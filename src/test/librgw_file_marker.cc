@@ -45,7 +45,6 @@ namespace {
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
-  CephContext* cct = nullptr;
 
   uint32_t owner_uid = 867;
   uint32_t owner_gid = 5309;
@@ -204,8 +203,6 @@ TEST(LibRGW, MOUNT) {
                        secret_key.c_str(), "/", &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
-
-  cct = static_cast<RGWLibFS*>(fs->fs_private)->get_context();
 }
 
 TEST(LibRGW, MARKER1_SETUP_BUCKET) {

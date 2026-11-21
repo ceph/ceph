@@ -957,7 +957,6 @@ int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
       << "WARNING: The Elasticsearch sync module is "
          "deprecated in Vampire and will be removed in the X release of Ceph."
       << dendl;
-  string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;
 }

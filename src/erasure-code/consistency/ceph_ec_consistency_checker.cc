@@ -38,7 +38,6 @@ int main(int argc, char **argv)
     ("length,l", po::value<int>(), "length");
 
   po::variables_map vm;
-  std::vector<std::string> unrecognized_options;
   try {
       auto parsed = po::command_line_parser(argc, argv)
       .options(desc)
@@ -50,7 +49,6 @@ int main(int argc, char **argv)
       return 0;
       }
       po::notify(vm);
-      unrecognized_options = po::collect_unrecognized(parsed.options, po::include_positional);
   } catch(const po::error& e) {
       std::cerr << "error: " << e.what() << std::endl;
       return 1;

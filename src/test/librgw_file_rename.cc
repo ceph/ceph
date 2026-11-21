@@ -40,7 +40,6 @@ namespace {
   uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
   bool do_create = false;
-  bool do_delete = false;
 
   string bucket1_name = "wyndemere";
   string bucket2_name = "galahad";
@@ -280,9 +279,6 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--create",
 					    (char*) nullptr)) {
       do_create = true;
-    } else if (ceph_argparse_flag(args, arg_iter, "--delete",
-					    (char*) nullptr)) {
-      do_delete = true;
     } else {
       ++arg_iter;
     }

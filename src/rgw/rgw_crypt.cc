@@ -2919,7 +2919,6 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
   /* SSE-S3 */
   if (stored_mode == "AES256") {
     /* try to retrieve actual key */
-    std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
     res = reconstitute_actual_key_from_sse_s3(s, attrs, y, actual_key);
     if (res != 0) {
@@ -2949,7 +2948,6 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
   /* SSE-S3 with GCM */
   if (stored_mode == "AES256-GCM") {
     /* try to retrieve actual key */
-    std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
     res = reconstitute_actual_key_from_sse_s3(s, attrs, y, actual_key);
     if (res != 0) {

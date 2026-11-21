@@ -361,7 +361,6 @@ TEST_F(LFUDAPolicyFixture, EvictionYield)
     EXPECT_EQ(policyDriver.get_cache_policy()->eviction(env->dpp, block->size, optional_yield{yield}), 0);
 
     std::string victimKey = victim.cacheObj.bucketName + "_version_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
-    std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     boost::system::error_code ec;
     request req;
     req.push("EXISTS", "RedisCache/" + victimKeyInCache);

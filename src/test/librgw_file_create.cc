@@ -31,7 +31,6 @@ namespace {
   librgw_t rgw1 = nullptr;
   librgw_t rgw2 = nullptr;
 
-  string userid("testuser");
   string access_key("");
   string secret_key("");
 
@@ -80,9 +79,6 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
 				     (char*) nullptr)) {
       secret_key = val;
-    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--userid",
-				     (char*) nullptr)) {
-      userid = val;
     } else {
       ++arg_iter;
     }

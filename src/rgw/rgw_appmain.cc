@@ -737,11 +737,10 @@ void rgw::AppMain::init_lua()
 {
   if (!g_conf().get_val<bool>("rgw_lua_enable"))
     return;
-  rgw::sal::Driver* driver = env.driver;
   std::string install_dir;
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
-  int r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
+  int r = rgw::lua::install_packages(dpp, env.driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
                                      failed_packages, install_dir);
   if (r < 0) {
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua packages from allowlist. error: " << r
@@ -755,7 +754,7 @@ void rgw::AppMain::init_lua()
 
   env.lua.manager = env.driver->get_lua_manager(install_dir);
 #ifdef WITH_RADOSGW_RADOS
-  if (driver->get_name() == "rados") { /* Supported for only RadosStore */
+  if (env.driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
       rgw::lua::Background>(dpp->get_cct(), env.lua.manager.get());
     lua_background->start();

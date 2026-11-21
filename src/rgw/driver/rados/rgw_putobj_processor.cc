@@ -247,7 +247,6 @@ RadosWriter::~RadosWriter()
   }
 
   if (need_to_remove_head) {
-    std::string version_id;
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
     int r = store->delete_obj(dpp, obj_ctx, bucket_info, head_obj, 0, y, 0);
     if (r < 0 && r != -ENOENT) {

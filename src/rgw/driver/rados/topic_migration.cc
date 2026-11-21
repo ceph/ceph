@@ -298,7 +298,6 @@ int migrate(const DoutPrefixProvider* dpp,
       return r;
     }
 
-    std::string msg;
     for (const std::string& oid : oids) {
       if (oid.find(rgw::sal::pubsub_bucket_oid_infix) != oid.npos) {
         const auto obj = rgw_raw_obj{pool, oid};

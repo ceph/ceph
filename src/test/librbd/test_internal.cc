@@ -643,7 +643,6 @@ TEST_F(TestInternal, MetadataConfApply) {
   ASSERT_EQ(-ENOENT, ictx->operations->metadata_remove("conf_rbd_cache"));
 
   bool cache = ictx->cache;
-  std::string rbd_conf_cache = cache ? "true" : "false";
   std::string new_rbd_conf_cache = !cache ? "true" : "false";
 
   ASSERT_EQ(0, ictx->operations->metadata_set("conf_rbd_cache",

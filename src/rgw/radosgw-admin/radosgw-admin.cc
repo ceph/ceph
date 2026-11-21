@@ -1649,7 +1649,6 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
   string prefix;
   string delim;
   string marker;
-  vector<rgw_bucket_dir_entry> result;
   string ns;
 
   rgw::sal::Bucket::ListParams params;
@@ -3535,8 +3534,8 @@ int main(int argc, const char **argv)
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
   string marker;
-  string start_marker;
-  string end_marker;
+  [[maybe_unused]] string start_marker;
+  [[maybe_unused]] string end_marker;
   int max_entries = -1;
   bool max_entries_specified = false;
   int admin = false;
@@ -3551,7 +3550,7 @@ int main(int argc, const char **argv)
   string op_mask_str;
   string quota_scope;
   string ratelimit_scope;
-  std::string objects_file;
+  [[maybe_unused]] std::string objects_file;
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
@@ -3614,7 +3613,7 @@ int main(int argc, const char **argv)
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
 
-  string job_id;
+  [[maybe_unused]] string job_id;
   int num_shards = 0;
   bool num_shards_specified = false;
   std::optional<int> bucket_index_max_shards;
@@ -3650,9 +3649,9 @@ int main(int argc, const char **argv)
 
   boost::optional<std::string> compression_type;
 
-  string totp_serial;
-  string totp_seed;
-  string totp_seed_type = "hex";
+  [[maybe_unused]] string totp_serial;
+  [[maybe_unused]] string totp_seed;
+  [[maybe_unused]] string totp_seed_type = "hex";
   vector<string> totp_pin;
 #ifdef WITH_RADOSGW_RADOS
   int totp_seconds = 0;
@@ -11555,8 +11554,6 @@ next:
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
-      vector<cls::log::entry> entries;
-
       std::string errstr;
       RGWDataChangesLogInfo info;
 
@@ -11989,7 +11986,6 @@ next:
       return EINVAL;
     }
 
-    list<rados::cls::otp::otp_info_t> result;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.check_mfa(dpp(), user->get_id(), totp_serial, totp_pin.front(), null_yield);
     if (ret < 0) {
       cerr << "MFA check failed, error: " << cpp_strerror(-ret) << std::endl;

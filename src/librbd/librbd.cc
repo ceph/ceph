@@ -1333,7 +1333,7 @@ namespace librbd {
 
     int r = librbd::api::Group<>::list(io_ctx, names);
     if (r >= 0) {
-      for (auto itr : *names) {
+      for ([[maybe_unused]] const auto &itr : *names) {
 	tracepoint(librbd, group_list_entry, itr.c_str());
       }
     }

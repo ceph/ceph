@@ -193,7 +193,6 @@ TEST(LibRGW, GETATTR_OBJECTS) {
 
       for (auto& obj : obj_vector) {
 	struct rgw_file_handle *obj_fh = nullptr;
-	std::string object_name = get<0>(obj);
 	ret = rgw_lookup(fs, bucket_fh, get<0>(obj).c_str(), &obj_fh,
 			 nullptr /* stat */, 0 /* mask */, 0 /* flags */);
 	ASSERT_EQ(ret, 0);

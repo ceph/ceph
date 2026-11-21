@@ -1726,7 +1726,6 @@ public:
 
 	std::set<hobject_t> did;
 	std::set<hobject_t> checked;
-	std::set<hobject_t> skipped;
         // written_shards holds relative shard ids, so convert before testing it.
         // Without a pool (the offline tools) assume a single zone, where the
         // relative and absolute ids are the same.

@@ -284,11 +284,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disable_interface) {
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
                                                               mock_plugin_api);
 
-  std::string temp_oid("12345");
   ceph::bufferlist temp_bl;
   IOContext io_context = mock_image_ctx.get_data_io_context();
   io::DispatchResult* temp_dispatch_result = nullptr;
-  io::Extents temp_buffer_extents;
   int* temp_op_flags = nullptr;
   uint64_t* temp_journal_tid = nullptr;
   Context** temp_on_finish = nullptr;

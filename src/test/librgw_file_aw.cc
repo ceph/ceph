@@ -48,7 +48,6 @@ namespace {
   bool do_delete = false;
   bool do_large = false;
   bool do_verify = false;
-  bool do_hexdump = false;
 
   string bucket_name = "sorrydave";
   string object_name = "jocaml";
@@ -414,9 +413,6 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--large",
 					    (char*) nullptr)) {
       do_large = true;
-    } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
-					    (char*) nullptr)) {
-      do_hexdump = true;
     } else {
       ++arg_iter;
     }

@@ -259,7 +259,6 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
                                 string("daemon-private/") + stringify(name) +
                                 string("/"));
-    std::string prefix = string("daemon-private/") + stringify(name) + string("/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key put", "key", constraint));
     profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));

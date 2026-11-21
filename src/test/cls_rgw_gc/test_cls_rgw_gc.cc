@@ -90,7 +90,6 @@ TEST_P(TestClsRgwGc, gc_queue_ops1)
 
   //Test remove queue entries
   librados::ObjectWriteOperation remove_op;
-  string marker1;
   uint64_t num_entries = 1;
   cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
@@ -239,7 +238,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops5)
   }
   //Test list queue for expired entries only
   list<cls_rgw_gc_obj_info> list_info1, list_info2;
-  string marker, next_marker, marker1;
+  string marker, next_marker;
   uint64_t max = 10;
   bool expired_only = true, truncated;
   cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
@@ -300,7 +299,6 @@ TEST_P(TestClsRgwGc, gc_queue_ops6)
 
   //Remove one element from queue
   librados::ObjectWriteOperation remove_op;
-  string marker1;
   uint64_t num_entries = 1;
 
   cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
@@ -322,7 +320,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops6)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  list<cls_rgw_gc_obj_info> list_info1;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -372,7 +370,6 @@ TEST_P(TestClsRgwGc, gc_queue_ops7)
 
   //Remove one element from queue
   librados::ObjectWriteOperation remove_op;
-  string marker1;
   uint64_t num_entries = 1;
 
   cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
@@ -394,7 +391,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops7)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  list<cls_rgw_gc_obj_info> list_info1;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -444,7 +441,6 @@ TEST_P(TestClsRgwGc, gc_queue_ops8)
 
   //Remove one element from queue
   librados::ObjectWriteOperation remove_op;
-  string marker1;
   uint64_t num_entries = 1;
 
   cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
@@ -466,7 +462,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops8)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  list<cls_rgw_gc_obj_info> list_info1;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;

@@ -42,7 +42,6 @@ int RGWObjTags::set_from_string(const string& input){
   boost::split(kvs, input, boost::is_any_of("&"));
   for (const auto& kv: kvs){
     auto p = kv.find("=");
-    string key,val;
     if (p != string::npos) {
       ret = check_and_add_tag(url_decode(kv.substr(0,p)),
                               url_decode(kv.substr(p+1)));

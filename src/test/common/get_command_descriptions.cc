@@ -109,8 +109,6 @@ int main(int argc, char **argv) {
     exit(1);
   }
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
-    string err;
-
     if (*i == string("help") || *i == string("-h") || *i == string("--help")) {
       usage(cout);
       exit(0);

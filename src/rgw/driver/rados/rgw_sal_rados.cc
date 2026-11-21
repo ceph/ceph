@@ -524,7 +524,6 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
-  map<string, bool> common_prefixes;
   RGWObjectCtx obj_ctx(store);
   CephContext *cct = store->ctx();
 

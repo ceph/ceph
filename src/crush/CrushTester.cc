@@ -749,8 +749,6 @@ int CrushTester::compare(CrushWrapper& crush2)
   // make adjustments
   adjust_weights(weight);
 
-  map<int,int> bad_by_rule;
-
   int ret = 0;
   for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
     if (!crush.rule_exists(r)) {

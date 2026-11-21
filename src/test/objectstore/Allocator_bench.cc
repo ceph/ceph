@@ -150,7 +150,7 @@ TEST_P(AllocTest, test_alloc_bench_seq)
   uint64_t capacity = uint64_t(1024) * 1024 * 1024 * 1024;
   uint64_t alloc_unit = 4096;
   uint64_t want_size = alloc_unit;
-  PExtentVector allocated, tmp;
+  PExtentVector tmp;
 
   init_alloc(capacity, alloc_unit);
   alloc->init_add_free(0, capacity);
@@ -194,7 +194,6 @@ TEST_P(AllocTest, test_alloc_bench_seq_interleaving)
   uint64_t capacity = uint64_t(1024) * 1024 * 1024 * 128; //128GB
   uint64_t alloc_unit = 4096;
   uint64_t want_size = alloc_unit;
-  PExtentVector allocated, tmp;
 
   init_alloc(capacity, alloc_unit);
   alloc->init_add_free(0, capacity);
@@ -222,7 +221,7 @@ TEST_P(AllocTest, test_alloc_bench)
 {
   uint64_t capacity = uint64_t(1024) * 1024 * 1024 * 1024;
   uint64_t alloc_unit = 4096;
-  PExtentVector allocated, tmp;
+  PExtentVector tmp;
   AllocTracker at(capacity, alloc_unit);
 
   init_alloc(capacity, alloc_unit);
@@ -315,7 +314,7 @@ struct OverwriteTextContext : public Thread {
   }
 
   void* entry() override {
-    PExtentVector allocated, tmp;
+    PExtentVector tmp;
     gen_type rng(time(NULL));
     boost::uniform_int<> u1(0, 9); // 4K-2M
     boost::uniform_int<> u2(0, 9); // 4K-2M
@@ -375,7 +374,7 @@ void AllocTest::doOverwriteTest(uint64_t capacity, uint64_t prefill,
   uint64_t overwrite)
 {
   uint64_t alloc_unit = 4096;
-  PExtentVector allocated, tmp;
+  PExtentVector tmp;
   AllocTracker at(capacity, alloc_unit);
 
   init_alloc(capacity, alloc_unit);
@@ -534,7 +533,7 @@ struct OverwriteTextContext2 : public OverwriteTextContext {
 
   using OverwriteTextContext::OverwriteTextContext;
   void* entry() override {
-    PExtentVector allocated, tmp;
+    PExtentVector tmp;
     gen_type rng(time(NULL));
     boost::uniform_int<> u1(1, 16); // alloc_unit * u1 => 4K-64K
 

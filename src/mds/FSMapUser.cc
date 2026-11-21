@@ -67,8 +67,6 @@ void FSMapUser::print(std::ostream& out) const
 
 void FSMapUser::print_summary(ceph::Formatter *f, std::ostream *out) const
 {
-  std::map<std::string,int> by_state;
-
   if (f) {
     f->dump_unsigned("epoch", get_epoch());
     for (auto &p : filesystems) {

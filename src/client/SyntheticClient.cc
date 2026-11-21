@@ -587,7 +587,7 @@ int SyntheticClient::run()
       break;
     case SYNCLIENT_MODE_CREATESHARED:
       {
-        string sarg1 = get_sarg(0);
+        get_sarg(0); // skip unused argument
         int num = iargs.front();  iargs.pop_front();
         if (run_me()) {
           dout(2) << "createshared " << num << dendl;
@@ -598,7 +598,7 @@ int SyntheticClient::run()
       break;
     case SYNCLIENT_MODE_OPENSHARED:
       {
-        string sarg1 = get_sarg(0);
+        get_sarg(0); // skip unused argument
         int num = iargs.front();  iargs.pop_front();
         int count = iargs.front();  iargs.pop_front();
         if (run_me()) {

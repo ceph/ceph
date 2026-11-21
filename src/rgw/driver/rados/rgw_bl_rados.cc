@@ -438,7 +438,6 @@ private:
     auto is_idle = false;
     auto bucket_deleted = false;
     auto skip_bucket_deletion = false;
-    const std::string start_marker;
 
     std::string tenant_name, bucket_name, bucket_id, prefix;
     int ret = parse_list_name(list_obj_name, tenant_name, bucket_name,

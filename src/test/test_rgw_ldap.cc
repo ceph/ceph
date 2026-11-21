@@ -38,8 +38,6 @@ namespace {
     char **argv;
   } saved_args;
 
-  bool do_hexdump = false;
-
   string access_key("ewogICAgIlJHV19UT0tFTiI6IHsKICAgICAgICAidmVyc2lvbiI6IDEsCiAgICAgICAgInR5cGUiOiAibGRhcCIsCiAgICAgICAgImlkIjogImFkbWluIiwKICAgICAgICAia2V5IjogImxpbnV4Ym94IgogICAgfQp9Cg=="); // {admin,linuxbox}
   string other_key("ewogICAgIlJHV19UT0tFTiI6IHsKICAgICAgICAidmVyc2lvbiI6IDEsCiAgICAgICAgInR5cGUiOiAibGRhcCIsCiAgICAgICAgImlkIjogImFkbWluIiwKICAgICAgICAia2V5IjogImJhZHBhc3MiCiAgICB9Cn0K"); // {admin,badpass}
 
@@ -95,9 +93,6 @@ int main(int argc, char *argv[])
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
 			      (char*) nullptr)) {
       access_key = val;
-    } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
-					    (char*) nullptr)) {
-      do_hexdump = true;
     } else {
       ++arg_iter;
     }

@@ -256,8 +256,6 @@ int do_decode(const std::vector<const char*> &args) {
   boost::split(shards, args[2], boost::is_any_of(","));
   std::string fname = args[3];
 
-  std::set<int> want_to_read;
-  const auto chunk_mapping = ec_impl->get_chunk_mapping();
   for (auto &shard_str : shards) {
     std::string name = fname + "." + shard_str;
     std::string error;

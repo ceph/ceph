@@ -151,8 +151,6 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
   }
 
   /* Now chown on all the objects in the bucket */
-  map<string, bool> common_prefixes;
-
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
 
