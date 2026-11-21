@@ -99,6 +99,7 @@ public:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector* extents) override;
 
   void release(const release_set_t& release_set) override;
@@ -230,6 +231,7 @@ protected:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector* extents);
 
   void _release(const release_set_t& release_set);
@@ -254,6 +256,7 @@ protected:
     uint64_t unit,
     uint64_t max_alloc_size,
     int64_t  hint,
+    alloc_tag_t tag,
     PExtentVector* extents) {
     // this should be overriden when range count cap is present,
     // i.e. (range_count_cap > 0)
@@ -288,6 +291,7 @@ private:
   int64_t __allocate(size_t bucket0,
     uint64_t size,
     uint64_t unit,
+    alloc_tag_t tag,
     PExtentVector* extents);
 
   inline range_size_tree_t::iterator _pick_block(int distance,

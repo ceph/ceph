@@ -45,7 +45,7 @@ public:
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, PExtentVector *extents) override;
+    int64_t hint, alloc_tag_t tag, PExtentVector *extents) override;
 
   int64_t allocate_int(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,

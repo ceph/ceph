@@ -245,6 +245,7 @@ int64_t AvlAllocator::_allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   uint64_t allocated = 0;
@@ -409,6 +410,7 @@ int64_t AvlAllocator::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
@@ -433,7 +435,7 @@ int64_t AvlAllocator::allocate(
 
   auto lock_acquired = mono_clock::now();
 
-  auto ret = _allocate(want, unit, max_alloc_size, hint, extents);
+  auto ret = _allocate(want, unit, max_alloc_size, hint, tag, extents);
 
   logger->tinc_with_max(
       l_bluestore_allocator_alloc_process_lat,
