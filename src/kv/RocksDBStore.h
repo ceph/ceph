@@ -397,10 +397,12 @@ public:
     public KeyValueDB::WholeSpaceIteratorImpl {
   protected:
     rocksdb::Iterator *dbiter;
+    const KeyValueDB::IteratorOpts opts;
   public:
     explicit RocksDBWholeSpaceIteratorImpl(const RocksDBStore* db,
                                            rocksdb::ColumnFamilyHandle* cf,
                                            const KeyValueDB::IteratorOpts opts)
+      : opts(opts)
       {
         rocksdb::ReadOptions options = rocksdb::ReadOptions();
         if (opts & ITERATOR_NOCACHE)
@@ -569,7 +571,7 @@ err:
 
   WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 private:
-  WholeSpaceIterator get_default_cf_iterator();
+  WholeSpaceIterator get_default_cf_iterator(IteratorOpts opts);
 
   using cf_deleter_t = std::function<void(rocksdb::ColumnFamilyHandle*)>;
   using columns_t = std::map<std::string,
