@@ -64,7 +64,6 @@
 
 <ng-template
   #externalLinkTpl
-  let-row="data.row"
   let-value="data.value"
 >
   <a
@@ -77,4 +76,18 @@
     ></svg>
     Source
   </a>
+</ng-template>
+
+<ng-template
+  #docLinkTpl
+  let-value="data.value"
+>
+  @if (alertDocUrls[value]) {
+    <a
+      [href]="alertDocUrls[value]"
+      target="_blank"
+      i18n
+      ><cd-icon type="launch"></cd-icon> Docs</a
+    >
+  }
 </ng-template>
