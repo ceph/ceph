@@ -21,14 +21,15 @@ from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
-    disconnect_from_filesystem
+    disconnect_from_filesystem, connect_to_cluster, disconnect_from_cluster, \
+    AuthMode, PEER_KEY_PREFIX
 from .metrics.cache import (
     COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
     metrics_for_dir_and_peers, try_get_from_complete)
 from .metrics import load as metrics_load
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
-from .dir_map.load import load_dir_map, load_instances
+from .dir_map.load import load_dir_map, load_instances, load_shares
 from .dir_map.update import UpdateDirMapRequest, UpdateInstanceRequest
 from .dir_map.policy import Policy
 from .dir_map.state_transition import ActionType, State
@@ -58,6 +59,9 @@ class FSPolicy:
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)
         self.dir_paths = []
+        # dir_path -> per-share peer uuid; directories not in here go to the
+        # legacy peer
+        self.dir_to_peer = {}
         self.async_requests = {}
         self.finisher = Finisher()
         self.op_tracker = AsyncOpTracker()
@@ -140,8 +144,9 @@ class FSPolicy:
         with watcher.lock:
             return frozenset(str(instance_id) for instance_id in watcher.instances)
 
-    def init(self, dir_mapping, instances):
+    def init(self, dir_mapping, instances, dir_to_peer):
         with self.lock:
+            self.dir_to_peer = dir_to_peer
             self.policy.init(dir_mapping)
             # we'll schedule action for all directories, so don't bother capturing
             # directory names here.
@@ -206,13 +211,14 @@ class FSPolicy:
             finally:
                 self.op_tracker.finish_async_op()
 
-    def update_mapping(self, update_map, removals, callback=None):
+    def update_mapping(self, update_map, removals, callback=None, share_updates=None):
         log.info(f'updating directory map: {len(update_map)}+{len(removals)} updates')
         request_id = str(uuid.uuid4())
         def async_callback(r):
             self.finisher.queue(self.handle_update_mapping,
                                 [list(update_map.keys()), removals, request_id, callback, r])
-        request = UpdateDirMapRequest(self.ioctx, update_map.copy(), removals.copy(), async_callback)
+        request = UpdateDirMapRequest(self.ioctx, update_map.copy(), removals.copy(), async_callback,
+                                      share_updates)
         self.async_requests[request_id] = request
         self.op_tracker.start_async_op()
         log.debug(f'async request_id: {request_id}')
@@ -254,6 +260,9 @@ class FSPolicy:
             if schedule:
                 schedules.append(dir_path)
         for dir_path in removals:
+            if r == 0:
+                # its share_ key went with its dir_map_ key
+                self.dir_to_peer.pop(dir_path, None)
             schedule = self.policy.finish_action(dir_path, r)
             if schedule:
                 schedules.append(dir_path)
@@ -335,7 +344,7 @@ class FSPolicy:
                 self.notifier.notify(dir_path, message, self.handle_peer_ack)
             self.dir_paths.clear()
 
-    def add_dir(self, dir_path):
+    def add_dir(self, dir_path, peer_uuid=None):
         with self.lock:
             lookup_info = self.policy.lookup(dir_path)
             if lookup_info:
@@ -347,12 +356,17 @@ class FSPolicy:
             if not schedule:
                 return
             update_map = {dir_path: {'version': 1, 'instance_id': '', 'last_shuffled': 0.0}}
+            # the share mapping is stored in the same write as the directory,
+            # after the checks above and before the directory is scheduled
+            share_updates = {dir_path: peer_uuid} if peer_uuid else None
+            if peer_uuid:
+                self.dir_to_peer[dir_path] = peer_uuid
             updated = False
             def update_safe(updates, removals, r):
                 nonlocal updated
                 updated = True
                 self.cond.notifyAll()
-            self.update_mapping(update_map, [], callback=update_safe)
+            self.update_mapping(update_map, [], callback=update_safe, share_updates=share_updates)
             self.cond.wait_for(lambda: updated)
             self.schedule_action([dir_path])
 
@@ -395,6 +409,7 @@ class FSPolicy:
 
 class FSSnapshotMirror:
     PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer"
+    SUPER_KEY_PREFIX = "client.mirror_peer."
 
     def __init__(self, mgr):
         self.mgr = mgr
@@ -421,7 +436,7 @@ class FSSnapshotMirror:
     def split_spec(spec):
         try:
             client_id, cluster_name = spec.split('@')
-            _, client_name = client_id.split('.')
+            _, client_name = client_id.split('.', 1)
             return client_name, cluster_name
         except ValueError:
             raise MirrorException(-errno.EINVAL, f'invalid cluster spec {spec}')
@@ -436,6 +451,89 @@ class FSSnapshotMirror:
     @staticmethod
     def peer_config_key(filesystem, peer_uuid):
         return f'{FSSnapshotMirror.PEER_CONFIG_KEY_PREFIX}/{filesystem}/{peer_uuid}'
+
+    @staticmethod
+    def peer_uuid_from_super_key(client_name):
+        """peer uuid from a super-key name (client.mirror_peer.<peer_uuid>)"""
+        prefix = FSSnapshotMirror.SUPER_KEY_PREFIX
+        if not client_name.startswith(prefix):
+            raise MirrorException(-errno.EINVAL,
+                                  f'super-key must be named {prefix}<peer_uuid>')
+        peer_uuid = client_name[len(prefix):]
+        try:
+            # accept only the canonical form so the name round-trips
+            if str(uuid.UUID(peer_uuid)) != peer_uuid:
+                raise ValueError
+        except ValueError:
+            raise MirrorException(-errno.EINVAL,
+                                  f'invalid peer uuid in super-key name {client_name}')
+        return peer_uuid
+
+    @staticmethod
+    def get_omap_peers(ioctx):
+        """per-share peers stored in the mirror object, keyed by peer uuid"""
+        try:
+            with rados.ReadOpCtx() as read_op:
+                it, _ = ioctx.get_omap_vals(read_op, "", PEER_KEY_PREFIX, 256)
+                ioctx.operate_read_op(read_op, MIRROR_OBJECT_NAME)
+                return {k[len(PEER_KEY_PREFIX):]: json.loads(v) for k, v in it}
+        except rados.Error as e:
+            log.error(f'failed to fetch peers from mirror object: {e}')
+            raise Exception(-e.errno)
+
+    @staticmethod
+    def set_omap_peer(ioctx, peer_uuid, record):
+        try:
+            with rados.WriteOpCtx() as write_op:
+                ioctx.set_omap(write_op, (f'{PEER_KEY_PREFIX}{peer_uuid}',),
+                               (json.dumps(record).encode('utf-8'),))
+                ioctx.operate_write_op(write_op, MIRROR_OBJECT_NAME)
+        except rados.Error as e:
+            log.error(f'failed to store peer {peer_uuid} in mirror object: {e}')
+            raise Exception(-e.errno)
+
+    @staticmethod
+    def remove_omap_peer(ioctx, peer_uuid):
+        try:
+            with rados.WriteOpCtx() as write_op:
+                ioctx.remove_omap_keys(write_op, (f'{PEER_KEY_PREFIX}{peer_uuid}',))
+                ioctx.operate_write_op(write_op, MIRROR_OBJECT_NAME)
+        except rados.Error as e:
+            log.error(f'failed to remove peer {peer_uuid} from mirror object: {e}')
+            raise Exception(-e.errno)
+
+    @staticmethod
+    def notify_peers_changed(ioctx):
+        # a hint only: mirror daemons re-read the peers from the mirror object
+        def cbk(_, r, acks, timeouts):
+            log.debug(f'peers changed notify: r={r} acks={acks} timeouts={timeouts}')
+        try:
+            ioctx.aio_notify(MIRROR_OBJECT_NAME, cbk,
+                             msg=json.dumps({'type': 'peers_changed'}))
+        except rados.Error as e:
+            log.warning(f'failed to notify peer change: {e}')
+
+    @staticmethod
+    def omap_peer_entry(record):
+        """an omap peer record in the shape of an fs map peer entry"""
+        return {'remote': {'client_name': record['client_name'],
+                           'cluster_name': record['site_name'],
+                           'fs_name': record['remote_fs_name']},
+                'auth_mode': record['auth_mode']}
+
+    def get_all_peers(self, filesystem, ioctx):
+        """legacy peers from the fs map and per-share peers from the mirror object"""
+        peers = dict(self.get_filesystem_peers(filesystem))
+        for peer_uuid, record in FSSnapshotMirror.get_omap_peers(ioctx).items():
+            peers[peer_uuid] = FSSnapshotMirror.omap_peer_entry(record)
+        return peers
+
+    def remove_per_share_peer(self, filesystem, ioctx, peer_uuid):
+        # no ceph.mirror.info was set on the remote for a per-share peer;
+        # drop the record first, then the secret it points at
+        FSSnapshotMirror.remove_omap_peer(ioctx, peer_uuid)
+        self.config_set(FSSnapshotMirror.peer_config_key(filesystem, peer_uuid))
+        FSSnapshotMirror.notify_peers_changed(ioctx)
 
     def config_set(self, key, val=None):
         """set or remove a key from mon config store"""
@@ -537,7 +635,7 @@ class FSSnapshotMirror:
         if not rem:
             return
         log.debug(f'peer_uuid={peer_uuid} resolved to {rem}')
-        _, client_name = rem['client_name'].split('.')
+        _, client_name = rem['client_name'].split('.', 1)
 
         # fetch auth details from config store
         remote_conf = self.config_get(FSSnapshotMirror.peer_config_key(local_fs_name, peer_uuid))
@@ -588,6 +686,31 @@ class FSSnapshotMirror:
         finally:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
+    def verify_per_share_peer(self, local_fs_name, client_id, cluster_name, remote_fs_name, remote_conf):
+        # the super-key has only mon caps: check the remote cluster through
+        # its monitors, without mounting the remote file system
+        log.debug(f'local fs={local_fs_name} remote={client_id}@{cluster_name}/{remote_fs_name}')
+
+        _, client_name = client_id.split('.', 1)
+        remote_cluster = connect_to_cluster(client_name, cluster_name, remote_conf, 'remote')
+        try:
+            if remote_cluster.get_fsid() != remote_conf['fsid']:
+                raise MirrorException(-errno.EINVAL, 'FSID mismatch between bootstrap token and remote cluster')
+            r, outbuf, outs = remote_cluster.mon_command(
+                json.dumps({'prefix': 'fs dump', 'format': 'json'}), b'')
+            if r < 0:
+                log.error(f'failed to fetch remote fs map: {outs}')
+                raise MirrorException(r, 'failed to fetch remote fs map')
+            remote_fscid = FSSnapshotMirror.get_filesystem_id(remote_fs_name, json.loads(outbuf))
+            if remote_fscid is None:
+                raise MirrorException(-errno.ENOENT, f'remote filesystem {remote_fs_name} does not exist')
+            local_fscid = FSSnapshotMirror.get_filesystem_id(local_fs_name, self.fs_map)
+            if self.rados.get_fsid() == remote_conf['fsid'] and local_fscid == remote_fscid:
+                raise MirrorException(-errno.EINVAL, "Source and destination cluster fsid and "\
+                                      "file-system name can't be the same")
+        finally:
+            disconnect_from_cluster(cluster_name, remote_cluster)
+
     def init_pool_policy(self, filesystem):
         metadata_pool_id = get_metadata_pool(filesystem, self.fs_map)
         if not metadata_pool_id:
@@ -598,10 +721,11 @@ class FSSnapshotMirror:
             # TODO: make async if required
             dir_mapping = load_dir_map(ioctx)
             instances = load_instances(ioctx)
+            dir_to_peer = load_shares(ioctx)
             # init policy
             fspolicy = FSPolicy(self.mgr, ioctx)
             log.debug(f'init policy for filesystem {filesystem}: pool-id {metadata_pool_id}')
-            fspolicy.init(dir_mapping, instances)
+            fspolicy.init(dir_mapping, instances, dir_to_peer)
             self.pool_policy[filesystem] = fspolicy
         except rados.Error as e:
             log.error(f'failed to access pool-id {metadata_pool_id} for filesystem {filesystem}: {e}')
@@ -648,6 +772,12 @@ class FSSnapshotMirror:
         log.info(f'disabling mirror for filesystem {filesystem}')
         try:
             with self.lock:
+                # the fs map drops legacy peers on disable; drop per-share
+                # peers too so that they do not return on the next enable
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if fspolicy:
+                    for peer_uuid in FSSnapshotMirror.get_omap_peers(fspolicy.ioctx):
+                        self.remove_per_share_peer(filesystem, fspolicy.ioctx, peer_uuid)
                 cmd = {'prefix': 'fs mirror disable', 'fs_name': filesystem}
                 r, outs, err = self.mgr.mon_command(cmd)
                 if r < 0:
@@ -665,13 +795,14 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                peers = self.get_filesystem_peers(filesystem)
+                peers = self.get_all_peers(filesystem, fspolicy.ioctx)
                 peer_res = {}
                 for peer_uuid, rem in peers.items():
                     remote = rem['remote']
                     peer_res[peer_uuid] = {'client_name': remote['client_name'],
                                            'site_name': remote['cluster_name'],
-                                           'fs_name': remote['fs_name']
+                                           'fs_name': remote['fs_name'],
+                                           'auth_mode': rem.get('auth_mode', AuthMode.legacy.value)
                                            }
                 if format == 'json-pretty':
                     return 0, json.dumps(peer_res, indent=2), ''
@@ -720,12 +851,69 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to add peer'
 
+    def peer_add_per_share(self, filesystem, token_dct):
+        try:
+            client_id = token_dct['user']
+            site_name = token_dct['site_name']
+            remote_fs_name = token_dct['filesystem']
+            remote_conf = {k: token_dct[k] for k in ('fsid', 'mon_host', 'key')}
+        except KeyError as ke:
+            return -errno.EINVAL, '', f'token is missing {ke}'
+        try:
+            with self.lock:
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                peer_uuid = FSSnapshotMirror.peer_uuid_from_super_key(client_id)
+                if token_dct.get('peer_uuid') != peer_uuid:
+                    raise MirrorException(-errno.EINVAL, 'peer uuid in token does not match the super-key name')
+                omap_peers = FSSnapshotMirror.get_omap_peers(fspolicy.ioctx)
+                ### peer updates for key, site-name are not yet supported
+                if peer_uuid in omap_peers:
+                    return 0, json.dumps({}), ''
+                # a share picks its remote by picking the peer, so one per-share
+                # peer per remote file system
+                for other_uuid, other in omap_peers.items():
+                    if other.get('remote_fsid') == remote_conf['fsid'] and \
+                       other['remote_fs_name'] == remote_fs_name:
+                        raise MirrorException(-errno.EEXIST,
+                                              f'peer {other_uuid} already mirrors to {remote_fs_name} '
+                                              f'on cluster {remote_conf["fsid"]}')
+                self.verify_per_share_peer(filesystem, client_id, site_name, remote_fs_name, remote_conf)
+                # secret first, then the record that points at it
+                config_key = FSSnapshotMirror.peer_config_key(filesystem, peer_uuid)
+                self.config_set(config_key, json.dumps(remote_conf))
+                record = {'version': 1,
+                          'client_name': client_id,
+                          'site_name': site_name,
+                          'remote_fsid': remote_conf['fsid'],
+                          'remote_fs_name': remote_fs_name,
+                          'auth_mode': AuthMode.per_share.value}
+                try:
+                    FSSnapshotMirror.set_omap_peer(fspolicy.ioctx, peer_uuid, record)
+                except Exception:
+                    try:
+                        log.debug(f'cleaning up config-key for {peer_uuid}')
+                        self.config_set(config_key)
+                    except:
+                        pass
+                    raise
+                FSSnapshotMirror.notify_peers_changed(fspolicy.ioctx)
+                return 0, json.dumps({}), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to add peer'
+
     def peer_remove(self, filesystem, peer_uuid):
         try:
             with self.lock:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                if peer_uuid in FSSnapshotMirror.get_omap_peers(fspolicy.ioctx):
+                    self.remove_per_share_peer(filesystem, fspolicy.ioctx, peer_uuid)
+                    return 0, json.dumps({}), ''
                 # ok, this is being a bit lazy. remove mirror info from peer followed
                 # by purging the peer from fsmap. if the mirror daemon fs map updates
                 # are laggy, they happily continue to synchronize. ideally, we should
@@ -749,33 +937,50 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to remove peer'
 
-    def peer_bootstrap_create(self, fs_name, client_name, site_name):
+    def peer_bootstrap_create(self, fs_name, client_name, site_name,
+                              auth_mode=AuthMode.legacy):
         """create a bootstrap token for this peer filesystem"""
         try:
             with self.lock:
-                cmd = {'prefix': 'fs authorize',
-                       'filesystem': fs_name,
-                       'entity': client_name,
-                       'caps': ['/', 'rwps']}
-                r, outs, err = self.mgr.mon_command(cmd)
-                if r < 0:
-                    log.error(f'mon command to create peer user failed: {err}')
-                    raise Exception(-errno.EINVAL)
+                peer_uuid = None
+                if auth_mode == AuthMode.per_share:
+                    # the super-key is created by the orchestrator or the
+                    # administrator, not here; only fetch and package it.
+                    peer_uuid = FSSnapshotMirror.peer_uuid_from_super_key(client_name)
+                else:
+                    cmd = {'prefix': 'fs authorize',
+                           'filesystem': fs_name,
+                           'entity': client_name,
+                           'caps': ['/', 'rwps']}
+                    r, outs, err = self.mgr.mon_command(cmd)
+                    if r < 0:
+                        log.error(f'mon command to create peer user failed: {err}')
+                        raise Exception(-errno.EINVAL)
                 cmd = {'prefix': 'auth get',
                        'entity': client_name,
                        'format': 'json'}
                 r, outs, err = self.mgr.mon_command(cmd)
                 if r < 0:
+                    if peer_uuid and r == -errno.ENOENT:
+                        raise MirrorException(r, f'super-key {client_name} does not exist')
                     log.error(f'mon command to fetch keyring failed: {err}')
                     raise Exception(-errno.EINVAL)
                 outs = json.loads(outs)
                 outs0 = outs[0]
+                if peer_uuid:
+                    caps = outs0.get('caps', {})
+                    if 'mds' in caps or 'osd' in caps:
+                        raise MirrorException(-errno.EINVAL,
+                                              f'super-key {client_name} must not have mds or osd caps')
                 token_dct = {'fsid': self.mgr.rados.get_fsid(),
                              'filesystem': fs_name,
                              'user': outs0['entity'],
                              'site_name': site_name,
                              'key': outs0['key'],
                              'mon_host': self.mgr.rados.conf_get('mon_host')}
+                if peer_uuid:
+                    token_dct['peer_uuid'] = peer_uuid
+                    token_dct['auth_mode'] = auth_mode.value
                 token_str = json.dumps(token_dct).encode('utf-8')
                 encoded_token = base64.b64encode(token_str)
                 return 0, json.dumps({'token': encoded_token.decode('utf-8')}), ''
@@ -790,13 +995,37 @@ class FSSnapshotMirror:
             token_dct = json.loads(token_str.decode('utf-8'))
         except:
             return -errno.EINVAL, '', 'failed to parse token'
+        try:
+            auth_mode = AuthMode(token_dct.get('auth_mode', AuthMode.legacy.value))
+        except ValueError:
+            return -errno.EINVAL, '', 'invalid auth_mode in token'
+        if auth_mode == AuthMode.per_share:
+            return self.peer_add_per_share(filesystem, token_dct)
         client_name = token_dct.pop('user')
         cluster_name = token_dct.pop('site_name')
         remote_fs_name = token_dct.pop('filesystem')
         remote_cluster_spec = f'{client_name}@{cluster_name}'
         return self.peer_add(filesystem, remote_cluster_spec, remote_fs_name, token_dct)
 
-    def add_dir(self, filesystem, dir_path):
+    def resolve_dir_peer(self, filesystem, ioctx, peer_uuid):
+        """the per-share peer a new directory maps to, or None to leave it
+        unmapped (it then goes to the legacy peer, or waits for one); call
+        with self.lock held"""
+        legacy_peers = self.get_filesystem_peers(filesystem)
+        per_share_peers = FSSnapshotMirror.get_omap_peers(ioctx)
+        if peer_uuid:
+            if peer_uuid in legacy_peers:
+                raise MirrorException(-errno.EINVAL, f'peer_uuid {peer_uuid} is a legacy peer; directories added without --peer_uuid already go to it')
+            if peer_uuid not in per_share_peers:
+                raise MirrorException(-errno.ENOENT, f'peer_uuid {peer_uuid} is not a valid per-share remote peer')
+            return peer_uuid
+        if legacy_peers or not per_share_peers:
+            return None
+        if len(per_share_peers) > 1:
+            raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} has several per-share peers; pass --peer_uuid')
+        return next(iter(per_share_peers))
+
+    def add_dir(self, filesystem, dir_path, peer_uuid):
         try:
             with self.lock:
                 if not self.filesystem_exist(filesystem):
@@ -804,9 +1033,10 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                peer_uuid = self.resolve_dir_peer(filesystem, fspolicy.ioctx, peer_uuid)
                 dir_path = norm_path(dir_path)
                 log.debug(f'path normalized to {dir_path}')
-                fspolicy.add_dir(dir_path)
+                fspolicy.add_dir(dir_path, peer_uuid)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
@@ -892,7 +1122,7 @@ class FSSnapshotMirror:
         return metrics_load.load_sync_stat_metrics(
             ioctx, filesystem, None, fspolicy.policy,
             fspolicy.get_live_instance_ids(),
-            self.get_filesystem_peers(filesystem))
+            self.get_all_peers(filesystem, fspolicy.ioctx))
 
     @lru_cache_timeout(
         lambda self, *_args, **_kwargs: self.mgr.get_module_option(
@@ -955,7 +1185,7 @@ class FSSnapshotMirror:
                     if not fspolicy.policy.lookup(dir_path):
                         raise MirrorException(-errno.ENOENT,
                                               f'directory {dir_path} is not mirrored')
-                all_peers = self.get_filesystem_peers(filesystem)
+                all_peers = self.get_all_peers(filesystem, fspolicy.ioctx)
                 if not all_peers:
                     return 0, json.dumps({'metrics': {}}, indent=4), ''
 

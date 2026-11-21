@@ -5,6 +5,7 @@ from .cli import MirroringCLICommand
 from mgr_module import MgrModule, Option, NotifyType
 
 from .fs.snapshot_mirror import FSSnapshotMirror
+from .fs.utils import AuthMode
 
 class Module(MgrModule):
     CLICommand = MirroringCLICommand
@@ -82,9 +83,10 @@ class Module(MgrModule):
     def snapshot_mirror_peer_bootstrap_create(self,
                                               fs_name: str,
                                               client_name: str,
-                                              site_name: str):
+                                              site_name: str,
+                                              auth_mode: AuthMode = AuthMode.legacy):
         """Bootstrap a filesystem peer"""
-        return self.fs_snapshot_mirror.peer_bootstrap_create(fs_name, client_name, site_name)
+        return self.fs_snapshot_mirror.peer_bootstrap_create(fs_name, client_name, site_name, auth_mode)
 
     @MirroringCLICommand.Write('fs snapshot mirror peer_bootstrap import')
     def snapshot_mirror_peer_bootstrap_import(self,
@@ -96,9 +98,10 @@ class Module(MgrModule):
     @MirroringCLICommand.Write('fs snapshot mirror add')
     def snapshot_mirror_add_dir(self,
                                 fs_name: str,
-                                path: str):
+                                path: str,
+                                peer_uuid: Optional[str] = None):
         """Add a directory for snapshot mirroring"""
-        return self.fs_snapshot_mirror.add_dir(fs_name, path)
+        return self.fs_snapshot_mirror.add_dir(fs_name, path, peer_uuid)
 
     @MirroringCLICommand.Write('fs snapshot mirror remove')
     def snapshot_mirror_remove_dir(self,
