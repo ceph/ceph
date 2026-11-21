@@ -1,0 +1,46 @@
+meta:
+- desc: |
+   upgrade only ceph-mgr first: auto-upgrade can't happen against the old MDS
+   (setting ceph.dir.subvolume.prevpath fails), so verify that v2 subvolumes
+   keep working as v2 (client IO, subvolume commands, clones and purges), and
+   then upgrade the rest of the cluster.
+
+tasks:
+- sequential: [ignore-auth-warn-cephadm]
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+      - ceph config set global log_to_journald false --force
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
+      # A staggered upgrade is never marked complete (it stays in progress)
+      # while the other daemons are not upgraded:
+      # https://tracker.ceph.com/issues/81620. Wait for the mgrs to get
+      # upgraded instead, and then stop the upgrade.
+      - while ! ( ceph versions | jq -e '.mgr | length == 1' && ceph versions | jq -e '.mgr | keys' | grep $sha1 ) && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch upgrade status
+      - ceph orch upgrade stop
+      - ceph versions | jq -e '.mgr | length == 1'
+      - ceph versions | jq -e '.mgr | keys' | grep $sha1
+      - ceph versions | jq -e '.overall | length == 2'
+      - ceph orch ps
+- volumes_upgrade.verify_mgr_only:
+- print: "**** done verifying mgr-only upgrade"
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph fs dump; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph orch ps
+      - ceph orch upgrade status
+      - ceph health detail
+      - ceph versions
+      - echo "wait for servicemap items w/ changing names to refresh"
+      - sleep 60
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
+- volumes_upgrade.check_io:
+- print: "**** done upgrading rest of the cluster"
