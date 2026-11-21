@@ -121,6 +121,132 @@ class TestExports(CephFSTestCase):
         log.info(f"exports of a busy directory took {times}")
         self.assertLess(max(times), 10)
 
+class TestExportScatterRequest(CephFSTestCase):
+    """
+    An export whose subtree is frozen may find the filelock of the
+    directory inode stable in a state that cannot be wrlocked, and then
+    asks the auth of the inode to scatter it.  Unlike a request, the
+    export holds no auth pin on the inode by then, so the auth may have
+    frozen the inode in an export of its own, or exported it, by the time
+    the scatter request arrives.
+    """
+    MDSS_REQUIRED = 3
+    CLIENTS_REQUIRED = 2
+
+    def setUp(self):
+        super().setUp()
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+        self.gids = [self.fs.get_rank(rank=r, status=self.status)['gid']
+                     for r in range(3)]
+
+    def _set(self, rank, name, value):
+        self.fs.rank_asok(['config', 'set', name, str(value)], rank=rank,
+                          status=self.status)
+
+    def _auth(self, path, rank):
+        for s in self._get_subtrees(status=self.status, rank=rank):
+            if s['dir']['path'] == path:
+                return s['auth_first']
+        return None
+
+    def _export(self, path, source, target):
+        out = self.fs.rank_tell(['export', 'dir', path, str(target)], rank=source)
+        self.assertEqual(out.get('results', out).get('return_code', 0), 0)
+
+    def _wait_export(self, path, source, target, merged=False, timeout=60):
+        with safe_while(sleep=1, tries=timeout,
+                        action=f'export {path} to mds.{target}') as proceed:
+            while proceed():
+                if not merged:
+                    if self._auth(path, target) == target:
+                        return
+                # merged into the subtree of its parent on the target
+                elif self._auth(path, source) is None and \
+                     not self.fs.rank_asok(['dump_export_states'], rank=source,
+                                           status=self.status):
+                    return
+
+    def _wait_export_state(self, rank, state, timeout=60):
+        with safe_while(sleep=0.2, tries=timeout * 5,
+                        action=f'export state {state} on mds.{rank}') as proceed:
+            while proceed():
+                states = self.fs.rank_asok(['dump_export_states'], rank=rank,
+                                           status=self.status)
+                if state is None and not states:
+                    return
+                if states and states[0]['state'] == state:
+                    return
+
+    def _test_scatter_request(self, auth_frozen):
+        # get the export targets in place, so that the exports below go
+        # on at once; an empty import is given back to the auth of its
+        # inode at once, so the directory moved around holds a file
+        self.mount_a.run_shell(['mkdir', '-p', 'warmup', 'p/d'])
+        self.mount_a.run_shell(['touch', 'warmup/f'])
+        for source, target in ((0, 2), (2, 1), (1, 2)):
+            self._export('/warmup', source, target)
+            self._wait_export('/warmup', source, target)
+        self.mount_a.create_n_files('p/d/f', 100)
+        self._export('/p/d', 0, 1)
+        self._wait_export('/p/d', 0, 1)
+
+        # mds.1 exports /p/d and waits, frozen, before it takes the locks
+        # of the dir inode, whose auth is mds.0
+        self._set(1, 'mds_inject_export_frozen_delay', 12 if auth_frozen else 4)
+        self._export('/p/d', 1, 2)
+        self._wait_export_state(1, 'freezing')
+        time.sleep(0.5)
+        self._set(1, 'mds_inject_export_frozen_delay', 0)
+
+        # a client without caps on /p/d reads its stats, so mds.0 takes
+        # the filelock to sync, which mds.1 cannot wrlock
+        self.mount_b.run_shell(['stat', 'p/d'])
+        self.mount_b.getfattr('p/d', 'ceph.dir.entries')
+
+        if auth_frozen:
+            # mds.0 exports /p, with the dir inode in it, and stays frozen
+            # until after mds.1 asks it to scatter the filelock
+            self._set(0, 'mds_inject_export_frozen_delay', 20)
+            self._export('/p', 0, 2)
+            self._wait_export_state(0, 'freezing')
+            self._set(0, 'mds_inject_export_frozen_delay', 0)
+            self._wait_export('/p', 0, 2)
+        else:
+            # mds.1's scatter request reaches mds.0 after mds.0 exported
+            # /p, with the dir inode in it
+            self._set(0, 'mds_inject_scatter_request_delay', 20)
+            self._export('/p', 0, 2)
+            self._wait_export('/p', 0, 2)
+            time.sleep(25)
+            self._set(0, 'mds_inject_scatter_request_delay', 0)
+
+        # mds.1 gives up waiting for the filelock after a tick, and the
+        # directory can be exported and written to again
+        self._wait_export_state(1, None)
+        self._export('/p/d', 1, 2)
+        self._wait_export('/p/d', 1, 2, merged=True)
+        self.mount_a.run_shell(['touch', 'p/d/after'], timeout=60)
+
+        for r in range(3):
+            self.assertEqual(self.fs.get_rank(rank=r)['gid'], self.gids[r])
+            self.fs.rank_asok(['status'], rank=r)
+
+    def test_scatter_request_auth_frozen(self):
+        """
+        The auth must not scatter the filelock of an inode that it froze
+        in an export of its own; the importer would get the lock in the
+        middle of a gather.
+        """
+        self._test_scatter_request(auth_frozen=True)
+
+    def test_scatter_request_auth_exported(self):
+        """
+        The auth must not scatter the filelock of an inode that it has
+        exported since the request was sent.
+        """
+        self._test_scatter_request(auth_frozen=False)
+
 class TestRenameWitnessDiscover(CephFSTestCase):
     MDSS_REQUIRED = 3
     CLIENTS_REQUIRED = 1
