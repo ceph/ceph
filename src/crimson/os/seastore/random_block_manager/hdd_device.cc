@@ -132,27 +132,37 @@ open_ertr::future<> RotationalDevice::open(
 write_ertr::future<> RotationalDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
-  uint16_t stream) {
+  uint16_t stream,
+  dma_write_times_t *dma_times) {
   bl.rebuild_aligned(super.block_size);
 
   return seastar::do_with(
     bl.prepare_iovs(),
     std::move(bl),
-    [this, offset](auto& iovs, auto& bl)
+    [this, offset, dma_times](auto& iovs, auto& bl)
   {
     return write_ertr::parallel_for_each(
       iovs,
-      [this, offset](auto& p) mutable
+      [this, offset, dma_times](auto& p) mutable
     {
       auto off = offset + p.offset;
       auto len = p.length;
       auto& iov = p.iov;
+      // the first dma_write issued sets start
+      if (dma_times &&
+          dma_times->start == std::chrono::steady_clock::time_point{}) {
+        dma_times->start = std::chrono::steady_clock::now();
+      }
       return device.dma_write(off, std::move(iov)
       ).handle_exception(
         [](auto e) -> write_ertr::future<size_t>
       {
         return crimson::ct_error::input_output_error::make();
-      }).then([len](size_t written) -> write_ertr::future<> {
+      }).then([len, dma_times](size_t written) -> write_ertr::future<> {
+        // the last dma_write to finish sets end
+        if (dma_times) {
+          dma_times->end = std::chrono::steady_clock::now();
+        }
         if (written != len) {
           return crimson::ct_error::input_output_error::make();
         }

@@ -538,10 +538,37 @@ public:
   struct phase_durations_t {
     std::chrono::steady_clock::duration reserve{0};         // enter reserve + epm reserve
     std::chrono::steady_clock::duration ool_write{0};       // delayed + preallocated OOL writes
+    std::chrono::steady_clock::duration ool_throttle{0};    // token_bucket wait, part of ool_write
+    std::chrono::steady_clock::duration ool_prepare{0};     // build write list + merge copy, part of ool_write
+    std::chrono::steady_clock::duration ool_disk_write{0};  // rbm->write submit until all writes complete, part of ool_write
     std::chrono::steady_clock::duration lba_update{0};      // update_lba_mappings
     std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
     std::chrono::steady_clock::duration prepare_record{0};  // prepare_record
     std::chrono::steady_clock::duration journal{0};         // journal->submit_record (post-lock)
+    std::chrono::steady_clock::duration complete_commit{0}; // cache->complete_commit, part of journal
+    std::chrono::steady_clock::duration journal_batch_wait{0}; // submit_record until its journal write starts, part of journal
+    std::chrono::steady_clock::duration journal_disk_write{0}; // journal write start until complete, part of journal
+    std::chrono::steady_clock::duration journal_finalize_wait{0}; // wait to enter the journal finalize phase, part of journal
+    // RBM only, the three parts of journal_disk_write split at the device's dma_write
+    std::chrono::steady_clock::duration journal_pre_dma{0};  // journal write start until first dma_write issued
+    std::chrono::steady_clock::duration journal_dma{0};      // first dma_write issued until last one completes
+    std::chrono::steady_clock::duration journal_post_dma{0}; // last dma_write completes until the journal write is seen complete
+    // ool_* time for the current OOL write attempt; moved into the
+    // fields above only when ool_write itself is counted
+    std::chrono::steady_clock::duration attempt_ool_throttle{0};
+    std::chrono::steady_clock::duration attempt_ool_prepare{0};
+    std::chrono::steady_clock::duration attempt_ool_disk_write{0};
+
+    void reset_ool_attempt() {
+      attempt_ool_throttle = attempt_ool_prepare = attempt_ool_disk_write =
+        std::chrono::steady_clock::duration{0};
+    }
+    void commit_ool_attempt() {
+      ool_throttle += attempt_ool_throttle;
+      ool_prepare += attempt_ool_prepare;
+      ool_disk_write += attempt_ool_disk_write;
+      reset_ool_attempt();
+    }
   };
   phase_durations_t &get_phase_durations() {
     return phase_durations;

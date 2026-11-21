@@ -59,7 +59,8 @@ public:
   write_ertr::future<> writev(
     uint64_t offset,
     ceph::bufferlist bl,
-    uint16_t stream = 0) final;
+    uint16_t stream = 0,
+    dma_write_times_t *dma_times = nullptr) final;
 
   stat_device_ret stat_device() final {
     return seastar::file_stat(device_path, seastar::follow_symlink::yes
