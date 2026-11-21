@@ -1466,6 +1466,46 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
    */
   ceph_assert(!oset->return_enoent || rd->extents.size() == 1);
 
+  // The common small cache hit: one extent, all of it in one readable
+  // BufferHead.  Serve it without the hit/miss maps and the stripe map the
+  // general path below builds (all of it under the cache's lock), with the
+  // same side effects.
+  if (external_call && rd->bl && rd->extents.size() == 1 &&
+      !rd->fadvise_flags && !oset->return_enoent) {
+    ObjectExtent &ex = rd->extents.front();
+    if (ex.buffer_extents.size() == 1 &&
+        ex.buffer_extents.front().first == 0 &&
+        ex.buffer_extents.front().second == ex.length) {
+      sobject_t soid(ex.oid, rd->snap);
+      Object *o = get_object(soid, ex.objectno, oset, ex.oloc,
+                             ex.truncate_size, oset->truncate_seq);
+      auto p = o->data_lower_bound(ex.offset);
+      if (p != o->data.end() && p->first <= (loff_t)ex.offset) {
+        BufferHead *bh = p->second;
+        if ((bh->is_clean() || bh->is_dirty() || bh->is_tx()) &&
+            bh->end() >= (loff_t)(ex.offset + ex.length)) {
+          touch_ob(o);
+          if (bh->get_nocache() && bh->is_clean())
+            bh_lru_rest.lru_bottouch(bh);
+          else
+            touch_bh(bh);
+          if (perfcounter) {
+            perfcounter->inc(l_objectcacher_data_read, ex.length);
+            perfcounter->inc(l_objectcacher_cache_bytes_hit, bh->length());
+            perfcounter->inc(l_objectcacher_cache_ops_hit);
+          }
+          rd->bl->clear();
+          rd->bl->substr_of(bh->bl, ex.offset - bh->start(), ex.length);
+          int ret = ex.length;
+          ldout(cct, 20) << "readx single bh hit " << *bh << " " << ret << dendl;
+          delete rd;
+          trim();
+          return ret;
+        }
+      }
+    }
+  }
+
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ++ex_it) {
