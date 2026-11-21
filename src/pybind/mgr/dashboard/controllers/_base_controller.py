@@ -4,14 +4,13 @@ import json
 import logging
 from functools import wraps
 from typing import ClassVar, List, Optional, Type
-from urllib.parse import unquote
 
 import cherrypy
 
 from ..plugins import PLUGIN_MANAGER
 from ..services.auth import AuthManager, JwtManager
 from ..tools import get_request_body_params
-from ._helpers import _get_function_params
+from ._helpers import _get_function_params, path_param_positions
 from ._version import APIVersion
 
 logger = logging.getLogger(__name__)
@@ -200,18 +199,7 @@ class BaseController:
         if path_extension is None:
             path_extension = ""
         full_path = cls._cp_path_[1:] + path_extension  # type: ignore
-        path_params = []
-        for step in full_path.split('/'):
-            param = None
-            if not step:
-                continue
-            if step[0] == ':':
-                param = step[1:]
-            elif step[0] == '{' and step[-1] == '}':
-                param, _, _ = step[1:-1].partition(':')
-            if param:
-                path_params.append(param)
-        return path_params
+        return [name for _, name in path_param_positions(full_path)]
 
     @classmethod
     def get_path(cls):
@@ -249,10 +237,6 @@ class BaseController:
         @wraps(func)
         def inner(*args, **kwargs):
             client_version = None
-            for key, value in kwargs.items():
-                if isinstance(value, str):
-                    kwargs[key] = unquote(value)
-
             # Process method arguments.
             params = get_request_body_params(cherrypy.request)
             kwargs.update(params)
