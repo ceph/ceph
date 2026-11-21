@@ -58,6 +58,10 @@ Global Options
 
    Read from the given pool snapshot. Valid for all pool-specific read operations.
 
+.. option:: -S id, --snapid id
+
+   Read from the given pool snapshot. Valid for all pool-specific read operations.
+
 .. option:: --create
 
    Create the pool or directory that was specified.
