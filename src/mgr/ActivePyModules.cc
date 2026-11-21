@@ -262,6 +262,18 @@ PyObject *ActivePyModules::get_python(std::string_view what, const bool get_muta
     std::string crush_text = rdata.to_str();
     no_gil.acquire_gil();
     return PyUnicode_FromString(crush_text.c_str());
+  } else if (what == "osd_map_pools") {
+    // a list of the pools in osd_map, without the read balance scores,
+    // which map every PG of each replicated pool
+    PyFormatter pools_f(false, true);
+    without_gil_t no_gil;
+    cluster_state.with_osdmap([&](const OSDMap &osd_map){
+      no_gil.acquire_gil();
+      for (const auto &[pid, pdata] : osd_map.get_pools()) {
+        osd_map.dump_pool(nullptr, pid, pdata, &pools_f, false);
+      }
+    });
+    return pools_f.get();
   } else if (what.substr(0, 7) == "osd_map") {
     without_gil_t no_gil;
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
