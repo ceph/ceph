@@ -193,6 +193,9 @@ def on_files(files, config):
         "The [mapped-read program](examples/overlap_reads.cpp) preserves source objects "
         "while selecting logical ranges and translating backing offsets. Its "
         "[expected output](expected/overlap_reads.txt) is checked by the `overlap_reads` target.",
+        "", "The [packed-payload program](examples/packed_payload.cpp) maps sparse logical "
+        "selections into fragmented payload bytes. Its [expected output](expected/packed_payload.txt) "
+        "is checked by the `packed_payload` target.",
     ]) + "\n")
 
     archive = io.BytesIO()

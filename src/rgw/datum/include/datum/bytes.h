@@ -319,6 +319,24 @@ public:
         return slice;
     }
 
+    // Admit an absolute forward selection before skipping or narrowing to the cursor's size type:
+    constexpr slice_type take(const byte_extent selected)
+    requires detail::stable_byte_block<std::ranges::range_reference_t<source_type>>
+    {
+        if (selected.offset < position()) {
+            throw std::out_of_range {"byte extent precedes the cursor"};
+        }
+
+        const auto skip = selected.offset - position();
+        if (!detail::extent_fits(skip, selected.length, remaining())) {
+            throw std::out_of_range {"byte extent exceeds the cursor"};
+        }
+
+        consume(static_cast<std::size_t>(skip));
+
+        return take(static_cast<std::size_t>(selected.length));
+    }
+
 public:
     template <writable_byte_output OutputT>
     constexpr void read_into(OutputT&& destination)

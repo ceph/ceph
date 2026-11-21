@@ -89,6 +89,16 @@ constexpr auto finite_half_open_bounds(const IntervalT& value)
 }
 } // detail
 
+// Convert finite half-open byte bounds, retaining the position of an empty extent:
+template <interval_view IntervalT>
+requires std::same_as<typename expression_domain_t<IntervalT>::value_type, std::uint64_t>
+constexpr byte_extent extent_of(const IntervalT& value)
+{
+    const auto bounds = detail::finite_half_open_bounds(value);
+
+    return {bounds.lower().key(), bytes.distance(bounds.lower().key(), bounds.upper().key())};
+}
+
 template <canonical_sequence CoverageT, typename MetricT>
 requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>> and
          requires (const MetricT& metric, const typename MetricT::quantity_type& quantity) {

@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
+#include <limits>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -171,6 +173,20 @@ static_assert([] {
     });
 
     return 4 == result.offered and 4 == result.accepted and !result.stopped();
+}());
+
+static_assert([] {
+    const std::array origins {datum::byte_extent {4, 2}, datum::byte_extent {10, 3}};
+    const std::array selected {datum::byte_extent {11, 1}};
+    std::uint64_t packed = 0;
+    const auto result = iv::visit_packed_overlaps(origins, selected,
+        [&](const auto&, const auto&, const datum::byte_mapping mapped) {
+            packed = mapped.backing_offset;
+
+            return datum::acceptance::accept;
+        });
+
+    return 1 == result.accepted and 3 == packed;
 }());
 
 } // anonymous namespace
@@ -357,8 +373,7 @@ TEST_CASE("value descriptors map selected logical cuts to native backing offsets
     std::vector<std::tuple<unsigned, std::uint64_t, std::uint64_t, std::uint64_t>> reads;
     const auto result = iv::visit_overlaps(native_layout, selections,
         [&](const auto& source, const auto&) {
-            const datum::byte_extent selected {source.lower().key(),
-                                               source.upper().key() - source.lower().key()};
+            const auto selected = iv::extent_of(source);
             const auto mapped = datum::clip(source.source().geometry, selected);
             REQUIRE(mapped);
             reads.emplace_back(source.source().object, mapped->logical.offset,
@@ -393,4 +408,189 @@ TEST_CASE("overlap traversal retains string geometry during scoped observation")
         return datum::acceptance::accept;
     }), std::runtime_error);
     CHECK(2 == offered);
+}
+
+TEST_CASE("finite byte bounds convert to extents without losing empty positions")
+{
+    for (const auto extent : {datum::byte_extent {0, 0}, datum::byte_extent {9, 0},
+                              datum::byte_extent {4, 8},
+                              datum::byte_extent {std::numeric_limits<std::uint64_t>::max() - 1, 1},
+                              datum::byte_extent {std::numeric_limits<std::uint64_t>::max(), 0}}) {
+        CHECK(iv::extent_of(iv::bounds(extent)) == extent);
+    }
+
+    CHECK_THROWS_AS(iv::extent_of(iv::byte_query::universal()), std::domain_error);
+    CHECK_THROWS_AS(iv::extent_of(iv::byte_query::closed(0, 4)), std::domain_error);
+    CHECK_THROWS_AS(iv::extent_of(iv::byte_query::closed_open(8, 4)), std::domain_error);
+}
+
+TEST_CASE("packed overlaps retain skipped origins and multiple cuts in one-pass inputs")
+{
+    const std::array origins {datum::byte_extent {0, 4}, datum::byte_extent {9, 0},
+                              datum::byte_extent {10, 8}, datum::byte_extent {18, 4},
+                              datum::byte_extent {40, 3}};
+    const std::array selections {datum::byte_extent {12, 2}, datum::byte_extent {16, 1},
+                                 datum::byte_extent {42, 1}};
+    input_records source {origins};
+    input_records wanted {selections};
+    unsigned projections = 0;
+    const borrowed_projection lens {projections};
+    std::vector<std::tuple<std::size_t, std::size_t, datum::byte_mapping>> actual;
+    const auto result = iv::visit_packed_overlaps(source, wanted,
+        [&](const auto& left, const auto& right, const datum::byte_mapping mapped) {
+            CHECK(iv::extent_of(left) == mapped.logical);
+            CHECK(iv::extent_of(right) == mapped.logical);
+            actual.emplace_back(*left.source().id, *right.source().id, mapped);
+
+            return datum::acceptance::accept;
+        }, lens, &value_record::geometry);
+
+    CHECK(actual == std::vector<std::tuple<std::size_t, std::size_t, datum::byte_mapping>> {
+        {2, 0, {{12, 2}, 6}}, {2, 1, {{16, 1}, 10}}, {4, 2, {{42, 1}, 18}}
+    });
+    CHECK(3 == result.accepted);
+    CHECK(5 == source.reads);
+    CHECK(5 == projections);
+    CHECK(3 == wanted.reads);
+    CHECK(0 == source.live);
+    CHECK(0 == wanted.live);
+}
+
+TEST_CASE("packed overlap stopping preserves prefix positions without visiting later origins")
+{
+    const std::array origins {datum::byte_extent {0, 4}, datum::byte_extent {10, 4},
+                              datum::byte_extent {20, 4}};
+    const std::array selections {datum::byte_extent {1, 1}, datum::byte_extent {12, 1},
+                                 datum::byte_extent {22, 1}};
+    input_records source {origins};
+    input_records wanted {selections};
+    unsigned offered = 0;
+    const auto result = iv::visit_packed_overlaps(source, wanted,
+        [&](const auto&, const auto&, const datum::byte_mapping mapped)
+            -> std::expected<datum::acceptance, std::unique_ptr<int>> {
+            if (++offered == 2) {
+                CHECK(6 == mapped.backing_offset);
+
+                return std::unexpected(std::make_unique<int>(42));
+            }
+
+            CHECK(1 == mapped.backing_offset);
+
+            return datum::acceptance::accept;
+        }, &value_record::geometry, &value_record::geometry);
+
+    REQUIRE_FALSE(result);
+    CHECK(42 == *result.error().error);
+    CHECK(2 == result.error().progress.offered);
+    CHECK(1 == result.error().progress.accepted);
+    CHECK(1 == result.error().progress.consumed());
+    CHECK(2 == source.reads);
+    CHECK(2 == wanted.reads);
+    CHECK(1 == source.increments);
+    CHECK(1 == wanted.increments);
+    CHECK(0 == source.live);
+    CHECK(0 == wanted.live);
+}
+
+TEST_CASE("packed cuts agree with enumerating all source bytes before selection")
+{
+    const std::array origins {datum::byte_extent {0, 4}, datum::byte_extent {10, 8},
+                              datum::byte_extent {18, 4}, datum::byte_extent {40, 3}};
+    const std::array choices {datum::byte_extent {1, 2}, datum::byte_extent {12, 2},
+                              datum::byte_extent {16, 4}, datum::byte_extent {42, 1}};
+    std::vector<std::pair<std::uint64_t, std::size_t>> packed;
+    for (std::size_t origin = 0; origin < origins.size(); ++origin) {
+        for (std::uint64_t byte = 0; byte < origins[origin].length; ++byte) {
+            packed.emplace_back(origins[origin].offset + byte, origin);
+        }
+    }
+
+    for (unsigned mask = 0; mask != 16; ++mask) {
+        std::vector<datum::byte_extent> wanted;
+        for (unsigned index = 0; index != choices.size(); ++index) {
+            if (mask & (1U << index)) {
+                wanted.push_back(choices[index]);
+            }
+        }
+
+        using selected_byte = std::tuple<std::uint64_t, std::uint64_t, std::size_t>;
+
+        std::vector<selected_byte> expected;
+        for (std::size_t position = 0; position < packed.size(); ++position) {
+            const auto [logical, origin] = packed[position];
+            if (std::ranges::any_of(wanted, [logical](const auto extent) {
+                    return logical >= extent.offset and logical - extent.offset < extent.length;
+                })) {
+                expected.emplace_back(logical, position, origin);
+            }
+        }
+
+        std::vector<selected_byte> actual;
+        const auto progress = iv::visit_packed_overlaps(origins, wanted,
+            [&](const auto& source, const auto&, const datum::byte_mapping mapped) {
+                const auto origin = std::addressof(source.source()) - origins.data();
+                for (std::uint64_t byte = 0; byte < mapped.logical.length; ++byte) {
+                    actual.emplace_back(mapped.logical.offset + byte, mapped.backing_offset + byte,
+                                        static_cast<std::size_t>(origin));
+                }
+
+                return datum::acceptance::accept;
+            });
+
+        CHECK_FALSE(progress.stopped());
+        CHECK(actual == expected);
+    }
+}
+
+TEST_CASE("packed geometry rejects unsupported cuts and leaves an unused tail unprojected")
+{
+    const std::array source {iv::byte_query::empty(), iv::byte_query::closed_open(10, 14)};
+    const std::array all {iv::byte_query::universal()};
+    const auto accepted = iv::visit_packed_overlaps(source, all,
+        [](const auto&, const auto&, const datum::byte_mapping mapped) {
+            CHECK(mapped == datum::byte_mapping {{10, 4}, 0});
+
+            return datum::acceptance::accept;
+        });
+    CHECK(1 == accepted.accepted);
+
+    const std::array closed {iv::byte_query::closed(10, 12)};
+    const auto reject = [](const auto&, const auto&, const auto&) {
+        FAIL("unsupported geometry reached the consumer");
+
+        return datum::acceptance::accept;
+    };
+    CHECK_THROWS_AS(iv::visit_packed_overlaps(closed, all, reject), std::domain_error);
+    CHECK_THROWS_AS(iv::visit_packed_overlaps(source, closed, reject), std::domain_error);
+
+    const std::array tail {datum::byte_extent {0, 4},
+                           datum::byte_extent {std::numeric_limits<std::uint64_t>::max(), 1}};
+    const std::array selection {datum::byte_extent {0, 4}};
+    unsigned projections = 0;
+    const auto limited = iv::visit_packed_overlaps(tail, selection,
+        [](const auto&, const auto&, const auto&) { return datum::acceptance::accept_and_stop; },
+        [&](const auto& row) {
+            ++projections;
+
+            return row;
+        });
+    CHECK(1 == limited.accepted);
+    CHECK(1 == projections);
+}
+
+TEST_CASE("packed mapping preserves representable maximum byte endpoints")
+{
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+
+    const std::array origins {datum::byte_extent {0, maximum - 4},
+                              datum::byte_extent {maximum - 2, 2}};
+    const std::array selected {datum::byte_extent {maximum - 2, 2}};
+    const auto result = iv::visit_packed_overlaps(origins, selected,
+        [](const auto&, const auto&, const datum::byte_mapping mapped) {
+            CHECK(mapped == datum::byte_mapping {{maximum - 2, 2}, maximum - 4});
+
+            return datum::acceptance::accept;
+        });
+
+    CHECK(1 == result.accepted);
 }

@@ -23,8 +23,7 @@ int main()
 
     const auto result = iv::visit_overlaps(layout, wanted,
         [](const auto& source, const auto&) {
-            const datum::byte_extent selected {source.lower().key(),
-                                               source.upper().key() - source.lower().key()};
+            const auto selected = iv::extent_of(source);
             const auto mapped = datum::clip(source.source().geometry, selected).value();
             std::println("object {}: logical {}, backing {}, length {}", source.source().object,
                          mapped.logical.offset, mapped.backing_offset, mapped.logical.length);

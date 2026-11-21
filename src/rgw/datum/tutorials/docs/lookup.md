@@ -18,6 +18,7 @@ gives the setup commands.
 | Read data split across buffers | [hello, world! — in pieces](../tutorial.md#1-hello-world--in-pieces) |
 | Combine or subtract ranges | [Seat selection](../tutorial.md#2-seat-3-is-reserved) and [interval algebra](../tutorial.md#2½-an-interval-interlude) |
 | Align independent layouts and selections | [Overlap traversal](../tutorial.md#align-two-independently-segmented-sources) and the [mapped-read program](../examples/overlap_reads.cpp) |
+| Select bytes from a packed sparse payload | [Packed mapping](../tutorial.md#select-from-a-packed-sparse-payload) and the [complete program](../examples/packed_payload.cpp) |
 | Put overlapping ranges in order | [Untangle the ranges](../tutorial.md#3-untangle-the-ranges) |
 | Make key order match numeric order | [Put 2 before 10](../tutorial.md#4-put-2-before-10) |
 | Sort records by several keys | [Comparison composition](design.md#native-vocabulary-and-comparison-composition) |
@@ -299,6 +300,11 @@ ownership and backing lifetime.
 origins. Value/input producers need no prepass; cut and source observations are scoped to
 the callback. Progress and expected failures use `visit_range`'s contract.
 [Overlap traversal](../tutorial.md#align-two-independently-segmented-sources).
+
+**`visit_packed_overlaps`; `extent_of`.** Add packed payload offsets to logical cuts while
+preserving both origins. Byte bounds must be finite half-open where mapped. `extent_of`
+converts such bounds to `byte_extent`; `byte_cursor::take(byte_extent)` admits an absolute
+forward payload selection. [Packed mapping](../tutorial.md#select-from-a-packed-sparse-payload).
 
 **`visit_result`; `consumed()`; `stopped()`.** Scan progress stores `offered` and
 `accepted` counts and an optional `stop` decision. The two accessors derive

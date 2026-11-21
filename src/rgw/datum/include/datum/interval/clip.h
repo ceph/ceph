@@ -493,6 +493,8 @@ template <typename RangeT, typename LensT>
 requires overlap_source<RangeT, LensT>
 class overlap_cursor final
 {
+    using domain_type = expression_domain_t<overlap_geometry_t<RangeT, LensT>>;
+
     std::ranges::iterator_t<RangeT> position;
     std::ranges::sentinel_t<RangeT> finish;
 
@@ -500,6 +502,9 @@ class overlap_cursor final
 
     overlap_observation<std::ranges::range_reference_t<RangeT>> row;
     overlap_observation<overlap_geometry_t<RangeT, LensT>> geometry;
+
+public:
+    using cut_type = overlap_cut_t<RangeT, LensT>;
 
 public:
     constexpr overlap_cursor(RangeT& source, const LensT& lens)
@@ -530,10 +535,70 @@ public:
 
     constexpr auto bounds() const { return bounds_of(geometry.get()); }
 
-    constexpr auto cut(const borrowed_interval<
-                       expression_domain_t<overlap_geometry_t<RangeT, LensT>>> selected) const
+    constexpr cut_type cut(const borrowed_interval<domain_type> selected) const
     {
         return overlap_cut_t<RangeT, LensT> {row.get(), selected};
+    }
+
+};
+
+template <typename RangeT, typename LensT>
+concept packed_overlap_source = overlap_source<RangeT, LensT> and
+    std::same_as<typename expression_domain_t<overlap_geometry_t<RangeT, LensT>>::value_type,
+                 std::uint64_t>;
+
+// The packed start is the exclusive prefix sum of full origin lengths, including skipped origins.
+// Adapted from Blelloch, Prefix Sums and Their Applications (1993), sections 1.1 and 1.6:
+// https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf
+// Keep sequential checked state so geometry errors and stopping retain their traversal order:
+template <typename RangeT, typename LensT>
+requires packed_overlap_source<RangeT, LensT>
+class packed_overlap_cursor final
+{
+    using domain_type = expression_domain_t<overlap_geometry_t<RangeT, LensT>>;
+
+    overlap_cursor<RangeT, LensT> source;
+
+    std::uint64_t packed_first = 0;
+    std::optional<std::uint64_t> packed_last;
+
+public:
+    using cut_type = std::pair<typename overlap_cursor<RangeT, LensT>::cut_type, byte_mapping>;
+
+public:
+    constexpr packed_overlap_cursor(RangeT& rows, const LensT& lens) : source(rows, lens)
+    {}
+
+public:
+    constexpr bool exhausted() const { return source.exhausted(); }
+
+    constexpr void load()
+    {
+        if (packed_last) {
+            return;
+        }
+
+        source.load();
+        packed_last.emplace(source.empty() ? packed_first
+            : bytes.add(packed_first, extent_of(source.bounds()).length));
+    }
+
+    constexpr void advance()
+    {
+        packed_first = *packed_last;
+        packed_last.reset();
+        source.advance();
+    }
+
+    constexpr bool empty() const { return source.empty(); }
+
+    constexpr auto bounds() const { return source.bounds(); }
+
+    constexpr cut_type cut(const borrowed_interval<domain_type> selected) const
+    {
+        const byte_mapping whole {extent_of(source.bounds()), packed_first};
+
+        return {source.cut(selected), ceph::salad::datum::clip(whole, extent_of(selected)).value()};
     }
 
 };
@@ -543,21 +608,19 @@ public:
 // Refinement retains input identities as in Dignös et al., Snapshot Semantics for Temporal
 // Multiset Relations (2019), appendix E.2: https://arxiv.org/html/1902.04938
 // Here each input is internally disjoint; endpoint inclusion and infinity use Datum's algebra:
-template <typename LeftT, typename RightT, typename LeftLensT, typename RightLensT>
+template <typename LeftCursorT, typename RightCursorT>
 class overlap_stream final
 {
-    overlap_cursor<LeftT, LeftLensT> left;
-    overlap_cursor<RightT, RightLensT> right;
+    LeftCursorT& left;
+    RightCursorT& right;
 
 public:
-    using value_type = std::pair<overlap_cut_t<LeftT, LeftLensT>,
-                                 overlap_cut_t<RightT, RightLensT>>;
+    using value_type = std::pair<typename LeftCursorT::cut_type, typename RightCursorT::cut_type>;
 
 public:
-    constexpr overlap_stream(LeftT& left_source, RightT& right_source,
-                             const LeftLensT& left_lens, const RightLensT& right_lens)
-        : left(left_source, left_lens),
-          right(right_source, right_lens)
+    constexpr overlap_stream(LeftCursorT& left_source, RightCursorT& right_source)
+        : left(left_source),
+          right(right_source)
     {}
 
 private:
@@ -686,12 +749,42 @@ requires detail::overlap_source<LeftT, LeftLensT> and
                                           const LeftLensT& left_lens = {},
                                           const RightLensT& right_lens = {})
 {
-    detail::overlap_stream<LeftT, RightT, LeftLensT, RightLensT> overlaps {
-        left, right, left_lens, right_lens
-    };
+    detail::overlap_cursor<LeftT, LeftLensT> left_cursor {left, left_lens};
+    detail::overlap_cursor<RightT, RightLensT> right_cursor {right, right_lens};
+    detail::overlap_stream overlaps {left_cursor, right_cursor};
 
     return ceph::salad::datum::visit_range(overlaps, [&consumer](const auto& cuts) {
         return std::invoke(consumer, cuts.first, cuts.second);
+    });
+}
+
+// Visit logical overlaps and their positions in a packed source payload. Source coordinates are
+// uint64_t bytes; nonempty source geometry and selected cuts must be finite half-open intervals.
+// The callback receives source cut, selection cut, and selected byte_mapping. Both origins and
+// all borrowed values remain scoped to the callback. Holes contribute no packed bytes, but
+// skipped origins contribute their complete lengths. Other contracts match visit_overlaps:
+template <std::ranges::input_range SourceT, std::ranges::input_range SelectionT, typename ConsumerT,
+          typename SourceLensT = std::identity, typename SelectionLensT = std::identity>
+requires detail::packed_overlap_source<SourceT, SourceLensT> and
+         detail::overlap_source<SelectionT, SelectionLensT> and
+         same_expression_domain<detail::overlap_geometry_t<SourceT, SourceLensT>,
+                                 detail::overlap_geometry_t<SelectionT, SelectionLensT>> and
+         std::invocable<ConsumerT&, const detail::overlap_cut_t<SourceT, SourceLensT>&,
+                                    const detail::overlap_cut_t<SelectionT, SelectionLensT>&,
+                                    const byte_mapping&> and
+         ceph::salad::datum::detail::acceptance_result<std::invoke_result_t<
+             ConsumerT&, const detail::overlap_cut_t<SourceT, SourceLensT>&,
+                         const detail::overlap_cut_t<SelectionT, SelectionLensT>&,
+                         const byte_mapping&>>
+[[nodiscard]] constexpr auto visit_packed_overlaps(SourceT&& source, SelectionT&& selection,
+    ConsumerT&& consumer, const SourceLensT& source_lens = {}, const SelectionLensT& selection_lens = {})
+{
+    detail::packed_overlap_cursor<SourceT, SourceLensT> source_cursor {source, source_lens};
+    detail::overlap_cursor<SelectionT, SelectionLensT> selection_cursor {selection, selection_lens};
+    detail::overlap_stream overlaps {source_cursor, selection_cursor};
+
+    return ceph::salad::datum::visit_range(overlaps, [&consumer](const auto& cuts) {
+        return std::invoke(consumer, cuts.first.first, cuts.second, cuts.first.second);
     });
 }
 

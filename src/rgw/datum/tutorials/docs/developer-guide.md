@@ -61,6 +61,11 @@ retains each current value descriptor and its projected geometry through all ove
 It accepts input iterators and borrows callbacks and lenses. The [mapped-read program](examples/overlap_reads.cpp)
 shows logical-to-backing translation without materializing layout records. Cut/source observations
 are scoped to the callback; retain needed native ownership explicitly when scheduling I/O.
+For a sparse extent map with a packed payload, `interval::visit_packed_overlaps` also supplies
+the selected `byte_mapping`. Keep unselected origins in that map when their bytes are present
+in the payload. `byte_cursor::take(byte_extent)` selects the absolute packed region after
+admitting its skip and length. The [packed-payload program](examples/packed_payload.cpp) shows
+this composition; native framing, payload validation, and publication remain caller decisions.
 
 ## Own what must survive
 

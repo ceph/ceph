@@ -592,7 +592,7 @@ TEST_CASE("clipping preserves origins across holes and adjacent segments")
 
 TEST_CASE("cuts and byte cursors compose across object and payload holes")
 {
-    using Q = iv::query<mechanics_domain<unsigned>>;
+    using Q = iv::byte_query;
 
     const std::array rows {Q::closed_open(0, 4), Q::closed_open(10, 18), Q::closed_open(18, 22),
                            Q::closed_open(40, 43)};
@@ -603,29 +603,59 @@ TEST_CASE("cuts and byte cursors compose across object and payload holes")
     const std::array selected {Q::closed_open(1, 3), Q::closed_open(12, 20),
                                Q::closed_open(42, 43)};
     const iv::canonical_range selection {selected};
-    const iv::clip_view cuts {rows, selection, std::identity {}};
     datum::byte_cursor input {fragments};
-    auto origin = std::cbegin(rows);
-    unsigned packed_offset = 0;
     std::string output;
     std::vector<std::size_t> sources;
-    for (const auto cut : cuts) {
-        while (std::addressof(*origin) != std::addressof(cut.source())) {
-            packed_offset += origin->upper().key() - origin->lower().key();
-            ++origin;
-        }
-        const auto lower = cut.bounds().lower().key();
-        const auto offset = packed_offset + lower - cut.source().lower().key();
-        input.consume(offset - input.position());
-        datum::write_fragments(
-            input.take(cut.bounds().upper().key() - lower),
-            [&output](const auto block) { output.append(std::data(block), std::size(block)); });
-        ceph::util::push_back(sources, std::addressof(cut.source()) - std::data(rows));
-    }
+    const auto result = iv::visit_packed_overlaps(rows, selection,
+        [&](const auto& source, const auto&, const datum::byte_mapping mapped) {
+            datum::write_fragments(
+                input.take(datum::byte_extent {mapped.backing_offset, mapped.logical.length}),
+                [&output](const auto block) { output.append(std::data(block), std::size(block)); });
+            ceph::util::push_back(sources, std::addressof(source.source()) - std::data(rows));
+
+            return datum::acceptance::accept;
+        });
+
+    CHECK(4 == result.accepted);
     CHECK(output == "bcghijklmns");
     CHECK(sources == std::vector<std::size_t> {0, 1, 2, 3});
     CHECK(input.position() == std::size(bytes));
     CHECK(input.remaining() == 0);
+}
+
+TEST_CASE("absolute cursor selections admit skip and length before changing position")
+{
+    const std::array fragments {std::string_view {"abc"}, std::string_view {},
+                                std::string_view {"defgh"}};
+    unsigned observations = 0;
+    auto observed = fragments | std::views::transform([&observations](const auto fragment) {
+        ++observations;
+
+        return fragment;
+    });
+    datum::byte_cursor input {observed};
+    std::array<char, 3> output {};
+    datum::copy(input.take(datum::byte_extent {2, 3}), output);
+    CHECK(std::string_view {output.data(), output.size()} == "cde");
+    CHECK(5 == input.position());
+    CHECK(3 == input.remaining());
+
+    observations = 0;
+    for (const auto invalid : {datum::byte_extent {4, 1}, datum::byte_extent {9, 0},
+                               datum::byte_extent {7, 2},
+                               datum::byte_extent {std::numeric_limits<std::uint64_t>::max(), 1}}) {
+        CHECK_THROWS_AS(input.take(invalid), std::out_of_range);
+        CHECK(5 == input.position());
+        CHECK(3 == input.remaining());
+        CHECK(0 == observations);
+    }
+
+    CHECK(std::ranges::empty(input.take(datum::byte_extent {5, 0})));
+    CHECK(5 == input.position());
+    CHECK(std::ranges::empty(input.take(datum::byte_extent {8, 0})));
+    CHECK(8 == input.position());
+    CHECK(0 == input.remaining());
+    CHECK_THROWS_AS(input.take(datum::byte_extent {7, 0}), std::out_of_range);
 }
 
 TEST_CASE("iterator copies and moves retain owned clipping geometry")

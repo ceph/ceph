@@ -55,11 +55,14 @@ Other core operations already accept standard ranges under their established nam
 | Copy selected contiguous or fragmented bytes | `copy(source, byte_extent, output)` |
 | Scatter contiguous bytes into writable fragments | `scatter_bytes(source, fragments)` |
 | Read the next bytes into ordinary storage | `byte_cursor::read_into(output)` |
+| Take a forward absolute payload selection | `byte_cursor::take(byte_extent)` |
 | Send fragments to a synchronous consumer | `write_fragments(fragments, sink)` |
 | Compose a dynamic sequence of key segments | `key::compose_range(segments)` |
 | Append interval entries to bounded storage | `static_interval_set::append_range`, also through `interval_batch` |
 | Normalize, query, or clip intervals | `compile_intervals`, `canonical_range`, and `clip_view` |
 | Align independently segmented sources | `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` |
+| Map logical cuts into a packed payload | `interval::visit_packed_overlaps(source, selection, consumer)` |
+| Convert finite half-open byte bounds | `interval::bounds(byte_extent)`, `interval::extent_of(interval)` |
 | Count or take selected coverage | `interval::measure(range, metric)`, `interval::take(range, quota, metric)` |
 | Visit data and preserve continuation | `traversal::scan_range`, `traversal::for_each_page` |
 
@@ -591,14 +594,11 @@ const iv::clip_view borrowed_cuts {
     records, selected_coverage, [](const segment& row) { return extent_view {row}; }};
 ```
 
-Source-preserving cuts compose with byte cursors without a shared native payload
-type. The binding maps each cut's object coordinate into its packed payload
-coordinate, advances `input.consume(offset - input.position())`, then consumes
-`input.take(length)` through `write_fragments()`. Account for skipped origins
-when computing packed offsets: object holes occupy no packed bytes. For retained
-native buffers, a native owner-preserving cursor may be the appropriate sink;
-borrowed spans alone do not transfer its owner. Ownership and output coverage
-remain binding responsibilities.
+Source-preserving cuts compose with byte cursors without a shared native payload type.
+`visit_packed_overlaps` supplies packed payload positions; `byte_cursor::take(byte_extent)`
+selects the corresponding fragments for `write_fragments`. A native owner-preserving cursor
+can retain native buffers; borrowed spans alone do not transfer their owner. Ownership,
+payload admission, and publication remain binding responsibilities.
 
 `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` visits the
 intersections of two ordered, internally disjoint input ranges. Both lenses default to
@@ -630,6 +630,29 @@ native input iterator can itself fetch data. Exceptions propagate, and prior cal
 are not rolled back. This differs from `clip_view`'s prevalidated forward-source contract.
 The traversal adapts ordered co-iteration and identity-preserving interval refinement;
 the [bibliography](#bibliography) identifies the research and the relevant sections.
+
+`interval::extent_of(interval)` converts finite half-open `uint64_t` byte bounds into
+`byte_extent`, using checked distance. It is the inverse of `bounds(byte_extent)` wherever
+the endpoint is representable, including empty finite extents at nonzero positions.
+Infinite or other endpoint conventions and reversed finite geometry throw `std::domain_error`.
+
+`interval::visit_packed_overlaps(source, selection, consumer, source_lens, selection_lens)`
+adds logical-to-packed mapping to the same traversal. The callback receives the source cut,
+selection cut, and selected `byte_mapping`. Its backing offset is the sum of preceding full
+origin lengths plus the cut's displacement inside the current origin. Holes contribute no
+payload bytes; unselected origins still contribute their lengths. Each current descriptor and
+projection is retained once, without allocating a prefix array or materializing the source.
+Packed position zero corresponds to the first supplied origin. Keep all origins represented
+in the payload, including unselected ones, in the source sequence.
+
+Logical coordinates are `uint64_t` bytes. Encountered nonempty source geometry and emitted cuts
+must be finite half-open; unsupported bounds throw before invoking their consumer. A universal
+selection works when its intersections are finite half-open. Checked prefix arithmetic and
+the ordinary mapping clip enforce representability. Other input, lifetime, progress, and error
+contracts match `visit_overlaps`. Geometry traversal admits no payload or asynchronous effects.
+The [packed-payload example](tutorials/examples/packed_payload.cpp) combines the supplied mapping
+with `byte_cursor::take(byte_extent)` to gather selected bytes across independent holes and
+fragment boundaries. Prefix-position research is cited in the [bibliography](#bibliography).
 
 `interval/metric.h` keeps distance separate from order. A metric supplies a quantity type, zero,
 and distance. Measurement also needs checked addition; quota selection needs quantity ordering,
@@ -713,6 +736,12 @@ Byte cursor reads preflight the requested length, then copy and advance in one
 fragment traversal. No flattening or allocation is introduced. If observing a
 later fragment throws, already copied bytes and the cursor's consumed prefix
 remain; a bookmark can restore the position when the binding permits replay.
+`byte_cursor::take(byte_extent)` selects an absolute forward payload region. It checks both
+skip and length against remaining capacity before advancement or narrowing to `size_t`.
+Requests behind the current position or beyond capacity throw `std::out_of_range` without
+changing position. Admitted selections reuse `consume` and `take(count)`; fragment-observation
+exceptions can still leave a consumed prefix. Returned slices retain their existing borrowing
+requirements. Empty selections can advance to a later valid position, including the end.
 Scalar diagnostic redaction skips field access when no size is needed.
 
 `traversal::for_each_page()` separately handles explicit cursor progress,
@@ -1205,3 +1234,7 @@ describe local machinery, not backend throughput.
   PACMPL 2, OOPSLA, article 123, 2018; sections 3.3 and 4.4.
   Capability-based ordered co-iteration informs the two-input traversal. Datum handles
   interval endpoints and C++ lifetimes separately; no tensor compiler machinery is required.
+- Guy E. Blelloch. [*Prefix Sums and Their Applications*](https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf).
+  In *Synthesis of Parallel Algorithms*, 1993; sections 1.1 and 1.6. The exclusive prefix
+  interpretation supplies packed origin starts. Datum uses sequential checked state and
+  preserves source identities; it introduces neither a parallel scan nor a prefix array.

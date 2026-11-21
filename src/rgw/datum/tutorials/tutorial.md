@@ -612,6 +612,48 @@ propagate and completed effects remain. The research behind ordered co-iteration
 identity preservation is collected in the [bibliography](#bibliography).
 Build and check the complete example with the `overlap_reads` target.
 
+### Select from a packed sparse payload
+
+A sparse read can return logical extents and a payload containing only those extents' bytes.
+Use `iv::visit_packed_overlaps(source, selection, consumer, source_lens, selection_lens)` to
+obtain each selected logical extent together with its packed payload offset. Lenses default
+to identity; logical positions are `uint64_t` bytes. The callback receives the source cut,
+selection cut, and a `datum::byte_mapping`. Each input retains its independent origins.
+
+Packed positions count all preceding origin lengths, including unselected origins. Logical
+holes occupy no packed bytes. Position zero is relative to the first supplied origin, so the
+source sequence must include every origin represented in the packed payload.
+
+Inside the callback, a byte cursor can select that absolute packed region directly:
+
+```cpp
+const auto bytes = payload.take(datum::byte_extent {mapped.backing_offset, mapped.logical.length});
+datum::write_fragments(bytes, sink);
+```
+
+`take(byte_extent)` admits the complete forward selection before skipping bytes or narrowing
+its coordinates to `size_t`. Backward or oversized selections throw `std::out_of_range` without
+changing position. Admitted traversal retains ordinary fragment-observation exceptions and
+scoped borrowing; an exception can leave a consumed prefix. For finite half-open byte cuts,
+`iv::extent_of(cut)` converts the selected bounds to `byte_extent`, preserving empty positions.
+
+The [complete packed-payload program](examples/packed_payload.cpp) selects two cuts from one
+origin and a cut after a skipped origin. Its [expected output](expected/packed_payload.txt) is:
+
+```text
+logical 12, packed 6, length 2
+logical 16, packed 10, length 1
+logical 42, packed 18, length 1
+selected: ghks
+pieces: 3
+```
+
+Build and check it with the `packed_payload` target. Encountered nonempty source geometry and
+emitted cuts must be finite half-open; unsupported bounds throw `std::domain_error`. A universal
+selection can produce valid finite cuts. Other order, lifetime, progress, and failure contracts
+match `visit_overlaps`. Geometry traversal does not validate the payload or retain its native
+owner for asynchronous work. The [bibliography](#bibliography) cites the prefix-position research.
+
 ## 6 Five bytes, please
 
 *Use a metric to take up to a quota of covered bytes without counting gaps.*
@@ -2327,3 +2369,7 @@ identify sources in the separate local RGW integration snapshot described in the
   PACMPL 2, OOPSLA, article 123, 2018; sections 3.3 and 4.4. Describes ordered co-iteration
   and the capabilities needed for merge traversal. Datum separately handles interval endpoint
   inclusivity, infinity, and scoped C++ lifetimes.
+- Guy E. Blelloch. [*Prefix Sums and Their Applications*](https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf).
+  In *Synthesis of Parallel Algorithms*, 1993; sections 1.1 and 1.6. The prescan definition
+  and segment-allocation example motivate packed origin positions. Datum uses sequential
+  checked state while preserving source identity and traversal effects.

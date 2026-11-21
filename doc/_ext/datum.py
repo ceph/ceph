@@ -49,6 +49,8 @@ def guide():
     links['bibliography'] = ('references', '')
     links['align-two-independently-segmented-sources'] = (
         '05-labeled-slices', 'align-two-independently-segmented-sources')
+    links['select-from-a-packed-sparse-payload'] = (
+        '05-labeled-slices', 'select-from-a-packed-sparse-payload')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
         links[slug(title)] = ('build-and-run', nodes.make_id(title))
     return text, sections, chapters, links
@@ -148,6 +150,10 @@ def source_read(app, docname, source):
                     'while selecting logical ranges and translating backing offsets. Its '
                     '[expected output](expected/overlap_reads.txt) is checked by the '
                     '`overlap_reads` target.\n')
+        content += ('\nThe [packed-payload program](examples/packed_payload.cpp) maps sparse logical '
+                    'selections into fragmented payload bytes. Its '
+                    '[expected output](expected/packed_payload.txt) is checked by '
+                    'the `packed_payload` target.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:
