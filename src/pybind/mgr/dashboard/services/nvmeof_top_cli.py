@@ -503,7 +503,11 @@ else:
             self.delay = (now - self.timestamp)
             self.timestamp = now
 
-            self.client = next(iter(self.clients.values()))
+            if self.client is None:
+                if tool.args.get('server_address'):
+                    self.client = next(iter(self.clients.values()))
+                else:
+                    self.client = NVMeoFClient(self.group)
 
             if self.gw_info is None:
                 self.gw_info = self._fetch_gateway_info(self.client)
