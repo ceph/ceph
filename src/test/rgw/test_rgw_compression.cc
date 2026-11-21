@@ -185,3 +185,73 @@ TEST(Compress, BillionZeros)
 
   ASSERT_EQ(d_sink.get_sink().length() , size*1000);
 }
+
+// counts the calls it gets and fails once there are far more than a correct
+// filter could make, so a filter that loops on zero-length chunks ends the
+// test instead of hanging it
+class ut_get_sink_count : public ut_get_sink {
+public:
+  int calls = 0;
+  int empty_calls = 0;
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
+  {
+    if (++calls > 1000)
+      return -ELOOP;
+    if (bl_len == 0)
+      ++empty_calls;
+    return ut_get_sink::handle_data(bl, bl_ofs, bl_len);
+  }
+};
+
+// a compression block can be larger than the current rgw_max_chunk_size if the
+// option was lowered after the object was written. a range that ends well
+// before the end of such a block must not keep calling the next filter once
+// the whole range has been sent
+TEST(Decompress, RangeInBlockLargerThanChunkSize)
+{
+  CompressorRef plugin;
+  plugin = Compressor::create(g_ceph_context, Compressor::COMP_ALG_ZLIB);
+  ASSERT_NE(plugin.get(), nullptr);
+
+  constexpr size_t size = 1024 * 1024;
+  bufferlist bl;
+  bl.append_zero(size);
+
+  // one process() call writes the whole object as a single block
+  ut_put_sink c_sink;
+  RGWPutObj_Compress compressor(g_ceph_context, plugin, &c_sink);
+  compressor.process(std::move(bl), 0);
+  compressor.process({}, size); // flush
+
+  RGWCompressionInfo cs_info;
+  cs_info.compression_type = plugin->get_type_name();
+  cs_info.orig_size = size;
+  cs_info.compressor_message = compressor.get_compressor_message();
+  cs_info.blocks = std::move(compressor.get_compression_blocks());
+  ASSERT_EQ(1u, cs_info.blocks.size());
+
+  auto& conf = g_ceph_context->_conf;
+  const auto old_chunk_size = conf.get_val<Option::size_t>("rgw_max_chunk_size");
+  conf.set_val_or_die("rgw_max_chunk_size", "65536");
+  conf.apply_changes(nullptr);
+
+  ut_get_sink_count d_sink;
+  RGWGetObj_Decompress decompress(g_ceph_context, &cs_info, true, &d_sink);
+
+  off_t f_begin = 0;
+  off_t f_end = 99;
+  decompress.fixup_range(f_begin, f_end);
+
+  int r = decompress.handle_data(c_sink.get_sink(), 0, c_sink.get_sink().length());
+  bufferlist empty;
+  if (r == 0)
+    r = decompress.handle_data(empty, 0, 0);
+
+  conf.set_val_or_die("rgw_max_chunk_size", std::to_string(old_chunk_size));
+  conf.apply_changes(nullptr);
+
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(100u, d_sink.get_sink().length());
+  ASSERT_EQ(0, d_sink.empty_calls);
+}
