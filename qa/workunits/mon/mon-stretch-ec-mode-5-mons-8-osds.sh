@@ -1,6 +1,11 @@
 #!/bin/bash -ex
 
-# A bash script for setting up stretch mode with 5 monitors and 8 OSDs.
+# Lays out the cluster for tasks.stretch_ec_mode_disable_enable, which the
+# rados/singleton stretch-ec-mode-5-mons-8-osds job runs next: datacenters
+# dc1 and dc2, each of 2 hosts with 2 OSDs, monitors a and b in dc1, c and d
+# in dc2, and e in dc3, which has no OSDs, as the tiebreaker. It also makes
+# the erasure code profile stretch_ec_profile (k=2 m=1) and its rule over
+# the two datacenters, stretch_ec_rule, for the pool that the task creates.
 
 NUM_OSDS_UP=$(ceph osd df | grep "up" | wc -l)
 
@@ -50,8 +55,9 @@ ceph mon set_location e datacenter=dc3 host=host05
 # remove the current host from crush map
 hostname=$(hostname -s)
 ceph osd crush remove $hostname
-# create a new crush rule with stretch ec rule: a datacenter has two hosts
-# for the three shards of its zone, so place them on OSDs
+# a datacenter has 2 hosts for the 3 shards of each PG in it, so the
+# profile places shards on OSDs; create-erasure with 2 zones makes a rule
+# with 3 shards in each datacenter
 ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 \
     crush-failure-domain=osd
 ceph osd crush rule create-erasure stretch_ec_rule stretch_ec_profile 2

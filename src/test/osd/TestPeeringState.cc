@@ -231,9 +231,10 @@ protected:
   }
 
   // Helper to create an EC Pool
-  void create_ec_pool(int k = 2, int m = 2, bool fast_ec = true)
+  void create_ec_pool(int k = 2, int m = 2, bool fast_ec = true,
+                      int num_zones = 1)
   {
-    pool_size = k + m;
+    pool_size = (k + m) * num_zones;
     OSDMap::Incremental new_pool_inc(osdmap->get_epoch() + 1);
     new_pool_inc.new_pool_max = osdmap->get_pool_max();
     new_pool_inc.fsid = osdmap->get_fsid();
@@ -267,16 +268,45 @@ protected:
         "default";
     p->ec_data_shard_count = k;
     p->ec_coding_shard_count = m;
+    p->num_zones = num_zones;
     p->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
     if (fast_ec) {
-      p->nonprimary_shards.clear();
-      for (int i = 1; i < k; i++) {
-        p->nonprimary_shards.insert(shard_id_t(i));
-      }
+      p->nonprimary_shards = ECUtil::nonprimary_shards(k, m, {}, num_zones);
       p->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
     }
     apply_incremental(new_pool_inc);
     setup_up_acting();
+  }
+
+  // Helper - change num_zones of the EC pool, as `osd pool set num_zones`
+  // does: the shards of the removed zones leave up and acting, and those of
+  // added zones join them. The OSDs stay up, so they still get events
+  void set_num_zones(int num_zones)
+  {
+    const pg_pool_t *pp = osdmap->get_pg_pool(pool_id);
+    const int k = *pp->ec_data_shard_count;
+    const int m = *pp->ec_coding_shard_count;
+    dout(0) << "= num_zones " << pp->get_num_zones() << " -> " << num_zones
+            << " =" << dendl;
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.fsid = osdmap->get_fsid();
+    pg_pool_t *p = pending_inc.get_new_pool(pool_id, pp);
+    pool_size = (k + m) * num_zones;
+    p->size = pool_size;
+    p->num_zones = num_zones;
+    p->nonprimary_shards = ECUtil::nonprimary_shards(k, m, {}, num_zones);
+    p->last_change = pending_inc.epoch;
+    apply_incremental(pending_inc);
+    up.resize(pool_size);
+    acting.resize(pool_size);
+    for (int shard = 0; shard < pool_size; shard++) {
+      up[shard] = shard;
+      acting[shard] = shard;
+      if (std::find(up_acting.begin(), up_acting.end(), shard) ==
+          up_acting.end()) {
+        up_acting.push_back(shard);
+      }
+    }
   }
 
   // Helper to create a Replica Pool
@@ -859,9 +889,10 @@ protected:
     pg_log_entry_t entry(pg_log_entry_t::MODIFY, soid, v, pv, uv, reqid, utime_t(), 0);
     entry.written_shards = written;
 
+    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
     for (auto osd : osds) {
-      // Skips OSDs that are not written
-      if (!written.empty() && !written.contains(osd)) {
+      // Skips OSDs that are not written; written holds relative shards
+      if (!written.empty() && !written.contains(pool->get_relative_shard(osd))) {
         continue;
       }
       std::vector<pg_log_entry_t> entries;
@@ -2693,6 +2724,44 @@ TEST_F(PeeringStateTest, Issue79706_test3) {
   // recover.  We only verify that the PG reached a valid active+peered state.
   EXPECT_TRUE(get_ps(acting_primary)->is_active());
   EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+}
+
+TEST_F(PeeringStateTest, PartialWriteNumZonesFlip) {
+  // Scenario: 2+1 pool over two zones [0,1,2][3,4,5], nonprimary shards 1, 4
+  // Partial write v2 skipping shards 1 and 4 completes
+  // Partial write v3 skipping shards 1 and 4 is in flight
+  // num_zones 1: peering keeps v3, so shard 1's pwlc reaches v3, but shard
+  //   4 has left the pool and its pwlc stays at v2; no up_thru, so the PG
+  //   does not go active
+  // num_zones 2: shard 4's log, at v2, is authoritative and pwlc rolls back
+  //   to v2
+  //   Without the fix shard 1's pwlc starts at v2, past its last_update v1,
+  //   and shard 1 asserts on the primary's info
+  dout(0) << "== PartialWriteNumZonesFlip ==" << dendl;
+  create_ec_pool(2, 1, true, 2);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  eversion_t v1 = test_append_log_entry();
+  eversion_t v2 = test_append_log_entry(ss({0, 2}));
+  eversion_t v3 = test_append_log_entry(ss({0, 2}), shard_id_set(), true);
+  set_num_zones(1);
+  test_event_advance_map();
+  test_event_activate_map();
+  dispatch_all();
+  const auto &pwlc = get_ps(acting_primary)->get_info().partial_writes_last_complete;
+  ASSERT_EQ(pwlc.at(shard_id_t(1)), std::pair(v1, v3));
+  ASSERT_EQ(pwlc.at(shard_id_t(4)), std::pair(v1, v2));
+  set_num_zones(2);
+  test_peering();
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  for (int shard : {1, 4}) {
+    verify_replica_activated(acting[shard]);
+    EXPECT_EQ(get_ps(acting_primary)->get_info().partial_writes_last_complete.at(
+                shard_id_t(shard)),
+              std::pair(v1, v3));
+  }
 }
 
 

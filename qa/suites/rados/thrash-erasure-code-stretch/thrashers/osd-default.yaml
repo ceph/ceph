@@ -1,0 +1,25 @@
+# The OSD thrasher on pools over zones. min_in 12 keeps at least 4 OSDs in
+# each zone of 8, enough for k=6 m=2.
+overrides:
+  ceph:
+    log-ignorelist:
+      - but it is still running
+      - objects unfound and apparently lost
+      - slow request
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(DEPRECATED_EC_PLUGIN\)
+      - \(DEGRADED_STRETCH_MODE\)
+      - \(RECOVERING_STRETCH_MODE\)
+    conf:
+      osd:
+        osd debug reject backfill probability: .1
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        osd max backfills: 2
+tasks:
+  - thrashosds:
+      timeout: 1200
+      chance_pgnum_grow: 1
+      chance_pgnum_shrink: 1
+      chance_pgpnum_fix: 1
+      min_in: 12
