@@ -29,6 +29,7 @@ from .cephadmservice import (
     AuthEntity,
     CephService,
     CephadmDaemonDeploySpec,
+    DaemonDeployContext,
     simplified_keyring,
 )
 from ..schedule import DaemonPlacement
@@ -138,18 +139,20 @@ class SMBService(CephService):
         return None
 
     def prepare_create(
-        self, daemon_spec: CephadmDaemonDeploySpec
+            self,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         logger.debug('smb prepare_create')
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(
-            daemon_spec
-        )
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     def generate_config(
-        self, daemon_spec: CephadmDaemonDeploySpec
+            self,
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         logger.debug('smb generate_config')
         assert self.TYPE == daemon_spec.daemon_type
         smb_spec = cast(
@@ -228,7 +231,7 @@ class SMBService(CephService):
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
-        deps = sorted(self.get_dependencies(self.mgr, smb_spec))
+        deps = self.get_dependencies(self.mgr, smb_spec, daemon_spec.daemon_type)
         return config_blobs, deps
 
     def _cert_or_uri(self, data: Optional[str]) -> Optional[str]:
@@ -445,9 +448,9 @@ class SMBService(CephService):
         return ip
 
     @classmethod
-    def get_dependencies(
+    def _get_service_dependencies(
         cls,
-        mgr: 'CephadmOrchestrator',
+        mgr: "CephadmOrchestrator",
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None,
     ) -> List[str]:

@@ -9,7 +9,7 @@ from orchestrator import DaemonDescriptionStatus
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm import utils
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
@@ -49,7 +49,9 @@ class TestNFS:
                                       monitoring_ip_addrs={'test': '1.2.3.1'})
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
 
@@ -57,7 +59,9 @@ class TestNFS:
                                       monitoring_networks=['1.2.3.0/24'])
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
 
@@ -81,7 +85,8 @@ class TestNFS:
             with with_service(cephadm_module, nfs_spec, status_running=True) as _:
                 dds = wait(cephadm_module, cephadm_module.list_daemons())
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dds[0])
-                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(daemon_spec)
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(daemon_spec))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Bind_addr = 1.2.3.7" in ganesha_conf
 
@@ -96,7 +101,8 @@ class TestNFS:
             with with_service(cephadm_module, nfs_spec, status_running=True) as _:
                 dds = wait(cephadm_module, cephadm_module.list_daemons())
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dds[0])
-                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(daemon_spec)
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(daemon_spec))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Bind_addr = 1.2.3.7" in ganesha_conf
 
@@ -128,7 +134,7 @@ class TestNFS:
                                 keepalived_password='12345',
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32")
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -175,7 +181,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -213,7 +219,7 @@ class TestNFS:
                                 ssl=True,
                                 enable_stats=True,
                                 monitor_ssl=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -265,7 +271,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -305,7 +311,7 @@ class TestNFS:
                                 monitor_ssl=True,
                                 monitor_cert_source='cephadm-signed'
                                 )
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -357,7 +363,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -394,7 +400,7 @@ class TestNFS:
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True,
                                 monitor_ip_addrs={'test': '1.2.3.1'})
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -445,7 +451,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -476,7 +482,9 @@ class TestNFS:
                                       tls_ciphers='ECDHE-ECDSA-AES256')
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 expected_tls_block = (
                     'TLS_CONFIG{\n'
@@ -520,12 +528,12 @@ class TestNFS:
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='host1',
                         daemon_id='foo.host1.0.0',
                         service_name=nfs_spec.service_name(),
                         ports=[2049, 9587, 20049],
-                    ))
+                    )))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 4, nfsrdma, rpcrdma" in ganesha_conf
 
@@ -559,12 +567,12 @@ class TestNFS:
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='host1',
                         daemon_id='foo.host1.0.0',
                         service_name=nfs_spec.service_name(),
                         ports=[2049, 9587, 1234],
-                    ))
+                    )))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
                 assert "NFS_RDMA_Port = 1234" in ganesha_conf
@@ -585,11 +593,11 @@ class TestNFS:
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='host1',
                         daemon_id='foo.host1.0.0',
                         service_name=nfs_spec.service_name(),
-                    ))
+                    )))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 4" in ganesha_conf
                 assert "nfsrdma" not in ganesha_conf
@@ -608,7 +616,9 @@ class TestNFS:
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 4;" in ganesha_conf
 
@@ -617,7 +627,9 @@ class TestNFS:
                                       enable_nfsv3=True)
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4;" in ganesha_conf
 
@@ -879,3 +891,57 @@ def test_nfs_choose_next_action_detects_explicit_value_change():
         last_deps=['tls_ktls: False'],
     )
     assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_client_object_cache(cephadm_module: CephadmOrchestrator):
+    """Object-cache fields are included in deps only when set."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    assert not any(d.startswith('enable_client_object_cache:') for d in deps)
+    assert not any(d.startswith('client_object_cache_size:') for d in deps)
+    assert not any(d.startswith('client_object_cache_max_dirty:') for d in deps)
+
+    oc_spec = NFSServiceSpec(
+        service_id='foo',
+        enable_client_object_cache=True,
+        client_object_cache_size='1MiB',
+        client_object_cache_max_dirty='512KiB',
+    )
+    deps = nfs_svc.get_dependencies(cephadm_module, oc_spec)
+    assert 'enable_client_object_cache: True' in deps
+    assert 'client_object_cache_size: 1MiB' in deps
+    assert 'client_object_cache_max_dirty: 512KiB' in deps
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        oc_spec,
+        curr_deps=deps,
+        last_deps=[],
+    )
+    assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_rdma_and_tls_options(cephadm_module: CephadmOrchestrator):
+    spec = NFSServiceSpec(
+        service_id='foo',
+        enable_rdma=True,
+        rdma_port=20049,
+        tls_ktls=True,
+        tls_debug=True,
+        tls_min_version='1.3',
+        tls_ciphers='TLS_AES_256_GCM_SHA384',
+    )
+
+    assert service_registry.get_service('nfs').get_dependencies(
+        cephadm_module, spec, 'nfs'
+    ) == sorted([
+        'enable_rdma: True',
+        'rdma_port: 20049',
+        'tls_ktls: True',
+        'tls_debug: True',
+        'tls_min_version: 1.3',
+        'tls_ciphers: TLS_AES_256_GCM_SHA384',
+    ])
