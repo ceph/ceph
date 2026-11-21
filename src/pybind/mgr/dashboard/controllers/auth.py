@@ -11,7 +11,9 @@ import cherrypy
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, AuthType, BaseAuth, JwtManager, OAuth2
+from ..services.auth.signals import LOGIN_METRIC
 from ..services.cluster import ClusterModel
+from ..services.telemetry import telemetry
 from ..settings import Settings
 from . import APIDoc, APIRouter, ControllerAuthMixin, EndpointDoc, RESTController, allow_empty_body
 
@@ -56,6 +58,7 @@ class Auth(RESTController, ControllerAuthMixin):
                      'ttl': (int, 'Token Time to Live (in hours)')
                  },
                  responses={201: AUTH_SCHEMA})
+    @telemetry(LOGIN_METRIC)
     def create(self, username, password, ttl: Optional[int] = None):
         # pylint: disable=R0912
         user_data = AuthManager.authenticate(username, password)
