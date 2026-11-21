@@ -3,7 +3,7 @@
 Telemetry Module
 ================
 
-The telemetry module sends anonymous data about the cluster back to the
+The telemetry module sends data about the cluster back to the
 developers to report how Ceph is used and to report problems experienced by
 users. 
 
@@ -22,42 +22,52 @@ has no effect.)
 
 * **basic** (default: on): Basic information about the cluster
 
-    - capacity of the cluster
-    - number of Monitors, Managers, OSDs, MDSs, object gateways, or other
-      daemons
-    - software version currently being used
-    - number and types of RADOS pools and CephFS file systems
-    - names of configuration options that have been changed from their
-      default (but *not* their values)
+  - capacity of the cluster
+  - number of Monitors, Managers, OSDs, MDSs, object gateways, or other
+    daemons
+  - software version currently being used
+  - number and types of RADOS pools and CephFS file systems
+  - names of configuration options that have been changed from their
+    default (but *not* their values)
 
 * **crash** (default: on): Information about daemon crashes, including
 
-    - type of daemon
-    - version of the daemon
-    - operating system (OS distribution, kernel version)
-    - stack trace, identifying where in the Ceph code the crash occurred
+  - type of daemon
+  - version of the daemon
+  - operating system (OS distribution, kernel version)
+  - stack trace, identifying where in the Ceph code the crash occurred
 
 * **device** (default: on): Information about device metrics, including
 
-    - anonymized SMART metrics
+  - anonymized SMART metrics
 
 * **ident** (default: off): User-provided identifying information about
   the cluster
 
-    - cluster description
-    - contact email address
+  - cluster description
+  - contact email address
 
 * **perf** (default: off): Various performance metrics of a cluster, which can
   be used to
 
-    - reveal overall cluster health
-    - identify workload patterns
-    - troubleshoot issues with latency, throttling, memory management, etc.
-    - monitor cluster performance by daemon
+  - reveal overall cluster health
+  - identify workload patterns
+  - troubleshoot issues with latency, throttling, memory management, etc.
+  - monitor cluster performance by daemon
 
-The reported data does *not* contain any sensitive data. This means that the
-reported data does not include pool names, object names, object contents,
-hostnames, or device serial numbers.
+The basic, crash and device reports do not include pool names, object
+names, object contents, hostnames or device serial numbers.
+
+When the ``perf`` channel is on, the report also includes the performance
+counters that the daemons send to the Manager. In Tentacle 20.2 and later
+releases, these include the labels of labeled counters, and some labels
+carry names from the cluster. For example, the MDS counters carry the CephFS
+file system name and client IDs, the ``rbd-mirror`` per-image counters carry
+pool and image names, and the ``cephfs-mirror`` counters carry file system
+names and peer cluster names. Umbrella 21 and later releases also report
+subvolume paths and mirrored directory paths. To see exactly what would be
+sent, run ``ceph telemetry preview perf``, or ``ceph telemetry show perf``
+when telemetry is on.
 
 The reported data contains counters and statistics pertaining to how the
 cluster has been deployed, the version of Ceph, the OS distribution, and other
@@ -125,10 +135,10 @@ To allow the *telemetry* module to share data, run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on
+   ceph telemetry on --license sharing-1-0
 
 Please note: Telemetry data is licensed under the `Community Data License
-Agreement - Sharing - Version 1.0 <https://cdla.io/sharing-1-0/>`_.  This means
+Agreement - Sharing - Version 1.0 <https://cdla.dev/sharing-1-0/>`_.  This means
 that telemetry module can be enabled only after you add ``--license
 sharing-1-0`` to the ``ceph telemetry on`` command. After telemetry is on,
 consider enabling channels which are off by default, such as the
@@ -245,34 +255,25 @@ To list all collections, run the following command:
 
 Where:
 
-.. glossary:: 
+- ``NAME`` is the collection name. The prefix is the channel that the
+  collection belongs to.
+- ``STATUS`` shows whether the collection is reported. It depends on whether
+  the channel of the collection is enabled and whether you are opted in to the
+  collection.
+- ``DESC`` is a general description of the collection.
 
-        NAME
-                Collection name. The prefix indicates the channel to which the
-                collection belongs.
-
-        STATUS
-                Indicates whether the collection metrics are reported. This is
-                determined by the status (``enabled`` or ``disabled``) to which
-                the channel of the collection belongs, along with the
-                enrollment status of the collection (whether the user is
-                opted-in to this collection).
-
-        DESC
-                General description of the collection.
-
-To display any difference between the currenty-enrolled collections and any new
+To display any difference between the currently enrolled collections and any new
 or available collections, run the following command:
 
 .. prompt:: bash #
 
    ceph telemetry diff
 
-To enroll to the most recent collections, run the following command:
+To enroll in the most recent collections, run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on
+   ceph telemetry on --license sharing-1-0
 
 Enable a new channel that is currently disabled by running a command of the
 following form:
@@ -304,15 +305,19 @@ the following form:
 Manually sending telemetry
 --------------------------
 
-To send an ansynchronous, one-time set of telemetry data, run the following
-command:
+To compile a report and send it now, outside the regular interval, run the
+following command. The command returns when the upload has finished and
+prints the result, for example
+``Ceph report sent to https://telemetry.ceph.com/report``. The next scheduled
+report is due one interval after this one.
 
 .. prompt:: bash #
 
    ceph telemetry send
 
-If telemetry has not been enabled (by running the command ``ceph telemetry
-on``), add ``--license sharing-1-0`` to the ``ceph telemetry send`` command.
+If telemetry has not been enabled (by running the command
+``ceph telemetry on --license sharing-1-0``), add ``--license sharing-1-0`` to
+the ``ceph telemetry send`` command.
 
 Sending telemetry through a proxy
 ---------------------------------
@@ -356,14 +361,14 @@ To participate in a leaderboard in the `public dashboards
 
    ceph config set mgr mgr/telemetry/leaderboard true
 
-The leaderboard displays basic information about the cluster. This includes the
-cluster's total storage capacity and the number of OSDs. To add a description
-of the cluster so that it can more easily be identified on the leaderboard, run
-a command of the following form: 
+To add a description of the cluster so that it can more easily be identified
+on the leaderboard, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/telemetry/leaderboard_description 'Ceph cluster for Computational Biology at the University of XYZ'
 
-If the ``ident`` channel is enabled, its details will not be displayed in the
-leaderboard.
+Each report carries the ``leaderboard`` setting (``false`` by default) and the
+``leaderboard_description`` text, whether or not ``leaderboard`` is ``true``.
+What the public dashboards show for the cluster is decided by the telemetry
+service, not by the module.
