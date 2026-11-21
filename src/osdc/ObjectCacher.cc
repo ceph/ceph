@@ -1389,12 +1389,24 @@ void ObjectCacher::trim()
 
   uint64_t max_clean_bh = max_size >> BUFFER_MEMORY_WEIGHT;
   uint64_t nr_clean_bh = bh_lru_rest.lru_get_size() - bh_lru_rest.lru_get_num_pinned();
+  // read_hit() marks what it reads instead of moving it in the LRU: give
+  // each such BufferHead one more round, at most one pass over the LRU
+  uint64_t second_chances = read_gate ? bh_lru_rest.lru_get_size() : 0;
   while (get_stat_clean() > 0 &&
 	 ((uint64_t)get_stat_clean() > max_size ||
 	  nr_clean_bh > max_clean_bh)) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
+    if (second_chances > 0 &&
+        bh->referenced.exchange(false, std::memory_order_relaxed)) {
+      --second_chances;
+      // at the midpoint, not the top: below the data read in (by readahead,
+      // say) since it was read, which is not referenced yet and would
+      // otherwise go first; an LRU would have moved it up at the read
+      bh_lru_rest.lru_insert_mid(bh);
+      continue;
+    }
 
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
     ceph_assert(bh->is_clean() || bh->is_zero() || bh->is_error());
@@ -1411,10 +1423,17 @@ void ObjectCacher::trim()
     }
   }
 
+  uint64_t ob_second_chances = read_gate ? ob_lru.lru_get_size() : 0;
   while (ob_lru.lru_get_size() > max_objects) {
     Object *ob = static_cast<Object*>(ob_lru.lru_expire());
     if (!ob)
       break;
+    if (ob_second_chances > 0 &&
+        ob->referenced.exchange(false, std::memory_order_relaxed)) {
+      --ob_second_chances;
+      ob_lru.lru_insert_mid(ob);   // as for the BufferHeads above
+      continue;
+    }
 
     ldout(cct, 10) << "trim trimming " << *ob << dendl;
     close_object(ob);
@@ -1991,8 +2010,64 @@ private:
 void ObjectCacher::C_WaitForWrite::finish(int r)
 {
   std::lock_guard l(m_oc->lock);
+  GateShut g(m_oc);
   m_oc->_maybe_wait_for_writeback(m_len, &m_trace);
   m_onfinish->complete(r);
+}
+
+int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
+{
+  if (!read_gate || !rd->bl || rd->extents.size() != 1 ||
+      rd->fadvise_flags || oset->return_enoent)
+    return -EAGAIN;
+  ObjectExtent &ex = rd->extents.front();
+  if (ex.buffer_extents.size() != 1 ||
+      ex.buffer_extents.front().first != 0 ||
+      ex.buffer_extents.front().second != ex.length)
+    return -EAGAIN;
+  if (!gate_enter())
+    return -EBUSY;
+  // Only look: no writer is inside while the gate is open to us.  Take
+  // the object as it is; readx() under the lock creates or updates it.
+  int r = -EAGAIN;
+  uint64_t bh_len = 0;
+  sobject_t soid(ex.oid, rd->snap);
+  if ((uint32_t)ex.oloc.pool < objects.size()) {
+    auto& pool = objects[ex.oloc.pool];
+    auto it = pool.find(soid);
+    if (it != pool.end()) {
+      Object *o = it->second;
+      if (o->oset == oset && o->object_no == ex.objectno &&
+          o->truncate_size == ex.truncate_size &&
+          o->truncate_seq == oset->truncate_seq) {
+        auto p = o->data_lower_bound(ex.offset);
+        if (p != o->data.end() && p->first <= (loff_t)ex.offset) {
+          BufferHead *bh = p->second;
+          if ((bh->is_clean() || bh->is_dirty() || bh->is_tx()) &&
+              !bh->get_nocache() &&
+              bh->end() >= (loff_t)(ex.offset + ex.length)) {
+            o->referenced.store(true, std::memory_order_relaxed);
+            bh->referenced.store(true, std::memory_order_relaxed);
+            rd->bl->clear();
+            rd->bl->substr_of(bh->bl, ex.offset - bh->start(), ex.length);
+            bh_len = bh->length();
+            r = ex.length;
+          }
+        }
+      }
+    }
+  }
+  gate_exit();
+  if (r < 0)
+    return r;
+  if (perfcounter) {
+    perfcounter->inc(l_objectcacher_data_read, ex.length);
+    perfcounter->inc(l_objectcacher_cache_bytes_hit, bh_len);
+    perfcounter->inc(l_objectcacher_cache_ops_hit);
+  }
+  ldout(cct, 20) << "read_hit " << soid << " " << ex.offset << "~" << r << dendl;
+  delete rd;
+  return r;
 }
 
 void ObjectCacher::wait_for_writeback_space(uint64_t len)
@@ -2037,7 +2112,9 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     stat_dirty_waiting += len;
     ++stat_nr_dirty_waiters;
     std::unique_lock l{lock, std::adopt_lock};
+    gate_open();
     stat_cond.wait(l);
+    gate_shut();
     l.release();
     stat_dirty_waiting -= len;
     --stat_nr_dirty_waiters;
@@ -2091,7 +2168,9 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 		   << " bytes" << dendl;
     if (block_writes_upfront) {
       std::unique_lock l{lock, std::adopt_lock};
+      gate_open();
       cond.wait(l, [&done] { return done; });
+      gate_shut();
       l.release();
       ldout(cct, 10) << "wait_for_write woke up, ret " << ret << dendl;
       if (onfreespace)
@@ -2113,6 +2192,7 @@ void ObjectCacher::flusher_entry()
   ldout(cct, 10) << "flusher start" << dendl;
   int target_dirty_bh = target_dirty >> BUFFER_MEMORY_WEIGHT;
   std::unique_lock l{lock};
+  gate_shut();
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() +
       get_stat_dirty();
@@ -2167,8 +2247,10 @@ void ObjectCacher::flusher_entry()
       if (!max) {
 	// back off the lock to avoid starving other threads
         trace.event("backoff");
+	gate_open();
 	l.unlock();
 	l.lock();
+	gate_shut();
 	continue;
       }
     }
@@ -2177,7 +2259,9 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
+    gate_open();
     flusher_cond.wait_for(l, 1s);
+    gate_shut();
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -2186,6 +2270,7 @@ void ObjectCacher::flusher_entry()
    * the rados reads do come back their callback will try to access the
    * no-longer-valid ObjectCacher.
    */
+  gate_open();
   read_cond.wait(l, [this] {
     if (reads_outstanding > 0) {
       ldout(cct, 10) << "Waiting for all reads to complete. Number left: "
@@ -2203,7 +2288,9 @@ void ObjectCacher::flusher_entry()
 
 bool ObjectCacher::set_is_empty(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  // under the lock, or through the read gate (gate_peek())
+  ceph_assert(ceph_mutex_is_locked(lock) ||
+              gate_readers.load(std::memory_order_relaxed) > 0);
   if (oset->objects.empty())
     return true;
 

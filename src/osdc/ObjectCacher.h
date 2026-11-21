@@ -19,6 +19,8 @@
 
 #include "Striper.h"
 
+#include <atomic>
+#include <thread>
 #include <unordered_map>
 
 class WritebackHandler;
@@ -133,6 +135,8 @@ class ObjectCacher {
     ceph_tid_t last_read_tid;   // tid of last read op (if any)
     ceph::real_time last_write;
     SnapContext snapc;
+    // read by read_hit() since trim() last looked: a second chance
+    std::atomic<bool> referenced{false};
     ceph_tid_t journal_tid;
     int error; // holds return value for failed reads
 
@@ -256,6 +260,8 @@ class ObjectCacher {
 
     bool complete;
     bool exists;
+    // read by read_hit() since trim() last looked: a second chance
+    std::atomic<bool> referenced{false};
 
     std::map<loff_t, BufferHead*>     data;
 
@@ -416,6 +422,9 @@ class ObjectCacher {
   ceph::mutex& lock;
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
+  bool read_gate = false;
+  std::atomic<bool> gate_closed{false};
+  alignas(64) std::atomic<uint32_t> gate_readers{0};
   ceph::timespan max_dirty_age;
   bool cfg_block_writes_upfront;
 
@@ -650,6 +659,58 @@ class ObjectCacher {
   bool is_readable(ObjectSet *oset, std::vector<ObjectExtent>& extents,
                    snapid_t snapid);
   /**
+   * The read gate, off unless enable_read_gate() is called: it lets
+   * read_hit() serve a cache hit without the cache's lock, so readers of
+   * cached data do not queue on it.  Whoever changes the cache holds the
+   * lock and shuts the gate (gate_shut(), which waits for the readers
+   * inside to leave), and opens it (gate_open()) before dropping the lock
+   * or sleeping on it.  The cache does both around its own lock
+   * acquisitions and waits; a user of the gate does it around its own.
+   * Readers never wait: read_hit() gives up when the gate is shut, and
+   * the caller takes the lock instead.  So writers are not starved, and
+   * the gate adds no wait to the lock order.
+   */
+  void enable_read_gate() {
+    read_gate = true;
+  }
+  void gate_shut() {
+    if (!read_gate)
+      return;
+    gate_closed.store(true, std::memory_order_seq_cst);
+    for (int spins = 0;
+         gate_readers.load(std::memory_order_seq_cst) != 0; ++spins) {
+      if (spins > 100)
+        std::this_thread::yield();
+    }
+  }
+  void gate_open() {
+    if (read_gate)
+      gate_closed.store(false, std::memory_order_release);
+  }
+  /**
+   * Serve a read through the read gate, without the lock: a single extent
+   * that one clean, dirty or under-writeback BufferHead covers.  Returns
+   * the bytes read and consumes @rd; or leaves @rd alone and returns
+   * -EBUSY when the gate is shut (wait for the lock's holder, without
+   * shutting the gate again, and retry) or -EAGAIN when it is not such a
+   * hit (readx() it under the lock).  It does not move the BufferHead in the LRU; it marks it
+   * referenced, and trim() gives it a second chance.
+   */
+  int read_hit(OSDRead *rd, ObjectSet *oset);
+  /**
+   * Run @f, which only looks at the cache, through the read gate without
+   * the lock.  Returns false, without running it, when the gate is off or
+   * shut: then run it under the lock.
+   */
+  template <typename F>
+  bool gate_peek(F&& f) {
+    if (!read_gate || !gate_enter())
+      return false;
+    f();
+    gate_exit();
+    return true;
+  }
+  /**
    * Wait, like a writex() with block_writes_upfront, until there is room
    * for @len more dirty bytes: the wait a writex() with @defer_wait left to
    * its caller.
@@ -662,6 +723,23 @@ private:
                       ZTracer::Trace *trace, Context *onfreespace,
                       bool block_writes_upfront, bool *defer_wait);
   bool _writeback_wait_needed();
+  bool gate_enter() {
+    gate_readers.fetch_add(1, std::memory_order_seq_cst);
+    if (gate_closed.load(std::memory_order_seq_cst)) {
+      gate_readers.fetch_sub(1, std::memory_order_release);
+      return false;
+    }
+    return true;
+  }
+  void gate_exit() {
+    gate_readers.fetch_sub(1, std::memory_order_release);
+  }
+  // shut the gate for a scope that holds the lock (see gate_shut())
+  struct GateShut {
+    ObjectCacher *oc;
+    explicit GateShut(ObjectCacher *o) : oc(o) { oc->gate_shut(); }
+    ~GateShut() { oc->gate_open(); }
+  };
   void _maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
