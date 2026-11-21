@@ -948,6 +948,56 @@ def test_topic():
     list_topics(0, tenant)
 
 
+@pytest.mark.basic_test
+def test_account_purge_removes_topics():
+    """ test that purging an account removes the topics it owns """
+
+    account = 'RGW55555555555555555'
+    user = UID_PREFIX + 'acct_purge'
+
+    _, rc = admin(['account', 'create', '--account-id', account, '--account-name', 'purgeacct'], get_config_cluster())
+    assert rc in [0, 17] # EEXIST okay if we rerun
+
+    def account_topic_arns():
+        result, rc = admin(['topic', 'list', '--account-id', account], get_config_cluster())
+        assert rc == 0
+        topics = json.loads(result)
+        if isinstance(topics, dict):
+            topics = topics['topics']
+        return [t['arn'] for t in topics]
+
+    # the topic metadata keys ('<account id>:<topic name>') don't depend on
+    # the account or its topics list, so they still show a leaked topic
+    # after the account itself is gone
+    def topic_keys():
+        result, rc = admin(['metadata', 'list', 'topic'], get_config_cluster())
+        assert rc == 0
+        return json.loads(result)
+
+    conn, _ = another_user(user=user, account=account)
+    try:
+        zonegroup = get_config_zonegroup()
+        topic_name = gen_bucket_name() + TOPIC_SUFFIX
+        endpoint_args = 'push-endpoint=http://127.0.0.1:9001'
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        assert topic_arn == 'arn:aws:sns:' + zonegroup + ':' + account + ':' + topic_name
+
+        topic_key = account + ':' + topic_name
+        assert account_topic_arns() == [topic_arn]
+        assert topic_key in topic_keys()
+
+        # purge the account along with its user and topic
+        _, rc = admin(['account', 'rm', '--account-id', account, '--purge-data'], get_config_cluster())
+        assert rc == 0
+
+        # the topic must not outlive the account
+        assert topic_key not in topic_keys()
+    finally:
+        admin(['user', 'rm', '--uid', user], get_config_cluster())
+        admin(['account', 'rm', '--account-id', account, '--purge-data'], get_config_cluster())
+
+
 @pytest.mark.manual_test
 def test_topic_name():
     """ test topic name validation """
