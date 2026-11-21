@@ -390,12 +390,19 @@ class IngressService(CephService):
     ) -> bool:
         """
         Whether a stopped keepalived unit should be started by the serve loop.
-        Does not auto-start while more keepalived daemons exist than the placement target
+        Does not auto-start while more keepalived daemons exist than the placement target.
+        Daemons on unreachable (offline/maintenance) hosts are ignored, they cannot be
+        removed until the host returns and must not block the live daemon after failover.
         """
         ispec = cast(IngressSpec, spec)
         ingress_daemons = mgr.cache.get_daemons_by_service(ispec.service_name())
         keepalived_total = len(
-            [d for d in ingress_daemons if d.daemon_type == 'keepalived']
+            [
+                d for d in ingress_daemons
+                if d.daemon_type == 'keepalived'
+                and d.hostname
+                and (d.hostname == dd.hostname or not mgr.cache.is_host_unreachable(d.hostname))
+            ]
         )
         required = IngressService._ingress_keepalived_required_count(mgr, ispec)
         if keepalived_total > required:
