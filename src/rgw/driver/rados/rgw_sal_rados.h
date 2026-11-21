@@ -696,7 +696,7 @@ class RadosObject : public StoreObject {
     void raw_obj_to_obj(const rgw_raw_obj& raw_obj);
     int write_cloud_tier(const DoutPrefixProvider* dpp,
 			   optional_yield y,
-			   uint64_t olh_epoch,
+			   std::optional<uint64_t> olh_epoch,
 			   rgw::sal::PlacementTier* tier,
 			   bool is_multipart_upload,
 			   rgw_placement_rule& target_placement,

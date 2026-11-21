@@ -3565,8 +3565,14 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
     target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
     target_placement.storage_class = tier->get_storage_class();
 
-    /* Reset HEAD object as CloudTiered */
-    int reset_ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
+    /* Reset HEAD object as CloudTiered. like the restore itself, only re-link
+     * at an epoch recorded on the cloud object; an engaged 0 would promote
+     * this version over the current one */
+    std::optional<uint64_t> olh_epoch;
+    if (tier_ctx.o.versioned_epoch) {
+      olh_epoch = tier_ctx.o.versioned_epoch;
+    }
+    int reset_ret = write_cloud_tier(dpp, y, olh_epoch,
 			   tier, tier_ctx.is_multipart_upload,
 			   target_placement, tier_ctx.obj);
 
@@ -3804,7 +3810,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
 }
 int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
 				  optional_yield y,
-				  uint64_t olh_epoch,
+				  std::optional<uint64_t> olh_epoch,
 				  PlacementTier* tier,
 				  bool is_multipart_upload,
 				  rgw_placement_rule& target_placement,
