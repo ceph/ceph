@@ -131,6 +131,16 @@ class PerShardState {
   // PGMap state
   PGMap pg_map;
 
+  // Seastore cross-shard merge: merge sources whose objects have been
+  // fully copied into a staging collection on THIS shard (the target's
+  // shard). Filled in by copy_merge_source_to_target_shard(), consumed by
+  // PG::merge_from(). In memory only: after a restart the staging
+  // collections are discarded (see PGShardManager::load_pgs) and the copy
+  // starts over on the next READY. Value: where the source's ORIGINAL
+  // collection lives, so step 5 can delete it after the merge commits
+  // (the source's pg_to_shard mapping is gone by then).
+  std::map<spg_t, std::pair<core_id_t, store_index_t>> staged_merge_sources;
+
   seastar::future<> stop_pgs();
   std::map<pg_t, pg_stat_t> get_pg_stats();
   seastar::future<> broadcast_map_to_pgs(
@@ -576,6 +586,11 @@ public:
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
   }
 
+  seastar::future<std::pair<core_id_t, store_index_t>>
+  get_pg_mapping_full(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
+  }
+
   seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid).then(
       [](std::pair<core_id_t, store_index_t> mapping) {
@@ -761,6 +776,36 @@ public:
     store_index_t store_index,
     coll_t staging,
     const std::vector<copied_object_t>& objs);
+
+  // Step 2. Runs on the source's shard. Copies every object of the source
+  // PG's collection, chunk by chunk, into the staging collection on the
+  // target's shard and marks the source as staged there. Not resumable
+  // yet: any earlier partial staging copy is thrown away first. Fails
+  // (exceptional future) on a read or write error.
+  seastar::future<> copy_merge_source_to_target_shard(
+    spg_t source,
+    spg_t target,
+    store_index_t source_store_index,
+    crimson::os::CollectionRef source_coll);
+
+  // Step 3. Called before a merge source sends READY. Same-shard (or
+  // non-seastore): returns true straight away. Cross-shard: copies the
+  // source to the target's shard and returns true, or on failure cancels
+  // the merge and returns false.
+  seastar::future<bool> prepare_seastore_merge_source(
+    spg_t source,
+    store_index_t source_store_index,
+    crimson::os::CollectionRef source_coll,
+    unsigned pg_num,
+    unsigned pg_num_pending);
+
+  // True if `source` has a complete staging copy on this shard.
+  bool is_merge_source_staged(spg_t source) const {
+    return local_state.staged_merge_sources.contains(source);
+  }
+  void clear_merge_source_staged(spg_t source) {
+    local_state.staged_merge_sources.erase(source);
+  }
 
   // Remove every object in `cid` on `store_index` (this shard), then the
   // collection itself. Used for the original source collection once the

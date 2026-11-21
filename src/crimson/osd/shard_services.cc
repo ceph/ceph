@@ -410,6 +410,92 @@ seastar::future<> ShardServices::write_staging_chunk(
     store, std::move(coll), std::move(t));
 }
 
+seastar::future<> ShardServices::copy_merge_source_to_target_shard(
+  spg_t source,
+  spg_t target,
+  store_index_t source_store_index,
+  crimson::os::CollectionRef source_coll)
+{
+  LOG_PREFIX(ShardServices::copy_merge_source_to_target_shard);
+  const auto [target_core, target_store] = co_await get_pg_mapping_full(target);
+  const core_id_t source_core = seastar::this_shard_id();
+  const coll_t staging = merge_staging_cid(source);
+  INFO("copying source {} (shard {}) to staging {} on target {} (shard {})",
+       source, source_core, staging, target, target_core);
+
+  // Step 1: on the target's shard, start from a fresh empty staging
+  // collection. A copy left by an earlier, cancelled merge is stale (the
+  // source went back to ACTIVE), so it is thrown away.
+  co_await container().invoke_on(
+    target_core,
+    [source, staging, target_store](ShardServices& target_svc) {
+      target_svc.clear_merge_source_staged(source);
+      return target_svc.make_empty_staging_collection(target_store, staging);
+    });
+
+  // Step 2: read a chunk here, write it there, until no objects are left.
+  const uint64_t chunk = crimson::common::local_conf()->osd_target_transaction_size;
+  ghobject_t next;
+  uint64_t copied = 0;
+  do {
+    auto [objs, cursor] = co_await read_collection_chunk(
+      source_store_index, source_coll, next, chunk);
+    copied += objs.size();
+    // Hand the boxes to the target shard; foreign_ptr frees them back here.
+    auto fobjs = seastar::make_foreign(
+      std::make_unique<std::vector<copied_object_t>>(std::move(objs)));
+    co_await container().invoke_on(
+      target_core,
+      [target_store, staging, fobjs = std::move(fobjs)]
+      (ShardServices& target_svc) {
+        return target_svc.write_staging_chunk(target_store, staging, *fobjs);
+      });
+    next = cursor;
+  } while (next != ghobject_t::get_max());
+
+  co_await container().invoke_on(
+    target_core,
+    [source, source_core, source_store_index](ShardServices& target_svc) {
+      target_svc.local_state.staged_merge_sources[source] =
+        {source_core, source_store_index};
+    });
+  INFO("source {} staged on shard {}: {} objects", source, target_core, copied);
+}
+
+seastar::future<bool> ShardServices::prepare_seastore_merge_source(
+  spg_t source,
+  store_index_t source_store_index,
+  crimson::os::CollectionRef source_coll,
+  unsigned pg_num,
+  unsigned pg_num_pending)
+{
+  LOG_PREFIX(ShardServices::prepare_seastore_merge_source);
+  if (!is_seastore_objectstore()) {
+    co_return true;
+  }
+  spg_t target;
+  if (!source.is_merge_source(pg_num, pg_num_pending, &target)) {
+    co_return true;
+  }
+  if (co_await get_pg_mapping_full(source) ==
+      co_await get_pg_mapping_full(target)) {
+    co_return true;  // same shard: merge_collection works directly
+  }
+  try {
+    co_await copy_merge_source_to_target_shard(
+      source, target, source_store_index, std::move(source_coll));
+    co_return true;
+  } catch (const std::exception& e) {
+    ERROR("copy of source {} to target {}'s shard failed: {}; stopping merge",
+          source, target, e.what());
+  }
+  std::set<spg_t> merge_sources;
+  target.is_split(pg_num_pending, pg_num, &merge_sources);
+  co_await abort_seastore_cross_shard_merge(
+    target, source.pgid, &merge_sources, true);
+  co_return false;
+}
+
 seastar::future<> ShardServices::remove_collection_fully(
   store_index_t store_index, coll_t cid)
 {
