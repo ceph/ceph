@@ -6899,19 +6899,30 @@ def _test_multipart_get_part(storage_class=None):
         check_parts_count(response['ObjectParts'], part_count)
         assert [part['Size'] for part in response['ObjectParts']['Parts']] == part_sizes
 
+    ofs = 0
     for part, size in zip(parts, part_sizes):
+        # a partNumber read reports the part's byte range within the whole
+        # object and a 206 status, the same as a Range request
+        expected_range = 'bytes %d-%d/%d' % (ofs, ofs + size - 1, total_size)
+
         response = client.head_object(Bucket=bucket_name, Key=key, PartNumber=part['PartNumber'])
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 206
         assert response['PartsCount'] == part_count
         assert response['ETag'] == res['ETag']
+        assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == expected_range
 
         response = client.get_object(Bucket=bucket_name, Key=key, PartNumber=part['PartNumber'])
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 206
         assert response['PartsCount'] == part_count
         assert response['ETag'] == res['ETag']
         assert response['ContentLength'] == size
+        assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == expected_range
         # compare contents
         for chunk in response['Body'].iter_chunks():
             assert chunk.decode() == data[0:len(chunk)]
             data = data[len(chunk):]
+
+        ofs += size
 
     # request PartNumber out of range
     e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, PartNumber=5)
@@ -6934,13 +6945,16 @@ def test_multipart_get_part_storage_class():
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore
-def test_multipart_sse_c_get_part():
+@pytest.mark.parametrize('part_size,last_part_size', [
+    (5*1024*1024, 1*1024*1024),
+    (5*1024*1024 + 517, 1*1024*1024 + 123),  # sizes not a multiple of the AEAD chunk
+])
+def test_multipart_sse_c_get_part(part_size, last_part_size):
     bucket_name = get_new_bucket()
     client = get_client()
     key = "mymultipart"
 
-    part_size = 5*1024*1024
-    part_sizes = 3 * [part_size] + [1*1024*1024]
+    part_sizes = 3 * [part_size] + [last_part_size]
     part_count = len(part_sizes)
     total_size = sum(part_sizes)
 
@@ -6967,19 +6981,30 @@ def test_multipart_sse_c_get_part():
     res = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     assert len(parts) == part_count
 
+    ofs = 0
     for part, size in zip(parts, part_sizes):
+        # an encrypted partNumber read carries the same Content-Range and 206
+        # status as an unencrypted one
+        expected_range = 'bytes %d-%d/%d' % (ofs, ofs + size - 1, total_size)
+
         response = client.head_object(Bucket=bucket_name, Key=key, PartNumber=part['PartNumber'], **get_args)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 206
         assert response['PartsCount'] == part_count
         assert response['ETag'] == res['ETag']
+        assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == expected_range
 
         response = client.get_object(Bucket=bucket_name, Key=key, PartNumber=part['PartNumber'], **get_args)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 206
         assert response['PartsCount'] == part_count
         assert response['ETag'] == res['ETag']
         assert response['ContentLength'] == size
+        assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == expected_range
         # compare contents
         for chunk in response['Body'].iter_chunks():
             assert chunk.decode() == data[0:len(chunk)]
             data = data[len(chunk):]
+
+        ofs += size
 
     # request PartNumber out of range
     e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, PartNumber=5)
@@ -7064,12 +7089,14 @@ def test_multipart_single_get_part():
     assert error_code == 'InvalidPart'
 
 @pytest.mark.fails_on_dbstore
-def test_non_multipart_get_part():
+@pytest.mark.parametrize('body_size', [4, 3*1024*1024])
+def test_non_multipart_get_part(body_size):
     bucket_name = get_new_bucket()
     client = get_client()
     key = "singlepart"
 
-    response = client.put_object(Bucket=bucket_name, Key=key, Body='body')
+    body = 'a' * body_size
+    response = client.put_object(Bucket=bucket_name, Key=key, Body=body)
     etag = response['ETag']
 
     # request for PartNumber > 1 results in InvalidPart
@@ -7078,10 +7105,18 @@ def test_non_multipart_get_part():
     assert status == 400
     assert error_code == 'InvalidPart'
 
-    # request for PartNumber = 1 gives back the entire object
+    # partNumber=1 gives back the entire object with a 206 and a full-object
+    # Content-Range, by GET and HEAD
+    size = len(body)
+    expected_range = 'bytes 0-%d/%d' % (size - 1, size)
     response = client.get_object(Bucket=bucket_name, Key=key, PartNumber=1)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 206
     assert response['ETag'] == etag
-    assert _get_body(response) == 'body'
+    assert _get_body(response) == body
+    assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == expected_range
+    response = client.head_object(Bucket=bucket_name, Key=key, PartNumber=1)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 206
+    assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == expected_range
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore
@@ -7105,10 +7140,16 @@ def test_non_multipart_sse_c_get_part():
     assert status == 400
     assert error_code == 'InvalidPart'
 
-    # request for PartNumber = 1 gives back the entire object
+    # partNumber=1 returns the whole object with a 206 and a full-object
+    # Content-Range, by GET and HEAD
     response = client.get_object(Bucket=bucket_name, Key=key, PartNumber=1, **sse_args)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 206
     assert response['ETag'] == etag
     assert _get_body(response) == 'body'
+    assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == 'bytes 0-3/4'
+    response = client.head_object(Bucket=bucket_name, Key=key, PartNumber=1, **sse_args)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 206
+    assert response['ResponseMetadata']['HTTPHeaders']['content-range'] == 'bytes 0-3/4'
 
 
 def _simple_http_req_100_cont(host, port, is_secure, method, resource):
