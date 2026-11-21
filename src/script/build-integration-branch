@@ -7,6 +7,18 @@ Builds integration branches. Something similar to
   >   git pull b
   > done
 
+If a PR does not merge cleanly, the script stops and leaves the merge in
+progress so the conflict can be resolved by hand, then resumed:
+  $ ./src/script/build-integration-branch wip-yourname-testing
+    ... merge conflict ...
+  $ git add <resolved-files>
+  $ git merge --continue
+  $ ./src/script/build-integration-branch wip-yourname-testing --continue
+
+With --continue, the integration branch and the PR list recorded by the
+initial run are reused: PRs already merged into the branch are skipped and
+the remaining ones are merged.
+
 Requires either `~/.github_token` containing ONLY the token
 OR adding an entry like the following to `~/.netrc`:
   ```
@@ -23,24 +35,82 @@ import sys
 import time
 import netrc
 
-from subprocess import call, check_output
+from subprocess import call, check_output, DEVNULL
 from urllib.parse import urljoin
 
 TIME_FORMAT = '%Y-%m-%d-%H%M'
 CODENAMES = 'mimic nautilus octopus pacific quincy reef squid tentacle'
 REPO = "ceph/ceph"
+STATE_DIR = 'build-integration-branch'
+FETCH_RETRIES = 5
+FETCH_RETRY_DELAY = 5
+
+
+def git_output(*args):
+    return check_output(['git', *args]).strip().decode()
+
+
+def git_path(path):
+    return git_output('rev-parse', '--git-path', path)
+
+
+def current_branch():
+    return git_output('rev-parse', '--abbrev-ref', 'HEAD')
+
+
+def merge_in_progress():
+    return os.path.exists(git_path('MERGE_HEAD'))
+
+
+def commit_exists(sha):
+    return call(['git', 'cat-file', '-e', sha + '^{commit}'],
+                stderr=DEVNULL) == 0
+
+
+def is_merged(sha):
+    return (commit_exists(sha)
+            and call(['git', 'merge-base', '--is-ancestor', sha, 'HEAD']) == 0)
+
+
+def state_file(label):
+    return git_path(os.path.join(STATE_DIR, label.replace('/', '_') + '.json'))
+
+
+def save_state(label, state):
+    path = state_file(label)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(state, f, indent=2)
+    os.replace(tmp, path)
+
+
+def load_state(label):
+    try:
+        with open(state_file(label)) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+def clear_state(label):
+    try:
+        os.unlink(state_file(label))
+    except FileNotFoundError:
+        pass
+
+
+def die(message):
+    print(message, file=sys.stderr)
+    sys.exit(1)
 
 
 def get_postfix():
     postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
-    current_branch = (
-        check_output('git rev-parse --abbrev-ref HEAD', shell=True)
-        .strip()
-        .decode()
-    )
-    if current_branch in CODENAMES.split():
-        postfix += '-' + current_branch
-        print(f"Adding current branch name '-{current_branch}' as a postfix")
+    branch = current_branch()
+    if branch in CODENAMES.split():
+        postfix += '-' + branch
+        print(f"Adding current branch name '-{branch}' as a postfix")
     return postfix
 
 
@@ -51,6 +121,14 @@ def parse_args():
         "--no-postfix",
         action="store_true",
         help="Don't add `{postfix}` to the branch name.",
+    )
+    parser.add_argument(
+        "--continue",
+        dest="resume",
+        action="store_true",
+        help=("Resume building the integration branch for <label> after a "
+              "merge conflict was resolved and committed "
+              "(`git merge --continue`)."),
     )
     parser.add_argument(
         "--trailer",
@@ -91,15 +169,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    cli = parse_args()
-    if cli.no_date:
-        branch = cli.label
-    else:
-        branch = cli.label + get_postfix()
-    label = cli.label
-    repo = cli.repo
-
+def get_token():
     token = ''
     try:
         nrc = netrc.netrc()
@@ -122,8 +192,10 @@ def main():
         print('No github api access token found')
         print('  Add a token to .netrc for [api.]github.com')
         print('  OR add a token to $HOME/.github_token')
+    return token
 
-    # get prs
+
+def fetch_prs(label, repo, token):
     baseurl = urljoin('https://api.github.com',
                       ('repos/{repo}/issues?labels={label}'
                        '&sort=created'
@@ -141,52 +213,153 @@ def main():
     print("--- found %d issues tagged with %s" % (len(j), label))
 
     prs = []
-    prtext = []
     for issue in j:
         if 'pull_request' not in issue:
             continue
         r = requests.get(issue['pull_request']['url'],
                          headers={'Authorization': 'token %s' % token})
         pr = json.loads(r.text or r.content)
-        prs.append(pr)
-        prtext.append(pr['html_url'] + ' - ' + pr['title'])
+        prs.append({
+            'number': pr['number'],
+            'clone_url': pr['head']['repo']['clone_url'],
+            'ref': pr['head']['ref'],
+            'sha': pr['head']['sha'],
+            'html_url': pr['html_url'],
+            'title': pr['title'],
+        })
     print("--- queried %s prs" % len(prs))
+    return prs
+
+
+def merge_pr(pr, branch):
+    """Merge one PR into the current branch. Returns True on success."""
+    number = pr['number']
+    url = pr['clone_url']
+    ref = pr['ref']
+    print(f'--- pr {number} --- pulling {url} branch {ref}')
+    for attempt in range(1, FETCH_RETRIES + 1):
+        if call(['git', 'fetch', url, ref]) == 0:
+            break
+        print(f'Unable to access {url}, retrying '
+              f'({attempt}/{FETCH_RETRIES})..')
+        time.sleep(FETCH_RETRY_DELAY)
+    else:
+        raise Exception(f'Unable to fetch PR#{number} from {url}')
+
+    # Merge the head recorded when the PR list was queried, so that a
+    # resumed run merges exactly what the initial run would have merged.
+    target = pr['sha']
+    if not commit_exists(target):
+        print(f'PR#{number} head {target} is no longer available '
+              '(was the PR updated?), merging the current head instead')
+        target = 'FETCH_HEAD'
+    message = f"Merge branch '{ref}' of {url} into {branch}"
+    return call(['git', 'merge', '--no-ff', '--no-edit',
+                 '-m', message, target]) == 0
+
+
+def merge_prs(state):
+    branch = state['branch']
+    prs = state['prs']
+    for idx, pr in enumerate(prs, 1):
+        number = pr['number']
+        if is_merged(pr['sha']):
+            print(f'--- pr {number} --- already merged, skipping')
+            continue
+        if merge_pr(pr, branch):
+            continue
+        if merge_in_progress():
+            script = sys.argv[0]
+            remaining = len(prs) - idx
+            print(f"\n--- merge conflict in PR#{number}: "
+                  f"{pr['html_url']} - {pr['title']}")
+            print(f'--- {remaining} PR(s) left to merge after this one')
+            print('Resolve the conflict, then run:')
+            print('  git add <resolved-files>')
+            print('  git merge --continue')
+            print(f"  {script} {state['label']} --continue")
+            sys.exit(2)
+        raise Exception('Exiting due to an unknown failure when merging '
+                        f'PR#{number}')
+
+
+def finish(state, trailers):
+    if trailers:
+        cmd = ['git', 'commit', '--amend', '--no-edit']
+        cmd.extend(f'--trailer={t}' for t in trailers)
+        if call(cmd) != 0:
+            print('Failed to set git trailers!')
+            sys.exit(1)
+
+    clear_state(state['label'])
+    prtext = [pr['html_url'] + ' - ' + pr['title'] for pr in state['prs']]
+    print('--- done. these PRs were included:')
+    print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
+    print('--- perhaps you want to: ./run-make-check.sh && git push ci %s'
+          % state['branch'])
+
+
+def start(cli):
+    if merge_in_progress():
+        die('A merge is in progress; finish it (git merge --continue) or '
+            'abort it (git merge --abort) first.')
+    if cli.no_date:
+        branch = cli.label
+    else:
+        branch = cli.label + get_postfix()
+
+    prs = fetch_prs(cli.label, cli.repo, get_token())
 
     print("branch %s" % branch)
 
     # assemble
     print('--- creating branch %s' % branch)
-    r = call(['git', 'branch', '-D', branch])
+    call(['git', 'branch', '-D', branch])
     r = call(['git', 'checkout', '-b', branch])
     assert not r
-    for pr in prs:
-        pr_number = pr['number']
-        pr_url = pr['head']['repo']['clone_url']
-        pr_ref = pr['head']['ref']
-        print(f'--- pr {pr_number} --- pulling {pr_url} branch {pr_ref}')
-        while True:
-            r = call(['git', 'pull', '--no-ff', '--no-edit', pr_url, pr_ref])
-            if r == 0:
-                break
-            elif r == 1:
-                print(f'Unable to access {pr_url}, retrying..')
-            elif r == 128:
-                message = f'Unable to resolve conflict when merging PR#{pr_number}'
-                raise Exception(message)
-            else:
-                message = ('Exiting due to an unknown failure when pulling '
-                           f'PR#{pr_number}')
-                raise Exception(message)
-    if cli.trailers:
-        cmd = ['git', 'commit', '--am', '--no-edit']
-        cmd.extend(f'--trailer={t}' for t in cli.trailers)
-        if call(cmd) != 0:
-            print('Failed to set git trailers!')
-            sys.exit(1)
 
-    print('--- done. these PRs were included:')
-    print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
-    print('--- perhaps you want to: ./run-make-check.sh && git push ci %s' % branch)
+    state = {
+        'label': cli.label,
+        'branch': branch,
+        'repo': cli.repo,
+        'trailers': cli.trailers or [],
+        'prs': prs,
+    }
+    save_state(cli.label, state)
+    merge_prs(state)
+    finish(state, state['trailers'])
+
+
+def resume(cli):
+    state = load_state(cli.label)
+    if state is None:
+        die(f'No integration branch build in progress for {cli.label}; '
+            'run without --continue to start one.')
+    if merge_in_progress():
+        die('A merge is still in progress. Resolve the conflicts, then '
+            '`git add <resolved-files>` and `git merge --continue` '
+            'before re-running with --continue.')
+
+    branch = state['branch']
+    if current_branch() != branch:
+        print(f'--- checking out {branch}')
+        if call(['git', 'checkout', branch]) != 0:
+            die(f'Unable to check out {branch}')
+    print(f'--- resuming integration branch {branch}')
+
+    if cli.trailers:
+        state['trailers'] = cli.trailers
+        save_state(cli.label, state)
+    merge_prs(state)
+    finish(state, state['trailers'])
+
+
+def main():
+    cli = parse_args()
+    if cli.resume:
+        resume(cli)
+    else:
+        start(cli)
 
 
 if __name__ == '__main__':
