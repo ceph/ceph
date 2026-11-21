@@ -78,9 +78,9 @@ std::string rgw_bucket::get_key(char tenant_delim, char id_delim, size_t reserve
   return key;
 }
 
-list<rgw_bucket> rgw_bucket::generate_test_instances()
+vector<rgw_bucket> rgw_bucket::generate_test_instances()
 {
-  list<rgw_bucket> o;
+  vector<rgw_bucket> o;
   rgw_bucket b;
   init_bucket(&b, "tenant", "name", "pool", ".index_pool", "marker", "123");
   o.push_back(std::move(b));
@@ -122,9 +122,9 @@ void decode_json_obj(rgw_zone_id& zid, JSONObj *obj)
   decode_json_obj(zid.id, obj);
 }
 
-list<rgw_user> rgw_user::generate_test_instances()
+vector<rgw_user> rgw_user::generate_test_instances()
 {
-  list<rgw_user> o;
+  vector<rgw_user> o;
   rgw_user u("tenant", "user");
 
   o.push_back(u);

@@ -88,7 +88,7 @@ void RGWRESTConn::resolve_endpoints() {
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
                          const string& _remote_id,
-                         const list<string>& remote_endpoints,
+                         const vector<string>& remote_endpoints,
                          std::optional<string> _api_name,
                          HostStyle _host_style)
   : cct(_cct),
@@ -112,7 +112,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct,
                          const string& _remote_id,
-                         const list<string>& remote_endpoints,
+                         const vector<string>& remote_endpoints,
                          RGWAccessKey _cred,
                          std::string _zone_group,
                          std::optional<string> _api_name,

@@ -9,8 +9,8 @@
 #include "common/ceph_mutex.h"
 #include <boost/noncopyable.hpp>
 #include <boost/shared_ptr.hpp>
-#include <list>
 #include <map>
+#include <vector>
 
 class Finisher;
 
@@ -68,7 +68,8 @@ public:
   TestWatchNotify(TestCluster* test_cluster);
 
   int list_watchers(int64_t pool_id, const std::string& nspace,
-                    const std::string& o, std::list<obj_watch_t> *out_watchers);
+                    const std::string& o,
+                    std::vector<obj_watch_t> *out_watchers);
 
   void aio_flush(TestRadosClient *rados_client, Context *on_finish);
   void aio_watch(TestRadosClient *rados_client, int64_t pool_id,

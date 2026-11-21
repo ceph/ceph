@@ -163,9 +163,9 @@ void resource_metadata::dump(ceph::Formatter* f) const
   encode_json("role_id", role_id, f);
 }
 
-std::list<resource_metadata> resource_metadata::generate_test_instances()
+std::vector<resource_metadata> resource_metadata::generate_test_instances()
 {
-  std::list<resource_metadata> o;
+  std::vector<resource_metadata> o;
   o.emplace_back();
   resource_metadata m;
   m.role_id = "id";

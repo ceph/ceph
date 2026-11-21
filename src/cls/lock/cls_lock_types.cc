@@ -30,9 +30,9 @@ void locker_id_t::dump(ceph::Formatter *f) const
   f->dump_string("cookie", cookie);
 }
 
-std::list<locker_id_t> locker_id_t::generate_test_instances()
+std::vector<locker_id_t> locker_id_t::generate_test_instances()
 {
-  std::list<locker_id_t> o;
+  std::vector<locker_id_t> o;
   locker_id_t i;
   generate_lock_id(i, 1, "cookie");
   o.push_back(std::move(i));
@@ -59,9 +59,9 @@ static void generate_test_addr(entity_addr_t& a, int nonce, int port)
   a.set_port(port);
 }
 
-std::list<locker_info_t> locker_info_t::generate_test_instances()
+std::vector<locker_info_t> locker_info_t::generate_test_instances()
 {
-  std::list<locker_info_t> o;
+  std::vector<locker_info_t> o;
   locker_info_t i;
   i.expiration = utime_t(5, 0);
   generate_test_addr(i.addr, 1, 2);
@@ -85,9 +85,9 @@ void lock_info_t::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<lock_info_t> lock_info_t::generate_test_instances()
+std::vector<lock_info_t> lock_info_t::generate_test_instances()
 {
-  std::list<lock_info_t> o;
+  std::vector<lock_info_t> o;
   lock_info_t i;
   locker_id_t id;
   locker_info_t info;

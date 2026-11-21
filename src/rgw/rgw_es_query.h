@@ -3,52 +3,20 @@
 
 #pragma once
 
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+#include <utility>
+
 #include "rgw_string.h"
-
-class ESQueryStack {
-  std::list<std::string> l;
-  std::list<std::string>::iterator iter;
-
-public:
-  explicit ESQueryStack(std::list<std::string>& src) {
-    assign(src);
-  }
-
-  ESQueryStack() {}
-
-  void assign(std::list<std::string>& src) {
-    l.swap(src);
-    iter = l.begin();
-  }
-
-  bool peek(std::string *dest) {
-    if (done()) {
-      return false;
-    }
-    *dest = *iter;
-    return true;
-  }
-
-  bool pop(std::string *dest) {
-    bool valid = peek(dest);
-    if (!valid) {
-      return false;
-    }
-    ++iter;
-    return true;
-  }
-
-  bool done() {
-    return (iter == l.end());
-  }
-};
 
 class ESInfixQueryParser {
   std::string query;
   int size;
   const char *str;
   int pos{0};
-  std::list<std::string> args;
+  std::vector<std::string> args;
 
   void skip_whitespace(const char *str, int size, int& pos);
   bool get_next_token(bool (*filter)(char));
@@ -61,7 +29,7 @@ class ESInfixQueryParser {
 
 public:
   explicit ESInfixQueryParser(const std::string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
-  bool parse(std::list<std::string> *result);
+  bool parse(std::vector<std::string>& result);
 };
 
 class ESQueryNode;
@@ -71,7 +39,7 @@ struct ESEntityTypeMap {
     ES_ENTITY_NONE = 0,
     ES_ENTITY_STR  = 1,
     ES_ENTITY_INT  = 2,
-    ES_ENTITY_DATE = 3,
+    ES_ENTITY_DATE = 3
   };
 
   std::map<std::string, EntityType> m;
@@ -92,14 +60,10 @@ struct ESEntityTypeMap {
 
 class ESQueryCompiler {
   ESInfixQueryParser parser;
-  ESQueryStack stack;
   ESQueryNode *query_root{nullptr};
 
   std::string custom_prefix;
-
-  bool convert(std::list<std::string>& infix, std::string *perr);
-
-  std::list<std::pair<std::string, std::string> > eq_conds;
+  std::vector<std::pair<std::string, std::string>> eq_conds;
 
   ESEntityTypeMap *generic_type_map{nullptr};
   ESEntityTypeMap *custom_type_map{nullptr};
@@ -107,15 +71,17 @@ class ESQueryCompiler {
   std::map<std::string, std::string, ltstr_nocase> *field_aliases = nullptr;
   std::set<std::string> *restricted_fields = nullptr;
 
+  bool convert(std::vector<std::string> infix, std::string *perr);
+
 public:
-    ESQueryCompiler(const std::string& query,
-		    std::list<std::pair<std::string, std::string> > *prepend_eq_conds,
-		    const std::string& _custom_prefix)
-      : parser(query), custom_prefix(_custom_prefix) {
-    if (prepend_eq_conds) {
-      eq_conds = std::move(*prepend_eq_conds);
-    }
-  }
+  ESQueryCompiler(
+    const std::string& query,
+    std::vector<std::pair<std::string, std::string>> prepend_eq_conds,
+    const std::string& _custom_prefix)
+    : parser(query),
+      custom_prefix(_custom_prefix),
+      eq_conds(std::move(prepend_eq_conds)) {}
+
   ~ESQueryCompiler();
 
   bool compile(std::string *perr);

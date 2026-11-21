@@ -21,6 +21,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <optional>
 #include <fmt/format.h>
 
@@ -81,8 +82,8 @@ struct rgw_zone_id {
     f->dump_string("id", id);
   }
 
-  static std::list<rgw_zone_id> generate_test_instances() {
-    std::list<rgw_zone_id> o;
+  static std::vector<rgw_zone_id> generate_test_instances() {
+    std::vector<rgw_zone_id> o;
     o.emplace_back();
     o.push_back(rgw_zone_id("id"));
     return o;
@@ -327,6 +328,6 @@ struct RGWUploadPartInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<RGWUploadPartInfo> generate_test_instances();
+  static std::vector<RGWUploadPartInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
