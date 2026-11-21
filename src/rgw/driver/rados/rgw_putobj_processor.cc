@@ -424,6 +424,10 @@ int AtomicObjectProcessor::complete(
     return r;
   }
 
+  // a copy, rewrite or restore of an appendable object writes an atomic
+  // manifest, and an append can't extend that
+  attrs.erase(RGW_ATTR_APPEND_PART_NUM);
+
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
@@ -699,6 +703,14 @@ int AppendObjectProcessor::prepare(optional_yield y)
     map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
     if (iter == astate->attrset.end()) {
       ldpp_dout(dpp, 5) << "ERROR: The object is not appendable" << dendl;
+      return -ERR_OBJECT_NOT_APPENDABLE;
+    }
+    // an appendable object's manifest starts at part 1. a copy made before
+    // the atomic writer dropped the attr has an atomic manifest that starts
+    // at part 0, and an append would remove its head data
+    if (!cur_manifest || cur_manifest->get_rules().empty() ||
+        cur_manifest->get_rules().begin()->second.start_part_num == 0) {
+      ldpp_dout(dpp, 5) << "ERROR: The object has no append manifest" << dendl;
       return -ERR_OBJECT_NOT_APPENDABLE;
     }
     if (position != *cur_accounted_size) {
