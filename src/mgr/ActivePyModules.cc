@@ -17,6 +17,7 @@
 
 #include "ActivePyModules.h"
 
+#include <vector>
 #include <rocksdb/version.h>
 
 #include "common/debug.h"
@@ -1800,12 +1801,16 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
   without_gil_t no_gil;
   daemon_state.with_daemons_by_server([&no_gil, &f]
       (const std::map<std::string, DaemonStateCollection> &all) {
+    std::vector<DaemonHealthMetric> metrics;
     for (const auto &[hostname, daemon_state] : all) {
       for (const auto &[key, state] : daemon_state) {
-        std::lock_guard l(state->lock);
-        with_gil(no_gil, [&f, key=ceph::to_string(key), state=state] {
+        {
+          std::lock_guard l(state->lock);
+          metrics = state->daemon_health_metrics;
+        }
+        with_gil(no_gil, [&f, &metrics, key=ceph::to_string(key)] {
           f.open_array_section(key.c_str());
-          for (const auto &metric : state->daemon_health_metrics) {
+          for (const auto &metric : metrics) {
             f.open_object_section(metric.get_type_name());
             f.dump_int("value", metric.get_n1());
             f.dump_string("type", metric.get_type_name());
