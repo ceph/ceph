@@ -138,7 +138,7 @@ private:
   int m_journald_log = -3, m_journald_crash = -3;
 
   std::string m_log_stderr_prefix;
-  bool do_stderr_poll = false;
+  bool stderr_is_fifo = false;
 
   std::shared_ptr<Graylog> m_graylog;
   std::unique_ptr<JournaldLogger> m_journald;
