@@ -607,6 +607,16 @@ class PgScrubber : public ScrubPgIF,
   /// to complete (in order to perform an 'after-repair' scrub)
   bool m_after_repair_scrub_required{false};
 
+  /// operator requests made before the PG registers, applied on registration
+  std::optional<scrub_type_t> m_pending_shallow_request;
+  std::optional<scrub_type_t> m_pending_deep_request;
+
+  std::optional<scrub_type_t>& pending_request(scrub_level_t lvl)
+  {
+    return (lvl == scrub_level_t::deep) ? m_pending_deep_request
+					: m_pending_shallow_request;
+  }
+
   ostream& show_concise(ostream& out) const override;
 
  public:
