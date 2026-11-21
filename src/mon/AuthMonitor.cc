@@ -1972,6 +1972,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	  break;
 	case 'Q':
 	  break;
+	case 'e':
+	  break;
 	default:
 	  ss << "Unknown permission flag '" << c << "'.";
 	  err = -EINVAL;

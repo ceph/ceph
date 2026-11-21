@@ -32,6 +32,7 @@
 const unsigned MDSCapSpec::ALL;
 const unsigned MDSCapSpec::READ;
 const unsigned MDSCapSpec::WRITE;
+const unsigned MDSCapSpec::ENCRYPTION;
 const unsigned MDSCapSpec::SET_VXATTR;
 const unsigned MDSCapSpec::SNAPSHOT;
 const unsigned MDSCapSpec::FULL;
@@ -45,6 +46,7 @@ const unsigned MDSCapSpec::RWFP;
 const unsigned MDSCapSpec::RWFS;
 const unsigned MDSCapSpec::RWPS;
 const unsigned MDSCapSpec::RWFPS;
+const unsigned MDSCapSpec::RWEFPS;
 
 using std::ostream;
 using std::string;
@@ -92,12 +94,14 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     root_squash %= -(spaces >> lit("root_squash") >> attr(true));
     match = (fs_name >> path >> root_squash >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3, _4, _5)];
 
-    // capspec = * | r[w][f][p][q][Q][s]
+    // capspec = * | r[w][e][f][p][q][Q][s]
 #if 0
     capspec = spaces >> (
         lit("*")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
         lit("all")[_val = MDSCapSpec(MDSCapSpec::ALL)]
+        |
+        (lit("rwfps"))[_val = MDSCapSpec(MDSCapSpec::RWEFPS)]
         |
         (lit("rwfps"))[_val = MDSCapSpec(MDSCapSpec::RWFPS)]
         |
@@ -126,6 +130,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
         (
          lit('r')[qi::_a = MDSCapSpec::READ] >>
          (-lit('w')[qi::_a |= MDSCapSpec::WRITE] >>
+          -lit('e')[qi::_a |= MDSCapSpec::ENCRYPTION] >>
           -lit('f')[qi::_a |= MDSCapSpec::FULL] >>
           -lit('p')[qi::_a |= MDSCapSpec::SET_VXATTR] >>
           -lit('Q')[qi::_a |= MDSCapSpec::Q_PRIME] >>
@@ -536,6 +541,7 @@ string MDSCapSpec::to_string()
   } else {
     if (allow_read()) { str +="r"; }
     if (allow_write()) { str +="w"; }
+    if (allow_encryption()) { str +="e"; }
     if (allow_full()) { str +="f"; }
     if (allow_set_vxattr()) { str +="p"; }
     if (allow_qtine_prime_access()) { str +="Q"; }
@@ -568,6 +574,17 @@ bool MDSAuthCaps::allow_all() const
 {
   for (const auto& grant : grants) {
     if (grant.match.is_match_all() && grant.spec.allow_all()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool MDSAuthCaps::allow_encryption() const
+{
+  for (const auto& grant : grants) {
+    if (grant.spec.allow_encryption()) {
       return true;
     }
   }
@@ -615,6 +632,9 @@ ostream &operator<<(ostream &out, const MDSCapSpec &spec)
     }
     if (spec.allow_write()) {
       out << "w";
+    }
+    if (spec.allow_encryption()) {
+      out << "e";
     }
     if (spec.allow_full()) {
       out << "f";
