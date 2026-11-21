@@ -49,6 +49,32 @@ struct cls_otp_check_otp_op
 };
 WRITE_CLASS_ENCODER(cls_otp_check_otp_op)
 
+// returned by the check method to clients that set RETURNVEC on the write.
+// the payload of a write reply is capped by osd_max_write_op_reply_len (64
+// bytes by default), so this carries the result and its timestamp but not
+// the token, which the caller already has
+struct cls_otp_check_otp_reply
+{
+  ceph::real_time timestamp;
+  rados::cls::otp::OTPCheckResult result{rados::cls::otp::OTP_CHECK_UNKNOWN};
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(timestamp, bl);
+    encode((char)result, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(timestamp, bl);
+    uint8_t t;
+    decode(t, bl);
+    result = (rados::cls::otp::OTPCheckResult)t;
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_otp_check_otp_reply)
+
 struct cls_otp_get_result_op
 {
   std::string token;
