@@ -139,7 +139,7 @@ Worker* NetworkStack::get_worker()
   unsigned min_load = std::numeric_limits<int>::max();
   Worker* current_best = nullptr;
 
-  pool_spin.lock();
+  std::lock_guard lk(pool_spin);
   // find worker with least references
   // tempting case is returning on references == 0, but in reality
   // this will happen so rarely that there's no need for special case.
@@ -151,8 +151,10 @@ Worker* NetworkStack::get_worker()
     }
   }
 
-  pool_spin.unlock();
   ceph_assert(current_best);
+  // take the reference before dropping pool_spin: otherwise a concurrent
+  // caller can still see the old count and pick the same worker, leaving
+  // the connections unevenly spread across the workers.
   ++current_best->references;
   return current_best;
 }
