@@ -9539,6 +9539,100 @@ def test_lifecycle_expiration_size_lt():
     assert objects[0]['Key'] == "myobject_big"
 
 @pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_lifecycle_noncur_expiration_size_null_version():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # null versions, written before versioning is enabled
+    client.put_object(Bucket=bucket_name, Key='big', Body=get_byte_buffer(3000))
+    client.put_object(Bucket=bucket_name, Key='small', Body=get_byte_buffer(1000))
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+
+    # current versions with the opposite sizes
+    client.put_object(Bucket=bucket_name, Key='big', Body=get_byte_buffer(1000))
+    client.put_object(Bucket=bucket_name, Key='small', Body=get_byte_buffer(3000))
+
+    # expire noncurrent versions smaller than 2000 bytes. each null version
+    # must be sized by itself, not by the current version of its key
+    lifecycle_config = {
+        'Rules': [
+            {
+                'NoncurrentVersionExpiration': {
+                    'NoncurrentDays': 1
+                },
+                'ID': 'noncur_lt',
+                'Filter': {
+                    'Prefix': '',
+                    'ObjectSizeLessThan': 2000
+                },
+                'Status': 'Enabled',
+            },
+        ]
+    }
+
+    response = client.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name, LifecycleConfiguration=lifecycle_config)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    lc_interval = get_lc_debug_interval()
+    time.sleep(10*lc_interval)
+
+    # only the small null version expired
+    response = client.list_object_versions(Bucket=bucket_name)
+    null_keys = [v['Key'] for v in response['Versions'] if v['VersionId'] == 'null']
+    assert null_keys == ['big']
+    assert len(response['Versions']) == 3
+
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_expiration_size_gt_compressed():
+    sc = configured_storage_classes()
+    if len(sc) < 2:
+        pytest.skip('requires a storage class other than STANDARD')
+
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # the rgw/lifecycle suite compresses this storage class, so the big object
+    # is stored in far fewer than 2000 bytes. the filter must use its size
+    client.put_object(Bucket=bucket_name, Key='big', Body=get_byte_buffer(1024*1024), StorageClass=sc[1])
+    client.put_object(Bucket=bucket_name, Key='small', Body=get_byte_buffer(1000), StorageClass=sc[1])
+
+    lifecycle_config = {
+        'Rules': [
+            {
+                'Expiration': {
+                    'Days': 1
+                },
+                'ID': 'object_gt',
+                'Filter': {
+                    'Prefix': '',
+                    'ObjectSizeGreaterThan': 2000
+                },
+                'Status': 'Enabled',
+            },
+        ]
+    }
+
+    response = client.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name, LifecycleConfiguration=lifecycle_config)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    lc_interval = get_lc_debug_interval()
+    time.sleep(10*lc_interval)
+
+    # only the big object expired
+    response = client.list_objects(Bucket=bucket_name)
+    assert _get_keys(response) == ['small']
+
+@pytest.mark.lifecycle
 def test_lifecycle_id_too_long():
     bucket_name = get_new_bucket()
     client = get_client()

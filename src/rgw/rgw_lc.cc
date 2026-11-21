@@ -651,27 +651,25 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp,
 
   const auto& op = oc.op;
   if (op.size_gt || op.size_lt) {
-    int ret{0};
-    auto& bucket = oc.bucket;
-    auto& o = oc.o;
-    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o.key);
+    // the listing entry describes this exact version, and its accounted_size
+    // is the object size that ListObjects reports, not the compressed or
+    // encrypted size on disk
+    uint64_t size = oc.o.meta.accounted_size;
 
-    ret = obj->load_obj_state(dpp, y, true);
-    if (ret < 0) {
-      return false;
+    if (oc.o.is_delete_marker()) {
+      // a delete marker has no size of its own. keep sizing it by loading
+      // its key, as this always has, until it's settled whether size
+      // filters apply to delete markers at all
+      std::unique_ptr<rgw::sal::Object> obj = oc.bucket->get_object(oc.o.key);
+      int ret = obj->load_obj_state(dpp, y, true);
+      if (ret < 0) {
+        return false;
+      }
+      size = obj->get_size();
     }
 
-    bool gt_p{true};
-    bool lt_p{true};
-
-    if (op.size_gt) {
-      gt_p = (obj->get_size() > op.size_gt.get());
-    }
-    if (op.size_lt) {
-      lt_p = (obj->get_size() < op.size_lt.get());
-    }
-
-    return gt_p && lt_p;
+    return (!op.size_gt || size > *op.size_gt) &&
+           (!op.size_lt || size < *op.size_lt);
   } /* require size check */
 
   return true;
