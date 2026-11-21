@@ -66,3 +66,31 @@ options:
   - ceph-exporter
   flags:
   - runtime
+- name: exporter_ssl_options
+  type: str
+  level: advanced
+  desc: TLS/SSL protocol options for ceph-exporter HTTPS server. Colon-separated list of options (e.g. no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1 for TLS 1.2 and above). Supported options include default_workarounds, no_compression, no_sslv2, no_sslv3, no_tlsv1, no_tlsv1_1, no_tlsv1_2, single_dh_use. Unknown options cause the HTTPS server to fail at startup. The default only allows TLS 1.3.
+  default: no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1:no_tlsv1_2
+  services:
+  - ceph-exporter
+- name: exporter_ssl_ciphers
+  type: str
+  level: advanced
+  desc: TLS cipher list for ceph-exporter (TLS 1.2 and below). OpenSSL cipher string format. Empty string uses OpenSSL default.
+  default:
+  services:
+  - ceph-exporter
+- name: exporter_ssl_ciphersuites
+  type: str
+  level: advanced
+  desc: TLS 1.3 ciphersuites for ceph-exporter. Colon-separated OpenSSL ciphersuite names (e.g. TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256).
+  default:
+  services:
+  - ceph-exporter
+- name: exporter_tls_groups
+  type: str
+  level: advanced
+  desc: TLS key exchange groups for ceph-exporter. Colon-separated group names (e.g. P-256:P-384:P-521). Post-quantum groups like X25519MLKEM768 require OpenSSL 3.5+.
+  default:
+  services:
+  - ceph-exporter
