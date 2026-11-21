@@ -852,6 +852,21 @@ void ObjectOperation::exec_impl(const char *cls, const char *method,
 			       method, inbl, _3, _4, _5));
 }
 
+void ObjectOperation::exec_impl(const char *cls, const char *method,
+                                bufferlist& inbl, bufferlist *obl, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  // TODO: support flags so 'obl' is not assigned on write operations without OPERATION_RETURNVEC
+  librados::ObjectOperationTestImpl op = std::bind(
+      &TestIoCtxImpl::exec_internal, _1, _2,
+      librados_test_stub::get_class_handler(), cls,
+      method, inbl, obl, _4, _5);
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                   std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectOperation::set_op_flags2(int flags) {
 }
 

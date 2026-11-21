@@ -1545,6 +1545,14 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
 
+  void assert_time_range(timespec after, timespec before) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_TIME_RANGE);
+    osd_op.op.assert_time_range.after.tv_sec = after.tv_sec;
+    osd_op.op.assert_time_range.after.tv_nsec = after.tv_nsec;
+    osd_op.op.assert_time_range.before.tv_sec = before.tv_sec;
+    osd_op.op.assert_time_range.before.tv_nsec = before.tv_nsec;
+  }
+
   void get_internal_versions(boost::system::error_code* ec,
                              buffer::list *pbl) {
   	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);

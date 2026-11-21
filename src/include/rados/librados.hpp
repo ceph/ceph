@@ -381,6 +381,15 @@ inline namespace v14_2_0 {
     void assert_exists();
 
     /**
+     * Guard an operation with an assertion that the osd executes the operation
+     * within the given time range. Failed assertions return ETIME.
+     *
+     * Note that time comparisons between clients and osds are subject to
+     * clock skew.
+     */
+    void assert_time_range(timespec after, timespec before);
+
+    /**
      * get key/value pairs for specified keys
      *
      * @param assertions [in] comparison assertions

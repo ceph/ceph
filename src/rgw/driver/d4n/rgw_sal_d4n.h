@@ -132,6 +132,8 @@ class D4NFilterBucket : public FilterBucket {
                        optional_yield y) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const DoutPrefixProvider* dpp,
+				optional_yield y,
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;

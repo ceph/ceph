@@ -66,7 +66,9 @@ int RGWGC::tag_index(const string& tag)
   return rgw_shards_mod(XXH64(tag.c_str(), tag.size(), seed), max_objs);
 }
 
-std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y)
+auto RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag,
+                             optional_yield y, const time_pair* time_range)
+  -> std::tuple<int, std::optional<cls_rgw_obj_chain>>
 {
   ldpp_dout(this, 20) << "RGWGC::send_split_chain - tag is: " << tag << dendl;
 
@@ -90,26 +92,28 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
         broken_chain.objs.pop_back();
         --it;
         ldpp_dout(this, 20) << "RGWGC::send_split_chain - more than, dont add to broken chain and send chain" << dendl;
-        auto ret = send_chain(broken_chain, tag, y);
+        auto ret = send_chain(broken_chain, tag, y, time_range);
         if (ret < 0) {
           broken_chain.objs.insert(broken_chain.objs.end(), it, chain.objs.end()); // add all the remainder objs to the list to be deleted inline
           ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
           return {ret, {broken_chain}};
         }
+        // enforce the time range on the first write only
+        time_range = nullptr;
         broken_chain.objs.clear();
         total_encoded_size = base_encoded_size;
       }
     }
     if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - sending leftover objects" << dendl;
-      auto ret = send_chain(broken_chain, tag, y);
+      auto ret = send_chain(broken_chain, tag, y, time_range);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
         return {ret, {broken_chain}};
       }
     }
   } else {
-    auto ret = send_chain(chain, tag, y);
+    auto ret = send_chain(chain, tag, y, time_range);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
       return {ret, {std::move(chain)}};
@@ -118,12 +122,18 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
   return {0, {}};
 }
 
-int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optional_yield y)
+int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag,
+                      optional_yield y, const time_pair* time_range)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_obj_info info;
   info.chain = chain;
   info.tag = tag;
+  if (time_range) {
+    const auto after = ceph::real_clock::to_timespec(time_range->first);
+    const auto before = ceph::real_clock::to_timespec(time_range->second);
+    op.assert_time_range(after, before);
+  }
   gc_log_enqueue2(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   int i = tag_index(tag);

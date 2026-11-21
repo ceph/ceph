@@ -820,12 +820,14 @@ int D4NFilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y
 }
 
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
+				  const DoutPrefixProvider* dpp,
+				  optional_yield y,
 				  const std::string& oid,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
   std::unique_ptr<MultipartUpload> nmu =
-    next->get_multipart_upload(oid, upload_id, owner, mtime);
+    next->get_multipart_upload(dpp, y, oid, upload_id, owner, mtime);
 
   return std::make_unique<D4NFilterMultipartUpload>(std::move(nmu), this, this->filter);
 }

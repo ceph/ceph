@@ -41,6 +41,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_get_obj_window_size
 .. confval:: rgw_get_obj_max_req_size
 .. confval:: rgw_multipart_min_part_size
+.. confval:: rgw_mp_lock_max_time
+.. confval:: rgw_mp_lock_max_skew
 .. confval:: rgw_relaxed_s3_bucket_names
 .. confval:: rgw_list_buckets_max_chunk
 .. confval:: rgw_override_bucket_index_max_shards

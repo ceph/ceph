@@ -56,6 +56,18 @@ list<cls_lock_lock_op> cls_lock_lock_op::generate_test_instances()
   return o;
 }
 
+void cls_lock_lock_reply::dump(Formatter *f) const
+{
+  f->dump_stream("expires_at") << expires_at;
+}
+
+list<cls_lock_lock_reply> cls_lock_lock_reply::generate_test_instances()
+{
+  list<cls_lock_lock_reply> o;
+  o.emplace_back();
+  return o;
+}
+
 void cls_lock_unlock_op::dump(Formatter *f) const
 {
   f->dump_string("name", name);

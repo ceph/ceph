@@ -27,7 +27,8 @@ class RGWGC : public DoutPrefixProvider {
   static constexpr uint64_t seed = 8675309;
 
   int tag_index(const std::string& tag);
-  int send_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
+  int send_chain(const cls_rgw_obj_chain& chain, const std::string& tag,
+                 optional_yield y, const time_pair* time_range);
 
   class GCWorker : public Thread {
     const DoutPrefixProvider *dpp;
@@ -51,7 +52,9 @@ public:
   }
   std::vector<bool> transitioned_objects_cache;
   int get_max_objs() const { return max_objs; }
-  std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
+  auto send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag,
+                        optional_yield y, const time_pair* time_range = nullptr)
+    -> std::tuple<int, std::optional<cls_rgw_obj_chain>>;
 
   int remove(int index, const std::vector<std::string>& tags, librados::AioCompletion **pc, optional_yield y);
   int remove(int index, int num_entries, optional_yield y);

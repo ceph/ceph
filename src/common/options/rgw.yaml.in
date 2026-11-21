@@ -668,12 +668,40 @@ options:
 - name: rgw_mp_lock_max_time
   type: int
   level: advanced
-  desc: Multipart upload max completion time
-  long_desc: Time length to allow completion of a multipart upload operation. This
-    is done to prevent concurrent completions on the same object with the same upload
-    id.
+  desc: Multipart upload lock duration
+  long_desc: Duration for the distributed lock that guards a given multipart UploadId
+    against concurrent AbortMultipartUpload/CompleteMultipartUpload operations. This
+    lock is continuously renewed halfway through its duration, for as long as the
+    operation takes. A very short duration risks failures if lock renewal requests are
+    delayed. A very long duration delays recovery after a crash.
   default: 10_min
   min: 2_min
+  services:
+  - rgw
+- name: rgw_mp_lock_max_skew
+  type: int
+  level: advanced
+  desc: Limit on acceptable clock skew between OSDs for multipart lock enforcement
+  long_desc: Multipart uploads require that their writes happen before the lock expires.
+    Because that lock state is stored on a different object/OSD, this enforcement relies
+    on time comparisons which are subject to clock skew between OSDs. Clock skew above
+    this configured limit may lead to data loss from racing requests. This configured
+    limit should be significantly smaller than rgw_mp_lock_max_time.
+  default: 1_min
+  min: 10
+  see_also:
+  - rgw_mp_lock_max_time
+  - rgw_mp_lock_inject_skew
+  services:
+  - rgw
+- name: rgw_mp_lock_inject_skew
+  type: int
+  level: dev
+  desc: Injected clock skew in seconds for testing multipart lock enforcement
+  default: 0
+  see_also:
+  - rgw_mp_lock_max_time
+  - rgw_mp_lock_max_skew
   services:
   - rgw
 - name: rgw_mp_lock_inject_delay
