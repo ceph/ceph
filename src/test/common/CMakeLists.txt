@@ -169,6 +169,15 @@ add_ceph_unittest(unittest_throttle PARALLEL)
 set_property(TEST unittest_throttle PROPERTY RUN_SERIAL TRUE)
 target_link_libraries(unittest_throttle global)
 
+# unittest_prioritycache
+add_executable(unittest_prioritycache
+  test_prioritycache.cc
+  $<TARGET_OBJECTS:common_prioritycache_obj>
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_prioritycache)
+target_link_libraries(unittest_prioritycache global heap_profiler)
+
 # unittest_lru
 add_executable(unittest_lru
   test_lru.cc
