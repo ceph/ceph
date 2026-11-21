@@ -2,6 +2,7 @@
 #include "proxy_mount.h"
 #include "proxy_helpers.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
