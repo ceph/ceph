@@ -257,15 +257,18 @@ public:
     return clients;
   }
 
-  bool is_module_active(const std::string &name) {
-    ceph_assert(active_modules);
-    return active_modules->module_exists(name);
-  }
-
   auto& get_active_module_finisher(const std::string &name) {
     ceph_assert(active_modules);
     return active_modules->get_module_finisher(name);
   }
+
+  std::shared_ptr<ActivePyModule> get_active_module(const std::string &name) {
+    ceph_assert(active_modules);
+    return active_modules->get_module(name);
+  }
+
+  // 0 means unlimited
+  uint64_t get_max_command_queue_length(const PyModuleRef &module) const;
 
   // Sends the "active" beacon right away if all mgr modules
   // have finished startup. If some modules are still pending
