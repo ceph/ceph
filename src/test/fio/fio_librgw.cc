@@ -319,15 +319,6 @@ namespace {
     }
   }
 
-/*
- * The ->prep() function is called for each io_u prior to being submitted
- * with ->queue(). This hook allows the io engine to perform any
- * preparatory actions on the io_u, before being submitted. Not required.
- */
-  static int fio_librgw_prep(struct thread_data *td, struct io_u *io_u)
-  {
-    return 0;
-  }
 
 /*
  * The ->event() hook is called to match an event number with an io_u.
@@ -352,14 +343,6 @@ namespace {
     return 0;
   }
 
-/*
- * The ->cancel() hook attempts to cancel the io_u. Only relevant for
- * async io engines, and need not be supported.
- */
-  static int fio_librgw_cancel(struct thread_data *td, struct io_u *io_u)
-  {
-    return 0;
-  }
 
 /*
  * The ->queue() hook is responsible for initiating io on the io_u
