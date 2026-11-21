@@ -8,3 +8,4 @@ usr/lib/libos_tp.so*
 usr/lib/libosd_tp.so*
 usr/lib/libbluestore_tp.so*
 usr/share/man/man8/ceph-bluestore-tool.8
+usr/share/man/man8/ceph-objectstore-tool.8

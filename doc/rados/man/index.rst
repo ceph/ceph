@@ -9,11 +9,14 @@
    ../../man/8/ceph-volume-systemd.rst
    ../../man/8/ceph.rst
    ../../man/8/ceph-authtool.rst
+   ../../man/8/ceph-bluestore-tool.rst
    ../../man/8/ceph-clsinfo.rst
    ../../man/8/ceph-conf.rst
    ../../man/8/ceph-debugpack.rst
    ../../man/8/ceph-dencoder.rst
    ../../man/8/ceph-mon.rst
+   ../../man/8/ceph-monstore-tool.rst
+   ../../man/8/ceph-objectstore-tool.rst
    ../../man/8/ceph-osd.rst
    ../../man/8/ceph-kvstore-tool.rst
    ../../man/8/ceph-run.rst
