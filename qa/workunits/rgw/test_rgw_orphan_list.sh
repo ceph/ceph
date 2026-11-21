@@ -3,6 +3,9 @@
 # set -x
 set -e
 
+# define a trap that prints debugging info on failure
+trap 'echo "ERROR in ${0}: Command \"$BASH_COMMAND\" failed on line $LINENO with exit code $?"' ERR
+
 # if defined, debug messages will be displayed and prepended with the string
 # debug="DEBUG"
 
