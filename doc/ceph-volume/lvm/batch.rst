@@ -20,14 +20,12 @@ are supported.
 
 Automatic sorting of disks
 --------------------------
-If ``batch`` receives only a single list of data devices and other options are
-passed, ``ceph-volume`` will auto-sort disks by its rotational
-property and use non-rotating disks for ``block.db`` or ``journal`` depending
-on the objectstore used. If all devices are to be used for standalone OSDs,
-no matter if rotating or solid state, pass ``--no-auto``.
-For example assuming :term:`BlueStore` is used and ``--no-auto`` is not passed,
-the deprecated behavior would deploy the following, depending on the devices
-passed:
+``batch`` does not sort devices unless the ``--auto`` option is passed. If
+``batch`` receives only a single list of data devices and ``--auto`` is passed,
+``ceph-volume`` sorts the devices by their rotational property and uses the
+non-rotational devices for ``block.db`` or ``journal``, depending on the
+objectstore. For example, if :term:`BlueStore` is used and ``--auto`` is
+passed, ``batch`` deploys the following, depending on the devices passed:
 
 #. Devices are all HDDs: 1 OSD is created per device
 #. Devices are all SSDs: 2 OSDs are created per device
@@ -37,11 +35,9 @@ passed:
 .. note:: Although operations in ``ceph-volume lvm create`` allow usage of
           ``block.wal`` it isn't supported with the ``auto`` behavior.
 
-This default auto-sorting behavior is now **deprecated** and will be changed in future releases.
-Instead, devices are not automatically sorted unless the ``--auto`` option is passed.
-
-It is recommended to make use of the explicit device lists
-for ``block.db``, ``block.wal`` and ``journal``.
+Automatic sorting used to be the default and is **deprecated**. Instead of
+``--auto``, pass explicit device lists for ``block.db``, ``block.wal``, and
+``journal``.
 
 .. _ceph-volume-lvm-batch_bluestore:
 
