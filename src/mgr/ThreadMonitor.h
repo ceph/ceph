@@ -16,6 +16,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <istream>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -49,6 +50,9 @@ public:
   void start_monitoring();
   void stop_monitoring();
   void register_thread(const pid_t thread_id, const pid_t serve_thread_id, const std::string& name, const PyModuleRef py_module);
+
+  // Split out of read_process_statm() so tests can feed a stream
+  static bool parse_statm(std::istream& statm_stream, long long& rss_pages);
 
 protected:
   std::vector<std::string> get_tracked_keys() const noexcept override {
