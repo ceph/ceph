@@ -2055,8 +2055,20 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     }
   }
 
-  uint64_t feat_missing =
+  uint64_t feat_missing = 0;
+  // a peer with an authorizer never sends the MAuth that checks them
+  if (!connection->policy.features_checked_by_auth ||
+      (uint32_t)connect_msg.authorizer_len != 0) {
+    if (!connection->policy.features_ext_required.empty()) {
+      // msgr1 cannot carry extended features; the reply names this one
+      connection->policy.features_required |= CEPH_FEATUREMASK_SERVER_VAMPIRE;
+    }
+    feat_missing =
       connection->policy.features_required & ~(uint64_t)connect_msg.features;
+    if (!connection->policy.features_ext_required.empty()) {
+      feat_missing |= CEPH_FEATUREMASK_SERVER_VAMPIRE;
+    }
+  }
   if (feat_missing) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
                   << feat_missing << std::dec << dendl;

@@ -23,6 +23,7 @@
 #include <string>
 
 #include "include/ceph_features.h" // for CEPH_FEATURE_*
+#include "include/ceph_features_ext.h"
 #include "include/container_ios.h"
 #include "include/util.h"
 #include "include/utime.h"
@@ -53,6 +54,9 @@ enum {
 // map of entity_type -> features -> count
 struct FeatureMap {
   std::map<uint32_t,std::map<uint64_t,uint64_t>> m;
+  /// sessions by (can exchange extended features, extended features)
+  std::map<uint32_t,
+           std::map<std::pair<bool,ceph::feature_set_t>,uint64_t>> ext;
 
   void add(uint32_t type, uint64_t features) {
     if (type == CEPH_ENTITY_TYPE_MON) {
@@ -81,6 +85,31 @@ struct FeatureMap {
     }
   }
 
+  void add_ext(uint32_t type, bool capable,
+               const ceph::feature_set_t& features) {
+    if (type == CEPH_ENTITY_TYPE_MON) {
+      return;
+    }
+    ext[type][{capable, features}]++;
+  }
+
+  void rm_ext(uint32_t type, bool capable,
+              const ceph::feature_set_t& features) {
+    if (type == CEPH_ENTITY_TYPE_MON) {
+      return;
+    }
+    auto p = ext.find(type);
+    ceph_assert(p != ext.end());
+    auto q = p->second.find({capable, features});
+    ceph_assert(q != p->second.end());
+    if (--q->second == 0) {
+      p->second.erase(q);
+      if (p->second.empty()) {
+        ext.erase(p);
+      }
+    }
+  }
+
   FeatureMap& operator+=(const FeatureMap& o) {
     for (auto& p : o.m) {
       auto &v = m[p.first];
@@ -88,18 +117,30 @@ struct FeatureMap {
 	v[q.first] += q.second;
       }
     }
+    for (auto& p : o.ext) {
+      auto &v = ext[p.first];
+      for (auto& q : p.second) {
+        v[q.first] += q.second;
+      }
+    }
     return *this;
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(m, bl);
+    encode(ext, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     decode(m, p);
+    if (struct_v >= 2) {
+      decode(ext, p);
+    } else {
+      ext.clear();
+    }
     DECODE_FINISH(p);
   }
 
@@ -120,6 +161,25 @@ struct FeatureMap {
     }
   }
 
+  void dump_ext(ceph::Formatter *f) const {
+    for (auto& p : ext) {
+      f->open_array_section(ceph_entity_type_name(p.first));
+      for (auto& q : p.second) {
+        f->open_object_section("group");
+        f->dump_bool("capable", q.first.first);
+        f->open_array_section("features");
+        q.first.second.for_each([f](unsigned bit) {
+          auto name = ceph_feature_ext_name(bit);
+          f->dump_string("feature", name ? name : std::to_string(bit));
+        });
+        f->close_section();
+        f->dump_unsigned("num", q.second);
+        f->close_section();
+      }
+      f->close_section();
+    }
+  }
+
   static std::list<FeatureMap> generate_test_instances() {
     std::list<FeatureMap> ls;
     ls.emplace_back();
@@ -128,6 +188,10 @@ struct FeatureMap {
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_NOSRCADDR);
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_PGID64);
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_INCSUBOSDMAP);
+    ls.back().add_ext(CEPH_ENTITY_TYPE_CLIENT, false, {});
+    ls.back().add_ext(CEPH_ENTITY_TYPE_CLIENT, true, {});
+    ls.back().add_ext(CEPH_ENTITY_TYPE_CLIENT, true,
+                      {CEPH_FEATURE_EXT_DEV_TEST_A, 200});
     return ls;
   }
 };

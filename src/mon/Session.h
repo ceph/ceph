@@ -54,6 +54,8 @@ struct MonSession : public RefCountedObject {
   ConnectionRef con;
   int con_type = 0;
   uint64_t con_features = 0;  // zero if AnonConnection
+  bool con_ext_capable = false;  // can exchange extended features
+  ceph::feature_set_t con_features_ext;
   entity_name_t name;
   entity_addrvec_t addrs;
   entity_addr_t socket_addr;
@@ -94,6 +96,8 @@ struct MonSession : public RefCountedObject {
     if (con->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
       con_features = con->get_features();
+      con_ext_capable = con->peer_banner_valid;
+      con_features_ext = con->get_features_ext();
     }
   }
 
@@ -137,6 +141,8 @@ struct MonSession : public RefCountedObject {
     f->dump_stream("con_features_hex") << std::hex << con_features << std::dec;
     f->dump_string("con_features_release",
 		   ceph_release_name(ceph_release_from_features(con_features)));
+    f->dump_bool("con_ext_capable", con_ext_capable);
+    f->dump_stream("con_features_ext") << con_features_ext;
     f->dump_bool("open", !closed);
     f->dump_object("caps", caps);
     f->dump_bool("authenticated", authenticated);
@@ -187,6 +193,7 @@ struct MonSessionMap {
     }
     if (s->con_features) {
       feature_map.rm(s->con_type, s->con_features);
+      feature_map.rm_ext(s->con_type, s->con_ext_capable, s->con_features_ext);
     }
     s->closed = true;
     s->put();
@@ -214,6 +221,7 @@ struct MonSessionMap {
     }
     if (s->con_features) {
       feature_map.add(s->con_type, s->con_features);
+      feature_map.add_ext(s->con_type, s->con_ext_capable, s->con_features_ext);
     }
   }
 

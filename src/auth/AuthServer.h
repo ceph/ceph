@@ -55,4 +55,9 @@ public:
     uint32_t auth_method,
     const ceph::buffer::list& bl,
     ceph::buffer::list *reply) = 0;
+
+  /// The session handshake refused an authenticated peer that lacks
+  /// required features and cannot be told so for good.
+  virtual void handle_peer_missing_features(Connection *con,
+                                            uint64_t missing) {}
 };

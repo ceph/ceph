@@ -82,6 +82,11 @@ private:
   entity_name_t peer_name;
   State state;
   uint64_t peer_supported_features;  // CEPH_MSGR2_FEATURE_*
+  /// what our banner offered on this socket
+  uint64_t supported_features = 0;  // CEPH_MSGR2_FEATURE_*
+  ceph::feature_set_t supported_ext_features;
+  /// both ends offered CEPH_MSGR2_FEATURE_EXTENDED_FEATURES (this socket)
+  bool ext_features = false;
 
   uint64_t client_cookie;
   uint64_t server_cookie;
@@ -213,6 +218,7 @@ private:
 
 public:
   uint64_t connection_features;
+  ceph::feature_set_t connection_features_ext;
 
   ProtocolV2(AsyncConnection *connection);
   virtual ~ProtocolV2();
@@ -263,6 +269,13 @@ private:
   Ct<ProtocolV2> *handle_server_ident(ceph::bufferlist &payload);
   Ct<ProtocolV2> *send_compression_request();
   Ct<ProtocolV2> *handle_compression_done(ceph::bufferlist &payload);
+
+  // extended features (ceph_features_ext.h), carried in the banner
+  uint64_t local_msgr2_features() const;
+  ceph::feature_set_t local_ext_features() const;
+  void encode_banner_ext(ceph::bufferlist &bl);
+  void note_refusal(int error, const std::string &reason, uint64_t missing,
+                    const ceph::feature_set_t &missing_ext);
 
 
   // Server Protocol
