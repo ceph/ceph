@@ -361,6 +361,10 @@ if(WITH_RADOSGW_STANDALONE)
   )
 endif()
 
+add_library(jwt-cpp INTERFACE)
+target_include_directories(jwt-cpp INTERFACE
+  "${CMAKE_CURRENT_SOURCE_DIR}/jwt-cpp/include")
+
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
@@ -396,6 +400,7 @@ target_link_libraries(rgw_common
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
   PUBLIC
+    jwt-cpp
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
@@ -406,6 +411,7 @@ target_link_libraries(rgw_common
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/jwt-cpp/include"
   PUBLIC "${LUA_INCLUDE_DIR}")
 
 # work around https://github.com/Cyan4973/xxHash/issues/943 for debug builds
@@ -509,6 +515,7 @@ if(WITH_RADOSGW_STANDALONE)
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
     PUBLIC
+    jwt-cpp
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
@@ -1076,6 +1083,7 @@ target_link_libraries(rgw
   ${EXPAT_LIBRARIES}
   OpenSSL::SSL
   PUBLIC
+  jwt-cpp
   RapidJSON::RapidJSON
   dmclock::dmclock)
 
