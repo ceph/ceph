@@ -119,7 +119,9 @@ and do a fresh mount.
 
 If you are trying to reconnect clients in this way, you may also
 find it useful to set ``client_reconnect_stale`` to true in the
-FUSE client, to prompt the client to try to reconnect.
+FUSE client, to prompt the client to try to reconnect. A client reconnects
+this way at most once per ``client_reconnect_stale_interval`` (30 minutes
+by default); set it to 0 for no limit.
 
 Advanced: Configuring blocklisting
 ==================================

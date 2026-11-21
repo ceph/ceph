@@ -92,6 +92,21 @@ options:
   default: false
   services:
   - mds_client
+- name: client_reconnect_stale_interval
+  type: secs
+  level: advanced
+  desc: Minimum time between automatic reconnects after being blocklisted
+  long_desc: With client_reconnect_stale, a client that finds itself
+    blocklisted resets its sessions and reconnects with a new address. This
+    is the minimum time between two such reconnects, so that a client that
+    keeps getting evicted does not reconnect in a loop. 0 means no limit,
+    as with the kernel client's recover_session=clean.
+  default: 30_min
+  min: 0
+  services:
+  - mds_client
+  see_also:
+  - client_reconnect_stale
 - name: client_snapdir
   type: str
   level: advanced
