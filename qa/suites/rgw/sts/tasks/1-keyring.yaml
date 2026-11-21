@@ -1,0 +1,7 @@
+tasks:
+- exec:
+    client.0:
+      - sudo radosgw-admin sts keyring init
+      - sudo radosgw-admin sts keyring rotate
+      - sudo radosgw-admin sts keyring list
+      - sleep 5

@@ -32,6 +32,7 @@
 #include "include/stringify.h"
 #include "perfglue/heap_profiler.h"
 #include "rgw_kms_cache.h"
+#include "rgw_sts_keyring_cache.h"
 #include "rgw_main.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -471,6 +472,16 @@ void rgw::AppMain::cond_init_apis()
       }
     }
 
+    // the keyring serves both the STS API (issuing tokens) and S3 STS auth
+    // (verifying them); it lives in the mon config-key store, so RadosStore only
+    if (env.driver->get_name() == "rados" &&
+        (sts_enabled || g_conf().get_val<bool>("rgw_s3_auth_use_sts"))) {
+      const auto interval =
+          g_conf().get_val<int64_t>("rgw_sts_keyring_refresh_interval");
+      env.sts_keyring = std::make_unique<STS::KeyringCache>(
+          dpp->get_cct(), env.driver, std::chrono::seconds(interval));
+    }
+
     if (apis_set.contains("swift")) {
       RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
 
@@ -567,6 +578,9 @@ void rgw::AppMain::init_opslog()
 int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 {
   int r{0};
+  if (env.sts_keyring) {
+    env.sts_keyring->start();
+  }
   vector<string> frontends_def;
   std::string frontend_defs_str =
     g_conf().get_val<string>("rgw_frontend_defaults");
@@ -716,6 +730,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       rgw_pauser->add_pauser(s3vector_pauser.get());
     }
 #endif
+      if (env.sts_keyring) {
+        rgw_pauser->add_pauser(env.sts_keyring.get());
+      }
       reloader = std::make_unique<RGWRealmReloader>(
           env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
       realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
@@ -847,6 +864,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
   if (env.kms_cache) {
     env.kms_cache->stop_ttl_reaper();
+  }
+  if (env.sts_keyring) {
+    env.sts_keyring->stop();
   }
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();

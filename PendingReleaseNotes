@@ -191,6 +191,10 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* RGW: STS session tokens can now be sealed with a keyring of rotating keys
+  stored in the monitor config-key store. See the STS documentation for
+  keyring setup and switching ``rgw_sts_token_format``.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,
