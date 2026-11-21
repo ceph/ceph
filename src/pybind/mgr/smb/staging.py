@@ -135,6 +135,22 @@ class Staging:
             self.destination_store, ug_id
         ).get_users_and_groups()
 
+    def get_tls_credential(
+        self, tls_credential_id: str
+    ) -> resources.TLSCredential:
+        ekey = (str(TLSCredentialEntry.namespace), tls_credential_id)
+        # A credential removed in this batch is gone once the batch is
+        # saved, even though the destination store still holds it.
+        if ekey in self.deleted:
+            raise KeyError(ekey)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.TLSCredential)
+            return res
+        return TLSCredentialEntry.from_store(
+            self.destination_store, tls_credential_id
+        ).get_tls_credential()
+
     def get_rgw_credential(
         self, rgw_credential_id: str
     ) -> resources.RGWCredential:
@@ -562,6 +578,29 @@ def _check_cluster_resource(
                 msg="users and groups linked to different cluster",
                 status={
                     'other_cluster_id': ug.linked_to_cluster,
+                },
+            )
+    # The TLS credentials are only read when the cluster's configuration is
+    # synced, after the resources are saved. Catch a bad reference here, so
+    # that it is reported as an error result instead of a traceback.
+    for tls_ref in sorted(tls_refs(cluster)):
+        try:
+            tls_cred = staging.get_tls_credential(tls_ref)
+        except KeyError as err:
+            raise ErrorResult(
+                cluster,
+                msg=f"TLS credential '{tls_ref}' not found",
+                status={'unknown_id': tls_ref},
+            ) from err
+        if (
+            tls_cred.linked_to_cluster
+            and tls_cred.linked_to_cluster != cluster.cluster_id
+        ):
+            raise ErrorResult(
+                cluster,
+                msg=f"TLS credential '{tls_ref}' linked to different cluster",
+                status={
+                    'other_cluster_id': tls_cred.linked_to_cluster,
                 },
             )
     _check_cluster_keybridge(cluster)
