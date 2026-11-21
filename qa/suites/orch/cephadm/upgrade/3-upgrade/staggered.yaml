@@ -91,7 +91,11 @@ tasks:
       # to make sure mgr daemons upgrade is fully completed, including being deployed by a mgr on a new version
       # also serves as an early failure if manually upgrading the mgrs failed as --daemon-types won't be recognized
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       # verify only one version found for mgrs and that their version hash matches what we are upgrading to
       - ceph versions | jq -e '.mgr | length == 1'
       - ceph versions | jq -e '.mgr | keys' | grep $sha1
@@ -103,7 +107,11 @@ tasks:
       - ceph health detail
       # upgrade only the mons on one of the two hosts
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --hosts $(ceph orch ps | grep mgr.x | awk '{print $2}')
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       - ceph orch ps
       # verify two different version seen for mons
       - ceph versions | jq -e '.mon | length == 2'
@@ -111,7 +119,11 @@ tasks:
       - ceph health detail
       # upgrade mons on the other hosts
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --hosts $(ceph orch ps | grep mgr.y | awk '{print $2}')
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       - ceph orch ps
       # verify all mons now on same version and version hash matches what we are upgrading to
       - ceph versions | jq -e '.mon | length == 1'
@@ -122,7 +134,11 @@ tasks:
       - ceph health detail
       # upgrade exactly 2 osd daemons
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types osd --limit 2
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       - ceph orch ps
       # verify two different versions now seen for osds
       - ceph versions | jq -e '.osd | length == 2'
@@ -132,7 +148,11 @@ tasks:
       - ceph health detail
       # upgrade one more osd
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types crash,osd --limit 1
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       - ceph orch ps
       - ceph versions | jq -e '.osd | length == 2'
       # verify now 8 daemons have been upgraded
@@ -141,7 +161,11 @@ tasks:
       - ceph orch upgrade status
       - ceph health detail
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types crash,osd
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       - ceph orch ps
       # verify all osds are now on same version and version hash matches what we are upgrading to
       - ceph versions | jq -e '.osd | length == 1'
@@ -150,7 +174,11 @@ tasks:
       - ceph health detail
       # upgrade the rgw daemons using --services
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --services rgw.foo
-      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- cephadm.wait_for_upgrade:
+    timeout: 3600
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
       - ceph orch ps
       - ceph versions
       # verify all rgw daemons on same version and version hash matches what we are upgrading to
