@@ -165,5 +165,8 @@
     "cucumber-expressions": false,
     "es5-ext": false,
     "unrs-resolver@1.12.2": true
+  },
+  "overrides": {
+    "axios": "^1.20.0"
   }
 }
