@@ -261,8 +261,14 @@ def install_timer_unit(
     interval_sec: int,
     timeout_sec: int,
     randomized_delay_sec: int = 0,
+    on_active_sec: int = 0,
 ) -> None:
-    """Install a systemd timer + oneshot service pair for a periodic job."""
+    """Install a systemd timer and oneshot service for a periodic job.
+
+    on_active_sec is the wait before the first run. interval_sec is the
+    wait between runs after that. The timer resets on reboot, so a long
+    interval can keep delaying the first run. 0 means use interval_sec.
+    """
     _install_base_units(ctx, fsid)
 
     # write the oneshot service
@@ -289,6 +295,7 @@ def install_timer_unit(
         job_description=job_description,
         interval_sec=interval_sec,
         randomized_delay_sec=randomized_delay_sec,
+        on_active_sec=on_active_sec,
     )
     with write_new(timer_path, perms=None) as f:
         f.write(timer_content)
@@ -333,6 +340,13 @@ def remove_timer_unit(
             os.unlink(path)
 
     call_throws(ctx, ['systemctl', 'daemon-reload'])
+    # A run killed by TimeoutStartSec leaves a failed entry behind even
+    # after the unit file is gone.
+    call(
+        ctx,
+        ['systemctl', 'reset-failed', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
 
 
 def sidecars_from_dropin(
