@@ -463,6 +463,9 @@ And we will create a bucket level policy rule for existing bucket ``buck2``. Not
                                                    --group-id=buck2-default --pipe-id=pipe1 \
                                                    --source-zones='*' --dest-zones='*'
 
+To sync selected buckets to a cloud sync zone in the same way, see
+:ref:`radosgw-cloud-sync-selected-buckets`.
+
 
 
 Example 4: Limit Bucket Sync to Specific Zones
