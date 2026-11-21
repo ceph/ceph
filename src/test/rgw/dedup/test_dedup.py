@@ -16,6 +16,7 @@ import boto3
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from dataclasses import dataclass
+import socket
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -144,6 +145,33 @@ def _admin_rest_url():
     scheme = 'https' if port_no in (443, 8443) else 'http'
     return f'{scheme}://{hostname}:{port_no}/admin/dedup'
 
+# Transient connect errors seen when teuth nodes renew DHCP during long runs.
+_ADMIN_REST_TRANSIENT_ERRNOS = frozenset({
+    100,  # ENETDOWN
+    101,  # ENETUNREACH
+    110,  # ETIMEDOUT
+    111,  # ECONNREFUSED
+    113,  # EHOSTUNREACH
+})
+
+def _is_transient_admin_rest_error(exc):
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return True
+    if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+        return True
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        if isinstance(reason, (TimeoutError, socket.timeout)):
+            return True
+        if isinstance(reason, OSError) and reason.errno in _ADMIN_REST_TRANSIENT_ERRNOS:
+            return True
+    if isinstance(exc, OSError) and exc.errno in _ADMIN_REST_TRANSIENT_ERRNOS:
+        return True
+    return False
+
+def _admin_rest_retry_delay(attempt):
+    return min(0.5 * (2 ** attempt), 5.0)
+
 #--------------------------------------------------------------------------
 def admin_rest(method, params):
     """Send a signed GET/POST to /admin/dedup and return
@@ -157,15 +185,28 @@ def admin_rest(method, params):
 
     req = urllib.request.Request(url, method=method,
                                 headers=dict(aws_req.headers))
-    try:
-        resp = urllib.request.urlopen(req, timeout=120)
-        body = resp.read().decode('utf-8')
-        return (body, 0)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')
-        log.error("admin_rest %s [params=%s] HTTP %d: %s",
-                  method, params, e.code, body)
-        return (body, 1)
+    max_attempts = 6
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            resp = urllib.request.urlopen(req, timeout=120)
+            body = resp.read().decode('utf-8')
+            return (body, 0)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')
+            log.error("admin_rest %s [params=%s] HTTP %d: %s",
+                      method, params, e.code, body)
+            return (body, 1)
+        except Exception as e:
+            if not _is_transient_admin_rest_error(e):
+                raise
+            last_exc = e
+            log.debug("admin_rest %s [params=%s] transient error (attempt %d/%d): %s",
+                      method, params, attempt + 1, max_attempts, e)
+            if attempt + 1 < max_attempts:
+                time.sleep(_admin_rest_retry_delay(attempt))
+
+    raise last_exc
 
 #--------------------------------------------------------------
 def dedup_admin(subcmd, **kwargs):
