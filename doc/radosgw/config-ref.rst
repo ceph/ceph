@@ -360,6 +360,7 @@ implementation of the *dmclock_client* op queue divides RGW ops into admin, auth
 .. _Barbican: ../barbican
 .. _Encryption: ../encryption
 .. _HTTP Frontends: ../frontends
+.. _RGW_SMB Frontends: ../smb
 
 D4N Settings
 ============

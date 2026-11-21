@@ -28,9 +28,10 @@ For example, after finishing an upgrade to *tentacle*:
    ceph osd require-osd-release tentacle
 
 Monitors only accept a small set of recent release names. The current
-accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any
-older release name is rejected with ``not supported for this release``.
-The accepted set slides forward as new Ceph releases are added.
+accepted targets are ``squid``, ``tentacle``, ``umbrella``, and
+``vampire``; any older release name is rejected with ``not supported for
+this release``. The accepted set slides forward as new Ceph releases are
+added.
 
 The target release must be in the accepted set and must not be older
 than the current value; setting it to the current value is a no-op.
@@ -129,13 +130,13 @@ Initial value on new clusters
 
 New clusters start with ``require_osd_release`` set to the newest
 release the Monitor code knows about. On this release that is
-``umbrella``. Two developer options adjust the initial value for
+``vampire``. Two developer options adjust the initial value for
 testing; neither should be used in production.
 
+.. confval:: mon_debug_no_require_vampire
 .. confval:: mon_debug_no_require_umbrella
-.. confval:: mon_debug_no_require_tentacle
 
-Setting ``mon_debug_no_require_umbrella`` alone downshifts the initial
-value to ``tentacle``; setting both flags downshifts it further to
-``squid``. The ``tentacle`` flag has no effect unless the umbrella flag
+Setting ``mon_debug_no_require_vampire`` alone downshifts the initial
+value to ``umbrella``; setting both flags downshifts it further to
+``tentacle``. The ``umbrella`` flag has no effect unless the vampire flag
 is also set.

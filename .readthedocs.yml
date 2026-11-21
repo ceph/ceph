@@ -19,3 +19,4 @@ python:
 sphinx:
   builder: dirhtml
   configuration: doc/conf.py
+  fail_on_warning: true

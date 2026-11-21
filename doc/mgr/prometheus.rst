@@ -486,7 +486,7 @@ This is just an example: there are other ways to configure Prometheus
 scrape targets and label rewrite rules.
 
 prometheus.yml
-~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^
 
 ::
 
@@ -507,7 +507,7 @@ prometheus.yml
 
 
 ceph_targets.yml
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 
 ::
@@ -521,7 +521,7 @@ ceph_targets.yml
 
 
 node_targets.yml
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 ::
 

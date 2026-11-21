@@ -83,6 +83,8 @@ steps below:
 
      ceph orch apply grafana
 
+.. _cephadm-monitoring-stack-security:
+
 Enabling Security for the Monitoring Stack
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
