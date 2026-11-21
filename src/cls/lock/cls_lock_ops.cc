@@ -49,7 +49,7 @@ list<cls_lock_lock_op> cls_lock_lock_op::generate_test_instances()
   i.cookie = "cookie";
   i.tag = "tag";
   i.description = "description";
-  i.duration = utime_t(5, 0);
+  i.duration = std::chrono::seconds(5);
   i.flags = LOCK_FLAG_MAY_RENEW;
   o.push_back(std::move(i));
   o.emplace_back();
@@ -149,10 +149,10 @@ list<cls_lock_get_info_reply> cls_lock_get_info_reply::generate_test_instances()
   entity_addr_t addr1, addr2;
   generate_lock_id(id1, 1, "cookie1");
   generate_test_addr(addr1, 10, 20);
-  i.lockers[id1] = locker_info_t(utime_t(10, 0), addr1, "description1");
+  i.lockers[id1] = locker_info_t(ceph::real_time(std::chrono::seconds(10)), addr1, "description1");
   generate_lock_id(id2, 2, "cookie2");
   generate_test_addr(addr2, 30, 40);
-  i.lockers[id2] = locker_info_t(utime_t(20, 0), addr2, "description2");
+  i.lockers[id2] = locker_info_t(ceph::real_time(std::chrono::seconds(20)), addr2, "description2");
 
   o.push_back(std::move(i));
   o.emplace_back();

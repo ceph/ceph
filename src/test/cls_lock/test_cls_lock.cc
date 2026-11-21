@@ -17,7 +17,7 @@
 #include <errno.h>
 
 #include "include/types.h"
-#include "common/Clock.h"
+#include "common/ceph_time.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 
@@ -92,7 +92,7 @@ TEST_P(TestClsLock, TestMultiLocking) {
   Lock l(lock_name);
   // we set the duration, so the log output contains a locker with a
   // non-zero expiration time
-  l.set_duration(utime_t(120, 0));
+  l.set_duration(std::chrono::seconds(120));
 
   /* test lock object */
 
@@ -259,20 +259,20 @@ TEST_P(TestClsLock, TestMultipleLocks) {
 TEST_P(TestClsLock, TestLockDuration) {
   string oid = "foo";
   Lock l("lock");
-  utime_t dur(5, 0);
+  const auto dur = std::chrono::seconds(5);
   l.set_duration(dur);
-  utime_t start = ceph_clock_now();
+  const auto start = ceph::real_clock::now();
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
   int r = l.lock_exclusive(&ioctx, oid);
   if (r == 0) {
     // it's possible to get success if we were just really slow...
-    ASSERT_TRUE(ceph_clock_now() > start + dur);
+    ASSERT_TRUE(ceph::real_clock::now() > start + dur);
   } else {
     ASSERT_EQ(-EEXIST, r);
   }
 
   // coverity[store_truncates_time_t:SUPPRESS]
-  sleep(dur.sec());
+  sleep(dur.count());
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
 }
 
@@ -319,11 +319,11 @@ TEST_P(TestClsLock, TestSetCookie) {
   ASSERT_EQ(-ENOENT, ioctx.operate(oid, &op1));
 
   librados::ObjectWriteOperation op2;
-  lock(&op2, name, ClsLockType::SHARED, cookie, tag, "", utime_t{}, 0);
+  lock(&op2, name, ClsLockType::SHARED, cookie, tag, "", ceph::timespan::zero(), 0);
   ASSERT_EQ(0, ioctx.operate(oid, &op2));
 
   librados::ObjectWriteOperation op3;
-  lock(&op3, name, ClsLockType::SHARED, "cookie 2", tag, "", utime_t{}, 0);
+  lock(&op3, name, ClsLockType::SHARED, "cookie 2", tag, "", ceph::timespan::zero(), 0);
   ASSERT_EQ(0, ioctx.operate(oid, &op3));
 
   librados::ObjectWriteOperation op4;
@@ -360,7 +360,7 @@ TEST_P(TestClsLock, TestRenew) {
   ASSERT_EQ(0, ioctx.write(oid1, bl, bl.length(), 0));
 
   Lock l1(lock_name1);
-  utime_t lock_duration1(5, 0);
+  const auto lock_duration1 = std::chrono::seconds(5);
   l1.set_duration(lock_duration1);
 
   ASSERT_EQ(0, l1.lock_exclusive(&ioctx, oid1));
@@ -381,7 +381,7 @@ TEST_P(TestClsLock, TestRenew) {
   ASSERT_EQ(0, ioctx.write(oid2, bl, bl.length(), 0));
 
   Lock l2(lock_name2);
-  utime_t lock_duration2(5, 0);
+  const auto lock_duration2 = std::chrono::seconds(5);
   l2.set_duration(lock_duration2);
 
   ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
@@ -402,7 +402,7 @@ TEST_P(TestClsLock, TestRenew) {
   ASSERT_EQ(0, ioctx.write(oid3, bl, bl.length(), 0));
 
   Lock l3(lock_name3);
-  l3.set_duration(utime_t(5, 0));
+  l3.set_duration(std::chrono::seconds(5));
   l3.set_must_renew(true);
 
   ASSERT_EQ(-ENOENT, l3.lock_exclusive(&ioctx, oid3)) <<
@@ -418,7 +418,7 @@ TEST_P(TestClsLock, TestExclusiveEphemeralBasic) {
   string lock_name2 = "mylock2";
 
   Lock l1(lock_name1);
-  l1.set_duration(utime_t(300, 0));
+  l1.set_duration(std::chrono::seconds(300));
 
   uint64_t size;
   time_t mod_time;
@@ -433,7 +433,7 @@ TEST_P(TestClsLock, TestExclusiveEphemeralBasic) {
   // ***********************************************
 
   Lock l2(lock_name2);
-  l2.set_duration(utime_t(300, 0));
+  l2.set_duration(std::chrono::seconds(300));
 
   ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
   ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
@@ -450,14 +450,14 @@ TEST_P(TestClsLock, TestExclusiveEphemeralStealEphemeral) {
   string lock_name1 = "mylock1";
 
   Lock l1(lock_name1);
-  l1.set_duration(utime_t(3, 0));
+  l1.set_duration(std::chrono::seconds(3));
 
   ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
   sleep(4);
 
   // l1 is expired, l2 can take; l2 is also exclusive_ephemeral
   Lock l2(lock_name1);
-  l2.set_duration(utime_t(3, 0));
+  l2.set_duration(std::chrono::seconds(3));
   ASSERT_EQ(0, l2.lock_exclusive_ephemeral(&ioctx, oid1));
   sleep(1);
   ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
@@ -474,14 +474,14 @@ TEST_P(TestClsLock, TestExclusiveEphemeralStealExclusive) {
   string lock_name1 = "mylock1";
 
   Lock l1(lock_name1);
-  l1.set_duration(utime_t(3, 0));
+  l1.set_duration(std::chrono::seconds(3));
 
   ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
   sleep(4);
 
   // l1 is expired, l2 can take; l2 is exclusive (but not ephemeral)
   Lock l2(lock_name1);
-  l2.set_duration(utime_t(3, 0));
+  l2.set_duration(std::chrono::seconds(3));
   ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid1));
   sleep(1);
   ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
@@ -498,7 +498,7 @@ TEST_P(TestClsLock, TestExclusiveEphemeralExpiredReadOnly) {
   time_t mod_time;
 
   Lock l1(lock_name1);
-  l1.set_duration(utime_t(3, 0));
+  l1.set_duration(std::chrono::seconds(3));
   ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
   sleep(4);
 
@@ -517,7 +517,7 @@ TEST_P(TestClsLock, TestExclusiveEphemeralExpiredReadOnly) {
 
   // the next lock replaces the expired one, and its unlock removes the object
   Lock l2(lock_name1);
-  l2.set_duration(utime_t(3, 0));
+  l2.set_duration(std::chrono::seconds(3));
   ASSERT_EQ(0, l2.lock_exclusive_ephemeral(&ioctx, oid1));
   ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
   ASSERT_EQ(-ENOENT, ioctx.stat(oid1, &size, &mod_time));

@@ -5,6 +5,7 @@
 #define CEPH_CLS_LOCK_OPS_H
 
 #include "include/types.h"
+#include "common/ceph_time.h"
 #include "include/utime.h"
 #include "cls/lock/cls_lock_types.h"
 #include "include/rados/cls_traits.hpp"
@@ -16,10 +17,10 @@ struct cls_lock_lock_op
   std::string cookie;
   std::string tag;
   std::string description;
-  utime_t duration;
+  ceph::timespan duration;
   uint8_t flags;
 
-  cls_lock_lock_op() : type(ClsLockType::NONE), flags(0) {}
+  cls_lock_lock_op() : type(ClsLockType::NONE), duration(ceph::timespan::zero()), flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
