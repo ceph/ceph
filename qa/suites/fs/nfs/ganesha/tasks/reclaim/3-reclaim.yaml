@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # ganesha is killed and restarted
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
+# the scenario comes from scenario/
+tasks:
+- ganesha-reclaim:
+    cluster_id: nfs-ganesha-test
+    nfs_client: client.0

@@ -1,0 +1,9 @@
+# ganesha missed the reconnect but is still running; expected to fail,
+# see the README
+overrides:
+  ceph:
+    log-ignorelist:
+      # the kept session can be autoclosed
+      - evicting unresponsive client
+  ganesha-reclaim:
+    scenario: late

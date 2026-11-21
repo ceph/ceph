@@ -1,0 +1,11 @@
+tasks:
+- ganesha-reconf:
+    cluster_id: 'nfs-ganesha-test'
+    client_log_level: 20
+    server_log_level: FULL_DEBUG
+
+- cephadm.shell:
+    mon.a:
+      # for debug
+      - cmd: ceph orch ps
+      - cmd: ceph nfs cluster config get nfs-ganesha-test

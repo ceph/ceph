@@ -1,0 +1,6 @@
+# restarts ganesha (SIGTERM or SIGKILL) while the workload runs: the new
+# instance reclaims the libcephfs session from the MDS, the NFS client
+# reclaims its state during the grace period
+tasks:
+- ganesha_thrash:
+    cluster_id: nfs-ganesha-test

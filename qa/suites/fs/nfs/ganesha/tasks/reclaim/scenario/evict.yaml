@@ -1,0 +1,4 @@
+# evicting ganesha's kept session releases the rank
+overrides:
+  ganesha-reclaim:
+    scenario: evict
