@@ -1,0 +1,23 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - osd.1
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      - CEPHADM_AGENT_DOWN
+    log-only-match:
+      - CEPHADM_
