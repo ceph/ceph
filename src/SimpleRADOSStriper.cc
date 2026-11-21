@@ -163,7 +163,8 @@ int SimpleRADOSStriper::wait_for_aios(bool block)
     auto& aiocp = aios.front();
     int rc;
     if (block) {
-      rc = aiocp->wait_for_complete();
+      aiocp->wait_for_complete();
+      rc = aiocp->get_return_value();
     } else {
       if (aiocp->is_complete()) {
         rc = aiocp->get_return_value();
@@ -308,7 +309,8 @@ int SimpleRADOSStriper::shrink_alloc(uint64_t a)
 
   int aio_rc = 0;
   for (auto& aiocp : removes) {
-    if (int rc = aiocp->wait_for_complete(); rc < 0 && rc != -ENOENT) {
+    aiocp->wait_for_complete();
+    if (int rc = aiocp->get_return_value(); rc < 0 && rc != -ENOENT) {
       d(1) << " aio_remove failed: " << cpp_strerror(rc) << dendl;
       if (aio_rc == 0) {
         aio_rc = rc;
@@ -332,7 +334,8 @@ int SimpleRADOSStriper::shrink_alloc(uint64_t a)
   }
   /* we need to wait so we don't have dangling extents */
   d(10) << " waiting for allocated update" << dendl;
-  if (int rc = aiocp->wait_for_complete(); rc < 0) {
+  aiocp->wait_for_complete();
+  if (int rc = aiocp->get_return_value(); rc < 0) {
     d(1) << " update failure: " << cpp_strerror(rc) << dendl;
     return rc;
   }
@@ -429,7 +432,8 @@ int SimpleRADOSStriper::set_metadata(uint64_t new_size, bool update_size)
     if (allocated != new_allocated) {
       /* we need to wait so we don't have dangling extents */
       d(10) << "waiting for allocated update" << dendl;
-      if (int rc = aiocp->wait_for_complete(); rc < 0) {
+      aiocp->wait_for_complete();
+      if (int rc = aiocp->get_return_value(); rc < 0) {
         d(1) << " update failure: " << cpp_strerror(rc) << dendl;
         return rc;
       }
@@ -512,7 +516,8 @@ ssize_t SimpleRADOSStriper::read(void* data, size_t len, uint64_t off)
 
   r = 0;
   for (auto& [bl, aiocp] : reads) {
-    if (int rc = aiocp->wait_for_complete(); rc < 0) {
+    aiocp->wait_for_complete();
+    if (int rc = aiocp->get_return_value(); rc < 0) {
       d(1) << " read failure: " << cpp_strerror(rc) << dendl;
       return rc;
     }
