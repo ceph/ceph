@@ -311,6 +311,10 @@
   bucket fail with ``403 BucketSuspended``. The ``suspended`` field is now included
   in ``radosgw-admin bucket stats`` output.
 
+* RGW: ``radosgw-admin sync status`` honors ``--format=json`` (and other formatter
+  options) with a structured summary aligned with the default plaintext output,
+  instead of always printing human-readable text.
+
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
 
   * Removed the ``openssl_engine_opts`` configuration option. OpenSSL engine configuration in string format is no longer supported.
