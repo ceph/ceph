@@ -255,6 +255,16 @@ class MDCache {
   unsigned get_ephemeral_dist_frag_bits() const {
     return export_ephemeral_dist_frag_bits;
   }
+  uint64_t get_ephemeral_dist_tree_min_entries() const {
+    return export_ephemeral_dist_tree_min_entries;
+  }
+  /* The size below which a directory that a ceph.dir.pin.distributed.tree
+   * policy distributes goes back to the rank of its parent:
+   * mds_export_ephemeral_distributed_tree_gather_ratio of the threshold,
+   * rounded up, so that a threshold of 1 does not become 0, which would
+   * keep the directory distributed for good.  0 when there is no threshold.
+   */
+  uint64_t get_ephemeral_dist_tree_gather_entries() const;
   bool get_export_ephemeral_distributed_config(void) const {
     return export_ephemeral_distributed_config;
   }
@@ -284,6 +294,13 @@ class MDCache {
   }
 
   mds_rank_t hash_into_rank_bucket(inodeno_t ino, frag_t fg=0);
+  mds_rank_t dist_tree_rank(inodeno_t ino, frag_t fg);
+  // whether @dir is, or could be merged into, the subtree its parent is in,
+  // with this rank as the unambiguous auth of both
+  bool is_in_auth_parent_subtree(CDir *dir);
+  // on a replica of read-replicated dirfrag @dir, whether a client read
+  // of @dname missed it recently too; notes the miss if not
+  bool replica_read_missed_before(CDir *dir, std::string_view dname);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   void clear_dirty_bits_for_stray(CInode* diri);
@@ -1240,6 +1257,14 @@ private:
   std::set<CInode *> export_pin_queue;
   std::set<CInode *> export_pin_delayed_queue;
   std::set<CInode *> export_ephemeral_pins;
+  /* Directories with a fragment other than the root one in cache, for
+   * finding the ones a ceph.dir.pin.distributed.tree change applies to. */
+  std::set<CInode *> fragmented_dirs;
+  /* Client reads of dentries that a replica of a read-replicated dirfrag
+   * did not hold, by hash of the dirfrag and the name, in two generations
+   * (see replica_read_missed_before()). */
+  std::unordered_map<uint64_t, uint32_t> replica_read_misses[2];
+  time replica_read_misses_rotated = clock::zero();
 
   OpenFileTable open_file_table;
 
@@ -1626,6 +1651,10 @@ private:
   bool export_ephemeral_distributed_config;
   bool export_ephemeral_random_config;
   unsigned export_ephemeral_dist_frag_bits;
+  uint64_t export_ephemeral_dist_tree_min_entries;
+  double export_ephemeral_dist_tree_gather_ratio;
+  // mds_bal_replica_discover_reads
+  uint64_t replica_discover_reads;
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;

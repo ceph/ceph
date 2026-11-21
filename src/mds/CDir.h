@@ -434,7 +434,11 @@ public:
 
   // for giving to clients
   void get_dist_spec(std::set<mds_rank_t>& ls, mds_rank_t auth) {
-    if (is_auth()) {
+    // Only advertise the replicas of a dirfrag the balancer replicated for
+    // read load.  Replicas left behind by an export or created by a
+    // discover are usually incomplete, so a client that sent a lookup to
+    // one would only get forwarded to the auth.
+    if (is_auth() && is_rep()) {
       list_replicas(ls);
       if (!ls.empty()) 
 	ls.insert(auth);
