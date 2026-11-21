@@ -3,8 +3,8 @@
 Feature Toggles
 ^^^^^^^^^^^^^^^
 
-This plug-in allows to enable or disable some features from the Ceph Dashboard
-on-demand. When a feature becomes disabled:
+This plug-in turns individual Ceph Dashboard features on or off. When a
+feature becomes disabled:
 
 - Its front-end elements (web pages, menu entries, charts, etc.) will become
   hidden.
@@ -19,12 +19,15 @@ impact.
 The list of features that can be enabled/disabled is:
 
 - **Block (RBD)**:
-   - Image Management: ``rbd``
-   - Mirroring: ``mirroring``
-   - iSCSI: ``iscsi``
-- **Filesystem (Cephfs)**: ``cephfs``
+
+  - Image Management: ``rbd``
+  - Mirroring: ``mirroring``
+  - iSCSI: ``iscsi``
+
+- **File System (CephFS)**: ``cephfs``
 - **Objects (RGW)**: ``rgw`` (including daemon, user and bucket management).
-- **NFS**: ``nfs-ganesha`` exports.
+- **NFS**: ``nfs`` exports.
+- **Landing page** (Squid 19.2 and Tentacle 20.2 only): ``dashboard``.
 
 By default all features come enabled.
 
@@ -36,13 +39,14 @@ To retrieve a list of features and their current statuses:
 
 ::
 
-    Feature 'cephfs': 'enabled'
-    Feature 'iscsi': 'enabled'
-    Feature 'nvmeof': 'enabled'
-    Feature 'mirroring': 'enabled'
-    Feature 'rbd': 'enabled'
-    Feature 'rgw': 'enabled'
-    Feature 'nfs': 'enabled'
+    Feature 'rbd': enabled
+    Feature 'mirroring': enabled
+    Feature 'iscsi': enabled
+    Feature 'cephfs': enabled
+    Feature 'rgw': enabled
+    Feature 'nfs': enabled
+
+In Squid 19.2 and Tentacle 20.2 the list ends with ``Feature 'dashboard'``.
 
 To enable or disable the status of a single or multiple features:
 
@@ -55,6 +59,8 @@ To enable or disable the status of a single or multiple features:
    Feature 'iscsi': disabled
    Feature 'mirroring': disabled
 
-After a feature status has changed, the API REST endpoints immediately respond
-to that change, but it may take up to twenty (20) seconds for the front-end UI
-elements seconds to reflect the change.
+After a feature status has changed, the REST API endpoints can take up to 10
+seconds to respond to the change, because the Ceph Manager caches the status
+of each feature for 10 seconds. The Dashboard checks the feature status every
+30 seconds, so the front-end UI elements can take up to 40 seconds to reflect
+the change.
