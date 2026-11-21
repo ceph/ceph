@@ -4716,6 +4716,45 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
   }
 }
 
+// A buffer moved between 2Q shards (PG split) must leave the source shard's
+// age bins and be counted in the destination shard's bins.
+TEST(TwoQBufferCacheShard, move_rebins_into_destination_shard) {
+  BlueStore store(g_ceph_context, "", 4096);
+  std::unique_ptr<BlueStore::BufferCacheShard> src{
+      BlueStore::BufferCacheShard::create(&store, "2q", nullptr)};
+  std::unique_ptr<BlueStore::BufferCacheShard> dst{
+      BlueStore::BufferCacheShard::create(&store, "2q", nullptr)};
+  src->set_bin_count(8);
+  dst->set_bin_count(8);
+
+  BlueStore::Onode onode(g_ceph_context);
+  bufferlist bl;
+  bl.append(std::string(4096, 'x'));
+  BlueStore::Buffer buf(&onode.bc, BlueStore::Buffer::STATE_CLEAN, nullptr,
+                        0, bl, 0);
+  {
+    std::lock_guard l(src->lock);
+    src->_add(&buf, 1, nullptr);
+  }
+  EXPECT_EQ(4096u, src->sum_bins(0, 8));
+  EXPECT_EQ(4096u, src->_get_bytes());
+
+  {
+    std::scoped_lock l(src->lock, dst->lock);
+    dst->_move(src.get(), &buf);
+  }
+  EXPECT_EQ(4096u, dst->_get_bytes()) << "buffer_bytes follows the buffer";
+  EXPECT_EQ(0u, src->sum_bins(0, 8)) << "source age bins still count the buffer";
+  EXPECT_EQ(4096u, dst->sum_bins(0, 8)) << "destination age bins do not count it";
+
+  {
+    std::lock_guard l(dst->lock);
+    dst->_rm(&buf);
+  }
+  EXPECT_EQ(0u, src->sum_bins(0, 8));
+  EXPECT_EQ(0u, dst->sum_bins(0, 8));
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct =
