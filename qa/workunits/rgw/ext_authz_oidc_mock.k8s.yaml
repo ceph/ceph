@@ -1,0 +1,41 @@
+# Mock OIDC issuer for exercising AssumeRoleWithWebIdentity in an OCS/Rook cluster.
+# Create the script ConfigMap first:
+#   oc -n openshift-storage create configmap ext-authz-oidc-script \
+#       --from-file=ext_authz_oidc_mock.py=qa/workunits/rgw/ext_authz_oidc_mock.py
+# Then: oc -n openshift-storage apply -f qa/workunits/rgw/ext_authz_oidc_mock.k8s.yaml
+# The issuer URL is http://ext-authz-oidc.openshift-storage.svc:8080
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ext-authz-oidc
+  labels:
+    app: ext-authz-oidc
+spec:
+  containers:
+  - name: oidc
+    image: quay.io/ceph/ceph:v20.2.4
+    command: ["python3", "/scripts/ext_authz_oidc_mock.py"]
+    args:
+    - --host=0.0.0.0
+    - --port=8080
+    - --issuer=http://ext-authz-oidc.openshift-storage.svc:8080
+    ports:
+    - containerPort: 8080
+    volumeMounts:
+    - name: script
+      mountPath: /scripts
+  volumes:
+  - name: script
+    configMap:
+      name: ext-authz-oidc-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-authz-oidc
+spec:
+  selector:
+    app: ext-authz-oidc
+  ports:
+  - port: 8080
+    targetPort: 8080

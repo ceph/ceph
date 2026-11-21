@@ -40,6 +40,7 @@
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
+#include "rgw_rest_ext_authz.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
@@ -510,6 +511,7 @@ void rgw::AppMain::cond_init_apis()
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
       admin_resource->register_resource("account", new RGWRESTMgr_Account);
+      admin_resource->register_resource("ext-authz", new RGWRESTMgr_ExtAuthz);
       admin_resource->register_resource("restore", new RGWRESTMgr_Restore);
       /* Register driver-specific admin APIs */
       env.driver->register_admin_apis(admin_resource);
