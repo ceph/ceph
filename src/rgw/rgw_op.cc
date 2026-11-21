@@ -2968,7 +2968,10 @@ void RGWGetObj::execute(optional_yield y)
         goto done_err;
       }
       attrs = s->object->get_attrs();
-      s->obj_size = s->object->get_size();
+      // keep the original size that decompression already set up
+      if (!decompress) {
+        s->obj_size = s->object->get_size();
+      }
     }
   }
 
