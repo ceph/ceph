@@ -450,7 +450,7 @@ class Device(object):
     @property
     def is_ceph_disk_member(self) -> bool:
         def is_member(device: Dict[str, Any]) -> bool:
-            return 'ceph' in device.get('PARTLABEL', '') or \
+            return device.get('PARTLABEL', '').startswith('ceph ') or \
                 device.get('PARTTYPE', '') in ceph_disk_guids.keys()
         # If we come from Devices(), self.lsblk_all is set already.
         # Otherwise, we have to grab the data.

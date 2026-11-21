@@ -329,6 +329,12 @@ def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
     # falls back to blkid
     ('', 'gluster partition'),
     ('gluster partition', ''),
+    # labels that merely contain "ceph" are not ceph-disk partitions. ceph-disk
+    # always wrote "ceph <type>", so the label alone must not reject the device.
+    ('ceph', 'ceph'),
+    ('cephfs', 'cephfs'),
+    ('ceph-data', 'ceph-data'),
+    ('myceph', 'myceph'),
 ])
 def device_info_not_ceph_disk_member(monkeypatch, request):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
