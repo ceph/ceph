@@ -1,0 +1,9 @@
+# Client ops reach the OSD on a single connection, and are forwarded to the
+# OSD reactor core owning their PG (the default).
+overrides:
+  ceph:
+    conf:
+      osd:
+        crimson osd core listeners: false
+      client:
+        objecter use osd core hints: false
