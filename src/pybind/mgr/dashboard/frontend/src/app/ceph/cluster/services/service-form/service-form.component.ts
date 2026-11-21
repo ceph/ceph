@@ -1358,14 +1358,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     return ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(serviceType);
   }
 
-  setServiceId(serviceId: string): void {
-    const requiresServiceId: boolean = this.requiresServiceId(serviceId);
-    if (requiresServiceId && serviceId === 'nvmeof') {
+  setServiceId(serviceType: string): void {
+    const serviceIdCtrl = this.serviceForm.get('service_id');
+    if (this.requiresServiceId(serviceType) && serviceType === 'nvmeof') {
+      serviceIdCtrl.enable({ emitEvent: false });
       this.setNvmeServiceId();
-    } else if (requiresServiceId) {
-      this.serviceForm.get('service_id').setValue(null);
+    } else if (this.requiresServiceId(serviceType)) {
+      serviceIdCtrl.enable({ emitEvent: false });
+      serviceIdCtrl.setValue(null);
     } else {
-      this.serviceForm.get('service_id').setValue(serviceId);
+      serviceIdCtrl.setValue(serviceType);
+      serviceIdCtrl.disable({ emitEvent: false });
     }
   }
 
@@ -1571,7 +1574,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     const serviceId: string = values['service_id'];
     let serviceName: string = serviceType;
-    if (_.isString(serviceId) && !_.isEmpty(serviceId)) {
+    if (this.requiresServiceId(serviceType) && _.isString(serviceId) && !_.isEmpty(serviceId)) {
       serviceName = `${serviceType}.${serviceId}`;
       serviceSpec['service_id'] = serviceId;
     }
@@ -1857,12 +1860,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   get isPrefixedNamedService(): boolean {
-    return (
-      this.serviceForm.controls.service_type?.value &&
-      ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(
-        this.serviceForm.controls.service_type?.value
-      )
-    );
+    return this.requiresServiceId(this.serviceForm.controls.service_type?.value);
   }
 
   get showExternalSslCert(): boolean {
