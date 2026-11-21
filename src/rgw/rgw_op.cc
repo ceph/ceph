@@ -7352,12 +7352,13 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
-                                                  s->bucket_attrs, &new_config);
-  if (op_ret < 0) {
-    return;
-  }
-  return;
+  // build the attrs from s->bucket on each attempt, so a retry after a raced
+  // bucket write doesn't put back the stale attrs read at request start
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, &new_config] {
+    return driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
+                                                  s->bucket->get_attrs(),
+                                                  &new_config);
+  }, y);
 }
 
 void RGWDeleteLC::execute(optional_yield y)
@@ -7371,12 +7372,10 @@ void RGWDeleteLC::execute(optional_yield y)
 
   // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
   constexpr bool update_attrs = true;
-  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    return driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
                                                      update_attrs);
-  if (op_ret < 0) {
-    return;
-  }
-  return;
+  }, y);
 }
 
 int RGWGetCORS::verify_permission(optional_yield y)
