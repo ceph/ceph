@@ -25,6 +25,8 @@ class ConfigMonitor : public PaxosService
   std::map<std::string,ceph::buffer::list> current;
 
   void encode_pending_to_kvmon();
+  version_t get_history_first();
+  bool _trim_config_history(version_t newest);
 
   // Whether pending changes any value.
   bool has_pending_changes() const;
