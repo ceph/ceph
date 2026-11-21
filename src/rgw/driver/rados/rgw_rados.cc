@@ -57,6 +57,7 @@
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
 #include "rgw_crypt.h"
+#include "rgw_range_projection.h"
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 #include "rgw_notify.h"
@@ -8439,24 +8440,38 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   if (params.part_num) {
-    // capture whole-object details before the redirect below swaps astate to
-    // the part head. the Content-Range header needs the full object size, and
-    // the manifest part offset only matches the returned length for plain
-    // (uncompressed, unencrypted) objects
-    const uint64_t full_obj_size = astate->size;
+    // capture whole-object state before the redirect swaps astate to the part head
     const bool compressed = astate->attrset.count(RGW_ATTR_COMPRESSION);
-    bool encrypted = false;
     map<string, bufferlist> src_attrset;
     for (auto& iter : astate->attrset) {
       if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
         ldpp_dout(dpp, 4) << "get src crypt attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
-        encrypted = true;
       } else if (iter.first == RGW_ATTR_ETAG) {
         ldpp_dout(dpp, 4) << "copy src etag attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
       }
     }
+
+    // accounted_size holds the plaintext total (recovered for compressed/AEAD)
+    uint64_t plaintext_obj_size = astate->accounted_size;
+    // the compression block map is only needed to locate a multipart part
+    RGWCompressionInfo cs_info;
+    if (compressed && params.parts_count) {
+      bool ignored = false;
+      if (rgw_compression_info_from_attrset(astate->attrset, ignored, cs_info) < 0) {
+        cs_info.blocks.clear(); // decode failed: leave the header off below
+      }
+    }
+    const bool aead =
+        is_aead_mode(get_str_attribute(astate->attrset, RGW_ATTR_CRYPT_MODE));
+    // only AEAD expands the data, so only an AEAD part needs the offset walk below;
+    // capture its whole-object manifest and size first.
+    RGWObjManifest* const whole_manifest = aead ? manifest : nullptr;
+    const uint64_t whole_stored_size = astate->size;
+    // AEAD plaintext total: prefer the stored original size; the walk refines it
+    const bool have_aead_total = aead && !compressed &&
+        rgw_get_aead_original_size(dpp, astate->attrset, &plaintext_obj_size);
     int parts_count = 0;
     uint64_t part_ofs = 0;
     // use the manifest to redirect to the requested part number
@@ -8479,11 +8494,44 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       return -ERR_INVALID_PART;
     } else {
       params.parts_count = parts_count;
-      // only a plain object's stored part offset matches the length the client
-      // receives; skip the header for compressed or encrypted objects
-      if (!compressed && !encrypted) {
-        params.part_ofs = part_ofs;
-        params.full_obj_size = full_obj_size;
+      // recover the part's plaintext start offset: a plain/CBC/compressed part's stored
+      // offset locates it, an AEAD part needs the tag expansion undone; else omit.
+      std::optional<uint64_t> plaintext_part_ofs;
+      if (!aead) {
+        plaintext_part_ofs = part_ofs;
+      } else if (whole_manifest) {
+        // walk the part boundaries, summing plaintext sizes and recording the requested
+        // part's start; stop there unless the total is unknown, then sum to the end.
+        const bool need_total = !have_aead_total && !compressed;
+        uint64_t decrypted = 0;
+        uint64_t previous = 0;
+        const auto end = whole_manifest->obj_end(dpp);
+        for (auto mi = whole_manifest->obj_begin(dpp); mi != end; ++mi) {
+          if (mi.get_cur_stripe() != 0) {
+            continue;
+          }
+          const uint64_t boundary = mi.get_ofs();
+          decrypted += aead_encrypted_to_plaintext_size(boundary - previous, dpp);
+          if (boundary == part_ofs) {
+            plaintext_part_ofs = decrypted;
+            if (!need_total) {
+              break;
+            }
+          }
+          previous = boundary;
+        }
+        if (need_total) {
+          decrypted += aead_encrypted_to_plaintext_size(whole_stored_size - previous, dpp);
+          plaintext_obj_size = decrypted;
+        }
+      }
+      if (compressed && plaintext_part_ofs) {
+        plaintext_part_ofs =
+            compress_block_plaintext_offset(*plaintext_part_ofs, cs_info);
+      }
+      if (plaintext_part_ofs && plaintext_obj_size) {
+        params.part_ofs = *plaintext_part_ofs;
+        params.full_obj_size = plaintext_obj_size;
       }
     }
 

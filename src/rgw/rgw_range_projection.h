@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 #include <sys/types.h>
 
@@ -203,5 +204,24 @@ inline DiskRange project_encrypt_range(
   }
 
   return r;
+}
+
+// Recover a multipart part's plaintext start offset from its on-disk position,
+// for Content-Range on a partNumber read. A part starts on a compression block
+// boundary: its new_ofs matches that block, whose old_ofs is the plaintext start;
+// nullopt (no exact match) omits it.
+inline std::optional<uint64_t> compress_block_plaintext_offset(
+    uint64_t compressed_ofs, const RGWCompressionInfo& cs_info)
+{
+  // blocks are sorted by new_ofs, so binary-search for an exact start match.
+  auto less = [](const compression_block& b, uint64_t ofs) {
+    return b.new_ofs < ofs;
+  };
+  auto b = std::lower_bound(cs_info.blocks.begin(), cs_info.blocks.end(),
+                            compressed_ofs, less);
+  if (b == cs_info.blocks.end() || b->new_ofs != compressed_ofs) {
+    return std::nullopt;
+  }
+  return b->old_ofs;
 }
 
