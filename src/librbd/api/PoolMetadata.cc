@@ -62,6 +62,13 @@ int PoolMetadata<I>::set(librados::IoCtx& io_ctx, const std::string &key,
                          const std::string &value) {
   CephContext *cct = (CephContext *)io_ctx.cct();
 
+  // list() takes a "start after" key, so a pair with an empty key could be
+  // read back but never listed
+  if (key.empty()) {
+    lderr(cct) << "metadata key cannot be empty" << dendl;
+    return -EINVAL;
+  }
+
   bool need_update_pool_timestamp = false;
 
   std::string config_key;
