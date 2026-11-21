@@ -902,8 +902,6 @@ template <typename ValueT = std::string>
                         ::ceph::libfdb::select selector, page p,
                         const read_mode mode = read_mode::serializable)
 {
- using row_type = std::pair<std::string, ValueT>;
-
  if (0 == p.size) {
   return collect(scan<ValueT>(std::move(txn), std::move(selector), mode), p);
  }
@@ -911,14 +909,10 @@ template <typename ValueT = std::string>
  selector.options.result_limit = detail::range_limit_for(p);
  auto window = detail::read_query_window(*txn, selector, 1, mode);
 
- page_result<row_type> out;
- out.rows.reserve(detail::initial_reservation(window.result_pairs, p, out.rows.max_size()));
+ // Cap the view so the native continuation row is never decoded:
+ auto out = collect(detail::decode_pairs<ValueT>(window.result_pairs) | std::views::take(p.size), p);
  out.has_more = p.size < std::size(window.result_pairs) ||
                 window.more_available;
-
- for (const auto& raw_pair : window.result_pairs | std::views::take(p.size)) {
-  out.rows.emplace_back(detail::to_decoded_kv_pair<ValueT>(raw_pair));
- }
 
  return out;
 }
@@ -1172,7 +1166,7 @@ requires detail::row_invocable<FnT, ValueT> and
 inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT out,
                           const read_mode mode, FnT&& fn)
 {
- detail::for_each_row(scan<ValueT>(std::move(txn), std::move(selection), mode),
+ std::ranges::for_each(scan<ValueT>(std::move(txn), std::move(selection), mode),
                       [&fn, &out](auto&& row) {
                        *out++ = std::invoke(fn, std::move(row));
                       });
@@ -1229,7 +1223,7 @@ requires detail::row_invocable<FnT, ValueT> and
 inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT out,
                           const read_mode mode, FnT&& fn)
 {
- detail::for_each_row(scan<ValueT>(std::move(dbh), std::move(selection), mode),
+ std::ranges::for_each(scan<ValueT>(std::move(dbh), std::move(selection), mode),
                       [&fn, &out](auto&& row) {
                        *out++ = std::invoke(fn, std::move(row));
                       });

@@ -324,7 +324,6 @@ struct invocation_result_traits final
 {
  using value_type = ResultT;
  using error_type = void;
- using stored_t = std::expected<ResultT, std::monostate>;
  static constexpr bool controlled = false;
  static constexpr bool classified_failure = false;
 };
@@ -334,7 +333,6 @@ struct invocation_result_traits<std::expected<ValueT, ErrorT>> final
 {
  using value_type = ValueT;
  using error_type = ErrorT;
- using stored_t = std::expected<ValueT, ErrorT>;
  static constexpr bool controlled = true;
  static constexpr bool classified_failure = false;
 };
@@ -345,7 +343,6 @@ struct invocation_result_traits<std::expected<ValueT, transaction_failure<ErrorT
 {
  using value_type = ValueT;
  using error_type = ErrorT;
- using stored_t = std::expected<ValueT, transaction_failure<ErrorT>>;
  static constexpr bool controlled = true;
  static constexpr bool classified_failure = true;
 };
@@ -366,10 +363,13 @@ namespace concepts {
 template <typename T>
 concept supported_invocation_result =
  not std::is_reference_v<T> and
+ not std::same_as<typename detail::invocation_result_traits<std::remove_cv_t<T>>::value_type,
+                  std::in_place_t> and
+ not std::same_as<typename detail::invocation_result_traits<std::remove_cv_t<T>>::value_type,
+                  std::unexpect_t> and
  detail::safely_deliverable<typename detail::invocation_result_traits<std::remove_cv_t<T>>::value_type> and
  detail::safely_deliverable<typename detail::invocation_result_traits<std::remove_cv_t<T>>::error_type> and
- (std::is_void_v<T> or
-  std::constructible_from<typename detail::invocation_result_traits<std::remove_cv_t<T>>::stored_t, T>);
+ (std::is_void_v<T> or std::constructible_from<std::remove_cv_t<T>, T>);
 
 template <typename T>
 concept storable_invocation_result =
@@ -656,10 +656,6 @@ using operation_result_t =
  std::conditional_t<std::is_void_v<transaction_invocation_result_t<FnT>>,
                     void,
                     std::remove_cvref_t<transaction_invocation_result_t<FnT>>>;
-
-template <transaction_op FnT, typename PolicyT = void>
-auto maybe_retry(transaction_handle txn, FnT&& fn, retry_if<PolicyT> policy = {})
- -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
 auto commit_noreplay(transaction_handle txn,
@@ -972,48 +968,23 @@ auto invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn,
    for (;;) {
     next_attempt(status);
     phase = transaction_phase::body;
-    std::optional<typename traits::stored_t> attempt;
-    try
-     {
+
+    auto attempt = invoke_borrowed(txn, [&fn](transaction_handle& current) -> decltype(auto) {
       prepare_invocation(fn);
-      if constexpr (std::is_void_v<raw_result>) {
-       std::invoke(fn, txn);
-       attempt.emplace();
-      }
-      if constexpr (not std::is_void_v<raw_result>) {
-       attempt.emplace(std::invoke(fn, txn));
-      }
-     }
-    catch (...)
-     {
-      auto failure = exception_failure(std::current_exception(), phase, status);
-      finish_failed_attempt(txn, failure);
-      if (auto stopped = prepare_replay(txn, std::move(failure), policy, retry)) {
-       return fail_transaction<error_type>(std::move(*stopped));
-      }
-      continue;
+
+      return std::invoke(fn, current);
+    });
+
+    if (not attempt) {
+     auto failure = adopt_body_failure(std::move(attempt.error()), status);
+     phase = failure.phase;
+     status = failure.status;
+     finish_failed_attempt(txn, failure);
+     if (auto stopped = prepare_replay(txn, std::move(failure), policy, retry)) {
+      return std::unexpected(std::move(*stopped));
      }
 
-    if constexpr (traits::controlled) {
-     if (not *attempt) {
-      auto failure = [&] {
-       if constexpr (traits::classified_failure) {
-        return adopt_body_failure(std::move(attempt->error()), status);
-       }
-       if constexpr (not traits::classified_failure) {
-        return transaction_failure<error_type> {
-         application_error<error_type> {std::move(attempt->error())}, phase, status
-        };
-       }
-      }();
-      phase = failure.phase;
-      status = failure.status;
-      finish_failed_attempt(txn, failure);
-      if (auto stopped = prepare_replay(txn, std::move(failure), policy, retry)) {
-       return std::unexpected(std::move(*stopped));
-      }
-      continue;
-     }
+     continue;
     }
 
     if constexpr (not std::same_as<std::remove_cvref_t<CommitFnT>, std::nullopt_t>) {
@@ -1036,7 +1007,7 @@ auto invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn,
      return result_type {std::in_place, status};
     }
     if constexpr (not std::is_void_v<value_type>) {
-     return result_type {std::in_place, std::move(**attempt), status};
+     return result_type {std::in_place, std::move(*attempt), status};
     }
    }
   }
@@ -1070,14 +1041,6 @@ auto transact(const transaction_source& source, const retry_policy retry, retry_
   }
 }
 
-template <transaction_op FnT, typename PolicyT>
-auto maybe_retry(transaction_handle txn, FnT&& fn, retry_if<PolicyT> policy)
- -> operation_result_t<FnT>
-{
- return take_operation_result(invoke_with_retry(txn, std::forward<FnT>(fn),
-  [](const transaction_handle& current) { return ceph::libfdb::commit(current); }, policy));
-}
-
 template <transaction_op FnT>
 auto retry_without_commit(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
 {
@@ -1089,7 +1052,7 @@ auto retry_without_commit(transaction_handle txn, FnT&& fn) -> operation_result_
 template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn) -> operation_result_t<FnT>
 {
- return maybe_retry(make_transaction(std::move(dbh)), std::forward<FnT>(fn));
+ return take_operation_result(make_transactor(std::move(dbh))(std::forward<FnT>(fn)));
 }
 
 template <transaction_op FnT>
