@@ -196,7 +196,9 @@ int utime_t::parse_date(const std::string& date, uint64_t *epoch, uint64_t *nsec
 	}
       }
       // look for tz...
-      if (*q == '-' || *q == '+') {
+      if ((*q == '-' || *q == '+') &&
+          // Guard against overflow
+          q + 2 < fmt + sizeof(fmt)) {
 	*q = '%';
 	*(q+1) = 'z';
 	*(q+2) = 0;
