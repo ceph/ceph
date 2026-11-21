@@ -1028,16 +1028,17 @@ constexpr auto coalesce(const LHS_T& lhs, const RHS_T& rhs)
   max_bound_ref(lhs_bounds.upper(), rhs_bounds.upper(), inclusivity_merge::any));
 }
 
+// Emission bounds borrow their source; retained cursors materialize explicitly:
 template <boundary_view BoundT>
 constexpr auto difference_end_before(const BoundT& removed_begin)
 {
- return materialize_boundary(removed_begin, !removed_begin.inclusive());
+ return borrow_boundary(removed_begin, !removed_begin.inclusive());
 }
 
 template <boundary_view BoundT>
 constexpr auto difference_begin_after(const BoundT& removed_end)
 {
- return materialize_boundary(removed_end, !removed_end.inclusive());
+ return borrow_boundary(removed_end, !removed_end.inclusive());
 }
 
 template <ordered_domain DomainT, typename SinkT>
@@ -1191,6 +1192,22 @@ struct materializing_sink final
  }
 };
 
+// Count emitted bounds without constructing owning interval keys:
+struct counting_sink final
+{
+ std::size_t count = 0;
+
+ constexpr void operator()(const auto&)
+ {
+  ++count;
+ }
+
+ constexpr void emit_interval(const auto&, const auto&)
+ {
+  ++count;
+ }
+};
+
 } // namespace detail
 
 template <expression LHS_T, expression RHS_T, typename SinkT>
@@ -1246,7 +1263,7 @@ constexpr void for_each_interval(const detail::difference_expr<LHS_T, RHS_T>& ex
 
    detail::emit_bounds(sink, *cursor, detail::difference_end_before(overlap.lower()));
 
-   cursor.emplace(detail::difference_begin_after(overlap.upper()));
+   cursor.emplace(materialize_boundary(detail::difference_begin_after(overlap.upper())));
   };
 
   interval::for_each_interval(expression.rhs, emit_remaining);
@@ -1639,11 +1656,11 @@ constexpr auto compile_intervals(const ExprT& expression)
 template <expression ExprT>
 constexpr std::size_t interval_count(const ExprT& expression)
 {
- std::size_t count = 0;
+ detail::counting_sink sink;
 
- interval::for_each_interval(expression, [&count](const auto&) { ++count; });
+ interval::for_each_interval(expression, sink);
 
- return count;
+ return sink.count;
 }
 
 template <expression ExprT>
@@ -1981,14 +1998,38 @@ constexpr bool intersects(const LHS_T& lhs, const RHS_T& rhs)
         !detail::disjoint_before(rhs, lhs);
 }
 
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool encloses(const LHS_T& outer, const RHS_T& inner);
+
+template <interval_view OuterT, interval_view InnerT>
+requires same_expression_domain<OuterT, InnerT>
+constexpr bool encloses(const OuterT& outer, const InnerT& inner)
+{
+ return interval::is_empty_expression(
+  detail::difference_expr<const InnerT&, const OuterT&> {.lhs = inner, .rhs = outer});
+}
+
 namespace detail {
+
+template <ordered_domain DomainT>
+constexpr const interval_set<DomainT>& canonical_intervals(const interval_set<DomainT>& intervals)
+{
+ return intervals;
+}
+
+template <expression ExprT>
+constexpr auto canonical_intervals(const ExprT& expression)
+{
+ return interval::compile_intervals(expression);
+}
 
 template <expression LHS_T, expression RHS_T>
 requires same_expression_domain<LHS_T, RHS_T>
 constexpr bool canonical_intersects(const LHS_T& lhs, const RHS_T& rhs)
 {
- const auto lhs_intervals = interval::compile_intervals(lhs);
- const auto rhs_intervals = interval::compile_intervals(rhs);
+ const auto& lhs_intervals = detail::canonical_intervals(lhs);
+ const auto& rhs_intervals = detail::canonical_intervals(rhs);
  auto lhs_it = std::begin(lhs_intervals);
  auto rhs_it = std::begin(rhs_intervals);
 
@@ -2014,8 +2055,8 @@ template <expression OuterT, expression InnerT>
 requires same_expression_domain<OuterT, InnerT>
 constexpr bool canonical_encloses(const OuterT& outer, const InnerT& inner)
 {
- const auto outer_intervals = interval::compile_intervals(outer);
- const auto inner_intervals = interval::compile_intervals(inner);
+ const auto& outer_intervals = detail::canonical_intervals(outer);
+ const auto& inner_intervals = detail::canonical_intervals(inner);
  auto outer_it = std::begin(outer_intervals);
  const auto outer_end = std::end(outer_intervals);
 
@@ -2025,7 +2066,7 @@ constexpr bool canonical_encloses(const OuterT& outer, const InnerT& inner)
   }
 
   return outer_it != outer_end &&
-         interval::is_empty_expression(interval::difference(inner_interval, *outer_it));
+         interval::encloses(*outer_it, inner_interval);
  });
 }
 
@@ -2059,17 +2100,6 @@ requires same_expression_domain<LHS_T, RHS_T>
 constexpr bool is_disjoint(const LHS_T& lhs, const RHS_T& rhs)
 {
  return !interval::intersects(lhs, rhs);
-}
-
-template <expression LHS_T, expression RHS_T>
-requires same_expression_domain<LHS_T, RHS_T>
-constexpr bool encloses(const LHS_T& outer, const RHS_T& inner);
-
-template <interval_view OuterT, interval_view InnerT>
-requires same_expression_domain<OuterT, InnerT>
-constexpr bool encloses(const OuterT& outer, const InnerT& inner)
-{
- return interval::is_empty_expression(interval::difference(inner, outer));
 }
 
 template <interval_view OuterT, expression LHS_T, expression RHS_T>

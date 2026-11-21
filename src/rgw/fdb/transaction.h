@@ -616,9 +616,11 @@ using transaction_invocation_result_t =
 
 template <typename FnT, typename ...ArgTs>
 concept transaction_op =
- std::invocable<FnT&, transaction_handle&, ArgTs&...> &&
+ std::invocable<FnT&, transaction_handle&, ArgTs&...> and
  concepts::supported_invocation_result<
-   transaction_invocation_result_t<FnT, ArgTs...>>;
+   transaction_invocation_result_t<FnT, ArgTs...>> and
+ not invocation_result_traits<
+  std::remove_cv_t<transaction_invocation_result_t<FnT, ArgTs...>>>::controlled;
 
 // Borrow synchronous arguments directly. Staged publication belongs to the owner.
 template <typename FnT, typename ...ArgTs>

@@ -663,6 +663,40 @@ struct checked_domain final
  }
 };
 
+// Provider functions must not participate in this internal helper lookup:
+void canonical_intervals(const core::interval_set<checked_domain>&) = delete;
+
+TEST_CASE("canonical predicates and interval counting do not copy keys", "[fdb][algebra][ownership]")
+{
+ using checked_query = core::query<checked_domain>;
+ using checked_set = core::interval_set<checked_domain>;
+ const auto outer_interval = checked_query::closed(checked_key{0}, checked_key{10});
+ const auto inner_interval = checked_query::open(checked_key{2}, checked_key{8});
+ const checked_set outer {outer_interval};
+ const checked_set inner {inner_interval};
+ const checked_set separate {checked_query::closed(checked_key{20}, checked_key{30})};
+ const checked_set empty;
+ const auto difference = core::difference(outer_interval, inner_interval);
+
+ struct copy_budget_reset final
+ {
+  ~copy_budget_reset() { checked_key::copies_left = -1; }
+ } reset;
+
+ checked_key::copies_left = 0;
+
+ CHECK(core::intersects(outer, inner));
+ CHECK_FALSE(core::intersects(outer, separate));
+ CHECK(core::encloses(outer, inner));
+ CHECK_FALSE(core::encloses(inner, outer));
+ CHECK(core::encloses(outer, empty));
+ CHECK_FALSE(core::encloses(empty, inner));
+ CHECK(core::encloses(outer_interval, inner_interval));
+ CHECK_FALSE(core::encloses(inner_interval, outer_interval));
+ CHECK(2 == core::interval_count(difference));
+ CHECK_FALSE(core::is_empty_expression(difference));
+}
+
 TEST_CASE("core mutators publish only after all copies and comparisons succeed", "[fdb][algebra][failure]")
 {
  using checked_query = core::query<checked_domain>;

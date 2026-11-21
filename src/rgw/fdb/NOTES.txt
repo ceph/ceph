@@ -15,6 +15,15 @@ Foundation. See file COPYING.
   a separate transaction/retry wrapper.
   Functional transforms use ordinary range traversal without maintaining a row
   count that their callers do not consume; mutable callables remain borrowed.
+  Exception-based leaf helpers accept ordinary value/void bodies; typed
+  application rejection uses the owning/borrowed Transactor interfaces.
+
+* Core relationship predicates borrow canonical interval-set storage instead of
+  compiling it again. Scalar enclosure borrows its difference operands, and
+  counting/emptiness observe emitted bounds without materializing their keys.
+  Difference-bound adjustments borrow endpoints; only a cursor retained across
+  callbacks materializes its new position.
+  Arbitrary expressions still normalize when canonical traversal requires it.
 
 * General set mutations reuse core interval assignment for strong publication.
   FDB construction/mutation share bounded geometry, and scalar/composite scans
