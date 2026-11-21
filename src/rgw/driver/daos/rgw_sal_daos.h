@@ -1071,7 +1071,8 @@ class DaosStore : public StoreDriver {
       const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
       const std::string& unique_tag) override;
   virtual const std::string& get_compression_type(
-      const rgw_placement_rule& rule) override;
+      const rgw_placement_rule& rule,
+      std::optional<uint64_t> size = std::nullopt) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override;
 
   virtual void finalize(void) override;

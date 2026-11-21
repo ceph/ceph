@@ -3831,6 +3831,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
   std::optional<RGWCompressionInfo> compression_info;
+  std::optional<uint64_t> src_size; // bytes of object data to be received, if known
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
@@ -4038,6 +4039,7 @@ public:
   bufferlist& get_extra_data() { return extra_data_bl; }
 
   map<string, bufferlist>& get_attrs() { return src_attrs; }
+  std::optional<uint64_t> get_src_size() const { return src_size; }
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
@@ -4060,6 +4062,12 @@ public:
   int handle_headers(const map<string, string>& headers, int http_status) override {
     if (http_status == 503) {
       return -EBUSY;
+    }
+
+    // size of the object data that follows the embedded metadata. this is
+    // what gets compressed, and arrives before the attrs are processed
+    if (auto i = headers.find("RGWX_OBJECT_SIZE"); i != headers.end()) {
+      src_size = ceph::parse<uint64_t>(i->second);
     }
 
     if (src_bucket_perms && http_status != 403 && http_status != 401) {
@@ -4838,7 +4846,19 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
                       processor.set_tail_placement(*ptail_rule);
 
-                      const auto& compression_type = svc.zone->get_zone_params().get_compression_type(*ptail_rule);
+                      // objects smaller than the minimum size are stored
+                      // uncompressed. the object size header has been
+                      // received by the time the attrs are processed.
+                      // encrypted objects aren't compressed by sync, which
+                      // transfers them as stored
+                      const std::optional<uint64_t> size =
+                          obj_attrs.count(RGW_ATTR_CRYPT_MODE) ? std::nullopt : cb.get_src_size();
+                      const auto& compression_type =
+                          svc.zone->get_zone_params().get_compression_type(*ptail_rule, size);
+                      if (size) {
+                        ldpp_dout(rctx.dpp, 20) << "compression type for replicated object of size "
+                            << *size << "=" << compression_type << dendl;
+                      }
                       if (compression_type != "none") {
                         plugin = Compressor::create(cct, compression_type);
                         if (!plugin) {
@@ -5883,6 +5903,18 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
+  // logical (uncompressed, decrypted) size, from the state cached by
+  // prepare(). look it up before obj's key is modified below
+  uint64_t accounted_size = 0;
+  {
+    RGWObjState *astate = nullptr;
+    ret = get_obj_state(dpp, &obj_ctx, bucket_info, obj, &astate, nullptr, true, y);
+    if (ret < 0) {
+      return ret;
+    }
+    accounted_size = astate->accounted_size;
+  }
+
   ret = fixup_manifest_to_parts_len(dpp, attrs);
   if (ret < 0) {
     return ret;
@@ -5912,8 +5944,12 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   rgw::sal::DataProcessorFactory* dp_factory = nullptr;
   std::optional<RGWTransitionDPF> transition_dpf;
 
+  // objects smaller than the destination's minimum size are stored
+  // uncompressed. compare the logical size
   const auto& compression_type =
-      svc.zone->get_zone_params().get_compression_type(placement_rule);
+      svc.zone->get_zone_params().get_compression_type(placement_rule, accounted_size);
+  ldpp_dout(dpp, 20) << "compression type for transition of size " << accounted_size
+      << "=" << compression_type << dendl;
 
   bool src_compressed = false;
   RGWCompressionInfo cs_info;
