@@ -42,6 +42,7 @@
 #include <vector>
 #include "common/ceph_context.h"
 #include "common/perf_counters.h"
+#include "common/PluginRegistry.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"

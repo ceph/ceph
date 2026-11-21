@@ -8,6 +8,7 @@
 #include "boost/variant.hpp"
 
 #include "include/stringify.h"
+#include "include/encoding_set.h"
 #include "common/Formatter.h"
 #include "common/hobject.h"
 

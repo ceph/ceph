@@ -25,6 +25,8 @@
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "common/JSONFormatter.h"
+#include "include/byte_u_t.h"
+#include "include/encoding_flat_map.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "mgr/mgr_commands.h"
@@ -46,16 +48,16 @@ using namespace std;
 class TraceIter {
   int fd;
   unsigned idx;
-  MonitorDBStore::TransactionRef t;
+  MonitorDBStoreTransactionRef t;
 public:
   explicit TraceIter(string fname) : fd(-1), idx(-1) {
     fd = ::open(fname.c_str(), O_RDONLY|O_BINARY);
-    t.reset(new MonitorDBStore::Transaction);
+    t.reset(new MonitorDBStoreTransaction);
   }
   bool valid() {
     return fd != -1;
   }
-  MonitorDBStore::TransactionRef cur() {
+  MonitorDBStoreTransactionRef cur() {
     ceph_assert(valid());
     return t;
   }
@@ -96,7 +98,7 @@ public:
       return;
     }
     bliter = bl.cbegin();
-    t.reset(new MonitorDBStore::Transaction);
+    t.reset(new MonitorDBStoreTransaction);
     t->decode(bliter);
   }
   void init() {
@@ -245,7 +247,7 @@ void usage(const char *n, po::options_description &d)
 
 int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
 		  std::shared_ptr<CrushWrapper> crush,
-		  MonitorDBStore::Transaction* t) {
+		  MonitorDBStoreTransaction* t) {
   const string prefix("osdmap");
 
   // full
@@ -303,7 +305,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
 
 int rewrite_transaction(MonitorDBStore& store, int version,
 			const string& crush_file,
-			MonitorDBStore::Transaction* t) {
+			MonitorDBStoreTransaction* t) {
   const string prefix("osdmap");
 
   // calc the known-good epoch
@@ -437,7 +439,7 @@ int rewrite_crush(const char* progname,
     return 0;
   }
 
-  MonitorDBStore::Transaction rewrite_txn;
+  MonitorDBStoreTransaction rewrite_txn;
   r = rewrite_transaction(store, version, crush_file, &rewrite_txn);
   if (r) {
     return r;
@@ -446,7 +448,7 @@ int rewrite_crush(const char* progname,
   // store the transaction into store as a proposal
   const string prefix("paxos");
   version_t pending_v = store.get(prefix, "last_committed") + 1;
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   bufferlist bl;
   rewrite_txn.encode(bl);
   cout << "adding pending commit " << pending_v
@@ -519,7 +521,7 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
 
   const string prefix("auth");
   auto last_committed = st.get(prefix, "last_committed") + 1;
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put(prefix, last_committed, bl);
   t->put(prefix, "last_committed", last_committed);
   auto first_committed = st.get(prefix, "first_committed");
@@ -581,7 +583,7 @@ static int update_mkfs(MonitorDBStore& st,
   bufferlist bl;
   monmap.encode(bl, CEPH_FEATURES_ALL);
   monmap.set_epoch(0);
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put("mkfs", "monmap", bl);
   st.apply_transaction(t);
   return 0;
@@ -593,7 +595,7 @@ static int update_monitor(MonitorDBStore& st)
   // a stripped-down Monitor::mkfs()
   bufferlist bl;
   bl.append(CEPH_MON_ONDISK_MAGIC "\n");
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put(prefix, "magic", bl);
   st.apply_transaction(t);
   return 0;
@@ -622,7 +624,7 @@ static int update_creating_pgs(MonitorDBStore& st)
   bufferlist newbl;
   encode(creating, newbl, CEPH_FEATURES_ALL);
 
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put("osd_pg_creating", "creating", newbl);
   st.apply_transaction(t);
   return 0;
@@ -633,7 +635,7 @@ static int update_creating_pgs(MonitorDBStore& st)
 //  - mgr_command_desc
 static int update_mgrmap(MonitorDBStore& st)
 {
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
 
   {
     MgrMap map;
@@ -670,12 +672,12 @@ static int update_paxos(MonitorDBStore& st)
   constexpr version_t first_committed = 0x42;
   constexpr version_t last_committed = first_committed;
   for (version_t v = first_committed; v < last_committed + 1; v++) {
-    auto t = make_shared<MonitorDBStore::Transaction>();
+    auto t = make_shared<MonitorDBStoreTransaction>();
     if (v == first_committed) {
       t->put(prefix, "first_committed", v);
     }
     bufferlist proposal;
-    MonitorDBStore::Transaction empty_txn;
+    MonitorDBStoreTransaction empty_txn;
     empty_txn.encode(proposal);
     t->put(prefix, v, proposal);
     t->put(prefix, "last_committed", v);
@@ -687,7 +689,7 @@ static int update_paxos(MonitorDBStore& st)
   // the necessary epochs.
   bufferlist pending_proposal;
   {
-    MonitorDBStore::Transaction t;
+    MonitorDBStoreTransaction t;
     vector<string> prefixes = {"auth", "osdmap",
 			       "mgr", "mgr_command_desc"};
     for (const auto& prefix : prefixes) {
@@ -700,7 +702,7 @@ static int update_paxos(MonitorDBStore& st)
     t.encode(pending_proposal);
   }
   auto pending_v = last_committed + 1;
-  auto t = make_shared<MonitorDBStore::Transaction>();
+  auto t = make_shared<MonitorDBStoreTransaction>();
   t->put(prefix, pending_v, pending_proposal);
   t->put(prefix, "pending_v", pending_v);
   t->put(prefix, "pending_pn", 400);
@@ -1169,7 +1171,7 @@ int main(int argc, char **argv) {
       if (bl.length() == 0)
 	break;
       cout << "\n--- " << v << " ---" << std::endl;
-      auto tx(std::make_shared<MonitorDBStore::Transaction>());
+      auto tx(std::make_shared<MonitorDBStoreTransaction>());
       Paxos::decode_append_transaction(tx, bl);
       JSONFormatter f(true);
       tx->dump(&f);
@@ -1340,7 +1342,7 @@ int main(int argc, char **argv) {
     unsigned num = 0;
     for (unsigned i = 0; i < ntrans; ++i) {
       std::cerr << "Applying trans " << i << std::endl;
-      auto t(std::make_shared<MonitorDBStore::Transaction>());
+      auto t(std::make_shared<MonitorDBStoreTransaction>());
       string prefix;
       prefix.push_back((i%26)+'a');
       for (unsigned j = 0; j < tsize; ++j) {
@@ -1381,7 +1383,7 @@ int main(int argc, char **argv) {
     do {
       uint64_t num_keys = 0;
 
-      auto tx(std::make_shared<MonitorDBStore::Transaction>());
+      auto tx(std::make_shared<MonitorDBStoreTransaction>());
 
       while (it->valid() && num_keys < 128) {
         pair<string,string> k = it->raw_key();

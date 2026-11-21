@@ -21,6 +21,26 @@
 #include <fmt/ostream.h>
 #endif
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<coll_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<OSDOp> : fmt::ostream_formatter {};
+#endif
+
+namespace fmt {
+template <>
+struct formatter<pg_log_op_return_item_t> {
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const pg_log_op_return_item_t& litm, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "r={}+{}b", litm.rval, litm.bl.length());
+  }
+};
+} // namespace fmt
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<pg_missing_item> : fmt::ostream_formatter {};
+#endif
+
 namespace fmt {
 template <>
 struct formatter<osd_reqid_t> {

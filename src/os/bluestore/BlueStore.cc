@@ -14,6 +14,7 @@
  */
 
 #include <bit>
+#include <iomanip>  // for std::fixed, std::setprecision
 #include <random>
 #include <utility>
 #include <memory>
@@ -41,6 +42,7 @@
 #include "bluestore_common.h"
 #include "simple_bitmap.h"
 #include "os/kv.h"
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
@@ -68,6 +70,10 @@
 #include "Compression.h"
 #include "BlueAdmin.h"
 #include "extblkdev/ExtBlkDevPlugin.h"
+
+#ifdef WITH_CPUTRACE
+#include "common/cputrace.h"
+#endif
 
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE

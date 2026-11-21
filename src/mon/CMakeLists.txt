@@ -3,6 +3,7 @@ set(lib_mon_srcs
   ${CMAKE_SOURCE_DIR}/src/auth/AuthServiceHandler.cc
   Paxos.cc
   PaxosService.cc
+  Session.cc
   OSDMonitor.cc
   PoolCreateParams.cc
   MDSMonitor.cc
@@ -12,7 +13,11 @@ set(lib_mon_srcs
   MgrStatMonitor.cc
   Monitor.cc
   MonitorBackup.cc
+  MonitorDBStore.cc
+  MonitorDBStoreOp.cc
+  MonitorDBStoreTransaction.cc
   MonmapMonitor.cc
+  MonOpRequest.cc
   LogMonitor.cc
   AuthMonitor.cc
   ConfigMap.cc

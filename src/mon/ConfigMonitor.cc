@@ -25,6 +25,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
@@ -102,7 +103,7 @@ void ConfigMonitor::create_pending()
   pending_description.clear();
 }
 
-void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void ConfigMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);

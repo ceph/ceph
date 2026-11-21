@@ -1,3 +1,5 @@
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
 #include "include/rados/librados.h"
 #include "include/rados/rados_types.h"
 #include "test/librados/test.h"

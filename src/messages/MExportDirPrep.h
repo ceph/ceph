@@ -17,6 +17,7 @@
 #ifndef CEPH_MEXPORTDIRPREP_H
 #define CEPH_MEXPORTDIRPREP_H
 
+#include "include/encoding_set.h"
 #include "include/types.h"
 #include "messages/MMDSOp.h"
 

@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
+#include "include/rados.h" // for EBLOCKLISTED
 #include <functional>
 #include <set>
 

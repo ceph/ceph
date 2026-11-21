@@ -105,7 +105,7 @@ public:
   void update_from_paxos(bool *need_bootstrap) override;
   void post_paxos_update() override;
   void create_pending() override;
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
@@ -113,7 +113,7 @@ public:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  void encode_full(MonitorDBStoreTransactionRef t) override { }
 
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);

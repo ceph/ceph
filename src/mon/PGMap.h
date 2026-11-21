@@ -23,12 +23,9 @@
 #define CEPH_PGMAP_H
 
 #include "include/buffer.h"
-#include "include/ceph_fs.h" // for ceph_statfs
 #include "common/cmdparse.h" // for cmdmap_t
-#include "common/Formatter.h"
 #include "osd/osd_types.h"
 #include "include/mempool.h"
-#include "mon/mon_types.h"
 
 #include <cstdint>
 #include <iosfwd>
@@ -38,6 +35,7 @@
 #include <sstream>
 #include <string>
 
+struct ceph_statfs;
 struct health_check_map_t;
 namespace ceph { class Formatter; }
 class TextTable;
@@ -80,11 +78,7 @@ public:
       decode(up_not_acting, p);
       decode(primary, p);
     }
-    void dump(ceph::Formatter *f) const {
-      f->dump_int("acting", acting);
-      f->dump_int("up_not_acting", up_not_acting);
-      f->dump_int("primary", primary);
-    }
+    void dump(ceph::Formatter *f) const;
     static std::list<pg_count> generate_test_instances() {
       std::list<pg_count> o;
       o.emplace_back();

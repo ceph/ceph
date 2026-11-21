@@ -7,6 +7,8 @@
 #include "include/Context.h"
 #include "PaxosService.h"
 #include "mon/PGMap.h"
+#include "mon/PoolAvailability.h"
+#include "mon/ProgressEvent.h"
 #include "mgr/ServiceMap.h"
 
 struct Subscription;
@@ -39,7 +41,7 @@ public:
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
   version_t get_trim_to() const override;
 
   bool definitely_converted_snapsets() const {
@@ -49,7 +51,7 @@ public:
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 
-  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  void encode_full(MonitorDBStoreTransactionRef t) override { }
 
   bool preprocess_report(MonOpRequestRef op);
   bool prepare_report(MonOpRequestRef op);
