@@ -311,6 +311,18 @@ Request Parameters
 :Example: ``foo_user``
 :Required: Yes
 
+``tenant``
+
+:Description: The tenant of the user for which the information is requested.
+              A tenant may either be specified as a part of ``uid``, by
+              following the syntax ``tenant$user``, or by this parameter.
+              If ``uid`` already contains a tenant and this parameter names a
+              different one, the request fails with ``400 InvalidArgument``.
+              Requires ``uid``.
+:Type: String
+:Example: ``tenant1``
+:Required: No
+
 ``access-key``
 
 :Description: The S3 access key of the user for which the information is requested.
@@ -1342,6 +1354,17 @@ Request Parameters
 :Example: ``foo_user``
 :Required: Yes
 
+``tenant``
+
+:Description: The tenant of the user to be modified. A tenant may either be
+              specified as a part of ``uid``, by following the syntax
+              ``tenant$user``, or by this parameter. If ``uid`` already
+              contains a tenant and this parameter names a different one, the
+              request fails with ``400 InvalidArgument``.
+:Type: String
+:Example: ``tenant1``
+:Required: No
+
 ``display-name``
 
 :Description: The display name of the user to be modified.
@@ -1558,6 +1581,17 @@ Request Parameters
 :Type: String
 :Example: ``foo_user``
 :Required: Yes.
+
+``tenant``
+
+:Description: The tenant of the user to be removed. A tenant may either be
+              specified as a part of ``uid``, by following the syntax
+              ``tenant$user``, or by this parameter. If ``uid`` already
+              contains a tenant and this parameter names a different one, the
+              request fails with ``400 InvalidArgument``.
+:Type: String
+:Example: ``tenant1``
+:Required: No
 
 ``purge-data``
 
