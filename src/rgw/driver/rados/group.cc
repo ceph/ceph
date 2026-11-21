@@ -100,12 +100,11 @@ static int read_name(const DoutPrefixProvider* dpp,
 static int write_name(const DoutPrefixProvider* dpp,
                       optional_yield y,
                       RGWSI_SysObj& sysobj,
-                      NameObj& name)
+                      NameObj& name , bool exclusive)
 {
   bufferlist bl;
   encode(name.data, bl);
 
-  constexpr bool exclusive = true;
   return rgw_put_system_obj(dpp, &sysobj, name.obj.pool,
                             name.obj.oid, bl, exclusive,
                             &name.objv, ceph::real_time{}, y);
@@ -179,7 +178,7 @@ int write(const DoutPrefixProvider* dpp,
           const std::map<std::string, ceph::buffer::list>& attrs,
           ceph::real_time mtime,
           bool exclusive,
-          RGWObjVersionTracker& objv)
+          RGWObjVersionTracker& objv , bool from_remote_zone)
 {
   const rgw_raw_obj obj = get_group_obj(zone, info.id);
 
@@ -216,9 +215,13 @@ int write(const DoutPrefixProvider* dpp,
     if (r == -ENOENT) {
       // write the new name object below
     } else if (r == 0) {
-      ldpp_dout(dpp, 1) << "ERROR: group name obj " << nameobj.obj
+        // from metadata sync: overwrite the existing name.
+        // otherwise (local write): an existing name is an error
+        if(!from_remote_zone) {
+          ldpp_dout(dpp, 1) << "ERROR: group name obj " << nameobj.obj
           << " already taken for group id " << nameobj.data.id << dendl;
       return -EEXIST;
+        }
     } else if (r < 0) {
       return r;
     }
@@ -263,10 +266,13 @@ int write(const DoutPrefixProvider* dpp,
     nameobj.data.id = info.id;
     nameobj.objv.generate_new_write_ver(dpp->get_cct());
 
-    int r = write_name(dpp, y, sysobj, nameobj);
+    int r = write_name(dpp, y, sysobj, nameobj, !from_remote_zone);
     if (r < 0) {
       ldpp_dout(dpp, 20) << "WARNING: failed to write name obj "
           << nameobj.obj << " with: " << cpp_strerror(r) << dendl;
+      if(from_remote_zone) {
+        return r; // let metadata sync retry
+      }
     } // not fatal
     // link the new name to its account
     const auto& users = account::get_groups_obj(zone, info.account_id);
@@ -448,7 +454,7 @@ class MetadataHandler : public RGWMetadataHandler {
     constexpr bool exclusive = false;
     return write(dpp, y, sysobj, rados, zone, new_info, pold_info,
                  group_obj->get().attrs, obj->get_mtime(),
-                 exclusive, objv);
+                 exclusive, objv , from_remote_zone);
   }
 
   int remove(std::string& entry, RGWObjVersionTracker& objv,
