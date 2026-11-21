@@ -70,7 +70,7 @@ Get the Source
 
 The source of Ceph documentation is a collection of ReStructured Text files
 in the Ceph repository within the ``doc`` directory. For details
-on GitHub and Ceph, see :ref:`Get Involved`.
+on GitHub and Ceph, see :ref:`get-involved`.
 
 Use the `Fork and Pull`_ approach to make documentation contributions. To do
 this, you must:
