@@ -84,6 +84,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 
+#include "erasure-code/lrc/ErasureCodeLrcLayers.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
@@ -9421,6 +9422,28 @@ int OSDMonitor::prepare_new_pool(string& name,
     *ss << "'fast_read' can only apply to erasure coding pool";
     return -EINVAL;
   }
+  // This only fires for a profile left keyless, or given an invalid value, by
+  // a release that ignored layer-plugin. A pending profile is checked once
+  // committed: get_erasure_code() makes the command wait for it.
+  if (pool_type == pg_pool_t::TYPE_ERASURE &&
+      !g_conf().get_val<bool>("mon_debug_allow_lrc_without_layer_plugin") &&
+      osdmap.has_erasure_code_profile(erasure_code_profile) &&
+      !pending_inc.has_erasure_code_profile(erasure_code_profile)) {
+    const auto& profile = osdmap.get_erasure_code_profile(erasure_code_profile);
+    if (ceph::lrc_profile_layer_plugin_unusable(profile)) {
+      *ss << "erasure-code profile '" << erasure_code_profile << "' "
+          << ceph::lrc_layer_plugin_problem(profile)
+          << "; set it on the profile before creating a pool. Use the "
+          << "sub-plugin its data was written with ('jerasure' if the "
+          << "profile's existing pools were written before Tentacle, 'isa' "
+          << "otherwise), re-specifying the full profile: 'ceph osd "
+          << "erasure-code-profile set " << erasure_code_profile << " ... "
+          << ceph::LRC_LAYER_PLUGIN_KEY << "=<jerasure|isa> --force "
+          << "--yes-i-really-mean-it'. See "
+          << "https://tracker.ceph.com/issues/81369.";
+      return -EINVAL;
+    }
+  }
   int r;
   if (num_zones > 1) {
     r = check_no_legacy_individual_stretch_pools(-1, ss);
@@ -14321,6 +14344,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       dout(20) << "erasure code profile " << name << " try again" << dendl;
       goto wait;
     } else {
+      if (!g_conf().get_val<bool>("mon_debug_allow_lrc_without_layer_plugin")) {
+        // Default layer-plugin for a new LRC profile; an override keeps the
+        // value already recorded rather than guessing one
+        const ErasureCodeProfile *existing_profile =
+          osdmap.has_erasure_code_profile(name) ?
+            &osdmap.get_erasure_code_profile(name) : nullptr;
+        err = ceph::resolve_lrc_layer_plugin(existing_profile, profile_map, &ss);
+        if (err)
+          goto reply_no_propose;
+      }
       err = normalize_profile(name, profile_map, force, &ss);
       if (err)
 	goto reply_no_propose;
@@ -14331,13 +14364,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (osdmap.has_erasure_code_profile(name)) {
 	ErasureCodeProfile existing_profile_map =
 	  osdmap.get_erasure_code_profile(name);
-	err = normalize_profile(name, existing_profile_map, force, &ss);
-	if (err)
-	  goto reply_no_propose;
+        // An LRC profile with an invalid layer-plugin (stored by a release that
+        // ignored the key) cannot be instantiated, so it is not normalized; it
+        // differs from any valid proposal and can only be replaced with --force
+        const bool existing_invalid =
+          ceph::lrc_profile_layer_plugin_unusable(existing_profile_map) &&
+          !ceph::lrc_profile_missing_layer_plugin(existing_profile_map);
+        if (!existing_invalid) {
+          err = normalize_profile(name, existing_profile_map, force, &ss);
+          if (err)
+            goto reply_no_propose;
 
-	if (existing_profile_map == profile_map) {
-	  err = 0;
-	  goto reply_no_propose;
+          if (existing_profile_map == profile_map) {
+            err = 0;
+            goto reply_no_propose;
+          }
 	}
 
         // only a profile that a pool uses is dangerous to change
@@ -14353,6 +14394,45 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              << ", and " << users.str() << ": changing it can corrupt their"
              << " data; add --yes-i-really-mean-it to do it anyway";
           goto reply_no_propose;
+        }
+
+        // Overriding an in-use LRC profile with a different sub-plugin risks
+        // data corruption: existing data was encoded with the old sub-plugin
+        // but would now be decoded with the new one (wrong unless the two
+        // happen to agree), and OSDs only adopt the change on restart, so they
+        // disagree until every one is restarted. When that is what the override
+        // does, warn the operator and give the safe procedure.
+        auto old_lp = existing_profile_map.find(ceph::LRC_LAYER_PLUGIN_KEY);
+        auto new_lp = profile_map.find(ceph::LRC_LAYER_PLUGIN_KEY);
+        if (ceph::is_lrc_profile(existing_profile_map) &&
+            !ceph::lrc_profile_layer_plugin_unusable(existing_profile_map) &&
+            new_lp != profile_map.end() && new_lp->second != old_lp->second) {
+          vector<string> pool_names;
+          for (const auto& [id, pool] : osdmap.get_pools()) {
+            if (pool.is_erasure() && pool.erasure_code_profile == name) {
+              pool_names.push_back(osdmap.get_pool_name(id));
+            }
+          }
+          if (!pool_names.empty()) {
+            ostringstream warn;
+            warn << "changed " << ceph::LRC_LAYER_PLUGIN_KEY << " of "
+                 << "erasure code profile " << name << " from " << old_lp->second
+                 << " to " << new_lp->second << " while pool(s) "
+                 << boost::algorithm::join(pool_names, ", ") << " use it. Data already "
+                 << "written with " << old_lp->second << " will be decoded with "
+                 << new_lp->second << ", which corrupts it unless "
+                 << new_lp->second << " is what wrote it. OSDs only use the "
+                 << "new value after a restart, and while they disagree "
+                 << "recovery and degraded reads can corrupt data: stop client "
+                 << "I/O and recovery, restart every OSD serving these pools, "
+                 << "then resume I/O and recovery.";
+            // Send it to the cluster log as well as the command reply: the
+            // reply keeps only the first line of ss (it is passed through
+            // getline), while the log preserves the full warning and records
+            // when the sub-plugin changed.
+            mon.clog->warn() << warn.str();
+            ss << "WARNING: " << warn.str();
+          }
         }
       }
 

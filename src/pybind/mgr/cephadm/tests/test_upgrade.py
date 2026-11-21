@@ -3120,3 +3120,81 @@ def test_upgrade_nvmeof_not_safe_does_not_redeploy(
         daemon.name()
         not in cephadm_module.upgrade._nvmeof_disabled_daemons
     )
+
+
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_check_lrc_layer_plugin(get, cephadm_module: CephadmOrchestrator):
+    get.return_value = {'erasure_code_profiles': {
+        'lrc_bare': {'plugin': 'lrc', 'k': '4', 'm': '2', 'l': '3'},
+        'lrc_set': {'plugin': 'lrc', 'k': '4', 'm': '2', 'l': '3',
+                    'layer-plugin': 'jerasure'},
+        'jer': {'plugin': 'jerasure', 'k': '4', 'm': '2'},
+        'another_bare': {'plugin': 'lrc', 'k': '2', 'm': '1', 'l': '3'},
+        'lrc_isa': {'plugin': 'lrc', 'k': '4', 'm': '2', 'l': '3',
+                    'layer-plugin': 'isa'},
+        'lrc_typo': {'plugin': 'lrc', 'k': '4', 'm': '2', 'l': '3',
+                     'layer-plugin': 'jerasue'},
+        'jer_stray': {'plugin': 'jerasure', 'k': '4', 'm': '2',
+                      'layer-plugin': 'jerasue'},
+    }}
+
+    # Upgrading to tentacle reports every LRC profile without a valid
+    # layer-plugin (missing, or not jerasure/isa), sorted; LRC profiles with a
+    # valid value and non-LRC profiles are ignored.
+    assert cephadm_module.upgrade.check_lrc_layer_plugin('20.2.0') == \
+        ['another_bare', 'lrc_bare', 'lrc_typo']
+
+    # Still reported when upgrading to a release after tentacle.
+    assert cephadm_module.upgrade.check_lrc_layer_plugin('21.1.0') == \
+        ['another_bare', 'lrc_bare', 'lrc_typo']
+
+    # Not relevant when the target is older than tentacle.
+    assert cephadm_module.upgrade.check_lrc_layer_plugin('19.2.0') == []
+
+    # A malformed version string is treated as not applicable.
+    assert cephadm_module.upgrade.check_lrc_layer_plugin('not-a-version') == []
+
+    # No erasure-code profiles at all.
+    get.return_value = {}
+    assert cephadm_module.upgrade.check_lrc_layer_plugin('20.2.0') == []
+
+
+def test_lrc_layer_plugin_error_detail(cephadm_module: CephadmOrchestrator):
+    detail = cephadm_module.upgrade._lrc_layer_plugin_error_detail(['p1', 'p2'])
+    joined = '\n'.join(detail)
+    assert 'p1, p2' in joined
+    assert 'layer-plugin' in joined
+    # The remediation command must be spelled out, including the force flags.
+    assert 'ceph osd erasure-code-profile get' in joined
+    assert '--force --yes-i-really-mean-it' in joined
+    assert '81369' in joined
+
+
+@mock.patch.object(CephadmUpgrade, 'check_lrc_layer_plugin', return_value=['myprofile'])
+@mock.patch.object(CephadmUpgrade, 'check_host_cpu_isa_level', return_value=[])
+@mock.patch.object(CephadmUpgrade, '_check_target_version', return_value=None)
+@mock.patch("cephadm.module.CephadmOrchestrator.get_module_option_ex", return_value=False)
+def test_upgrade_start_blocks_on_keyless_lrc(
+        _get_module_option_ex, _check_target, _check_isa, _check_lrc,
+        cephadm_module: CephadmOrchestrator):
+    # upgrade_start must refuse to even start when a keyless LRC profile exists.
+    with pytest.raises(OrchestratorError) as err:
+        cephadm_module.upgrade.upgrade_start('', '20.2.0')
+    assert 'myprofile' in str(err.value)
+    assert 'layer-plugin' in str(err.value)
+
+
+@mock.patch.object(CephadmUpgrade, '_validate_upgrade_filters', return_value=None)
+@mock.patch.object(CephadmUpgrade, 'check_lrc_layer_plugin', return_value=['myprofile'])
+@mock.patch.object(CephadmUpgrade, 'check_host_cpu_isa_level', return_value=[])
+@mock.patch.object(CephadmUpgrade, '_check_target_version', return_value=None)
+@mock.patch("cephadm.module.CephadmOrchestrator.get_module_option_ex", return_value=False)
+def test_upgrade_start_skips_lrc_check_without_osds(
+        _get_module_option_ex, _check_target, _check_isa, _check_lrc,
+        _validate_filters, cephadm_module: CephadmOrchestrator):
+    # An upgrade that does not touch OSDs must not be blocked by the LRC check.
+    # upgrade_start still fails later (no running mgrs in the test), but the LRC
+    # check must be skipped entirely.
+    with pytest.raises(OrchestratorError, match='Need at least 2 running mgr daemons'):
+        cephadm_module.upgrade.upgrade_start('', '20.2.0', daemon_types=['mgr'])
+    _check_lrc.assert_not_called()
