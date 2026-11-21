@@ -262,6 +262,13 @@ public:
   /* Send exactly @len bytes from the memory location pointed by @buf.
    * On success returns @len. On failure throws rgw::io::Exception. */
   virtual size_t write_data(const char *buf, size_t len) = 0;
+
+  /* Send @len1 bytes from @buf1 and then @len2 bytes from @buf2, as one
+   * write where the sink supports it. */
+  virtual size_t write_data_gather(const char *buf1, size_t len1,
+                                   const char *buf2, size_t len2) {
+    return write_data(buf1, len1) + write_data(buf2, len2);
+  }
 };
 
 /* Utility class providing RestfulClient's implementations with facilities
@@ -310,6 +317,17 @@ public:
     : sink(sink) {
     constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
     std::streambuf::setp(buffer, buffer + len);
+  }
+
+  /* The bytes buffered and not written yet, and dropping them. For a
+   * caller that writes them itself. */
+  std::string_view pending() const {
+    return {std::streambuf::pbase(),
+            static_cast<size_t>(std::streambuf::pptr() -
+                                std::streambuf::pbase())};
+  }
+  void discard() {
+    std::streambuf::pbump(-static_cast<int>(pending().size()));
   }
 };
 
