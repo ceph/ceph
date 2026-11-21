@@ -956,8 +956,8 @@ void Client::update_io_stat_read(utime_t latency) {
   {
     std::scoped_lock l(slot.lock);
     slot.s.rd_lat.add(latency.to_nsec());
+    slot.s.rd_lat_ns += latency.to_nsec();
   }
-  logger->tinc(l_c_read, latency);
 }
 
 void Client::update_io_stat_write(utime_t latency) {
@@ -965,8 +965,8 @@ void Client::update_io_stat_write(utime_t latency) {
   {
     std::scoped_lock l(slot.lock);
     slot.s.wr_lat.add(latency.to_nsec());
+    slot.s.wr_lat_ns += latency.to_nsec();
   }
-  logger->tinc(l_c_wrlat, latency);
 }
 
 Client::IoStats Client::get_io_stats()
@@ -980,6 +980,10 @@ Client::IoStats Client::get_io_stats()
     t.wr_sz.merge(slot.s.wr_sz);
     t.rd_bytes += slot.s.rd_bytes;
     t.wr_bytes += slot.s.wr_bytes;
+    t.rd_lat_ns += slot.s.rd_lat_ns;
+    t.wr_lat_ns += slot.s.wr_lat_ns;
+    t.osdc_hit += slot.s.osdc_hit;
+    t.osdc_miss += slot.s.osdc_miss;
   }
   return t;
 }
@@ -990,6 +994,19 @@ void Client::update_io_stat_logger()
   if (!logger)
     return;
   auto t = get_io_stats();
+  // what came in since the last tick: the latency averages and the hits
+  auto& o = io_stats_logged;
+  if (t.rd_lat.n > o.rd_lat.n)
+    logger->tinc(l_c_read, std::chrono::nanoseconds(t.rd_lat_ns - o.rd_lat_ns),
+                 t.rd_lat.n - o.rd_lat.n);
+  if (t.wr_lat.n > o.wr_lat.n)
+    logger->tinc(l_c_wrlat, std::chrono::nanoseconds(t.wr_lat_ns - o.wr_lat_ns),
+                 t.wr_lat.n - o.wr_lat.n);
+  if (t.osdc_hit > o.osdc_hit)
+    logger->inc(l_c_osdc_hit, t.osdc_hit - o.osdc_hit);
+  if (t.osdc_miss > o.osdc_miss)
+    logger->inc(l_c_osdc_miss, t.osdc_miss - o.osdc_miss);
+  o = t;
   utime_t avg;
   avg.set_from_double(t.rd_lat.mean / 1000000000);
   logger->tset(l_c_rd_avg, avg);
@@ -8196,6 +8213,8 @@ void Client::tick()
       check_caps(in, CHECK_CAPS_NODELAY);
   }
 
+  // the perf counters the metrics read are summed per CPU: add them up
+  update_io_stat_logger();
   if (!mount_aborted)
     collect_and_send_metrics();
 
@@ -8211,7 +8230,6 @@ void Client::tick()
     }
     logger->set(l_c_caps_dirty, caps_dirty);
   }
-  update_io_stat_logger();
 
   delay_put_inodes(is_unmounting());
   trim_cache(true);
@@ -12805,11 +12823,7 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
     put_fast_rd_ref(in);
     return false;
   }
-  if (r > 0) {
-    logger->inc(l_c_osdc_hit);
-  } else if (r == 0) {
-    logger->inc(l_c_osdc_miss);
-  }
+  count_osdc_read(r);
   if (r == 0)
     r = cond.wait();   // a hit (or an error) leaves cond untouched
   if (r >= 0)

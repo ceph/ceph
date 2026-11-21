@@ -2767,6 +2767,9 @@ private:
     RunStat rd_lat, wr_lat;   // ns
     RunStat rd_sz, wr_sz;     // bytes
     uint64_t rd_bytes = 0, wr_bytes = 0;
+    // for the perf counters, added to them on tick()
+    uint64_t rd_lat_ns = 0, wr_lat_ns = 0;
+    uint64_t osdc_hit = 0, osdc_miss = 0;
   };
   struct alignas(64) IoStatSlot {
     ceph::spinlock lock;
@@ -2779,6 +2782,17 @@ private:
   }
   IoStats get_io_stats();
   void update_io_stat_logger();
+  // what update_io_stat_logger() added to the perf counters so far
+  IoStats io_stats_logged;
+  // a cached read's hit or miss (l_c_osdc_hit/miss), per CPU
+  void count_osdc_read(int r) {
+    auto& slot = io_stat_slot();
+    std::scoped_lock l(slot.lock);
+    if (r > 0)
+      ++slot.s.osdc_hit;
+    else if (r == 0)
+      ++slot.s.osdc_miss;
+  }
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
