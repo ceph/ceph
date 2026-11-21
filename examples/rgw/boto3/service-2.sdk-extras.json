@@ -121,11 +121,41 @@
                     "documentation":"<p>Append Object</p>",
                     "location": "querystring",
                     "locationName": "append"
+                },
+                "MigrationMtime": {
+                    "shape":"MigrationMtime",
+                    "documentation":"<p>Object mtime to keep when migrating data. Requires the migration=write user capability.</p>",
+                    "location": "querystring",
+                    "locationName": "rgwx-migration-mtime"
+                },
+                "MigrationVersionId": {
+                    "shape":"MigrationVersionId",
+                    "documentation":"<p>Object version id to keep when migrating data. Requires the migration=write user capability.</p>",
+                    "location": "querystring",
+                    "locationName": "rgwx-migration-version-id"
                 }
             }
         },
         "Append": {"type":"boolean"},
         "AppendPosition":{"type":"integer"},
+        "MigrationMtime": {"type":"string"},
+        "MigrationVersionId": {"type":"string"},
+        "CompleteMultipartUploadRequest": {
+            "members": {
+                "MigrationMtime": {
+                    "shape":"MigrationMtime",
+                    "documentation":"<p>Object mtime to keep when migrating data. Requires the migration=write user capability.</p>",
+                    "location": "querystring",
+                    "locationName": "rgwx-migration-mtime"
+                },
+                "MigrationVersionId": {
+                    "shape":"MigrationVersionId",
+                    "documentation":"<p>Object version id to keep when migrating data. Requires the migration=write user capability.</p>",
+                    "location": "querystring",
+                    "locationName": "rgwx-migration-version-id"
+                }
+            }
+        },
         "PutObjectOutput": {
             "members": {
                 "AppendPosition": {
