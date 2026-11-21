@@ -189,6 +189,63 @@ TEST_F(LibRadosList, ListObjectsStart) {
   rados_nobjects_list_close(ctx);
 }
 
+TEST_F(LibRadosList, ListObjectsSeekHash) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+
+  for (int i = 0; i < 64; ++i) {
+    string n = "obj-" + stringify(i);
+    ASSERT_EQ(0, rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
+  }
+
+  rados_list_ctx_t ctx;
+  rados_list_ctx_t probe_ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &probe_ctx));
+
+  // Find an object that is not the first entry in its PG in listing order.
+  std::map<uint32_t, std::pair<std::string, uint32_t>> pg_first_obj;
+  std::string target_oid;
+  uint32_t target_hash = 0;
+  bool found_target = false;
+  const char *entry;
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
+    rados_object_list_cursor cursor = NULL;
+    ASSERT_EQ(0, rados_nobjects_list_get_cursor(ctx, &cursor));
+    uint32_t hash = ((hobject_t *)cursor)->get_hash();
+    uint32_t pg = rados_nobjects_list_seek_cursor(probe_ctx, cursor);
+    rados_object_list_cursor_free(ioctx, cursor);
+
+    auto [it, inserted] = pg_first_obj.emplace(pg, std::make_pair(std::string(entry), hash));
+    if (!inserted && !found_target && hash != it->second.second) {
+      target_oid = entry;
+      target_hash = hash;
+      found_target = true;
+    }
+  }
+  rados_nobjects_list_close(probe_ctx);
+  rados_nobjects_list_close(ctx);
+  ASSERT_TRUE(found_target);
+
+  // Fresh listing: seek must return target_hash unchanged and resume at
+  // target_hash, not restart at the beginning of the PG.
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  ASSERT_EQ(target_hash, rados_nobjects_list_seek(ctx, target_hash));
+  ASSERT_EQ(target_hash, rados_nobjects_list_get_pg_hash_position(ctx));
+  ASSERT_EQ(0, rados_nobjects_list_next(ctx, &entry, NULL, NULL));
+  ASSERT_EQ(target_oid, std::string(entry));
+  rados_nobjects_list_close(ctx);
+
+  // Already-fetched listing: seek must behave identically.
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  ASSERT_EQ(0, rados_nobjects_list_next(ctx, &entry, NULL, NULL));
+  ASSERT_EQ(target_hash, rados_nobjects_list_seek(ctx, target_hash));
+  ASSERT_EQ(target_hash, rados_nobjects_list_get_pg_hash_position(ctx));
+  ASSERT_EQ(0, rados_nobjects_list_next(ctx, &entry, NULL, NULL));
+  ASSERT_EQ(target_oid, std::string(entry));
+  rados_nobjects_list_close(ctx);
+}
+
 // this function replicates
 // librados::operator<<(std::ostream& os, const librados::ObjectCursor& oc)
 // because we don't want to use librados in librados client.
