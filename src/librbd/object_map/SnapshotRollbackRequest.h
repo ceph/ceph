@@ -33,7 +33,12 @@ public:
    *
    * @endverbatim
    *
-   * If an error occurs within the READ_MAP state, the associated snapshot's
+   * Objects flagged as OBJECT_EXISTS_CLEAN in the snapshot object map are
+   * marked OBJECT_EXISTS before the map is written as the new HEAD object
+   * map since the rollback dirties them relative to the latest snapshot.
+   *
+   * If an error occurs within the READ_MAP state (including a failure to
+   * decode the snapshot object map), the associated snapshot's
    * object map will be flagged as invalid.  Otherwise, an error from any state
    * will result in the HEAD object map being flagged as invalid via the base
    * class.
@@ -64,6 +69,7 @@ private:
   bufferlist m_read_bl;
 
   void send_read_map();
+  int mark_objects_dirty();
   void send_invalidate_map();
   void send_write_map();
 
