@@ -77,6 +77,11 @@
   profile of its own, such as ``mypool-k2-m2``, as does each new pool created
   without a named profile.
 
+* RGW: The ``log`` sync module has been removed. It only logged the objects
+  that a zone would sync and had no other effect. A zone whose ``tier_type``
+  is ``log`` must be changed to another sync module before upgrading, or its
+  RGW daemons will fail to start.
+
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 
