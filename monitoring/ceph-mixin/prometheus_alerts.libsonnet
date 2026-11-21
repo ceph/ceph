@@ -984,7 +984,7 @@
         {
           alert: 'CephRBDMirrorImagesPerDaemonHigh',
           'for': '1m',
-          expr: 'sum by (cluster, ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
+          expr: 'count by (cluster, ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.2' },
           annotations: {
             summary: 'Number of image replications are now above %(CephRBDMirrorImagesPerDaemonThreshold)s%(cluster)s' % [$._config.CephRBDMirrorImagesPerDaemonThreshold, $.MultiClusterSummary()],
