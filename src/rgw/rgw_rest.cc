@@ -8,6 +8,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include "ceph_ver.h"
+#include "common/error_code.h"
 #include "common/HTMLFormatter.h"
 #include "common/XMLFormatter.h"
 #include "common/split.h"
@@ -765,7 +766,7 @@ int dump_body(req_state* const s,
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
   } catch (rgw::io::Exception& e) {
-    return -e.code().value();
+    return ceph::from_error_code(e.code());
   }
 }
 
@@ -787,7 +788,7 @@ int recv_body(req_state* const s,
   try {
     len = RESTFUL_IO(s)->recv_body(buf, max);
   } catch (rgw::io::Exception& e) {
-    return -e.code().value();
+    return ceph::from_error_code(e.code());
   }
   bool healthcheck = false;
   // we dont want to limit health checks
