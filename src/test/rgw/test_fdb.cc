@@ -5313,6 +5313,16 @@ TEST_CASE("borrowed transactor invocation leaves ownership with its caller", "[f
   CHECK(lfdb::transaction_phase::setup == result.error().phase);
   CHECK(0 == result.error().status.attempts);
   CHECK(lfdb::commit_status::not_submitted == result.error().status.commit);
+
+  const auto typed = txr(empty, [&](auto&) -> std::expected<int, std::unique_ptr<int>> {
+   invoked = true;
+   return 1;
+  });
+  REQUIRE_FALSE(typed);
+  CHECK_FALSE(invoked);
+  CHECK(std::make_error_code(std::errc::invalid_argument) == native_failure(typed).code);
+  CHECK(lfdb::transaction_phase::setup == typed.error().phase);
+  CHECK(0 == typed.error().status.attempts);
  }
 
  SECTION("native failures keep their identity without local recovery") {
