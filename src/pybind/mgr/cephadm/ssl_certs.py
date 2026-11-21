@@ -9,6 +9,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from ceph.deployment.tls_utils import SSLConfigException
 
+# RFC 5280 limits the X.509 Common Name (CN) field to 64 characters.
+COMMON_NAME_MAX_LENGTH = 64
+
 
 class SSLCerts:
     def __init__(self, fsid: str, _certificate_duration_days: int = (365 * 10 + 3)) -> None:
@@ -93,7 +96,12 @@ class SSLCerts:
         public_key = private_key.public_key()
 
         builder = x509.CertificateBuilder()
-        builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
+        # Truncate at the first DNS label rather than a blind character
+        # slice, since the SAN (not CN) is used for hostname verification.
+        cn_value = addrs[0]
+        if len(cn_value) > COMMON_NAME_MAX_LENGTH:
+            cn_value = cn_value.split('.')[0][:COMMON_NAME_MAX_LENGTH]
+        builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn_value), ]))
         builder = builder.issuer_name(self.get_root_issuer_name())
         builder = builder.not_valid_before(datetime.now())
         builder = builder.not_valid_after(datetime.now() + timedelta(days=cert_duration_in_days))
