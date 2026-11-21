@@ -509,48 +509,48 @@
             Add address +
           </button>
         </div>
+      }
 
-        <p
-          class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
+      <p
+        class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
+        i18n
+      >
+        Network transport settings
+      </p>
+      <p
+        class="cds--type-body-compact-01 cds-mb-4"
+        i18n
+      >
+        NFS over RDMA
+      </p>
+
+      <div class="form-item">
+        <cds-checkbox
+          id="enable_rdma"
+          formControlName="enable_rdma"
           i18n
         >
-          Network transport settings
-        </p>
-        <p
-          class="cds--type-body-compact-01 cds-mb-4"
-          i18n
-        >
-          NFS over RDMA
-        </p>
+          Enable RDMA for low-latency data transfer on supported networks.
+        </cds-checkbox>
+      </div>
 
+      @if (nfsForm.get('enable_rdma').value) {
         <div class="form-item">
-          <cds-checkbox
-            id="enable_rdma"
-            formControlName="enable_rdma"
-            i18n
-          >
-            Enable RDMA for low-latency data transfer on supported networks.
-          </cds-checkbox>
+          <cds-number
+            cdValidate
+            #rdmaPortRef="cdValidate"
+            id="rdma_port"
+            formControlName="rdma_port"
+            label="RDMA Port"
+            i18n-label
+            [min]="1"
+            [max]="65535"
+            helperText="Port used for NFS over RDMA."
+            i18n-helperText
+            [invalid]="rdmaPortRef.isInvalid"
+            [invalidText]="rdmaPortError"
+          ></cds-number>
         </div>
-
-        @if (nfsForm.get('enable_rdma').value) {
-          <div class="form-item">
-            <cds-number
-              cdValidate
-              #rdmaPortRef="cdValidate"
-              id="rdma_port"
-              formControlName="rdma_port"
-              label="RDMA Port"
-              i18n-label
-              [min]="1"
-              [max]="65535"
-              helperText="Port used for NFS over RDMA."
-              i18n-helperText
-              [invalid]="rdmaPortRef.isInvalid"
-              [invalidText]="rdmaPortError"
-            ></cds-number>
-          </div>
-        }
       }
 
       <!-- High availability -->

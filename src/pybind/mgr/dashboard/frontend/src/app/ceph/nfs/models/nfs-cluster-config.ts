@@ -2,6 +2,7 @@ export interface NFSBackend {
   hostname: string;
   ip: string;
   port?: number;
+  monitoring_port?: number;
   status?: string;
 }
 
@@ -19,6 +20,8 @@ export interface NFSCluster {
   virtual_ip: string | null;
   port?: number;
   monitor_port?: number;
+  monitoring_port?: number;
+  rdma_port?: number;
   backend: NFSBackend[];
   deployment_type?: string;
   ingress_mode?: string;

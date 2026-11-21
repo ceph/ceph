@@ -11,7 +11,7 @@ export interface BindAddrValue {
 export interface NfsClusterFormValue {
   cluster_id: string;
   placement: string;
-  count: number;
+  count: number | null;
   custom_placement_type: string;
   label: ComboBoxContent | string | null;
   host_pattern: string;
