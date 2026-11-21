@@ -254,13 +254,12 @@ int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  TestMemCluster::SharedFile file;
-  {
-    std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
-    if (file == NULL) {
-      return -ENOENT;
-    }
+  // file_omaps is shared by every object in the pool, so it needs the pool's
+  // file_lock as well as the object's own lock.
+  std::shared_lock pool_l{m_pool->file_lock};
+  TestMemCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, {});
+  if (file == NULL) {
+    return -ENOENT;
   }
 
   out_vals->clear();
@@ -311,13 +310,13 @@ int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  TestMemCluster::SharedFile file;
-  {
-    std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
-    if (file == NULL) {
-      return -ENOENT;
-    }
+  // file_omaps is shared by every object in the pool: inserting into it
+  // under only the object's lock races with other objects' omap writes.
+  std::unique_lock pool_l{m_pool->file_lock};
+  TestMemCluster::SharedFile file = get_file(oid, true, CEPH_NOSNAP,
+                                             get_snap_context());
+  if (file == NULL) {
+    return -ENOENT;
   }
 
   std::unique_lock l{file->lock};
@@ -336,13 +335,13 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  TestMemCluster::SharedFile file;
-  {
-    std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
-    if (file == NULL) {
-      return -ENOENT;
-    }
+  // file_omaps is shared by every object in the pool: inserting into it
+  // under only the object's lock races with other objects' omap writes.
+  std::unique_lock pool_l{m_pool->file_lock};
+  TestMemCluster::SharedFile file = get_file(oid, true, CEPH_NOSNAP,
+                                             get_snap_context());
+  if (file == NULL) {
+    return -ENOENT;
   }
 
   std::unique_lock l{file->lock};
