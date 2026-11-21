@@ -449,6 +449,24 @@ static std::string content_encoding_without_aws_chunked(std::string_view value)
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
+  // a partNumber read returns one part like a Range response (206 + Content-Range)
+  // the AWS SDKs rely on. require the part to fit so a backend lacking its size
+  // emits no impossible range or bare 206. exclude skip_decrypt (ciphertext length
+  // != plaintext offsets) and assembled large objects (lo_etag replaces the body).
+  using range_tuple = std::tuple<uint64_t, uint64_t, uint64_t>;
+  std::optional<range_tuple> content_range;
+
+  const bool is_part_range = !range_str && !skip_decrypt && lo_etag.empty() &&
+      multipart_part_num && multipart_part_ofs && multipart_full_obj_size &&
+      total_len && *multipart_part_ofs + total_len <= *multipart_full_obj_size;
+  if (range_str) {
+    content_range.emplace(start, end, s->obj_size);
+  } else if (is_part_range) {
+    content_range.emplace(*multipart_part_ofs,
+                          *multipart_part_ofs + total_len - 1,
+                          *multipart_full_obj_size);
+  }
+
   if (rdma_active && get_data && !sent_header && !op_ret) {
     if (!rdma_complete) {
       // A zero-length callback is not necessarily the end of the operation:
@@ -525,22 +543,17 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     set_req_state_err(s, 0);
     dump_errno(s, custom_http_ret);
   } else {
-    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
-                  : op_ret);
+    set_req_state_err(s, ((partial_content || is_part_range) && !op_ret)
+                  ? STATUS_PARTIAL_CONTENT : op_ret);
     dump_errno(s);
   }
 
   if (op_ret)
     goto done;
 
-  if (range_str)
-    dump_range(s, start, end, s->obj_size);
-  else if (multipart_part_num && multipart_part_ofs &&
-           multipart_full_obj_size && total_len) {
-    // a partNumber read returns a part; report its place in the object the
-    // same way a Range request does, which the AWS SDKs rely on
-    dump_range(s, *multipart_part_ofs, *multipart_part_ofs + total_len - 1,
-               *multipart_full_obj_size);
+  if (content_range) {
+    const auto& [first, last, complete] = *content_range;
+    dump_range(s, first, last, complete);
   }
 
   if (s->system_request &&
@@ -622,7 +635,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     dump_content_length(s, 0);
     // Match the HTTP status for ordinary and ranged GET responses.
     dump_header(s, "x-amz-rdma-reply",
-                (partial_content && !custom_http_ret) ? "206" : "200");
+                ((partial_content || is_part_range) && !custom_http_ret) ? "206" : "200");
     dump_header(s, "x-amz-rdma-bytes-transferred", s->rdma_bytes_transferred);
   } else {
     dump_content_length(s, total_len);
