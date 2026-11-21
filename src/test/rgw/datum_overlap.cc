@@ -280,6 +280,36 @@ TEST_CASE("overlap traversal agrees with a pointwise origin-pair model")
     }
 }
 
+TEST_CASE("rvalue-reference observations preserve original row and endpoint identity")
+{
+    std::array rows {record {7, query::closed_open(0, 8)}};
+    auto referenced = rows | std::views::transform([](record& row) -> record&& {
+        return std::move(row);
+    });
+    const std::array selected {query::closed_open(1, 3), query::closed_open(4, 6)};
+    const auto result = iv::visit_overlaps(referenced, selected, [&](const auto& source, const auto&) {
+        CHECK(std::addressof(source.source()) == std::addressof(rows[0]));
+
+        return datum::acceptance::accept;
+    }, [](const record& row) -> const query&& { return std::move(row.geometry); });
+
+    CHECK(2 == result.accepted);
+    CHECK(rows[0].geometry == query::closed_open(0, 8));
+
+    using strings = iv::query<iv::comparison_domain<std::string>>;
+
+    const std::array words {strings::closed_open(std::string(80, 'a'), std::string(80, 'z'))};
+    const std::array all {strings::universal()};
+    const auto observed = iv::visit_overlaps(words, all, [&](const auto& source, const auto&) {
+        CHECK(std::addressof(source.lower().key()) == std::addressof(words[0].lower().key()));
+        CHECK(std::addressof(source.upper().key()) == std::addressof(words[0].upper().key()));
+
+        return datum::acceptance::accept;
+    }, [](const strings& row) -> const strings&& { return std::move(row); });
+
+    CHECK(1 == observed.accepted);
+}
+
 TEST_CASE("one-pass owning descriptors and projections are observed once per origin")
 {
     const std::array left_extents {datum::byte_extent {0, 8}, datum::byte_extent {8, 8}};

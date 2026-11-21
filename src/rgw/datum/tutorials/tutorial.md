@@ -98,6 +98,35 @@ offset alone uses the output size as the count. Invalid bounds throw before writ
 When a consumer expects fragments, `datum::fragments(owner)` adapts a contiguous
 owner to a one-fragment view. Its span borrows the bytes, so keep the backing storage alive.
 
+### Transfer between fragmented buffers
+
+When the destination is also split into buffers, use `scatter_bytes`. Its source and
+destination boundaries can differ. The [complete program](examples/fragment_transfer.cpp)
+selects six bytes from `"ab"`, `"cdef"`, and `"gh"` and transfers them into two writable buffers:
+
+```cpp
+datum::byte_cursor payload {source};
+const auto selected = payload.take(datum::byte_extent {1, 6});
+std::array<char, 2> first {};
+std::array<char, 5> last {'.', '.', '.', '.', '.'};
+const std::array<std::span<char>, 2> destination {std::span {first}, std::span {last}};
+const auto copied = datum::scatter_bytes(selected, destination);
+```
+
+The result is six copied bytes: `first` contains `bc`, and `last` contains `defg.`.
+The unused destination tail keeps its original value. No contiguous staging buffer is needed.
+The same function accepts a contiguous source and interoperates with byte spellings such
+as `char`, `unsigned char`, and `std::byte`.
+
+Fragment ranges must support repeatable forward traversal. The operation checks total
+capacity before writing, then retains each current descriptor while copying its pieces.
+Capacity refusal writes nothing; an exception during later observation can leave a written
+prefix. An empty source does not inspect the destination. Keep all borrowed backing valid,
+use disjoint source and destination storage, and ensure destination fragments do not alias
+one another. Cumulative byte positions align the pieces; disjoint write footprints protect
+unselected storage. The [bibliography](#bibliography) records the supporting prefix-sum and
+separation-logic research and the relevant C++23 range operations.
+
 For a destination that grows, include `<datum/range.h>` and append a joined view:
 
 ```cpp
@@ -2373,3 +2402,11 @@ identify sources in the separate local RGW integration snapshot described in the
   In *Synthesis of Parallel Algorithms*, 1993; sections 1.1 and 1.6. The prescan definition
   and segment-allocation example motivate packed origin positions. Datum uses sequential
   checked state while preserving source identity and traversal effects.
+- John C. Reynolds. [*Separation Logic: A Logic for Shared Mutable Data Structures*](https://www.cs.cmu.edu/~jcr/seplogic.pdf).
+  LICS, 2002; frame rule and its aliasing counterexample. The fragmented-copy contract
+  requires disjoint storage footprints and retains caller responsibility for backing lifetimes.
+  It does not provide a runtime alias check or a formal verification of C++ pointer use.
+- WG21. [*N4950: Working Draft, Standard for Programming Language C++*](https://timsong-cpp.github.io/cppwp/n4950/).
+  C++23, 2023; [copy](https://timsong-cpp.github.io/cppwp/n4950/alg.copy) and
+  [join views](https://timsong-cpp.github.io/cppwp/n4950/range.join). These define ordinary
+  element traversal; Datum's fragment transfer adds byte conversion and capacity admission.

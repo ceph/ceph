@@ -58,6 +58,66 @@ constexpr void copy_byte_block(const SourceT *source, DestinationT *destination,
     }
     copy_values();
 }
+
+template <typename RangeT>
+concept cacheable_fragment_range = fragment_input_range<RangeT> and
+    (std::is_reference_v<std::ranges::range_reference_t<RangeT>> ||
+     std::constructible_from<std::remove_cvref_t<std::ranges::range_reference_t<RangeT>>,
+                             std::ranges::range_reference_t<RangeT>>);
+
+template <cacheable_fragment_range RangeT>
+class fragment_copy_cursor final
+{
+    std::ranges::iterator_t<RangeT> position;
+    std::ranges::sentinel_t<RangeT> finish;
+
+    range_observation<std::ranges::range_reference_t<RangeT>> block;
+    std::size_t offset = 0;
+
+public:
+    constexpr explicit fragment_copy_cursor(RangeT& source)
+        : position(std::ranges::begin(source)),
+          finish(std::ranges::end(source))
+    {}
+
+private:
+    constexpr void load()
+    {
+        while (position != finish) {
+            if (!block) {
+                block.emplace(*position);
+            }
+            if (offset < std::ranges::size(block.get())) {
+                return;
+            }
+
+            block.reset();
+            ++position;
+            offset = 0;
+        }
+
+        throw std::length_error {"byte fragment capacity changed during transfer"};
+    }
+
+public:
+    constexpr auto data()
+    {
+        load();
+
+        return std::ranges::data(block.get()) + offset;
+    }
+
+    constexpr std::size_t remaining()
+    {
+        load();
+
+        return std::ranges::size(block.get()) - offset;
+    }
+
+    constexpr void consume(const std::size_t count) noexcept { offset += count; }
+
+};
+
 } // detail
 
 // One contiguous block is one fragment. The view preserves element constness and
@@ -87,24 +147,64 @@ constexpr std::size_t byte_capacity(FragmentsT&& fragments)
     return total;
 }
 
-// Preflight capacity before the first write. Source and destination must not
-// overlap. Fragment descriptors and their backing storage survive this call.
+// Preflight capacity before the first write. Source and destination storage are disjoint;
+// destination fragments do not alias one another. Borrowed backing remains live during the call:
 template <byte_block SourceT, writable_byte_fragments FragmentsT>
 constexpr std::size_t scatter_bytes(SourceT&& source, FragmentsT&& destination)
 {
-    if (std::ranges::size(source) > byte_capacity(destination)) {
+    const auto source_size = std::ranges::size(source);
+    if (0 == source_size) {
+        return 0;
+    }
+
+    if (source_size > byte_capacity(destination)) {
         throw std::length_error {"byte fragments have insufficient capacity"};
     }
     std::size_t copied = 0;
     static_cast<void>(ceph::salad::datum::visit_range(destination, [&](auto&& fragment) {
         const auto count =
-            std::min<std::size_t>(std::ranges::size(source) - copied, std::ranges::size(fragment));
+            std::min<std::size_t>(source_size - copied, std::ranges::size(fragment));
         detail::copy_byte_block(std::ranges::data(source) + copied,
                                 std::ranges::data(fragment), count);
         copied += count;
-        return copied == std::ranges::size(source) ? acceptance::accept_and_stop
-                                                   : acceptance::accept;
+        return copied == source_size ? acceptance::accept_and_stop : acceptance::accept;
     }));
+
+    return copied;
+}
+
+// Independent fragment boundaries align in cumulative byte position (Blelloch, Prefix Sums
+// and Their Applications, 1993, section 1.1: https://www.cs.cmu.edu/~guyb/papers/Ble93.pdf).
+// The disjoint-footprint contract follows Reynolds, Separation Logic (LICS 2002), frame rule:
+// https://www.cs.cmu.edu/~jcr/seplogic.pdf
+// Retain current descriptors through their pieces; capacity failure writes nothing, while later
+// observation exceptions can leave a written prefix. The storage contract is the same as above:
+template <byte_fragments SourceT, writable_byte_fragments DestinationT>
+requires detail::cacheable_fragment_range<detail::fragment_source_t<SourceT>> and
+         detail::cacheable_fragment_range<DestinationT>
+constexpr std::size_t scatter_bytes(SourceT&& source, DestinationT&& destination)
+{
+    const auto source_size = byte_capacity(source);
+    if (0 == source_size) {
+        return 0;
+    }
+    if (source_size > byte_capacity(destination)) {
+        throw std::length_error {"byte fragments have insufficient capacity"};
+    }
+
+    detail::fragment_copy_cursor input {detail::read_fragments(source)};
+    detail::fragment_copy_cursor output {destination};
+    std::size_t copied = 0;
+    while (copied < source_size) {
+        const auto count = std::min({source_size - copied, input.remaining(), output.remaining()});
+        const auto *input_bytes = input.data();
+        auto *output_bytes = output.data();
+        detail::copy_byte_block(input_bytes, output_bytes, count);
+
+        input.consume(count);
+        output.consume(count);
+        copied += count;
+    }
 
     return copied;
 }

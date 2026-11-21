@@ -53,7 +53,7 @@ Other core operations already accept standard ranges under their established nam
 | --- | --- |
 | Copy a complete byte source | `copy(source, output)` |
 | Copy selected contiguous or fragmented bytes | `copy(source, byte_extent, output)` |
-| Scatter contiguous bytes into writable fragments | `scatter_bytes(source, fragments)` |
+| Copy contiguous or fragmented bytes into writable fragments | `scatter_bytes(source, fragments)` |
 | Read the next bytes into ordinary storage | `byte_cursor::read_into(output)` |
 | Take a forward absolute payload selection | `byte_cursor::take(byte_extent)` |
 | Send fragments to a synchronous consumer | `write_fragments(fragments, sink)` |
@@ -609,7 +609,7 @@ The [mapped-read example](tutorials/examples/overlap_reads.cpp) translates logic
 to backing offsets while retaining the source object number.
 
 This synchronous traversal accepts single-pass iterators and value/proxy rows. It observes
-each current row and its geometry once, borrowing lvalues and retaining temporary descriptors
+each current row and its geometry once, borrowing references and retaining value descriptors
 until all their cuts are consumed. Source rows need no default constructor, copy constructor,
 or assignment when the iterator supplies movable values. Callbacks and const-invocable lenses
 are borrowed and need not be copyable or movable. Both inputs must have the same domain and
@@ -975,6 +975,14 @@ Staging also accepts ordinary writable contiguous ranges and keeps its existing 
 including when supplied as a vector; it never selects the clear-and-grow output path.
 `scatter_bytes` and whole-source `copy` preflight capacity before writing. Fixed codec
 overflow may leave a written prefix. Sources and destinations must not overlap.
+`scatter_bytes` also accepts a fragmented source, independently of destination boundaries.
+Both fragment ranges must be repeatable forward ranges with consistent descriptors across
+the capacity and transfer passes. Current value descriptors remain alive through their pieces;
+references, including rvalue references, are borrowed without moving their owners. An empty
+source does not inspect the destination. A later observation exception can leave a written prefix.
+Destination fragments must not alias one another, and borrowed backing stays valid during the call.
+The [fragment-transfer example](tutorials/examples/fragment_transfer.cpp) composes a payload
+selection with this operation. No staging buffer is needed.
 `decode_bounded<T, MaximumContainerBytes>(bytes, maximum_input_bytes)` returns a
 candidate only after full decoding; the codec allocation limit is per container,
 not an aggregate memory/admission budget. Its wire enrollment/order is unchanged.
@@ -1238,3 +1246,10 @@ describe local machinery, not backend throughput.
   In *Synthesis of Parallel Algorithms*, 1993; sections 1.1 and 1.6. The exclusive prefix
   interpretation supplies packed origin starts. Datum uses sequential checked state and
   preserves source identities; it introduces neither a parallel scan nor a prefix array.
+- John C. Reynolds. [*Separation Logic: A Logic for Shared Mutable Data Structures*](https://www.cs.cmu.edu/~jcr/seplogic.pdf).
+  LICS, 2002; frame rule and its aliasing counterexample. Disjoint source and destination
+  footprints inform the fragment-transfer contract; Datum does not infer or check aliasing.
+- WG21. [*N4950: Working Draft, Standard for Programming Language C++*](https://timsong-cpp.github.io/cppwp/n4950/).
+  C++23, 2023; [copy](https://timsong-cpp.github.io/cppwp/n4950/alg.copy) and
+  [join views](https://timsong-cpp.github.io/cppwp/n4950/range.join). Standard element copying
+  remains appropriate for ordinary ranges; Datum adds checked byte transfer across blocks.

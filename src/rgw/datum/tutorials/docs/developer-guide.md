@@ -22,6 +22,15 @@ errno translation, reshard accounting, and persistence in native bindings.
 See the [layer map](design.md#architectural-guidelines) and
 [Ceph vocabulary lesson](../tutorial.md#18-bytes-with-a-ceph-accent).
 
+For fixed fragmented output, `scatter_bytes(source, destination)` accepts contiguous or
+fragmented bytes and preserves unused destination capacity. Fragment inputs support two
+repeatable passes: capacity admission, then transfer. Current value descriptors are retained
+through their pieces; borrowed references do not transfer ownership. Capacity failure writes
+nothing, while later observation exceptions may leave a written prefix. Keep source and
+destination storage disjoint, destination fragments mutually nonaliasing, and all backing live.
+See the [fragment-transfer example](../examples/fragment_transfer.cpp) and
+[transfer lesson](../tutorial.md#transfer-between-fragmented-buffers).
+
 ## Decode once, then use the value
 
 A validated record is useful input. Pass it to checking, accounting, and selection operations

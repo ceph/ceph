@@ -427,47 +427,6 @@ public:
 
 namespace detail {
 
-// An input producer may return an owning descriptor. Retain that value before projecting it;
-// lvalue observations keep their original identity and require no record or endpoint copies:
-template <typename ReferenceT>
-class overlap_observation final
-{
-    using value_type = std::remove_cvref_t<ReferenceT>;
-    using storage_type = std::conditional_t<std::is_lvalue_reference_v<ReferenceT>,
-                                            const value_type*, std::optional<value_type>>;
-
-    storage_type storage {};
-
-public:
-    constexpr explicit operator bool() const noexcept { return static_cast<bool>(storage); }
-
-    constexpr const value_type& get() const noexcept { return *storage; }
-
-    template <typename ValueT>
-    constexpr void emplace(ValueT&& value)
-    {
-        if constexpr (std::is_lvalue_reference_v<ReferenceT>) {
-            storage = std::addressof(value);
-        }
-
-        if constexpr (!std::is_lvalue_reference_v<ReferenceT>) {
-            storage.emplace(std::forward<ValueT>(value));
-        }
-    }
-
-    constexpr void reset() noexcept
-    {
-        if constexpr (std::is_lvalue_reference_v<ReferenceT>) {
-            storage = nullptr;
-        }
-
-        if constexpr (!std::is_lvalue_reference_v<ReferenceT>) {
-            storage.reset();
-        }
-    }
-
-};
-
 template <typename RangeT>
 using overlap_row_t = std::remove_cvref_t<std::ranges::range_reference_t<RangeT>>;
 
@@ -480,9 +439,9 @@ concept overlap_source = std::ranges::input_range<RangeT> and
     std::convertible_to<std::ranges::range_reference_t<RangeT>, const overlap_row_t<RangeT>&> and
     std::regular_invocable<const LensT&, const overlap_row_t<RangeT>&> and
     stable_interval<overlap_geometry_t<RangeT, LensT>> and
-    (std::is_lvalue_reference_v<std::ranges::range_reference_t<RangeT>> ||
+    (std::is_reference_v<std::ranges::range_reference_t<RangeT>> ||
      std::constructible_from<overlap_row_t<RangeT>, std::ranges::range_reference_t<RangeT>>) and
-    (std::is_lvalue_reference_v<overlap_geometry_t<RangeT, LensT>> ||
+    (std::is_reference_v<overlap_geometry_t<RangeT, LensT>> ||
      std::move_constructible<std::remove_cvref_t<overlap_geometry_t<RangeT, LensT>>>);
 
 template <typename RangeT, typename LensT>
@@ -500,8 +459,8 @@ class overlap_cursor final
 
     clip_geometry<const LensT&> projection;
 
-    overlap_observation<std::ranges::range_reference_t<RangeT>> row;
-    overlap_observation<overlap_geometry_t<RangeT, LensT>> geometry;
+    ceph::salad::datum::detail::range_observation<std::ranges::range_reference_t<RangeT>> row;
+    ceph::salad::datum::detail::range_observation<overlap_geometry_t<RangeT, LensT>> geometry;
 
 public:
     using cut_type = overlap_cut_t<RangeT, LensT>;

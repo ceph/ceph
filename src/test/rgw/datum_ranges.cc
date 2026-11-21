@@ -1928,6 +1928,12 @@ TEST_CASE("range consumers honor ADL when data members hide range access")
     CHECK(first == std::array {'a', 'b'});
     CHECK(last == std::array {'c', 'd'});
 
+    first.fill('x');
+    last.fill('x');
+    CHECK(4 == datum::scatter_bytes(fragments, destination));
+    CHECK(first == std::array {'a', 'b'});
+    CHECK(last == std::array {'c', 'd'});
+
     using domain = mechanics_domain<int>;
     using query = iv::query<domain>;
     const range_lookup_test::source<query, 2> intervals {{query::closed(1, 2), query::closed(2, 3)}};

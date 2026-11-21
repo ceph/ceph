@@ -13,6 +13,7 @@ gives the setup commands.
 | Design or port a handler with explicit contracts | [Developer’s guide](developer-guide.md) |
 | Understand decode-once processing and publication | [Values and evaluation](developer-guide.md#decode-once-then-use-the-value) and [failure and publication](developer-guide.md#decide-failure-and-publication-together) |
 | Copy a byte range into ordinary storage | [Fragmented byte copying](../tutorial.md#1-hello-world--in-pieces) |
+| Transfer bytes between independently split buffers | [Fragment transfer](../tutorial.md#transfer-between-fragmented-buffers) and the [complete program](../examples/fragment_transfer.cpp) |
 | Append a range or join fragments into a string | [First lesson variation](../tutorial.md#1-hello-world--in-pieces) |
 | Compose a path supplied as a range of segments | [Key composition variation](../tutorial.md#4-put-2-before-10) |
 | Read data split across buffers | [hello, world! — in pieces](../tutorial.md#1-hello-world--in-pieces) |

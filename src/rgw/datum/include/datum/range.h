@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <expected>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -79,6 +80,49 @@ concept compatible_result_errors =
 template <typename T>
 concept acceptance_result = std::same_as<T, std::remove_cvref_t<T>> and
     std::same_as<typename result_traits<T>::value_type, acceptance>;
+
+// Keep a current element alive through scoped observation. Borrow references without moving;
+// retain values until reset, preserving cv qualification and mutable metadata:
+template <typename ReferenceT>
+class range_observation final
+{
+    using value_type = std::remove_cvref_t<ReferenceT>;
+    using storage_type = std::conditional_t<std::is_reference_v<ReferenceT>,
+                                            std::remove_reference_t<ReferenceT>*,
+                                            std::optional<value_type>>;
+
+    storage_type storage {};
+
+public:
+    constexpr explicit operator bool() const noexcept { return static_cast<bool>(storage); }
+
+    constexpr auto& get() noexcept { return *storage; }
+    constexpr const auto& get() const noexcept { return *storage; }
+
+    template <typename ValueT>
+    constexpr void emplace(ValueT&& value)
+    {
+        if constexpr (std::is_reference_v<ReferenceT>) {
+            storage = std::addressof(value);
+        }
+
+        if constexpr (!std::is_reference_v<ReferenceT>) {
+            storage.emplace(std::forward<ValueT>(value));
+        }
+    }
+
+    constexpr void reset() noexcept
+    {
+        if constexpr (std::is_reference_v<ReferenceT>) {
+            storage = nullptr;
+        }
+
+        if constexpr (!std::is_reference_v<ReferenceT>) {
+            storage.reset();
+        }
+    }
+
+};
 
 } // detail
 

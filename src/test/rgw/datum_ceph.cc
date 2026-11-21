@@ -1,5 +1,6 @@
 // Native byte ownership and the ordinary Ceph declaration dialect.
 #include <ceph-datum.h>
+#include <datum/bytes.h>
 
 #include <array>
 #include <cstddef>
@@ -165,6 +166,23 @@ TEST_CASE("Ceph byte vocabulary supplies standard fragments and checked copying"
     datum::copy(source, 2, observed);
     CHECK(observed[0] == 'c');
     CHECK(observed[1] == 'd');
+}
+
+TEST_CASE("Ceph fragment views transfer into independently segmented ordinary storage")
+{
+    const auto source = fragmented_input();
+    auto blocks = datum::fragments(source);
+    std::array<char, 3> first {};
+    std::array<std::byte, 4> last {};
+    last.fill(std::byte {'x'});
+    const std::array<std::span<std::byte>, 2> destination {
+        std::as_writable_bytes(std::span {first}), std::span {last}
+    };
+
+    CHECK(6 == datum::scatter_bytes(blocks, destination));
+    CHECK(first == std::array {'a', 'b', 'c'});
+    CHECK(last == std::array {std::byte {'d'}, std::byte {'e'}, std::byte {'f'}, std::byte {'x'}});
+    CHECK(source.to_str() == "abcdef");
 }
 
 TEST_CASE("Ceph whole-source copies return the written prefix and preserve capacity failures")

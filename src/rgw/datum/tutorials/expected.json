@@ -3,6 +3,7 @@
   "developer_flow": "returned: 7\noffered: 3, consumed: 2, accepted: 1\nresume index: 2\nmalformed page: no reply published\n",
   "overlap_reads": "object 7: logical 12, backing 102, length 3\nobject 7: logical 16, backing 106, length 2\nobject 9: logical 24, backing 200, length 2\npieces: 3\n",
   "packed_payload": "logical 12, packed 6, length 2\nlogical 16, packed 10, length 1\nlogical 42, packed 18, length 1\nselected: ghks\npieces: 3\n",
+  "fragment_transfer": "copied: 6\nfirst: bc\nlast: defg.\n",
   "01_hello_fragments": "hello, world!\n",
   "02_half_interval_interlude": "A: [1, 2, 3, 4, 5]\nB: [3, 4, 5, 6, 7]\nA union B: [1, 2, 3, 4, 5, 6, 7]\nA intersection B: [3, 4, 5]\nA minus B: [1, 2]\n",
   "02_half_interval_interlude_variation": "A: [1, 2, 3, 4, 5]\nB: [7, 8, 9]\nA union B: [1, 2, 3, 4, 5, 7, 8, 9]\nA intersection B: []\nA minus B: [1, 2, 3, 4, 5]\n",

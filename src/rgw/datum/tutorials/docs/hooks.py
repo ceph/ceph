@@ -196,6 +196,9 @@ def on_files(files, config):
         "", "The [packed-payload program](examples/packed_payload.cpp) maps sparse logical "
         "selections into fragmented payload bytes. Its [expected output](expected/packed_payload.txt) "
         "is checked by the `packed_payload` target.",
+        "", "The [fragment-transfer program](examples/fragment_transfer.cpp) copies a payload "
+        "selection into independently segmented writable storage. Its "
+        "[expected output](expected/fragment_transfer.txt) is checked by the `fragment_transfer` target.",
     ]) + "\n")
 
     archive = io.BytesIO()

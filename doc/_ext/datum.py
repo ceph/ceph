@@ -51,6 +51,8 @@ def guide():
         '05-labeled-slices', 'align-two-independently-segmented-sources')
     links['select-from-a-packed-sparse-payload'] = (
         '05-labeled-slices', 'select-from-a-packed-sparse-payload')
+    links['transfer-between-fragmented-buffers'] = (
+        '01-hello-fragments', 'transfer-between-fragmented-buffers')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
         links[slug(title)] = ('build-and-run', nodes.make_id(title))
     return text, sections, chapters, links
@@ -154,6 +156,10 @@ def source_read(app, docname, source):
                     'selections into fragmented payload bytes. Its '
                     '[expected output](expected/packed_payload.txt) is checked by '
                     'the `packed_payload` target.\n')
+        content += ('\nThe [fragment-transfer program](examples/fragment_transfer.cpp) copies a payload '
+                    'selection into independently segmented writable storage. Its '
+                    '[expected output](expected/fragment_transfer.txt) is checked by '
+                    'the `fragment_transfer` target.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:

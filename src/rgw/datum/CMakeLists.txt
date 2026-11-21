@@ -23,8 +23,7 @@ endif()
 
 include(core.cmake)
 
-# Native vocabulary is usable by ordinary Ceph C++20 declarations. Its implementation
-# consumers select the newer core/codec dialect privately when needed.
+# Native vocabulary and portable core operations share the required C++23 baseline.
 add_library(datum_ceph INTERFACE)
 add_library(datum::ceph ALIAS datum_ceph)
 target_include_directories(datum_ceph INTERFACE
@@ -33,7 +32,7 @@ target_include_directories(datum_ceph INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 # Ceph creates ceph-common after registering this component. Resolve it at generation.
 target_link_libraries(datum_ceph INTERFACE "$<TARGET_NAME_IF_EXISTS:ceph-common>")
-target_compile_features(datum_ceph INTERFACE cxx_std_20)
+target_compile_features(datum_ceph INTERFACE cxx_std_23)
 
 # Select the preferred native C++26 data path explicitly when it is available.
 add_library(datum_reflection INTERFACE)
