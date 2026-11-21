@@ -190,9 +190,11 @@
     "vocabulary": [
       "byte_extent",
       "interval::byte_query",
-      "interval::bounds"
+      "interval::bounds",
+      "interval::observe_intervals",
+      "interval::extent_of"
     ],
-    "sha256": "3745ff0f92762f343236cb10353d8404db980c99c9966dc12085683a8d8cfac0"
+    "sha256": "0314ce4926715331ffd0aa6368977916707da57e67c41894b6f02f29c962837c"
   },
   "runnable_key_range": {
     "program": "key-range-example.cc",
@@ -208,7 +210,7 @@
     ],
     "scope": "Standalone byte-key prefix/marker selection using a standard filter view, followed by lexicographic record ordering and a standard Ranges pair projection.",
     "expected_stdout": "photos/30\nphotos/70\nphotos/30@9\nphotos/30@2\nphotos/70@4\n",
-    "sha256": "c32db4253c9d277b4b64700ef1199bca231f8322319dc1dce2e83769fdb53507",
+    "sha256": "33c855c8dd95569ecc424928992e8b39a2a776c350ad407934a24c8d545d2f52",
     "interactive_stages": [
       {
         "start": null,
@@ -288,6 +290,23 @@
     "design": "Standard Ranges and C++23 range insertion; native Ceph containers are interoperability examples."
   },
   "presentation_adaptations": {
+    "cache-gap-example.cc": {
+      "base_ref": "0c360a68d2ed6d7fa7a84ca59cf8951e67c61358",
+      "base_sha256": "3745ff0f92762f343236cb10353d8404db980c99c9966dc12085683a8d8cfac0",
+      "changes": [
+        "Observe the difference directly instead of compiling a collection for one traversal.",
+        "Use extent_of to convert each finite half-open result into checked byte geometry."
+      ],
+      "scope": "Applied standalone example; original Ceph read-path reference retained, no consumer migration."
+    },
+    "key-range-example.cc": {
+      "base_ref": "0c360a68d2ed6d7fa7a84ca59cf8951e67c61358",
+      "base_sha256": "c32db4253c9d277b4b64700ef1199bca231f8322319dc1dce2e83769fdb53507",
+      "changes": [
+        "Remove unused compiled coverage; the name filter evaluates contains directly."
+      ],
+      "scope": "Runnable names and record-ordering illustration; native endpoint adapter excerpts remain separate."
+    },
     "integration-listing.cpp.txt": {
       "sha256": "1db386e2572d7c82bc0944f45a50fdd60f5ad3ac13cd96a04abe6f7a142216bf",
       "changes": [

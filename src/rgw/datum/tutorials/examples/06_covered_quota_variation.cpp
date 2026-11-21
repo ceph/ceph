@@ -1,6 +1,5 @@
-// Use a metric to take up to a quota of covered bytes without counting gaps.
+// Take a bounded covered-byte quota during constant evaluation:
 
-#include <array>
 #include <print>
 #include <cstdint>
 
@@ -13,17 +12,17 @@ int main()
 {
     using interval = iv::byte_query;
 
-    // A covered byte has a position inside one of these intervals; gaps consume no quota.
-    const std::array ranges {
+    // Retain two canonical pieces for measurement and selection; gaps consume no quota:
+    constexpr auto coverage = iv::compile_intervals<2>(iv::set_union(
         interval::closed_open(0, 3),
         interval::closed_open(10, 15)
-    };
-    const auto coverage = iv::compile_intervals(ranges);
+    ));
 
-    const std::uint64_t quota = 10;
+    constexpr std::uint64_t quota = 10;
 
     // Count only covered bytes toward the quota:
-    const auto selected = iv::take(coverage, quota, iv::bytes);
+    constexpr auto selected = iv::take<2>(coverage, quota, iv::bytes);
+    static_assert(iv::measure(selected, iv::bytes) == 8);
 
     std::println("on the menu: {} bytes", iv::measure(coverage, iv::bytes));
     std::println("order: {} bytes", quota);

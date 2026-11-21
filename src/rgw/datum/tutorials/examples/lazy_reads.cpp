@@ -11,7 +11,7 @@ namespace iv = datum::interval;
 
 int main()
 {
-    const auto requested = iv::compile_intervals(iv::byte_query::closed_open(0, 24));
+    constexpr auto requested = iv::byte_query::closed_open(0, 24);
     const std::array cached_bounds {iv::byte_query::closed_open(4, 8),
                                     iv::byte_query::closed_open(12, 20)};
     const auto cached = iv::compile_intervals(cached_bounds);

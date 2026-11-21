@@ -91,6 +91,32 @@ look ahead. Capacity limits entries and throws without returning a partial batch
 bound point allocations or input preparation. The [read planner](../examples/read_plan.cpp)
 uses this form to avoid collecting missing coverage and a vector-backed batch.
 
+## Choose preparation for the consumer
+
+Use `contains(expression, point)` when filtering records by membership. For a single pass over
+native/admitted algebra, use `observe_intervals`; a byte consumer can turn each finite half-open
+part into `byte_extent` with `extent_of`. For a bounded batch, pass the algebra directly to
+`take<Capacity>`. These paths avoid collecting coverage just to traverse it once.
+
+Retain `compile_intervals` where it provides something the caller needs: normalization of raw
+unordered entries, repeated geometry consumers, or owned point values that must survive the
+input. Use its bounded form when an expression's output has a known entry bound. Keep
+`evaluate(expression, workspace)` where preparation must obey explicit work/intermediate-entry
+limits. Lazy output and bounded output capacity do not enforce those workspace limits.
+
+Choose `visit_overlaps` for synchronous alignment of ordered, internally disjoint record and
+selection streams, including input producers returning values. Use `clip_view` when its stable,
+forward inputs and prevalidation are useful for repeatable traversal. Choose `visit_packed_overlaps`
+when sparse logical origins correspond to a densely packed payload; it counts every preceding
+origin's bytes, even when that origin is unselected.
+
+Known numeric geometry can use bounded compilation and `take<Capacity>` during C++23 constant
+evaluation. The [constant-plan example](../examples/constexpr_plan.cpp) checks the actual pieces
+and measure with `static_assert`; it prints only after compilation. Inline entries allow a plan
+to remain a `constexpr` value. Custom domains and callbacks must also support constant evaluation;
+native I/O and payload ownership remain runtime concerns. See the
+[bibliography's C++23 rules](../tutorial.md#bibliography).
+
 ## Own what must survive
 
 Borrow for synchronous calls whose references do not escape. Retain an owner when a callback,

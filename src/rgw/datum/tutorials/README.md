@@ -6,6 +6,17 @@ checks the same record-view examples with the native C++26 reflection backend.
 
 All sections and their examples are provisional while Datum continues to evolve.
 
+The lessons use one-pass overlap traversal for synchronous cuts, bounded quota plans with
+`static_assert`, and fragmented transfer where both sides have separate buffers. See
+[how to choose preparation](docs/developer-guide.md#choose-preparation-for-the-consumer)
+and the [complete constant-plan program](examples/constexpr_plan.cpp).
+
+The shared [supplemental example catalog](examples.json) supplies CMake and both documentation
+publishers. It includes the complete read planner, streaming/transfer programs, and worked
+cache-gap, key-range, and native-buffer comparisons. Downloaded archives include those comparison
+sources and their provenance under `comparisons/`; the repository keeps their authoritative
+sources with the Ceph documentation. Expected outputs remain in [expected.json](expected.json).
+
 Read the [tutorial](tutorial.md), starting with
 [hello, world! — in pieces](tutorial.md#1-hello-world--in-pieces).
 The [build appendix](tutorial.md#appendix-a-building-and-running) gives the setup,

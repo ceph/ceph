@@ -56,6 +56,7 @@ watch:
   - CMakeLists.txt
   - tutorial.md
   - examples
+  - examples.json
   - expected.json
   - figures
   - cmake

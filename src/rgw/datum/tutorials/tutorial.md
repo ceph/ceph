@@ -427,6 +427,8 @@ for (const auto& interval : missing) {
 
 The [lazy-read program](examples/lazy_reads.cpp) adapts missing coverage to ordinary byte
 extents with `views::transform`, then uses `visit_range` to stop after two planned reads.
+Its single request remains an interval value; cache entries are normalized once from a raw
+array. Only the resulting difference is lazy, so no intermediate missing-coverage vector is needed.
 Use `visit_intervals` when the callback should receive scoped canonical interval values.
 Both visitation functions support their existing acceptance, progress, and expected-error
 contracts. A stop or failure performs no further iterator increment. Preparing a canonical
@@ -552,11 +554,11 @@ fixed-width hex: 2, 15, 16
 
 Two cats, Miso and Mochi, have supplied a conversation with naps at either end.
 Select bytes `[4, 12)` to trim the naps, keeping each piece attached to its speaker's
-name. Datum's `clip_view` keeps that source association as it clips the records.
+name. Datum's `visit_overlaps` keeps that source association while consuming each cut.
 
 The [complete program](examples/05_labeled_slices.cpp) includes
 `<datum/interval/clip.h>`. The built-in `iv::byte_query` supplies unsigned byte
-positions and their ordering; `interval` is a short alias for that type.
+positions and their ordering. Plain byte extents also supply this geometry directly.
 Each ordinary record carries a name, its starting byte position, and its text:
 
 ```cpp
@@ -568,16 +570,14 @@ struct text_record final
 };
 ```
 
-Create the records and prepare the selection with `compile_intervals`:
+Create the records and a one-entry byte selection:
 
 ```cpp
-using interval = iv::byte_query;
-
 const std::array records {
     text_record {"Miso", 0, "zzz meow"},
     text_record {"Mochi", 8, "purr zzz"}
 };
-const auto selection = iv::compile_intervals(interval::closed_open(4, 12));
+const std::array selection {datum::byte_extent {4, 8}};
 ```
 
 These intervals are half-open: the lower endpoint is included, and the upper
@@ -588,26 +588,18 @@ endpoint is excluded. The records meet at position 8 without overlapping:
 | `Miso` | `[0, 8)` | `[4, 8)` |
 | `Mochi` | `[8, 16)` | `[8, 12)` |
 
-`clip_view` takes the source records, the canonical selection, and a geometry lens.
-The lens reads one record and returns a plain `byte_extent {offset, length}`.
-Datum converts that geometry into checked half-open bounds:
-
-```cpp
-// Keep the source record attached to each clipped interval:
-const iv::clip_view cuts {records, selection, [](const text_record& row) {
-    return datum::byte_extent {row.offset, row.text.size()};
-}};
-```
-
-`clip_view` checks that the records' extents are ordered and disjoint. It produces
-separate cuts at record boundaries. Each cut exposes its original record through
-`source()` and its selected bounds through `lower()` and `upper()`.
+`visit_overlaps` takes both inputs, a consumer, and a geometry lens for the records.
+The lens returns `byte_extent {offset, length}`; Datum converts it into checked half-open
+bounds. Both inputs must already be ordered and internally disjoint. This one-pass operation
+performs no validation prepass and accepts input ranges and records produced by value.
+Each cut exposes its original record through `source()` and its selected bounds through
+`lower()` and `upper()`.
 ([7](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/clip.h))
 
 Use the cut's global bounds to observe the matching text within its source record:
 
 ```cpp
-for (const auto& cut : cuts) {
+const auto progress = iv::visit_overlaps(records, selection, [](const auto& cut, const auto&) {
     const auto& record = cut.source();
     const auto lower = cut.lower().key();
     const auto upper = cut.upper().key();
@@ -615,17 +607,20 @@ for (const auto& cut : cuts) {
     // Convert global cut bounds to a substring within that source record:
     std::println("{} [{}, {}): \"{}\"", record.name, lower, upper,
                  record.text.substr(lower - record.offset, upper - lower));
-}
+    return datum::acceptance::accept;
+}, [](const text_record& row) {
+    return datum::byte_extent {row.offset, row.text.size()};
+});
 ```
 
 `lower - record.offset` is the starting position within that record's text;
 `upper - lower` is the selected byte count. `substr` returns another
 `std::string_view`, observing the original characters.
 
-Read each cut's bounds before the iterator advances: they borrow from the iterator
-and the selection. Keep the records, selection, and backing text valid, and leave
-the records and selection unchanged during traversal. The loop consumes each cut
-within those lifetimes.
+Read each cut and its source during the callback. These observations can refer to the
+current input value or projected geometry; they must not escape. Keep backing text valid
+through traversal. `progress.accepted` is two here. Returning `accept_and_stop` instead
+would accept that cut and stop before another input increment.
 
 The output keeps both speakers' names:
 
@@ -636,14 +631,22 @@ Mochi [8, 12): "purr"
 
 ### A small variation
 
-Start the selection exactly at the record boundary, as in the
-[complete variation](examples/05_labeled_slices_variation.cpp):
+The [complete variation](examples/05_labeled_slices_variation.cpp) starts the selection
+at the record boundary and demonstrates `clip_view` for stable, repeatable inputs:
 
 ```cpp
-const auto selection = iv::compile_intervals(interval::closed_open(8, 12));
+using interval = iv::byte_query;
+constexpr auto selection = iv::compile_intervals<1>(interval::closed_open(8, 12));
+const iv::clip_view cuts {records, selection, [](const text_record& row) {
+    return datum::byte_extent {row.offset, row.text.size()};
+}};
 ```
 
-Miso's record ends at its excluded endpoint, 8, so it contributes no cut:
+`clip_view` validates ordered, disjoint record geometry before producing cuts. It requires
+forward inputs with stable geometry and canonical selection. Choose it when those checks
+and repeatable range traversal are useful; use `visit_overlaps` for synchronous one-pass work.
+The variation prints each cut in a range loop, keeping the view, selection, records, and backing
+text alive. Miso's record ends at its excluded endpoint, 8, so it contributes no cut:
 
 ```text
 Mochi [8, 12): "purr"
@@ -740,12 +743,11 @@ The [complete program](examples/06_covered_quota.cpp) includes
 `iv::byte_query`. Prepare the half-open coverage:
 
 ```cpp
-// A covered byte has a position inside one of these intervals; gaps consume no quota.
-const std::array ranges {
+// Retain two canonical pieces for measurement and selection; gaps consume no quota:
+constexpr auto coverage = iv::compile_intervals<2>(iv::set_union(
     interval::closed_open(0, 3),
     interval::closed_open(10, 15)
-};
-const auto coverage = iv::compile_intervals(ranges);
+));
 ```
 
 An ordered domain tells Datum how to compare positions. A metric adds the distance
@@ -755,15 +757,18 @@ checked arithmetic for this byte geometry. Pass `take` the canonical coverage, t
 byte quota, and the supplied metric:
 
 ```cpp
-const std::uint64_t quota = 5;
+constexpr std::uint64_t quota = 5;
 
 // Count only covered bytes toward the quota:
-const auto selected = iv::take(coverage, quota, iv::bytes);
+constexpr auto selected = iv::take<2>(coverage, quota, iv::bytes);
+static_assert(iv::measure(selected, iv::bytes) == 5);
 ```
 
 `take` walks the coverage in order, counting only covered distances and trimming
 the final interval when the remaining quota runs out. The result owns its selected
-intervals. It describes byte positions, without reading or retaining payload bytes;
+intervals in two inline slots. `constexpr` and the assertion check the calculation during
+compilation. We retain `coverage` because the program also measures all available bytes.
+It describes byte positions, without reading or retaining payload bytes;
 use those positions with clipping or copying when you need the data itself.
 Selected geometry must be finite half-open. `take` also accepts native/admitted algebra
 directly, using its existing cursors instead of collecting intermediate coverage.
@@ -804,7 +809,7 @@ Ask for ten bytes, as in the
 [complete variation](examples/06_covered_quota_variation.cpp):
 
 ```cpp
-const std::uint64_t quota = 10;
+constexpr std::uint64_t quota = 10;
 ```
 
 `take` returns all eight available bytes. The quota is an upper limit;
@@ -840,6 +845,31 @@ subtraction and advancement. The compiler checks the operations' types, not thes
 Use existing `difference(coverage, batch)` to describe remaining coverage when needed;
 native progress, effects, and retry ownership stay with the caller. The measured-prefix
 research is collected in the [bibliography](#bibliography).
+
+### Keep a plan at compile time
+
+Known byte geometry can use the same operations during C++23 constant evaluation. The
+[complete constant-plan program](examples/constexpr_plan.cpp) subtracts cached coverage
+and keeps a bounded five-byte batch:
+
+```cpp
+constexpr auto reads = iv::take<2>(
+    iv::difference(iv::byte_query::closed_open(0, 15), iv::byte_query::closed_open(3, 10)),
+    5, iv::bytes);
+
+static_assert(reads.size() == 2);
+static_assert(reads[0] == iv::byte_query::closed_open(0, 3));
+static_assert(reads[1] == iv::byte_query::closed_open(10, 12));
+static_assert(iv::measure(reads, iv::bytes) == 5);
+```
+
+The program prints these planned positions at runtime; actual I/O remains the caller's job.
+Use bounded compilation or `take<Capacity>` to retain these numeric plans as `constexpr`
+objects. C++23 permits transient allocation during constant evaluation when that storage is
+released within the evaluation; a nonempty vector allocation cannot remain in the resulting
+`constexpr` object. Inline entries avoid that allocation for this byte domain. Custom points,
+metrics, and callbacks must themselves support constant evaluation. See N4950's constant
+expression rules in the [bibliography](#bibliography).
 
 ## 7 Move it and keep reading
 
@@ -1645,7 +1675,7 @@ and `iv` aliases `datum::interval`.
 using interval = iv::byte_query;
 
 // Store the selection and quota without applying the quota:
-const auto order = plan::with_control(
+constexpr auto order = plan::with_control(
     plan::make_query(interval::closed_open(0, 8)), std::uint64_t {5});
 ```
 
@@ -1661,8 +1691,8 @@ also shows a compatible plain record.
 Read the selection and retrieve the control by its type:
 
 ```cpp
-const auto coverage = iv::compile_intervals(order.intervals);
-const auto quota = plan::control<std::uint64_t>(order);
+constexpr auto coverage = plan::compile_intervals<1>(order);
+constexpr auto quota = plan::control<std::uint64_t>(order);
 
 std::println("requested: {} bytes", iv::measure(coverage, iv::bytes));
 std::println("quota: {} bytes", quota);
@@ -1677,7 +1707,8 @@ The program explicitly applies the quota using the operation from section 6:
 
 ```cpp
 // This example interprets its uint64_t control as a covered-byte quota:
-const auto selected = iv::take(coverage, quota, iv::bytes);
+constexpr auto selected = iv::take<1>(order.intervals, quota, iv::bytes);
+static_assert(iv::measure(selected, iv::bytes) == 5);
 for (const auto& span : selected) {
     std::println("[{}, {})", span.lower().key(), span.upper().key());
 }
@@ -1697,6 +1728,9 @@ served: 5 bytes
 
 Keeping the request as data lets one part of a program construct it and another
 choose how to carry it out. Here, the explicit `take` call supplies that behavior.
+The compiled `coverage` serves the full-request measurement; quota selection consumes
+`order.intervals` directly. Its single inline slot and numeric geometry let the complete
+selection run at compile time. Runtime inputs use the same API.
 
 ### A small variation
 
@@ -1705,7 +1739,7 @@ the stored quota to ten:
 
 ```cpp
 // Store the selection and quota without applying the quota:
-const auto order = plan::with_control(
+constexpr auto order = plan::with_control(
     plan::make_query(interval::closed_open(0, 8)), std::uint64_t {10});
 ```
 
@@ -2054,7 +2088,7 @@ retained: meow
 
 ### A small variation
 
-*Copy a Ceph byte range into an independent bufferlist, then read its fragments with core copy.*
+*Copy a Ceph byte range into an independent bufferlist, then scatter it into split storage.*
 
 The [complete variation](examples/18_ceph_bytes_variation.cpp) changes the ownership
 choice. `source` is again a `ceph::buffer::list` containing `Miso: meow`. Passing the
@@ -2073,15 +2107,19 @@ Now expose the snapshot's segments as standard spans and use the pure core:
 
 ```cpp
 const auto fragments = datum::fragments(snapshot);
-std::array<char, 4> output {};
-datum::copy(fragments, output);
+std::array<char, 1> first {};
+std::array<char, 4> last {'.', '.', '.', '.'};
+const std::array<std::span<char>, 2> output {std::span {first}, std::span {last}};
+const auto copied = datum::scatter_bytes(fragments, output);
 ```
 
 `fragments(snapshot)` adapts the Ceph list to a standard view whose elements are
-`std::span<const char>` borrowing each native segment. The following `copy` is the
-core `<datum/bytes.h>` operation: it sees a range of spans and the output array,
-with no Ceph storage type in its interface. It copies the snapshot's complete
-four-byte contents; the returned span covers the bytes written into `output`.
+`std::span<const char>` borrowing each native segment. `scatter_bytes` is the core
+`<datum/bytes.h>` operation: it sees source spans and writable destination spans.
+It copies the four bytes across the destination boundary and returns the count four;
+the last dot remains unchanged. Source and destination storage must be disjoint and
+destination fragments must not alias. Both inputs must support repeatable forward
+traversal so capacity can be checked before writing. Include `<span>` for these spans.
 
 This view borrows the list and its bytes. Its iterators also depend on the view
 object, so keep both the list and the view alive while iterating. That is why the
@@ -2224,6 +2262,13 @@ cmake --build build --parallel 2 --target 18_ceph_bytes 18_ceph_bytes_variation
 ctest --test-dir build --output-on-failure -R '^18_ceph_bytes(_variation)?$'
 ```
 
+The same option enables the catalog's `comparison_fragment` target. Build and check it with:
+
+```sh
+cmake --build build --parallel 2 --target comparison_fragment
+ctest --test-dir build --output-on-failure -R '^comparison_fragment$'
+```
+
 The build needs generated `acconfig.h` and `ceph_release.h`, initialized fmt headers, and
 `libceph-common` from that compatible build. The Ceph and RGW options are
 independent; ordinary core examples do not link native libraries.
@@ -2295,8 +2340,14 @@ ctest --test-dir build --output-on-failure -R '^01_hello_fragments$'
 The check requires a successful exit, empty standard error, and exact standard
 output matching the example's entry in [the expected outputs](expected.json),
 including its final newline.
+The tutorial targets also keep the programs' `assert` checks enabled in Release builds
+with GCC, Clang, and MSVC. The worked comparisons use them to check equivalent results,
+ownership, and native cursor behavior in addition to their printed output.
 
-Every executable and test uses its source filename without `.cpp` as its name.
+Lesson executables and tests use their source filename without `.cpp` as their name.
+Supplemental targets, including the three worked comparisons, are named by the shared
+[example catalog](examples.json). That catalog drives CMake and both documentation collections;
+the archive includes comparison sources under `comparisons/` with their source notes.
 To try another lesson and its variation, set `example` to a name from this table:
 
 | Lesson | `example` | Additional setup |
@@ -2389,15 +2440,15 @@ identify sources in the separate local RGW integration snapshot described in the
    See `compose`, `encoded_key`,
    `decimal_segment`, and `fixed_width_hexadecimal_segment`.
 7. Datum contributors. [*Source-preserving interval clipping*](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/clip.h).
-   See `clip_view`, `cut_view`,
-   and their source and bounds accessors.
+   See `visit_overlaps`, `visit_packed_overlaps`, `clip_view`, and `cut_view`,
+   including their scoped source and bounds observations.
 8. Datum contributors. [*Coverage metrics and quotas*](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/metric.h).
    See the supplied `bytes` metric, `measure`, and `take`.
 9. Datum contributors. [*Payload ownership and retained projections*](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/ownership.h).
    See `ownership_traits`,
    `owning_value`, and `retained_view`.
 10. Datum contributors. [*Byte observations and slice descriptors*](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/bytes.h).
-    See `copy`, `fragments`, `write_fragments`, `byte_cursor`, and `byte_slice`.
+    See `copy`, `scatter_bytes`, `fragments`, `write_fragments`, `byte_cursor`, and `byte_slice`.
 11. Datum contributors. [*Record views, field profiles, and wire schemas*](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/record.h).
     See `member_view`, `view_of`,
     `member_fields`, and `binary_fields`. The
@@ -2485,6 +2536,9 @@ identify sources in the separate local RGW integration snapshot described in the
   [view requirements](https://timsong-cpp.github.io/cppwp/n4950/range.view). These specify
   ref/owning adaptation and copying-cost contracts for standard pipelines. The expression
   observation remains a move-only range.
+- WG21 N4950, [constant expressions](https://timsong-cpp.github.io/cppwp/n4950/expr.const).
+  The C++23 allocation rules permit temporary storage released within evaluation. Bounded
+  numeric interval plans retain their entries inline and can survive as `constexpr` values.
 - Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
   `isEmpty`, `encloses`, `equals`, and `canonical` explain why order-only bound operations
   need not determine discrete membership or membership-equivalent representations.

@@ -1,4 +1,4 @@
-// Store a byte selection and quota together, then explicitly take up to that many covered bytes.
+// Store a byte selection and quota, then select a bounded plan at compile time:
 
 #include <print>
 #include <cstdint>
@@ -15,16 +15,17 @@ int main()
     using interval = iv::byte_query;
 
     // Store the selection and quota without applying the quota:
-    const auto order = plan::with_control(
+    constexpr auto order = plan::with_control(
         plan::make_query(interval::closed_open(0, 8)), std::uint64_t {5});
-    const auto coverage = iv::compile_intervals(order.intervals);
-    const auto quota = plan::control<std::uint64_t>(order);
+    constexpr auto coverage = plan::compile_intervals<1>(order);
+    constexpr auto quota = plan::control<std::uint64_t>(order);
 
     std::println("requested: {} bytes", iv::measure(coverage, iv::bytes));
     std::println("quota: {} bytes", quota);
 
     // This example interprets its uint64_t control as a covered-byte quota:
-    const auto selected = iv::take(coverage, quota, iv::bytes);
+    constexpr auto selected = iv::take<1>(order.intervals, quota, iv::bytes);
+    static_assert(iv::measure(selected, iv::bytes) == 5);
     for (const auto& span : selected) {
         std::println("[{}, {})", span.lower().key(), span.upper().key());
     }

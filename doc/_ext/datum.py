@@ -14,6 +14,7 @@ from sphinx import addnodes
 import m2r2
 
 COURSE = Path(__file__).resolve().parents[2] / 'src/rgw/datum/tutorials'
+COMPARISONS = Path(__file__).resolve().parents[1] / 'dev/radosgw/datum/in-practice-assets'
 PREFIX = 'dev/radosgw/datum/'
 FENCES = re.compile(r'(^```[^\n]*\n.*?^```[ \t]*$)', re.M | re.S)
 PARTS = [
@@ -55,6 +56,7 @@ def guide():
         '01-hello-fragments', 'transfer-between-fragmented-buffers')
     links['observe-algebra-as-a-range'] = ('03-normalize-ranges', 'observe-algebra-as-a-range')
     links['bounded-read-batches'] = ('06-covered-quota', 'bounded-read-batches')
+    links['keep-a-plan-at-compile-time'] = ('06-covered-quota', 'keep-a-plan-at-compile-time')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
         links[slug(title)] = ('build-and-run', nodes.make_id(title))
     return text, sections, chapters, links
@@ -65,13 +67,26 @@ def promote(text):
                    for index, part in enumerate(FENCES.split(text)))
 
 
+def example_source(path):
+    if path.startswith('comparisons/'):
+        return COMPARISONS / path.removeprefix('comparisons/')
+    return COURSE / path
+
+
 def archive(app):
     target = Path(app.doctreedir) / 'datum-tutorials.zip'
     with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(COURSE.rglob('*')):
             relative = path.relative_to(COURSE)
             if path.is_file() and not set(relative.parts) & {'build', '__pycache__', '.git'}:
+                app.env.note_dependency(str(path))
                 bundle.write(path, 'datum-tutorials/' + relative.as_posix())
+        for example in json.loads((COURSE / 'examples.json').read_text(encoding='utf-8')):
+            if example['source'].startswith('comparisons/'):
+                app.env.note_dependency(str(example_source(example['source'])))
+                bundle.write(example_source(example['source']), 'datum-tutorials/' + example['source'])
+        app.env.note_dependency(str(COMPARISONS / 'source-notes.json'))
+        bundle.write(COMPARISONS / 'source-notes.json', 'datum-tutorials/comparisons/source-notes.json')
     return target
 
 
@@ -124,6 +139,7 @@ def source_read(app, docname, source):
     elif key == 'references':
         content = '# References\n' + promote(text.split('## Bibliography\n', 1)[1])
     elif key == 'examples':
+        app.env.note_dependency(str(COURSE / 'examples.json'))
         archive(app)
         content = ('# Complete examples\n\n[Download the tutorial sources](datum-tutorials.zip), '
                    'then follow [Build and run](build-and-run.rst).\n\n')
@@ -135,36 +151,16 @@ def source_read(app, docname, source):
             content += (f'| [{title}]({name}.rst) | [Program](examples/{stem}.cpp) · '
                         f'[Variation](examples/{stem}_variation.cpp) | [Output](expected/{expected}.txt) · '
                         f'[Variation output](expected/{variation}.txt) |\n')
-        content += ('\n## Interactive read planner\n\n'
-                    'The landing page’s read planner also has a '
-                    '[complete program](examples/read_plan.cpp) and '
-                    '[expected output](expected/read_plan.txt). '
-                    'See [Build and run](build-and-run.rst#run-the-interactive-read-planner-example) '
-                    'to build and check its starting selection.\n')
-        content += ('\n## Developer’s guide\n\n'
-                    '[Decode and prepare a reply](examples/developer_flow.cpp) with '
-                    '[expected output](expected/developer_flow.txt). '
-                    'The [developer’s guide](developer-guide.rst) explains its contracts.\n')
-        content += ('\n## Handled scan failures\n\n'
-                    'The [fallible scan program](examples/fallible_scan.cpp) retains progress and '
-                    'the failing row’s position. Its [expected output](expected/fallible_scan.txt) '
-                    'is checked by the `fallible_scan` target.\n')
-        content += ('\n## Mapped overlap reads\n\n'
-                    'The [mapped-read program](examples/overlap_reads.cpp) preserves source objects '
-                    'while selecting logical ranges and translating backing offsets. Its '
-                    '[expected output](expected/overlap_reads.txt) is checked by the '
-                    '`overlap_reads` target.\n')
-        content += ('\nThe [packed-payload program](examples/packed_payload.cpp) maps sparse logical '
-                    'selections into fragmented payload bytes. Its '
-                    '[expected output](expected/packed_payload.txt) is checked by '
-                    'the `packed_payload` target.\n')
-        content += ('\nThe [fragment-transfer program](examples/fragment_transfer.cpp) copies a payload '
-                    'selection into independently segmented writable storage. Its '
-                    '[expected output](expected/fragment_transfer.txt) is checked by '
-                    'the `fragment_transfer` target.\n')
-        content += ('\nThe [lazy-read program](examples/lazy_reads.cpp) observes missing coverage '
-                    'through a standard range pipeline and stops after two planned reads. Its '
-                    '[expected output](expected/lazy_reads.txt) is checked by the `lazy_reads` target.\n')
+        for example in json.loads((COURSE / 'examples.json').read_text(encoding='utf-8')):
+            name = example['name']
+            content += (f'\n## {example["title"]}\n\n{example["summary"]}\n\n'
+                        f'[Program]({example["source"]}) · [Expected output](expected/{name}.txt) · '
+                        f'CMake target `{name}`.\n')
+            if example['requires_ceph']:
+                content += '\nRequires the optional Ceph vocabulary build and an existing Ceph-common library.\n'
+        content += ('\nThe archive includes the shared [example catalog](examples.json) and worked comparison '
+                    '[source notes](comparisons/source-notes.json). See '
+                    '[Build and run](build-and-run.rst) for optional dependencies.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:
@@ -201,7 +197,7 @@ def doctree_read(app, tree):
         path, separator, anchor = uri.partition('#')
         for prefix in ('tutorials/', '../'):
             asset = path.removeprefix(prefix)
-            if asset.startswith(('examples/', 'expected/', 'figures/', 'cmake/')):
+            if asset.startswith(('examples/', 'comparisons/', 'expected/', 'figures/', 'cmake/')):
                 path = asset
                 break
         if path.startswith('figures/') and len(reference.children) == 1 and isinstance(
@@ -228,9 +224,9 @@ def doctree_read(app, tree):
             if target[1]:
                 reference['refuri'] += '#' + target[1]
             continue
-        if path.startswith(('examples/', 'expected/', 'figures/', 'cmake/')) or path in {
-                'datum-tutorials.zip', 'expected.json'}:
-            actual = COURSE / path
+        if path.startswith(('examples/', 'comparisons/', 'expected/', 'figures/', 'cmake/')) or path in {
+                'datum-tutorials.zip', 'expected.json', 'examples.json'}:
+            actual = example_source(path)
             dependency = actual
             if path == 'datum-tutorials.zip':
                 actual = Path(app.doctreedir) / path

@@ -25,7 +25,7 @@ int main()
         text_record {"Miso", 0, "zzz meow"},
         text_record {"Mochi", 8, "purr zzz"}
     };
-    const auto selection = iv::compile_intervals(interval::closed_open(8, 12));
+    constexpr auto selection = iv::compile_intervals<1>(interval::closed_open(8, 12));
 
     // Keep the source record attached to each clipped interval:
     const iv::clip_view cuts {records, selection, [](const text_record& row) {

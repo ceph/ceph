@@ -14,6 +14,9 @@ from mkdocs.structure.files import File
 from pygments.formatters import HtmlFormatter
 
 PROJECT = Path(__file__).resolve().parent.parent
+COMPARISONS = PROJECT.parents[3] / 'doc/dev/radosgw/datum/in-practice-assets'
+if (PROJECT / 'comparisons').is_dir():
+    COMPARISONS = PROJECT / 'comparisons'
 FENCES = re.compile(r"(^```[^\n]*\n.*?^```[ \t]*$)", re.M | re.S)
 PARTS = [
     ("Bytes, keys, and ranges", 1, 6,
@@ -58,6 +61,7 @@ def reading_links(groups, source):
 
 def on_files(files, config):
     guide = (PROJECT / "tutorial.md").read_text(encoding="utf-8")
+    examples = json.loads((PROJECT / "examples.json").read_text(encoding="utf-8"))
     config.extra["datum_source_url"] = "https://github.com/chardan/ceph/blob/jfw-datum"
 
     source = os.environ.get("DATUM_SOURCE_DIR")
@@ -81,6 +85,11 @@ def on_files(files, config):
     add("stylesheets/code.css", content=HtmlFormatter(style="default").get_style_defs(".codehilite"))
 
     add("expected.json", path=PROJECT / "expected.json")
+    add("examples.json", path=PROJECT / "examples.json")
+    for example in examples:
+        if example["source"].startswith("comparisons/"):
+            add(example["source"], path=COMPARISONS / Path(example["source"]).name)
+    add("comparisons/source-notes.json", path=COMPARISONS / "source-notes.json")
     for name, output in json.loads((PROJECT / "expected.json").read_text(encoding="utf-8")).items():
         add(f"expected/{name}.txt", content=output)
     for directory in ["examples", "figures", "cmake"]:
@@ -176,43 +185,30 @@ def on_files(files, config):
         "# Complete examples", "", "Each lesson has a runnable program and a small variation.",
         "[Download the tutorial sources](datum-tutorials.zip), then follow [Build and run](build-and-run.md).", "",
         "| Lesson | Code | Expected output |", "| --- | --- | --- |", *rows,
-        "", "## Interactive read planner", "",
-        "The landing page's read planner also has a [complete program](examples/read_plan.cpp) "
-        "and [expected output](expected/read_plan.txt). See "
-        "[Build and run](build-and-run.md#run-the-interactive-read-planner-example) "
-        "to build and check its starting selection.",
-        "", "## Developer’s guide", "",
-        "[Decode and prepare a reply](examples/developer_flow.cpp) with "
-        "[expected output](expected/developer_flow.txt). "
-        "The [developer’s guide](developer-guide.md) explains its contracts.",
-        "", "## Handled scan failures", "",
-        "The [fallible scan program](examples/fallible_scan.cpp) retains progress and "
-        "the failing row's position. Its [expected output](expected/fallible_scan.txt) "
-        "is checked by the `fallible_scan` target.",
-        "", "## Mapped overlap reads", "",
-        "The [mapped-read program](examples/overlap_reads.cpp) preserves source objects "
-        "while selecting logical ranges and translating backing offsets. Its "
-        "[expected output](expected/overlap_reads.txt) is checked by the `overlap_reads` target.",
-        "", "The [packed-payload program](examples/packed_payload.cpp) maps sparse logical "
-        "selections into fragmented payload bytes. Its [expected output](expected/packed_payload.txt) "
-        "is checked by the `packed_payload` target.",
-        "", "The [fragment-transfer program](examples/fragment_transfer.cpp) copies a payload "
-        "selection into independently segmented writable storage. Its "
-        "[expected output](expected/fragment_transfer.txt) is checked by the `fragment_transfer` target.",
-        "", "The [lazy-read program](examples/lazy_reads.cpp) observes missing coverage "
-        "through a standard range pipeline and stops after two planned reads. Its "
-        "[expected output](expected/lazy_reads.txt) is checked by the `lazy_reads` target.",
+        *[f'\n## {example["title"]}\n\n{example["summary"]}\n\n'
+          f'[Program]({example["source"]}) · [Expected output](expected/{example["name"]}.txt) · '
+          f'CMake target `{example["name"]}`.\n'
+          + ('\nRequires the optional Ceph vocabulary build and an existing Ceph-common library.\n'
+             if example["requires_ceph"] else '') for example in examples],
+        "", "The archive includes the shared [example catalog](examples.json) and worked comparison "
+        "[source notes](comparisons/source-notes.json). See [Build and run](build-and-run.md) "
+        "for optional dependencies.",
     ]) + "\n")
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-        for name in ["CMakeLists.txt", "README.md", "tutorial.md", "expected.json", "mkdocs.yml",
+        for name in [".gitignore", "CMakeLists.txt", "README.md", "tutorial.md", "expected.json", "examples.json", "mkdocs.yml",
                      "requirements-docs.txt"]:
             bundle.write(PROJECT / name, "datum-tutorials/" + name)
         for directory in ["examples", "figures", "cmake", "docs"]:
             for path in sorted((PROJECT / directory).rglob("*")):
                 if path.is_file() and "__pycache__" not in path.parts:
                     bundle.write(path, "datum-tutorials/" + path.relative_to(PROJECT).as_posix())
+        for example in examples:
+            if example["source"].startswith("comparisons/"):
+                bundle.write(COMPARISONS / Path(example["source"]).name,
+                             "datum-tutorials/" + example["source"])
+        bundle.write(COMPARISONS / "source-notes.json", "datum-tutorials/comparisons/source-notes.json")
     add("datum-tutorials.zip", content=archive.getvalue())
     return files
 
@@ -230,7 +226,7 @@ def on_page_markdown(markdown, page, config, **kwargs):
         path, separator, anchor = destination.partition("#")
         for prefix in ("tutorials/", "../"):
             asset = path.removeprefix(prefix)
-            if asset.startswith(("examples/", "expected/", "figures/", "cmake/")):
+            if asset.startswith(("examples/", "comparisons/", "expected/", "figures/", "cmake/")):
                 path = asset
                 break
         target = None
@@ -244,7 +240,7 @@ def on_page_markdown(markdown, page, config, **kwargs):
             target = "lookup.md"
         elif path in {"docs/developer-guide.md", "tutorials/docs/developer-guide.md"}:
             target = "developer-guide.md" + separator + anchor
-        elif path == "expected.json" or path.startswith(("examples/", "expected/", "figures/")):
+        elif path in {"expected.json", "examples.json"} or path.startswith(("examples/", "comparisons/", "expected/", "figures/")):
             target = path + separator + anchor
         else:
             design = config.extra["datum_source_url"] + "/src/rgw/datum/README.md#"

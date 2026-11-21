@@ -1,7 +1,8 @@
-// Copy a Ceph byte range into an independent bufferlist, then read its fragments with core copy.
+// Retain an independent Ceph snapshot and scatter its bytes into split ordinary storage:
 
 #include <array>
 #include <print>
+#include <span>
 #include <string_view>
 
 #include <datum/bytes.h>
@@ -20,8 +21,12 @@ int main()
 
     // A standard view of spans lets the pure core consume the native list's bytes:
     const auto fragments = datum::fragments(snapshot);
-    std::array<char, 4> output {};
-    datum::copy(fragments, output);
+    std::array<char, 1> first {};
+    std::array<char, 4> last {'.', '.', '.', '.'};
+    const std::array<std::span<char>, 2> output {std::span {first}, std::span {last}};
+    const auto copied = datum::scatter_bytes(fragments, output);
 
-    std::println("snapshot: {}", std::string_view {output});
+    std::println("snapshot: {}{}", std::string_view {first}, std::string_view {last}.substr(0, 3));
+
+    return copied == 4 and last.back() == '.' ? 0 : 1;
 }

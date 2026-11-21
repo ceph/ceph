@@ -45,7 +45,11 @@ without keeping it alive.
 ## What can you build?
 
 - **Bytes and buffers:** [read fragmented payloads](tutorial/01-hello-fragments.md), select byte ranges,
+  [transfer into fragmented output](tutorial/01-hello-fragments.md#transfer-between-fragmented-buffers),
   and retain storage without first assembling a contiguous buffer.
+- **Read planning:** [stream missing coverage](tutorial/03-normalize-ranges.md#observe-algebra-as-a-range),
+  align layouts with selections, and
+  [keep a bounded plan at compile time](tutorial/06-covered-quota.md#keep-a-plan-at-compile-time).
 - **Records and codecs:** [project record fields](tutorial/08-toy-basket.md) and
   [encode selected fields](tutorial/12-postcard.md) using shared record declarations.
 - **Keys and ordering:** [build ordered keys](tutorial/04-numeric-keys.md) and compose comparisons

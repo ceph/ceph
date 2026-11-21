@@ -1,5 +1,6 @@
 // Work out the logical read ranges around one cached block.
 #include <datum/interval/metric.h>
+#include <datum/interval/range.h>
 
 #include <algorithm>
 #include <cassert>
@@ -35,10 +36,11 @@ int main()
     const auto explicit_calls = calls;
     calls.clear();
 
-    // The same byte ranges, calculated by subtraction.
+    // Stream the same byte ranges directly from subtraction:
     const auto missing = iv::difference(requested, cached);
-    for (const auto& part : iv::compile_intervals<2>(missing)) {
-        read(part.lower().key(), part.upper().key() - part.lower().key());
+    for (const auto& part : iv::observe_intervals(missing)) {
+        const auto bytes = iv::extent_of(part);
+        read(bytes.offset, bytes.length);
     }
     assert(calls == explicit_calls);
     assert((calls == std::vector<datum::byte_extent> {{0, 16}, {48, 16}}));

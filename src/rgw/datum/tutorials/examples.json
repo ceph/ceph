@@ -1,0 +1,57 @@
+[
+  {
+    "name": "read_plan", "source": "examples/read_plan.cpp", "requires_ceph": false,
+    "title": "Interactive read planner",
+    "summary": "Select a bounded read batch directly from requested and cached coverage. The landing page uses the same program."
+  },
+  {
+    "name": "developer_flow", "source": "examples/developer_flow.cpp", "requires_ceph": false,
+    "title": "Decode and prepare a reply",
+    "summary": "Decode once, retain progress, and stage an owned reply before publication."
+  },
+  {
+    "name": "fallible_scan", "source": "examples/fallible_scan.cpp", "requires_ceph": false,
+    "title": "Handled scan failures",
+    "summary": "Retain progress and the failing row's position through expected-returning visitation."
+  },
+  {
+    "name": "overlap_reads", "source": "examples/overlap_reads.cpp", "requires_ceph": false,
+    "title": "Mapped overlap reads",
+    "summary": "Preserve object identity while aligning independent layouts and translating selected backing offsets."
+  },
+  {
+    "name": "packed_payload", "source": "examples/packed_payload.cpp", "requires_ceph": false,
+    "title": "Packed sparse payloads",
+    "summary": "Map logical selections into packed fragmented payload bytes, accounting for skipped origins."
+  },
+  {
+    "name": "fragment_transfer", "source": "examples/fragment_transfer.cpp", "requires_ceph": false,
+    "title": "Independent fragment boundaries",
+    "summary": "Copy a selected payload into independently segmented writable storage without a staging buffer."
+  },
+  {
+    "name": "lazy_reads", "source": "examples/lazy_reads.cpp", "requires_ceph": false,
+    "title": "Lazy algebra and controlled reads",
+    "summary": "Use a standard range pipeline over missing coverage and stop after two planned reads."
+  },
+  {
+    "name": "constexpr_plan", "source": "examples/constexpr_plan.cpp", "requires_ceph": false,
+    "title": "A read plan at compile time",
+    "summary": "Retain inline read geometry in a constexpr object and check its contents and byte count with static_assert."
+  },
+  {
+    "name": "comparison_cache_gap", "source": "comparisons/cache-gap-example.cc", "requires_ceph": false,
+    "title": "Worked cache-gap comparison",
+    "summary": "Compare explicit gap branching with direct lazy subtraction and checked byte extents."
+  },
+  {
+    "name": "comparison_key_range", "source": "comparisons/key-range-example.cc", "requires_ceph": false,
+    "title": "Worked key-range and ordering comparison",
+    "summary": "Filter names directly by composed bounds, then compare explicit record ordering with shared comparisons."
+  },
+  {
+    "name": "comparison_fragment", "source": "comparisons/fragment-example.cc", "requires_ceph": true,
+    "title": "Worked native-buffer comparison",
+    "summary": "Compare staged and borrowed payload processing and exercise native copying, retained slices, and core fragments."
+  }
+]

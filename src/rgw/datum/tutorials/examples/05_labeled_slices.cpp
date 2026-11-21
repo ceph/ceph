@@ -1,4 +1,4 @@
-// Clip records to selected intervals and identify the source of each resulting cut.
+// Visit selected record pieces while preserving the source of each cut:
 
 #include <array>
 #include <print>
@@ -19,20 +19,14 @@ struct text_record final
 
 int main()
 {
-    using interval = iv::byte_query;
-
     const std::array records {
         text_record {"Miso", 0, "zzz meow"},
         text_record {"Mochi", 8, "purr zzz"}
     };
-    const auto selection = iv::compile_intervals(interval::closed_open(4, 12));
+    const std::array selection {datum::byte_extent {4, 8}};
 
     // Keep the source record attached to each clipped interval:
-    const iv::clip_view cuts {records, selection, [](const text_record& row) {
-        return datum::byte_extent {row.offset, row.text.size()};
-    }};
-
-    for (const auto& cut : cuts) {
+    const auto progress = iv::visit_overlaps(records, selection, [](const auto& cut, const auto&) {
         const auto& record = cut.source();
         const auto lower = cut.lower().key();
         const auto upper = cut.upper().key();
@@ -40,5 +34,10 @@ int main()
         // Convert global cut bounds to a substring within that source record:
         std::println("{} [{}, {}): \"{}\"", record.name, lower, upper,
                      record.text.substr(lower - record.offset, upper - lower));
-    }
+        return datum::acceptance::accept;
+    }, [](const text_record& row) {
+        return datum::byte_extent {row.offset, row.text.size()};
+    });
+
+    return progress.accepted == 2 ? 0 : 1;
 }

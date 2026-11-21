@@ -59,7 +59,8 @@ Other core operations already accept standard ranges under their established nam
 | Send fragments to a synchronous consumer | `write_fragments(fragments, sink)` |
 | Compose a dynamic sequence of key segments | `key::compose_range(segments)` |
 | Append interval entries to bounded storage | `static_interval_set::append_range`, also through `interval_batch` |
-| Normalize, query, or clip intervals | `compile_intervals`, `canonical_range`, and `clip_view` |
+| Normalize raw interval entries or retain reusable coverage | `compile_intervals`, `canonical_range` |
+| Validate and repeatedly clip stable records | `interval::clip_view` |
 | Observe algebra through standard range pipelines | `interval::observe_intervals(expression)` |
 | Align independently segmented sources | `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` |
 | Map logical cuts into a packed payload | `interval::visit_packed_overlaps(source, selection, consumer)` |
@@ -71,6 +72,29 @@ Other core operations already accept standard ranges under their established nam
 Use the standard algorithms directly with Datum projections and comparisons.
 Heterogeneous record profiles and comparison policies retain their typed argument packs;
 a runtime sequence cannot substitute for the different member and policy types.
+
+### Choose how to consume a selection
+
+Keep an interval expression until its consumer needs a particular representation:
+
+| Consumer needs | Choose | Why |
+| --- | --- | --- |
+| Test membership of existing values | `contains(expression, value)` | Evaluates the expression directly |
+| Traverse algebra once with a standard pipeline | `observe_intervals(expression)` | Avoids collecting intermediate coverage |
+| Retain a quota-limited batch with a known entry bound | `take<Capacity>(expression, quota, bytes)` | Streams directly into inline canonical output |
+| Retain coverage for multiple passes, or normalize unordered entries | `compile_intervals` | Owns prepared point values; bounded expression output is also available |
+| Align ordered record and selection streams | `visit_overlaps` | Preserves both origins, including input producers returning records by value |
+| Find cuts in a packed sparse payload | `visit_packed_overlaps` | Supplies logical bounds and packed backing offsets together |
+| Validate stable records and expose repeatable cuts | `clip_view` | Checks geometry before traversal |
+| Bound preparation work and intermediate entries | `evaluate(expression, workspace)` | Prepares under explicit limits before publishing output |
+
+The [developer’s guide](tutorials/docs/developer-guide.md) explains their lifetime and
+effect contracts. The [constant-plan example](tutorials/examples/constexpr_plan.cpp) checks
+a complete bounded byte plan during C++23 constant evaluation. Use inline numeric interval
+storage to retain such a `constexpr` result; a nonempty vector allocation cannot remain in
+a C++23 constant-expression object. Runtime geometry uses the same operations. Custom point,
+metric, and callback operations must also permit constant evaluation. The relevant N4950
+rules are collected in the [bibliography](#bibliography).
 
 ## Bytes, geometry, and standard Ranges
 
@@ -859,6 +883,7 @@ canonical lvalues. External mutation must preserve normalization during observat
 | `compile_intervals<Capacity>(expression)` | Owns inline interval values, with the requested entry limit |
 | `evaluate(expression, scratch)` | Borrows a read-only span into the workspace |
 | `take(coverage, quota, metric)` | Owns a vector of selected interval values |
+| `take<Capacity>(expression, quota, metric)` | Owns inline selected interval values, with the requested entry limit |
 | `canonical_range{range}` for an unadmitted range | Checks existing geometry; storage follows `views::all` |
 
 Each result supports read-only range iteration; sizing, indexing, and contiguous access
@@ -922,16 +947,18 @@ struct byte_order
     std::tuple<std::uint64_t> controls;
 };
 
-const byte_order order {iv::byte_query::closed_open(0, 8), {}, {}, {std::uint64_t {5}}};
+constexpr byte_order order {iv::byte_query::closed_open(0, 8), {}, {}, {std::uint64_t {5}}};
 static_assert(plan::resolved_query<byte_order>);
-const auto coverage = plan::compile_intervals(order);
-const auto selected = iv::take(coverage, plan::control<std::uint64_t>(order), iv::bytes);
+constexpr auto selected = iv::take<1>(
+    order.intervals, plan::control<std::uint64_t>(order), iv::bytes);
+static_assert(iv::measure(selected, iv::bytes) == 5);
 ```
 
 Here, `iv` denotes `datum::interval`. `resolved_query` means the requirement tuple is
 empty. A consumer resolves its own application requirements before constructing such a
 description. Plan compilation compiles only the intervals; it does not apply residuals or
 controls. The explicit `take` call gives the integer control its covered-byte meaning.
+Compile the full query only when another consumer needs its prepared coverage.
 
 ## Observation and wire schemas
 
@@ -1332,6 +1359,9 @@ describe local machinery, not backend throughput.
   [view requirements](https://timsong-cpp.github.io/cppwp/n4950/range.view).
   These specify standard pipeline ownership and copying-cost contracts. An owned expression
   observation is a move-only range, leaving ref/owning adaptation to standard ranges.
+- WG21 N4950, [constant expressions](https://timsong-cpp.github.io/cppwp/n4950/expr.const).
+  Temporary allocation must be released within constant evaluation. Inline numeric interval
+  storage supports persistent `constexpr` plans without retained dynamic allocation.
 - Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
   `isEmpty`, `encloses`, `equals`, and `canonical` document the distinction between bounds,
   representation equality, and discrete membership. Datum retains its own empty-bound rules.

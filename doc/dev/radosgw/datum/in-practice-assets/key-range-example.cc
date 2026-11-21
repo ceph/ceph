@@ -31,9 +31,6 @@ int main()
     auto selected = datum::key::byte_query::prefix("photos/");
     selected = datum::key::starting_after(selected, "photos/20");
     selected = datum::key::ending_before(selected, "photos/80");
-    const auto intervals = iv::compile_intervals<1>(selected);
-    assert(intervals.size() == 1);
-
     std::ranges::for_each(names | std::views::filter([&selected](const auto name) {
         return iv::contains(selected, name);
     }), [](const auto name) { std::println("{}", name); });

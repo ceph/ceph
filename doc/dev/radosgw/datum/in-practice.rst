@@ -210,7 +210,6 @@ the C++ code changes with the selected keys. Cross the markers to get an empty r
        <div class="selection-code-label" id="datum-key-code-label">C++23 · select and print the matching names</div>
        <pre aria-labelledby="datum-key-code-label"><code id="datum-key-code">auto selected = datum::key::byte_query::prefix("photos/");
 
-   const auto intervals = iv::compile_intervals&lt;1&gt;(selected);
    std::ranges::for_each(names | std::views::filter([&amp;selected](const auto name) {
        return iv::contains(selected, name);
    }), [](const auto name) { std::println("{}", name); });</code></pre>
@@ -286,6 +285,8 @@ two bounds. A backend adapter maps finite endpoints to the database’s inclusiv
 exclusive endpoints and preserves the native query options chosen by the caller.
 Such database bindings live with the consumer integration. The runnable example operates on
 names directly; a native binding supplies the encoded prefix and markers for a database scan.
+The name filter calls ``contains(selected, name)`` directly and needs no compiled interval
+collection. Compile only when a consumer needs prepared endpoints or repeated coverage traversal.
 Adapters use ``iv::is_finite(endpoint)`` to check a Datum boundary; its provider needs
 only ``kind()``, ``key()``, and ``inclusive()`` along with its domain identity.
 
@@ -445,16 +446,19 @@ ordering; applications can use it directly.
        .. code-block:: cpp
 
           const auto missing = iv::difference(requested, cached);
-          for (const auto& part : iv::compile_intervals<2>(missing)) {
-              read(part.lower().key(), part.upper().key() - part.lower().key());
+          for (const auto& part : iv::observe_intervals(missing)) {
+              const auto bytes = iv::extent_of(part);
+              read(bytes.offset, bytes.length);
           }
 
        Select the requested bytes that are not cached, then visit the resulting ranges.
 
        PR implementation: `difference <https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/query.h>`_.
 
-The same subtraction handles zero, one, or two missing ranges; ``compile_intervals<2>`` allows
-for the two-range case shown here. The program records the resulting reads as
+The same subtraction handles zero, one, or two missing ranges. With
+``<datum/interval/range.h>``, ``observe_intervals`` streams the result directly to the read
+consumer; ``extent_of`` checks and converts finite half-open byte bounds. This avoids retaining
+coverage that is used only once. The program records the resulting reads as
 ``std::vector<datum::byte_extent>``, using the same vocabulary for requests and results.
 
 Both versions produce:
@@ -471,6 +475,22 @@ physical reads. This comparison changes only how the logical gaps are calculated
 
 The :doc:`landing page's interactive read planner <index>` extends this calculation to overlapping
 requests and multiple cached regions, then limits how much data to read in each batch.
+It passes the difference directly to ``take<6>`` and retains a bounded canonical batch.
+Six slots suffice for its three request and three cache intervals; a production caller must
+establish its own output bound or choose dynamic output. The
+:doc:`quota lesson <06-covered-quota>` also checks a complete numeric plan with ``static_assert``.
+
+When each selected cut needs the identity of a source record, use
+:doc:`visit_overlaps <05-labeled-slices>` with ordered, internally disjoint streams. If the
+logical extents describe a packed sparse reply, ``visit_packed_overlaps`` supplies backing
+offsets as well. Keep every origin present in that reply, including unselected ones, so its
+bytes contribute to the packed prefix. Payload validation, ownership, and I/O stay at the caller.
+
+For split output storage, ``scatter_bytes`` transfers from ordinary or native fragment spans
+without first flattening the source. The :doc:`Ceph variation <18-ceph-bytes>` copies an
+independent native snapshot into two ordinary buffers and leaves their unused tail intact.
+Capacity admission requires repeatable forward ranges; source and destination storage must
+be disjoint and destination fragments must not alias.
 
 Encoding record fields
 ----------------------
@@ -781,7 +801,8 @@ Integration source excerpts
 The panel links open current library code in the Datum PR or native code at recorded revisions.
 The integration excerpts retain their source revision, filename, and original line ranges.
 The listing excerpt uses the current shared boundary predicate; its planner range includes
-the complete final function. The source notes identify these presentation adaptations:
+the complete final function. The source notes also record the current cache-gap streaming
+and direct key-membership adaptations, preserving the original native revisions:
 
 - :download:`Listing planner and database adapter <in-practice-assets/integration-listing.cpp.txt>`.
 - :download:`Bucket-index records, codec, client, and test fixture <in-practice-assets/integration-bi.cpp.txt>`.
@@ -811,3 +832,8 @@ foundation library and its runnable tutorial examples.
 The :download:`source revisions and hashes <in-practice-assets/source-notes.json>` identify the
 comparison inputs. Native integration tests and their recorded results are outside this
 foundation change.
+
+The :doc:`complete example collection <examples>` includes all three runnable comparisons,
+their exact expected outputs, and the shared catalog. Its downloadable archive packages the
+authoritative comparison sources with their provenance; the native-buffer target requires
+the optional Ceph vocabulary setup. These are applied examples, not migrated Ceph consumers.

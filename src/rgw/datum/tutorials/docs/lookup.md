@@ -28,6 +28,8 @@ gives the setup commands.
 | Plan reads around cached data with a per-batch size limit | [Interactive read planner](index.md#datum-read-plan) |
 | Select a piece and keep its source label | [Keep the label on the slice](../tutorial.md#5-keep-the-label-on-the-slice) |
 | Take a quota without counting gaps | [Five bytes, please](../tutorial.md#6-five-bytes-please) |
+| Retain a complete byte plan at compile time | [Constant plans](../tutorial.md#keep-a-plan-at-compile-time) and the [complete program](../examples/constexpr_plan.cpp) |
+| Choose streaming, retained coverage, or bounded output | [Preparation choices](developer-guide.md#choose-preparation-for-the-consumer) |
 | Keep backing data with a slice | [Move it and keep reading](../tutorial.md#7-move-it-and-keep-reading) |
 | Read or select record fields | [Named C++23 views](../tutorial.md#8-a-window-into-misos-toy-basket) and [selected field profiles](../tutorial.md#9-pick-the-basket-fields) |
 | Stop a scan and continue later | [Keep your place](../tutorial.md#10-keep-your-place); [Turn the page](../tutorial.md#14-turn-the-page) for pages |
@@ -134,7 +136,12 @@ It preserves native cursor progress and partial mutation; other exceptions propa
 [Lesson 18](../tutorial.md#18-bytes-with-a-ceph-accent).
 
 **`clip_view`; cuts.** Intersect each source record's extent with selected coverage
-while retaining the source association. [Lesson 5](../tutorial.md#5-keep-the-label-on-the-slice).
+while retaining the source association. Requires stable forward geometry and prevalidates
+ordered, disjoint inputs. For synchronous input/value producers, use `visit_overlaps`.
+[Lesson 5](../tutorial.md#5-keep-the-label-on-the-slice).
+
+**Constant evaluation; `constexpr`.** Check a bounded numeric byte plan and its measure
+with `static_assert`. [Constant plans](../tutorial.md#keep-a-plan-at-compile-time).
 
 **`comparison_domain`; domain.** A domain identifies the point type and ordering.
 The helper supplies a comparison policy; a named derived type preserves domain
