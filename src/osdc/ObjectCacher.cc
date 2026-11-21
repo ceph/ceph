@@ -14,6 +14,9 @@
 #include <unordered_map>
 
 #include <boost/container/small_vector.hpp>
+#ifdef __linux__
+#include <sched.h>
+#endif
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
@@ -2015,6 +2018,23 @@ void ObjectCacher::C_WaitForWrite::finish(int r)
   m_onfinish->complete(r);
 }
 
+void ObjectCacher::fold_hit_slots()
+{
+  if (!perfcounter)
+    return;
+  uint64_t rd = 0, hit = 0, ops = 0;
+  for (auto& hs : hit_slots) {
+    rd += hs.bytes_read.exchange(0, std::memory_order_relaxed);
+    hit += hs.bytes_hit.exchange(0, std::memory_order_relaxed);
+    ops += hs.ops_hit.exchange(0, std::memory_order_relaxed);
+  }
+  if (ops) {
+    perfcounter->inc(l_objectcacher_data_read, rd);
+    perfcounter->inc(l_objectcacher_cache_bytes_hit, hit);
+    perfcounter->inc(l_objectcacher_cache_ops_hit, ops);
+  }
+}
+
 int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
 {
   if (!read_gate || !rd->bl || rd->extents.size() != 1 ||
@@ -2060,11 +2080,16 @@ int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
   gate_exit();
   if (r < 0)
     return r;
-  if (perfcounter) {
-    perfcounter->inc(l_objectcacher_data_read, ex.length);
-    perfcounter->inc(l_objectcacher_cache_bytes_hit, bh_len);
-    perfcounter->inc(l_objectcacher_cache_ops_hit);
-  }
+  unsigned cpu = 0;
+#ifdef __linux__
+  int c = sched_getcpu();
+  if (c >= 0)
+    cpu = c;
+#endif
+  auto& hs = hit_slots[cpu % HIT_SLOTS];
+  hs.bytes_read.fetch_add(ex.length, std::memory_order_relaxed);
+  hs.bytes_hit.fetch_add(bh_len, std::memory_order_relaxed);
+  hs.ops_hit.fetch_add(1, std::memory_order_relaxed);
   ldout(cct, 20) << "read_hit " << soid << " " << ex.offset << "~" << r << dendl;
   delete rd;
   return r;
@@ -2211,6 +2236,8 @@ void ObjectCacher::flusher_entry()
       trace.init("flusher", &trace_endpoint);
       trace.event("start");
     }
+    if (read_gate)
+      fold_hit_slots();
 
     loff_t actual = get_stat_dirty() + get_stat_dirty_waiting();
     int actual_bhs = dirty_or_tx_bh.size() + get_stat_nr_dirty_waiters();

@@ -425,6 +425,14 @@ class ObjectCacher {
   bool read_gate = false;
   std::atomic<bool> gate_closed{false};
   alignas(64) std::atomic<uint32_t> gate_readers{0};
+  // read_hit()'s perf counters, per CPU so that readers do not share a
+  // cache line; the flusher adds them to perfcounter every second
+  struct alignas(64) HitSlot {
+    std::atomic<uint64_t> bytes_read{0}, bytes_hit{0}, ops_hit{0};
+  };
+  static constexpr unsigned HIT_SLOTS = 64;
+  HitSlot hit_slots[HIT_SLOTS];
+  void fold_hit_slots();
   ceph::timespan max_dirty_age;
   bool cfg_block_writes_upfront;
 
