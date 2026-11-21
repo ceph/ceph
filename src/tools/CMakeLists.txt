@@ -143,3 +143,8 @@ add_subdirectory(ceph_dedup)
 if(WITH_RADOSGW)
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
+
+# eBPF tracing tools
+if(WITH_EBPF_TRACE)
+  add_subdirectory(CephBPF)
+endif()
