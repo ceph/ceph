@@ -51,6 +51,7 @@ public:
   int regetattr_mask = 0;          // getattr mask if i need to re-stat after a traceless reply
  
   utime_t  sent_stamp;
+  uint64_t listing_seq = 0;        // Client::readdir_listing_seq when made
   mds_rank_t mds = -1;             // who i am asking
   mds_rank_t resend_mds = -1;      // someone wants you to (re)send the request here
   bool     send_to_auth = false;   // must send to auth mds
