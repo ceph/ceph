@@ -38,7 +38,7 @@
 #include <boost/asio/ssl.hpp>
 #endif
 
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "services/svc_config_key.h"
 #include "services/svc_zone.h"
@@ -1019,7 +1019,7 @@ int AsioFrontend::ssl_reload() {
   }
 
   if (options) {
-    for (auto &option : ceph::split(*options, ":")) {
+    for (const auto option : ceph::split(*options, ":")) {
       if (option == "default_workarounds") {
         ssl_ctx->set_options(ssl::context::default_workarounds);
       } else if (option == "no_compression") {

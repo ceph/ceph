@@ -21,7 +21,7 @@
 #include "include/intarith.h"
 #include "include/stringify.h"
 #include "include/random.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/perf_counters.h"
 #include "common/TracepointProvider.h"
 
