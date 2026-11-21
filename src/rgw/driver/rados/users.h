@@ -53,6 +53,16 @@ int remove(const DoutPrefixProvider* dpp,
            const rgw_raw_obj& obj,
            std::string_view name);
 
+/// remove name only while the stored entry is still the one this user wrote.
+/// returns 0 when another user owns the entry.
+int remove_if_owner(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    librados::Rados& rados,
+                    const rgw_raw_obj& obj,
+                    std::string_view name,
+                    std::string_view path,
+                    std::string_view user_id);
+
 /// Return a paginated listing of user ids.
 int list(const DoutPrefixProvider* dpp,
          optional_yield y,

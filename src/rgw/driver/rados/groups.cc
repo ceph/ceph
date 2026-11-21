@@ -15,6 +15,11 @@
 
 #include "groups.h"
 
+#include <algorithm>
+#include <cctype>
+#include <map>
+#include <utility>
+
 #include "include/rados/librados.hpp"
 #include "common/ceph_json.h"
 #include "common/dout.h"
@@ -64,6 +69,53 @@ int remove(const DoutPrefixProvider* dpp,
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_rm(op, name);
   return ref.operate(dpp, std::move(op), y);
+}
+
+static std::string resource_key(std::string_view name)
+{
+  std::string key;
+  key.resize(name.size());
+  std::transform(name.begin(), name.end(), key.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return key;
+}
+
+int remove_if_owner(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    librados::Rados& rados,
+                    const rgw_raw_obj& obj,
+                    std::string_view name,
+                    std::string_view path,
+                    std::string_view group_id)
+{
+  rgw_rados_ref ref;
+  int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  resource_metadata meta;
+  meta.group_id = group_id;
+
+  cls_user_account_resource entry;
+  entry.name = name;
+  entry.path = path;
+  encode(meta, entry.metadata);
+  bufferlist expected;
+  encode(entry, expected);
+
+  librados::ObjectWriteOperation op;
+  int cmp_r = 0;
+  std::map<std::string, std::pair<bufferlist, int>> assertions;
+  assertions.emplace(resource_key(name),
+                     std::make_pair(std::move(expected), CEPH_OSD_CMPXATTR_OP_EQ));
+  op.omap_cmp(assertions, &cmp_r);
+  ::cls_user_account_resource_rm(op, name);
+  r = ref.operate(dpp, std::move(op), y);
+  if (r == -ECANCELED) {
+    return 0;
+  }
+  return r;
 }
 
 int list(const DoutPrefixProvider* dpp,
