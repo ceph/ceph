@@ -2,6 +2,7 @@ import errno
 import json
 import logging
 import time
+import traceback
 import datetime
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -1287,8 +1288,9 @@ class CephadmUpgrade:
                 })
                 return False
             except Exception as e:
-                logger.exception(f'Upgrade: unexpected exception during _do_upgrade: {str(e)}')
-                logger.error(e.__traceback__)
+                logger.error(
+                    f'Upgrade: unexpected exception during _do_upgrade: {str(e)}\n'
+                    f'{traceback.format_exc()}')
                 self._fail_upgrade('UPGRADE_EXCEPTION', {
                     'severity': 'error',
                     'summary': 'Upgrade: failed due to an unexpected exception',
