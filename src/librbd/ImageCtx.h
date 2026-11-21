@@ -7,7 +7,6 @@
 #include "include/int_types.h"
 
 #include <atomic>
-#include <list>
 #include <map>
 #include <memory>
 #include <set>
@@ -188,7 +187,7 @@ namespace librbd {
 
     xlist<io::AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
-    std::list<Context*> async_requests_waiters;
+    std::vector<Context*> async_requests_waiters;
 
     ImageState<ImageCtx> *state;
     Operations<ImageCtx> *operations;

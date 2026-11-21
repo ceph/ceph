@@ -9,6 +9,7 @@
 #include "test/librados/test.h"
 #include "test/journal/RadosTestFixture.h"
 #include <limits>
+#include <vector>
 
 using namespace std::chrono_literals;
 using std::shared_ptr;
@@ -67,7 +68,7 @@ public:
 				static_cast<uint64_t>(max_in_flight)}
     {}
     ~ObjectRecorderFlusher() {
-      for (auto& [object_recorder, m] : m_object_recorders) {
+      for (const auto& [object_recorder, m] : m_object_recorders) {
 	C_SaferCond cond;
 	object_recorder->flush(&cond);
 	cond.wait();
@@ -114,7 +115,7 @@ public:
     double m_flush_age = 600;
     uint64_t m_max_in_flight_appends = 0;
     using ObjectRecorders =
-      std::list<std::pair<ceph::ref_t<journal::ObjectRecorder>, ceph::mutex*>>;
+      std::vector<std::pair<ceph::ref_t<journal::ObjectRecorder>, ceph::mutex*>>;
     ObjectRecorders m_object_recorders;
     Handler m_handler;
   };

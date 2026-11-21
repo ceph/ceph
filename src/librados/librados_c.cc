@@ -24,7 +24,6 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <list>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -79,7 +78,6 @@ using std::string;
 using std::map;
 using std::set;
 using std::vector;
-using std::list;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -702,7 +700,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pool_list)(
 {
   tracepoint(librados, rados_pool_list_enter, cluster, len);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  std::list<std::pair<int64_t, std::string> > pools;
+  std::vector<std::pair<int64_t, std::string>> pools;
   int r = client->pool_list(pools);
   if (r < 0) {
     tracepoint(librados, rados_pool_list_exit, r);
@@ -720,9 +718,8 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pool_list)(
     memset(b, 0, len);
   }
   int needed = 0;
-  std::list<std::pair<int64_t, std::string> >::const_iterator i = pools.begin();
-  std::list<std::pair<int64_t, std::string> >::const_iterator p_end =
-    pools.end();
+  auto i = std::cbegin(pools);
+  const auto p_end = std::cend(pools);
   for (; i != p_end; ++i) {
     int rl = i->second.length() + 1;
     if (len < (unsigned)rl)
@@ -1180,7 +1177,6 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_pool_stat)(
 {
   tracepoint(librados, rados_ioctx_pool_stat_enter, io);
   librados::IoCtxImpl *io_ctx_impl = (librados::IoCtxImpl *)io;
-  list<string> ls;
   std::string pool_name;
 
   int err = io_ctx_impl->client->pool_get_name(io_ctx_impl->get_id(), &pool_name);
@@ -1188,11 +1184,11 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_pool_stat)(
     tracepoint(librados, rados_ioctx_pool_stat_exit, err, stats);
     return err;
   }
-  ls.push_back(pool_name);
+  const std::vector<string> pools {pool_name};
 
   map<string, ::pool_stat_t> rawresult;
   bool per_pool = false;
-  err = io_ctx_impl->client->get_pool_stats(ls, &rawresult, &per_pool);
+  err = io_ctx_impl->client->get_pool_stats(pools, &rawresult, &per_pool);
   if (err) {
     tracepoint(librados, rados_ioctx_pool_stat_exit, err, stats);
     return err;
@@ -3521,8 +3517,8 @@ extern "C" ssize_t LIBRADOS_C_API_DEFAULT_F(rados_list_lockers)(
   std::string oid = o;
   std::string tag_str;
   int tmp_exclusive;
-  std::list<librados::locker_t> lockers;
-  int r = ctx.list_lockers(oid, name_str, &tmp_exclusive, &tag_str, &lockers);
+  std::vector<librados::locker_t> lockers;
+  const int r = ctx.list_lockers(oid, name_str, tmp_exclusive, tag_str, lockers);
   if (r < 0) {
     tracepoint(librados, rados_list_lockers_exit, r, *exclusive, "", *tag_len, *clients_len, *cookies_len, *addrs_len);
 	  return r;
@@ -3531,11 +3527,10 @@ extern "C" ssize_t LIBRADOS_C_API_DEFAULT_F(rados_list_lockers)(
   size_t clients_total = 0;
   size_t cookies_total = 0;
   size_t addrs_total = 0;
-  list<librados::locker_t>::const_iterator it;
-  for (it = lockers.begin(); it != lockers.end(); ++it) {
-    clients_total += it->client.length() + 1;
-    cookies_total += it->cookie.length() + 1;
-    addrs_total += it->address.length() + 1;
+  for (const auto& locker : lockers) {
+    clients_total += locker.client.length() + 1;
+    cookies_total += locker.cookie.length() + 1;
+    addrs_total += locker.address.length() + 1;
   }
 
   bool too_short = ((clients_total > *clients_len) ||
@@ -3555,21 +3550,21 @@ extern "C" ssize_t LIBRADOS_C_API_DEFAULT_F(rados_list_lockers)(
   char *clients_p = clients;
   char *cookies_p = cookies;
   char *addrs_p = addrs;
-  for (it = lockers.begin(); it != lockers.end(); ++it) {
-    strcpy(clients_p, it->client.c_str());
-    strcpy(cookies_p, it->cookie.c_str());
-    strcpy(addrs_p, it->address.c_str());
+  for (const auto& locker : lockers) {
+    strcpy(clients_p, locker.client.c_str());
+    strcpy(cookies_p, locker.cookie.c_str());
+    strcpy(addrs_p, locker.address.c_str());
     tracepoint(librados, rados_list_lockers_locker, clients_p, cookies_p, addrs_p);
-    clients_p += it->client.length() + 1;
-    cookies_p += it->cookie.length() + 1;
-    addrs_p += it->address.length() + 1;
+    clients_p += locker.client.length() + 1;
+    cookies_p += locker.cookie.length() + 1;
+    addrs_p += locker.address.length() + 1;
   }
   if (tmp_exclusive)
     *exclusive = 1;
   else
     *exclusive = 0;
 
-  int retval = lockers.size();
+  const int retval = r;
   tracepoint(librados, rados_list_lockers_exit, retval, *exclusive, tag, *tag_len, *clients_len, *cookies_len, *addrs_len);
   return retval;
 }
