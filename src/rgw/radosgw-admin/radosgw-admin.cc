@@ -9450,7 +9450,11 @@ next:
       }
       do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
     } else {
-      RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp());
+      ret = RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp());
+      if (ret < 0) {
+        cerr << "ERROR: bucket check failed: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 
