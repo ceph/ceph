@@ -3096,7 +3096,14 @@ RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dp
                                                     rgw_zone_set *zones_trace)
 {
   bool stat_follow_olh = false;
-  return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, stat_follow_olh,
+  // full sync names a versioned null version "null" so the source reads that
+  // version, but bi expects an empty instance for it
+  std::optional<rgw_obj_key> dest_key;
+  if (key.have_null_instance()) {
+    dest_key = key;
+    dest_key->instance.clear();
+  }
+  return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch, stat_follow_olh,
                            source_trace_entry, zones_trace);
 }
 
