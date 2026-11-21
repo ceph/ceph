@@ -62,6 +62,39 @@ TEST(bluestore, sizeof) {
   cout << "map<char,char>\t" << sizeof(map<char, char>) << std::endl;
 }
 
+TEST(BlueStore, tracked_keys_are_options) {
+  BlueStore store(g_ceph_context, "", 4096);
+  auto tracked = store.get_tracked_keys();
+  for (const auto& key : tracked) {
+    EXPECT_NE(nullptr, g_ceph_context->_conf.get_schema(key))
+      << "tracked key is not an option: " << key;
+  }
+  for (const auto& name : {"bluestore_cache_age_bin_interval",
+                           "bluestore_cache_age_bins_kv",
+                           "bluestore_cache_age_bins_kv_onode",
+                           "bluestore_cache_age_bins_meta",
+                           "bluestore_cache_age_bins_data"}) {
+    EXPECT_NE(tracked.end(), std::find(tracked.begin(), tracked.end(), name))
+      << "option is not tracked: " << name;
+  }
+}
+
+TEST(BlueStore, age_bins_can_change_at_runtime) {
+  BlueStore store(g_ceph_context, "", 4096);
+  // The age bin lists are not runtime options, so the config only accepts
+  // a new value while an observer (BlueStore) tracks them.
+  std::stringstream err;
+  ASSERT_EQ(0, g_ceph_context->_conf.set_val(
+    "bluestore_cache_age_bins_meta", "720 0 0 0 0 0 0 0 0 0", &err))
+    << err.str();
+  g_ceph_context->_conf.apply_changes(nullptr);
+  ASSERT_EQ("720 0 0 0 0 0 0 0 0 0",
+            g_ceph_context->_conf.get_val<std::string>(
+              "bluestore_cache_age_bins_meta"));
+  g_ceph_context->_conf.rm_val("bluestore_cache_age_bins_meta");
+  g_ceph_context->_conf.apply_changes(nullptr);
+}
+
 // Note: Reusable for future bit-flip fuzzing.
 static void expect_decode_tolerated(std::function<void()> decode,
                                     bool expect_thrown = false) {
