@@ -18,7 +18,6 @@
 #include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/randomblock_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore {
@@ -454,12 +453,7 @@ private:
     return seastar::do_with(
       create_transaction(src, name, cache_hint, IsWeak),
       [f=std::forward<Func>(f)](auto &ref_t) mutable {
-        return with_trans_intr(
-          *ref_t,
-          [f=std::forward<Func>(f)](auto& t) mutable {
-            return f(t);
-          }
-        );
+        return f(*ref_t);
       }
     );
   }

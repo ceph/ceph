@@ -20,7 +20,6 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/linked_tree_node.h"
 #include "crimson/os/seastore/extent_pinboard.h"
 
@@ -2220,10 +2219,6 @@ void stage_visibility_handoff(Transaction& t,
 
   /// Invalidate extent and mark affected transactions
   void invalidate_extent(Transaction& t, CachedExtent& extent);
-
-  /// Mark a valid transaction as conflicted
-  void mark_transaction_conflicted(
-    Transaction& t, CachedExtent& conflicting_extent);
 
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);

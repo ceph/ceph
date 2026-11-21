@@ -439,7 +439,7 @@ public:
   {
     LOG_PREFIX(TransactionManager::read_pins);
     static_assert(is_logical_type(T::TYPE));
-    co_await trans_intr::parallel_for_each(
+    co_await seastar::parallel_for_each(
       pins,
       seastar::coroutine::lambda(
 	[this, &t, FNAME, maybe_init=std::move(maybe_init)](auto &pin)
@@ -648,7 +648,7 @@ public:
       } catch(crimson::ct_error::eagain&) {}
       if (!ext) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     // user must initialize the logical extent themselves.
@@ -696,7 +696,7 @@ public:
       } catch (crimson::ct_error::eagain&) {}
       if (exts.empty()) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     // user must initialize the logical extent themselves
@@ -935,8 +935,8 @@ public:
                t, hint, num, len);
      return seastar::do_with(std::vector<TCachedExtentRef<T>>(),
        [this, &t, hint, len, num, FNAME](auto &extents) {
-       return trans_intr::do_for_each(
-                       boost::make_counting_iterator(0),
+       return seastar::do_for_each(
+                        boost::make_counting_iterator(0),
                        boost::make_counting_iterator(num),
          [this, &t, len, hint, &extents] (auto i) {
          return alloc_non_data_extent<T>(t, hint, len).si_then(
@@ -1470,41 +1470,6 @@ private:
     }
   };
 
-  using mutated_extents_set_t =
-    std::set<CachedExtentRef, mem_addr_cmp_t>;
-  struct mutated_extents_locker {
-    mutated_extents_set_t mutated_extents;
-    std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
-    std::vector<std::shared_lock<seastar::shared_mutex>> shared_locks;
-
-    mutated_extents_locker(
-      mutated_extents_set_t &&mutated_extents,
-      std::vector<std::unique_lock<seastar::shared_mutex>> &&unique_locks,
-      std::vector<std::shared_lock<seastar::shared_mutex>> &&shared_locks)
-      : mutated_extents(mutated_extents),
-        unique_locks(std::move(unique_locks)),
-        shared_locks(std::move(shared_locks)) {}
-    mutated_extents_locker() = default;
-    mutated_extents_locker(mutated_extents_locker&&) = default;
-
-    void release_lock() {
-      unique_locks.clear();
-    }
-
-    void release_shared_lock() {
-      shared_locks.clear();
-    }
-
-    void release() {
-      unique_locks.clear();
-      shared_locks.clear();
-    }
-    ~mutated_extents_locker() {
-      release();
-    }
-  };
-  seastar::future<mutated_extents_locker> lock_mutated_nodes(
-    Transaction &t);
 
   using resolve_cursor_to_mapping_iertr = base_iertr;
   resolve_cursor_to_mapping_iertr::future<LBAMapping>
@@ -1807,7 +1772,7 @@ private:
       co_await lba_manager->update_mapping_refcount(
 	t, pin.direct_cursor, 1);
     }
-    co_await trans_intr::parallel_for_each(
+    co_await seastar::parallel_for_each(
       ret,
       [](auto &remapped_mapping) {
 	return remapped_mapping.refresh(

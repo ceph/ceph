@@ -44,6 +44,9 @@ struct FixedKVNode : CachedExtent {
   FixedKVNode(const FixedKVNode &rhs)
     : CachedExtent(rhs),
       range(rhs.range) {}
+  FixedKVNode(const FixedKVNode &rhs, share_buffer_t s)
+    : CachedExtent(rhs, s),
+      range(rhs.range) {}
 
   virtual fixed_kv_node_meta_t<node_key_t> get_node_meta() const = 0;
   virtual ~FixedKVNode() = default;
@@ -723,6 +726,9 @@ struct FixedKVLeafNode
   virtual typename node_layout_t::delta_buffer_t *maybe_get_delta_buffer() {
     return this->is_mutation_pending() ? &delta_buffer : nullptr;
   }
+
+  FixedKVLeafNode(const FixedKVLeafNode &rhs, share_buffer_t s)
+    : parent_node_t(rhs, s) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) override {
     assert(delta_buffer.empty());

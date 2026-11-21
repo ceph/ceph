@@ -400,7 +400,6 @@ public:
           continue;
         }
         promote_size += extent->get_length();
-        t.add_to_read_set(extent);
         co_await trans_intr::make_interruptible(extent->wait_io());
         co_await ecb->promote_extent(t, extent);
         it++;

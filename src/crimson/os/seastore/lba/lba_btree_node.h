@@ -147,6 +147,9 @@ struct LBALeafNode
   LBALeafNode(const LBALeafNode &rhs)
     : parent_type_t(rhs),
       parent_node_t(rhs) {}
+  LBALeafNode(const LBALeafNode &rhs, share_buffer_t s)
+    : parent_type_t(rhs, s),
+      parent_node_t(rhs, s) {}
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
@@ -315,7 +318,7 @@ struct LBALeafNode
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
-    return CachedExtentRef(new LBALeafNode(*this));
+    return CachedExtentRef(new LBALeafNode(*this, share_buffer_t()));
   }
 
   std::ostream &print_detail(std::ostream &out) const final;

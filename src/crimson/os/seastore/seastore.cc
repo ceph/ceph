@@ -899,15 +899,11 @@ SeaStore::Shard::mkfs_managers()
   ++(shard_stats.processing_inlock_io_num);
   TransactionRef t = transaction_manager->create_transaction(
     Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
-   co_await with_repeat_trans_intr(*t,
-    seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
-    ++(shard_stats.repeat_io_num);
-    DEBUGT("...", tr);
-    co_await onode_manager->mkfs(tr);
-    auto coll_root = co_await collection_manager->mkfs(tr);
-    transaction_manager->write_collection_root(tr, coll_root);
-    co_await transaction_manager->submit_transaction(tr);
-  }));
+  DEBUGT("...", *t);
+  co_await onode_manager->mkfs(*t);
+  auto coll_root = co_await collection_manager->mkfs(*t);
+  transaction_manager->write_collection_root(*t, coll_root);
+  co_await transaction_manager->submit_transaction(*t);
   assert(shard_stats.pending_io_num);
   --(shard_stats.pending_io_num);
    // XXX: it's wrong to assume no failure
@@ -2047,15 +2043,25 @@ void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
 // (build_next_batch). Default is yes, specific op patterns opt out and run solo.
 
 // Bathced pg-log trim (OP_OMAP_RMKEYS / OP_OMAP_RMKEYRANGE)
+// Collection management ops (mkcoll, rmcoll, split, merge, set_bits) also run
+// solo: a batch may span collections.
 static bool txn_is_batchable(ceph::os::Transaction& t)
 {
   using ceph::os::Transaction;
   auto i = t.begin();
   while (i.have_op()) {
     auto op = i.decode_op();
-    if (op->op == Transaction::OP_OMAP_RMKEYS ||
-        op->op == Transaction::OP_OMAP_RMKEYRANGE) {
+    switch (op->op) {
+    case Transaction::OP_OMAP_RMKEYS:
+    case Transaction::OP_OMAP_RMKEYRANGE:
+    case Transaction::OP_MKCOLL:
+    case Transaction::OP_RMCOLL:
+    case Transaction::OP_SPLIT_COLLECTION2:
+    case Transaction::OP_MERGE_COLLECTION:
+    case Transaction::OP_COLL_SET_BITS:
       return false;
+    default:
+      break;
     }
   }
   return true;
@@ -2069,37 +2075,35 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   assert(store_active);
   ++(shard_stats.io_num);
 
-  auto coll = _get_collection(_ch->get_cid());
-  auto& entry = coll->pending_txns.emplace_back();
+  auto& entry = pending_txns.emplace_back();
   entry.txn = std::move(_t);
   entry.batchable = txn_is_batchable(entry.txn);
   auto fut = entry.pr.get_future();
   DEBUG("enqueue cid={} queue_depth={} in_flight={}",
-        coll->get_cid(), coll->pending_txns.size(), coll->collection_in_flight);
-  if (!coll->collection_in_flight) {
-    coll->collection_in_flight = true;
-    DEBUG("cid={} gate closed, starting dispatch", coll->get_cid());
-    std::ignore = dispatch_collection(coll);
+        _ch->get_cid(), pending_txns.size(), batch_in_flight);
+  if (!batch_in_flight) {
+    batch_in_flight = true;
+    DEBUG("gate closed, starting dispatch");
+    std::ignore = dispatch_batches();
   }
   return fut;
 }
 
 ceph::os::Transaction SeaStore::Shard::build_next_batch(
-  SeastoreCollection& coll,
   std::vector<seastar::promise<>>& pending_txns_promises)
 {
   ceph::os::Transaction merged;
   bool first = true;
   uint64_t batch_features = 0;
-  while (!coll.pending_txns.empty()) {
-    const bool no_batch = !coll.pending_txns.front().batchable;
+  while (!pending_txns.empty()) {
+    const bool no_batch = !pending_txns.front().batchable;
     if (!first &&
-        (no_batch || coll.pending_txns.front().txn.get_data_features() != batch_features)) {
+        (no_batch || pending_txns.front().txn.get_data_features() != batch_features)) {
       // Batch boundary: seal what we have so far in the batch
       break;
     }
-    auto e = std::move(coll.pending_txns.front());
-    coll.pending_txns.pop_front();
+    auto e = std::move(pending_txns.front());
+    pending_txns.pop_front();
     if (first) {
       batch_features = e.txn.get_data_features();
       merged = std::move(e.txn);
@@ -2116,28 +2120,25 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
   return merged;
 }
 
-seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
+seastar::future<> SeaStore::Shard::dispatch_batches()
 {
-  LOG_PREFIX(SeaStoreS::dispatch_collection);
-  auto& coll = static_cast<SeastoreCollection&>(*ch);
-  while (!coll.pending_txns.empty()) {
+  LOG_PREFIX(SeaStoreS::dispatch_batches);
+  while (!pending_txns.empty()) {
     std::vector<seastar::promise<>> pending_txns_promises;
-    auto merged = build_next_batch(coll, pending_txns_promises);
-    DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
-          pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
-    co_await run_one_batch(ch, std::move(merged));
-    DEBUG("committed batch of {} txns for cid={}",
-          pending_txns_promises.size(), coll.get_cid());
+    auto merged = build_next_batch(pending_txns_promises);
+    DEBUG("draining {} txns, committing batch ({} ops)",
+          pending_txns_promises.size(), merged.get_num_ops());
+    co_await run_one_batch(std::move(merged));
+    DEBUG("committed batch of {} txns", pending_txns_promises.size());
     for (auto& p : pending_txns_promises) {
       p.set_value();
     }
   }
-  DEBUG("cid={} drained, gate open", coll.get_cid());
-  coll.collection_in_flight = false;
+  DEBUG("drained, gate open");
+  batch_in_flight = false;
 }
 
 seastar::future<> SeaStore::Shard::run_one_batch(
-  CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
   LOG_PREFIX(SeaStoreS::run_one_batch);
@@ -2146,7 +2147,7 @@ seastar::future<> SeaStore::Shard::run_one_batch(
 
   auto flags = _t.get_fadvise_flags();
   internal_context_t ctx{
-    _ch, std::move(_t),
+    std::move(_t),
     transaction_manager->create_transaction(
       Transaction::src_t::MUTATE,
       "do_transaction",
@@ -2165,66 +2166,36 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   --(shard_stats.waiting_throttler_io_num);
   ++(shard_stats.processing_inlock_io_num);
 
-  co_await with_repeat_trans_intr(
-    [&, this] {
-      // Preserve handle and rewind the external iterator before each attempt.
-      ctx.reset_preserve_handle(*transaction_manager);
-    },
-    *ctx.transaction,
-    seastar::coroutine::lambda([&ctx, this, FNAME](auto &t)
-			       -> tm_ret {
-      ++(shard_stats.repeat_io_num);
-#ifndef NDEBUG
-      TRACET(" transaction dump:\n", t);
-      JSONFormatter f(true);
-      f.open_object_section("transaction");
-      ctx.ext_transaction.dump(&f);
-      f.close_section();
-      std::stringstream str;
-      f.flush(str);
-      TRACET("{}", t, str.str());
-#endif
+  // Direct single-writer execution: eliminate with_repeat_trans_intr and conflict retry loops
+  ++(shard_stats.repeat_io_num);
+  auto &t = *ctx.transaction;
+  DEBUGT("{} operations, 0x{:x} bytes, {} colls, {} objects ...",
+         t,
+         ctx.ext_transaction.get_num_ops(),
+         ctx.ext_transaction.get_num_bytes(),
+         ctx.iter.colls.size(),
+         ctx.iter.objects.size());
 
-      DEBUGT("cid={}, {} operations, 0x{:x} bytes, {} colls, {} objects ...",
-	     t, ctx.ch->get_cid(),
-	     ctx.ext_transaction.get_num_ops(),
-	     ctx.ext_transaction.get_num_bytes(),
-	     ctx.iter.colls.size(),
-	     ctx.iter.objects.size());
+  std::vector<OnodeRef> onodes(
+    ctx.iter.colls.size() * ctx.iter.objects.size());
 
-      std::vector<OnodeRef> onodes(ctx.iter.objects.size());
+  const size_t total_ops = ctx.ext_transaction.get_num_ops();
+  size_t current_op = 0;
 
-      // Get the total number of operations from the transaction
-      const size_t total_ops = ctx.ext_transaction.get_num_ops();
-      size_t current_op = 0;
+  auto build_start = seastar::lowres_clock::now();
+  while (ctx.iter.have_op()) {
+    current_op++;
+    DEBUGT("processing op {} of {}", t, current_op, total_ops);
+    co_await _do_transaction_step(ctx, onodes, ctx.iter);
+  }
+  ctx.build_time += seastar::lowres_clock::now() - build_start;
 
-      auto build_start = seastar::lowres_clock::now();
-      while (ctx.iter.have_op()) {
-        current_op++;
-
-        DEBUGT("processing op {} of {} for cid={}",
-               t, current_op, total_ops, ctx.ch->get_cid());
-	co_await _do_transaction_step(
-	  ctx, ctx.ch, onodes, ctx.iter);
-      }
-      ctx.build_time += seastar::lowres_clock::now() - build_start;
-
-      DEBUGT("completed all {} ops for cid={}",
-             t, total_ops, ctx.ch->get_cid());
-      auto submit_start = seastar::lowres_clock::now();
-      co_await transaction_manager->submit_transaction(*ctx.transaction);
-      ctx.submit_time += seastar::lowres_clock::now() - submit_start;
-    })
-  ).handle_error(
-    crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
-      transaction_dump(ctx.ext_transaction);
-      ceph_abort_msg(fmt::format("{} unexpected error: {}", FNAME, e));
-      return seastar::now();
-    })
-  );
+  DEBUGT("completed all {} ops", t, total_ops);
+  auto submit_start = seastar::lowres_clock::now();
+  co_await transaction_manager->submit_transaction(*ctx.transaction);
+  ctx.submit_time += seastar::lowres_clock::now() - submit_start;
 
   DEBUGT("done", *ctx.transaction);
-  add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();
     auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
@@ -2292,7 +2263,6 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_do_transaction_step(
   internal_context_t &ctx,
-  CollectionRef &col,
   std::vector<OnodeRef> &onodes,
   ceph::os::Transaction::iterator &i)
 {
@@ -2356,6 +2326,14 @@ SeaStore::Shard::_do_transaction_step(
 
   using onode_iertr = OnodeManager::get_onode_iertr::extend<
     crimson::ct_error::value_too_large>;
+  // A batch may span collections: take the collection from the op, and cache
+  // onodes per (collection, object) as the object index is shared.
+  // cid refers into the iterator, which outlives the async onode lookups
+  // that keep references to it (a local copy would dangle).
+  const coll_t &cid = i.get_cid(op->cid);
+  const size_t onode_base = size_t(op->cid) * i.objects.size();
+  const size_t oid_idx = onode_base + op->oid;
+  const size_t dest_oid_idx = onode_base + op->dest_oid;
   auto fut = onode_iertr::make_ready_future<OnodeRef>(OnodeRef());
   bool create = false;
   if (op->op == Transaction::OP_TOUCH ||
@@ -2365,32 +2343,32 @@ SeaStore::Shard::_do_transaction_step(
       op->op == Transaction::OP_ZERO) {
     create = true;
   }
-  if (!onodes[op->oid]) {
+  if (!onodes[oid_idx]) {
     const ghobject_t& oid = i.get_oid(op->oid);
     auto t0 = seastar::lowres_clock::now();
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_onode(*ctx.transaction, col->get_cid(), oid);
+      fut = onode_manager->get_onode(*ctx.transaction, cid, oid);
     } else {
       DEBUGT("op {}, get_or_create oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
       fut = onode_manager->get_or_create_onode(
-        *ctx.transaction, col->get_cid(), oid);
+        *ctx.transaction, cid, oid);
     }
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
       ctx.get_onode_time += seastar::lowres_clock::now() - t0;
       return onode_iertr::make_ready_future<OnodeRef>(std::move(onode));
     });
   }
-  return fut.si_then([&, op, this, FNAME](auto get_onode)
+  return fut.si_then([&, op, oid_idx, dest_oid_idx, this, FNAME](auto get_onode)
                       -> OnodeManager::get_or_create_onode_iertr::future<> {
-    OnodeRef& onode = onodes[op->oid];
+    OnodeRef& onode = onodes[oid_idx];
     if (!onode) {
       assert(get_onode);
       onode = get_onode;
     }
-    OnodeRef& d_onode = onodes[op->dest_oid];
+    OnodeRef& d_onode = onodes[dest_oid_idx];
     if ((op->op == Transaction::OP_CLONE
 	  || op->op == Transaction::OP_COLL_MOVE_RENAME
 	  || op->op == Transaction::OP_CLONERANGE2)
@@ -2401,7 +2379,7 @@ SeaStore::Shard::_do_transaction_step(
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(
-        *ctx.transaction, col->get_cid(), dest_oid
+        *ctx.transaction, cid, dest_oid
       ).si_then([&d_onode](auto dest_onode) {
 	assert(dest_onode);
 	assert(!d_onode);
@@ -2413,26 +2391,26 @@ SeaStore::Shard::_do_transaction_step(
       DEBUGT("op {}, get_onode dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
       return onode_manager->get_or_create_onode(
-        *ctx.transaction, col->get_cid(), dest_oid
+        *ctx.transaction, cid, dest_oid
       ).si_then([&d_onode](auto target_onode) {
         d_onode = target_onode;
       });
     } else {
       return OnodeManager::get_or_create_onode_iertr::now();
     }
-  }).si_then([&ctx, &i, &onodes, op, this, FNAME]() -> tm_ret {
+  }).si_then([&ctx, &i, &onodes, op, &cid, oid_idx, dest_oid_idx, this, FNAME]() -> tm_ret {
     const ghobject_t& oid = i.get_oid(op->oid);
-    OnodeRef& onode = onodes[op->oid];
+    OnodeRef& onode = onodes[oid_idx];
     assert(onode);
     try {
       switch (op->op) {
       case Transaction::OP_REMOVE:
       {
         DEBUGT("op REMOVE, oid={} ...", *ctx.transaction, oid);
-        return _remove(ctx, onode, oid
- ).si_then([&onode] {
-   onode.reset();
- });
+        return _remove(ctx, cid, onode, oid
+	).si_then([&onode] {
+	  onode.reset();
+	});
       }
       case Transaction::OP_CREATE:
       case Transaction::OP_TOUCH:
@@ -2451,7 +2429,7 @@ SeaStore::Shard::_do_transaction_step(
                "TOUCH_TEMP",
                oid,
                dest_oid);
-        OnodeRef& d_onode = onodes[op->dest_oid];
+        OnodeRef& d_onode = onodes[dest_oid_idx];
         assert(d_onode);
         assert(d_onode->get_hobj() == dest_oid.hobj);
         assert(!dest_oid.hobj.is_temp());
@@ -2624,7 +2602,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         DEBUGT("op CLONE, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
-	return _clone(ctx, *onode, *onodes[op->dest_oid]);
+	return _clone(ctx, *onode, *onodes[dest_oid_idx]);
       }
       case Transaction::OP_CLONERANGE2:
       {
@@ -2637,7 +2615,7 @@ SeaStore::Shard::_do_transaction_step(
         return _clone_range(
           ctx,
           onode,
-          onodes[op->dest_oid],
+          onodes[dest_oid_idx],
           srcoff,
           len,
           dstoff);
@@ -2647,9 +2625,9 @@ SeaStore::Shard::_do_transaction_step(
         DEBUGT("op COLL_MOVE_RENAME, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	ceph_assert(op->cid == op->dest_cid);
-        auto &target_onode = onodes[op->dest_oid];
+        auto &target_onode = onodes[dest_oid_idx];
 	return _rename(
-	  ctx, onode, target_onode
+	  ctx, cid, onode, target_onode
 	).si_then([&onode] {
 	  onode.reset();
 	});
@@ -2733,10 +2711,10 @@ void rename_onode_omap_metadata(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_rename(
   internal_context_t &ctx,
+  const coll_t &cid,
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
-  auto cid = ctx.ch->get_cid();
   return _migrate_onode(ctx, cid, onode, d_onode);
 }
 
@@ -2792,6 +2770,7 @@ SeaStore::Shard::_migrate_onode(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_remove(
   internal_context_t &ctx,
+  const coll_t &cid,
   OnodeRef &onode,
   const ghobject_t &oid)
 {
@@ -2820,9 +2799,9 @@ SeaStore::Shard::_remove(
 	  });
       });
     });
-  }).si_then([this, &ctx, &onode] {
+  }).si_then([this, &ctx, &cid, &onode] {
     return onode_manager->erase_onode(
-      *ctx.transaction, ctx.ch->get_cid(), onode);
+      *ctx.transaction, cid, onode);
   }).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(

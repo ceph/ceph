@@ -500,7 +500,7 @@ TransactionManager::refs_ret TransactionManager::remove(
   DEBUGT("{} offsets ...", t, offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
     [this, &t, FNAME](auto &&offsets, auto &refcnts) {
-    return trans_intr::do_for_each(offsets.begin(), offsets.end(),
+    return seastar::do_for_each(offsets.begin(), offsets.end(),
       [this, &t, &refcnts](auto &laddr) {
       return this->remove(t, laddr
       ).si_then([&refcnts](auto ref) {
@@ -669,17 +669,13 @@ TransactionManager::submit_transaction(
   LOG_PREFIX(TransactionManager::submit_transaction);
   SUBDEBUGT(seastore_t, "start, entering reserve_projected_usage", t);
   auto reserve_start = std::chrono::steady_clock::now();
-  co_await trans_intr::make_interruptible(
-    t.get_handle().enter(write_pipeline.reserve_projected_usage)
-  );
+  co_await t.get_handle().enter(write_pipeline.reserve_projected_usage);
 
   auto dispatch_result = epm->dispatch_delayed_extents(t);
   auto projected_usage = dispatch_result.usage;
   SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
-  co_await trans_intr::make_interruptible(
-    epm->reserve_projected_usage(
+  co_await epm->reserve_projected_usage(
       projected_usage
-    )
   );
   t.get_phase_durations().reserve +=
     std::chrono::steady_clock::now() - reserve_start;
@@ -782,43 +778,6 @@ TransactionManager::update_lba_mappings(
   });
 }
 
-seastar::future<TransactionManager::mutated_extents_locker>
-TransactionManager::lock_mutated_nodes(
-  Transaction &t)
-{
-  mutated_extents_set_t mutated_extents;
-  LOG_PREFIX(TransactionManager::lock_mutated_nodes);
-  t.for_each_mutated_extent(
-    [&mutated_extents](auto &extent) {
-      if (!is_root_type(extent.get_type())) {
-        std::ignore = mutated_extents.emplace(&extent);
-      }
-  });
-  if (unlikely(mutated_extents.empty())) {
-    co_return mutated_extents_locker();
-  }
-  std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
-  std::vector<std::shared_lock<seastar::shared_mutex>> shared_locks;
-  if (auto &e = *mutated_extents.begin();
-      should_use_no_conflict_publish(t, e->get_type())) {
-    for (auto &ext : mutated_extents) {
-      assert(should_use_no_conflict_publish(t, ext->get_type()));
-      TRACET("locking {}", t, *ext);
-      auto lock = co_await seastar::get_unique_lock(ext->commit_lock);
-      unique_locks.emplace_back(std::move(lock));
-    }
-  } else {
-    for (auto &ext : mutated_extents) {
-      assert(!should_use_no_conflict_publish(t, ext->get_type()));
-      TRACET("shared locking {}", t, *ext);
-      auto lock = co_await seastar::get_shared_lock(ext->commit_lock);
-      shared_locks.emplace_back(std::move(lock));
-    }
-  }
-  co_return mutated_extents_locker(
-    std::move(mutated_extents), std::move(unique_locks), std::move(shared_locks));
-}
-
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::do_submit_transaction(
   Transaction &tref,
@@ -827,9 +786,7 @@ TransactionManager::do_submit_transaction(
 {
   LOG_PREFIX(TransactionManager::do_submit_transaction);
   SUBDEBUGT(seastore_t, "start, entering ool_writes", tref);
-  co_await trans_intr::make_interruptible(
-    tref.get_handle().enter(write_pipeline.ool_writes_and_lba_updates)
-  );
+  co_await tref.get_handle().enter(write_pipeline.ool_writes_and_lba_updates);
 
   SUBTRACET(seastore_t, "write delayed ool extents", tref);
   auto ool_start = std::chrono::steady_clock::now();
@@ -845,18 +802,6 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().lba_update +=
     std::chrono::steady_clock::now() - lba_start;
 
-  // TODO: For now, we lock mutated extents after delayed ool writes
-  // and lba mappings updating, this is ok because:
-  // 1. at present, only lba/backref nodes might be modified by
-  //    no_conflict trans;
-  // 2. only ool lba/backref extents' persistence needs to be sync'd
-  //
-  // In the future, when no_conflict transactions may also modify
-  // logical extents, we should add something like "lock_logical_mutated_extents"
-  // and invoke it before writing ool extents.
-  auto locker = co_await trans_intr::make_interruptible(
-    lock_mutated_nodes(tref));
-
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
   ool_start = std::chrono::steady_clock::now();
@@ -866,15 +811,7 @@ TransactionManager::do_submit_transaction(
 
   SUBTRACET(seastore_t, "entering prepare", tref);
   auto prepare_enter_start = std::chrono::steady_clock::now();
-  co_await trans_intr::make_interruptible(
-    tref.get_handle().enter(write_pipeline.prepare)
-  );
-
-  // For conflicting transactions, we can release the lock
-  // now. Because other transactions accessing the same
-  // extents as the current one would be invalidated later
-  // in Cache::prepare_record()
-  locker.release_shared_lock();
+  co_await tref.get_handle().enter(write_pipeline.prepare);
 
   tref.get_phase_durations().prepare_enter +=
     std::chrono::steady_clock::now() - prepare_enter_start;
@@ -903,7 +840,7 @@ TransactionManager::do_submit_transaction(
     std::move(record),
     tref.get_handle(),
     tref.get_src(),
-    [&locker, this, FNAME, &tref](record_locator_t submit_result) {
+    [this, FNAME, &tref](record_locator_t submit_result) {
     SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
     auto start_seq = submit_result.write_result.start_seq;
     journal->get_trimmer().set_journal_head(start_seq);
@@ -911,7 +848,6 @@ TransactionManager::do_submit_transaction(
       tref,
       submit_result.record_block_base,
       start_seq);
-    locker.release_lock();
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),
       cache->get_oldest_backref_dirty_from().value_or(start_seq));
@@ -927,9 +863,7 @@ TransactionManager::do_submit_transaction(
   tref.get_phase_durations().journal +=
     std::chrono::steady_clock::now() - journal_start;
 
-  co_await trans_intr::make_interruptible(
-    tref.get_handle().complete()
-  );
+  co_await tref.get_handle().complete();
 }
 
 seastar::future<> TransactionManager::flush(OrderingHandle &handle)
@@ -998,7 +932,7 @@ TransactionManager::rewrite_logical_extent(
       } catch (crimson::ct_error::eagain&) {}
       if (!nextent) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
@@ -1060,19 +994,12 @@ TransactionManager::rewrite_logical_extent(
       } catch (crimson::ct_error::eagain&) {}
       if (extents.empty()) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
-    // if rewriting a logical range resolves to multiple extents,
-    // the LBA update likely involves insertions/splits (structural
-    // btree changes), which the no-conflict publish-to-prior path
-    // does not currently cover safely. Fall back to optimistic
-    // conflict handling. a batch transaction rewrites many extents,
-    // and any structural rewrite taints them all.
-    t.force_rewrite_conflict |= (extents.size() > 1);
     for (auto &_nextent : extents) {
       auto nextent = _nextent->template cast<LogicalChildNode>();
       assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
@@ -1444,7 +1371,7 @@ TransactionManager::promote_extent(
       } catch (crimson::ct_error::eagain&) {}
       if (promoted_raw_extents.empty()) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
@@ -1455,7 +1382,6 @@ TransactionManager::promote_extent(
     auto orig_laddr = orig_ext->get_laddr();
     auto orig_paddr = orig_ext->get_paddr();
     auto orig_length = orig_ext->get_length();
-    t.force_rewrite_conflict |= (promoted_raw_extents.size() > 1);
     for (auto &extent : promoted_raw_extents) {
       auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
       auto slice_length = extent->get_length();
@@ -1503,7 +1429,7 @@ TransactionManager::promote_extent(
       } catch (crimson::ct_error::eagain&) {}
       if (!promoted_extent) {
         epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await epm->wait_background();
       }
     }
     auto lext = promoted_extent->cast<LogicalChildNode>();
@@ -1609,7 +1535,7 @@ TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
     L_ADDR_NULL,
     [this, &t, target_generation, modify_time, &extents, FNAME, hint]
     (auto &paddr_hint, auto &next_laddr) {
-    return trans_intr::do_for_each(
+    return seastar::do_for_each(
       extents,
       [this, &t, target_generation, modify_time, FNAME,
       &paddr_hint, &next_laddr, hint](auto &extent) {
@@ -1624,9 +1550,7 @@ TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
       // the extent may be concurrently being loaded/written by another
       // transaction, wait for that IO to complete before rewriting it
       // to avoid racing with it
-      return trans_intr::make_interruptible(
-        extent->wait_io()
-      ).then_interruptible(
+      return extent->wait_io().then(
         [this, &t, target_generation, modify_time, FNAME,
         &paddr_hint, &next_laddr, hint, &extent]() mutable
         -> rewrite_extent_iertr::future<> {
