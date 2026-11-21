@@ -1,0 +1,3 @@
+overrides:
+  ceph.key_rotate:
+    rotate_cmd: rotate-pending
