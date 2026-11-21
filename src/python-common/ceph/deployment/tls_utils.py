@@ -5,7 +5,7 @@ from datetime import datetime
 from cryptography import x509
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID, ExtensionOID
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 
@@ -304,6 +304,12 @@ def get_certificate_info(cert_data: str, include_details: bool = False) -> Dict[
                     'key_type': 'RSA',
                     'key_size': public_key.key_size,
                 }
+            elif isinstance(public_key, ec.EllipticCurvePublicKey):
+                info['public_key'] = {
+                    'key_type': 'EC',
+                    'key_size': public_key.key_size,
+                    'curve': public_key.curve.name,
+                }
             else:
                 info['public_key'] = {
                     'key_type': 'Unknown',
@@ -327,6 +333,12 @@ def get_private_key_info(private_data: str) -> Dict[str, Any]:
             info = {
                 'key_type': 'RSA',
                 'key_size': private_key.key_size,
+            }
+        elif isinstance(private_key, ec.EllipticCurvePrivateKey):
+            info = {
+                'key_type': 'EC',
+                'key_size': private_key.key_size,
+                'curve': private_key.curve.name,
             }
         else:
             info = {
