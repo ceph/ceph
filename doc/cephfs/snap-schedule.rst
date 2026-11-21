@@ -206,11 +206,6 @@ completely mute the tracebacks due to the inherent nature of problem. In the
 event that such tracebacks are seen, the only solution to get the system to a
 stable state is the disable and re-enable the snap_schedule Manager Module.
 
-In order to somewhat limit the overall number of snapshots in a file system, the
-module will only keep a maximum of 50 snapshots per directory. If the retention
-policy results in more then 50 retained snapshots, the retention list will be
-shortened to the newest 50 snapshots.
-
 Data storage
 ------------
 The snapshot schedule data is stored in a rados object in the cephfs metadata
