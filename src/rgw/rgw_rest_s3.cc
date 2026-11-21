@@ -3781,10 +3781,10 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     part_str(parts, "success_action_status", &status_string);
 
-    int r = stringtoul(status_string, &status_int);
-    if (r < 0) {
-      op_ret = r;
-      goto done;
+    // an unparsable value defaults to 204, like any value outside 200/201.
+    // the object is already written, so don't turn this into an error
+    if (stringtoul(status_string, &status_int) < 0) {
+      status_int = 0;
     }
 
     switch (status_int) {
