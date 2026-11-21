@@ -773,6 +773,13 @@ to a multi-site system, follow these steps:
 
       radosgw-admin zonegroup modify --api-name=<name> --rgw-zonegroup=<name>
 
+   After this change, S3 clients that send the old API name ``default`` as
+   the location constraint cannot create buckets: ``CreateBucket`` fails
+   with ``InvalidLocationConstraint``. For example, ``aws s3 mb`` sends the
+   AWS CLI's region as the location constraint, unless the region is
+   ``us-east-1``. Set the region of such clients to the new API name.
+   Existing buckets and objects remain accessible.
+
 4. Configure the master zonegroup. Replace ``<name>`` with the realm name or
    zonegroup name. Replace ``<fqdn>`` with the fully qualified domain name(s)
    in the zonegroup:
@@ -781,18 +788,7 @@ to a multi-site system, follow these steps:
 
       radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
 
-5. Configure the master zone. Replace ``<name>`` with the realm name, zone
-   name, or zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
-   name(s) in the zonegroup:
-
-   .. prompt:: bash #
-
-      radosgw-admin zone modify --rgw-realm=<name> --rgw-zonegroup=<name> \
-                                  --rgw-zone=<name> --endpoints http://<fqdn>:80 \
-                                  --access-key=<access-key> --secret=<secret-key> \
-                                  --master --default
-
-6. Create a system user. Replace ``<user-id>`` with the username.  Replace
+5. Create a system user. Replace ``<user-id>`` with the username.  Replace
    ``<display-name>`` with a display name. The display name is allowed to
    contain spaces:
 
@@ -802,6 +798,22 @@ to a multi-site system, follow these steps:
                                   --display-name="<display-name>" \
                                   --access-key=<access-key> \
                                   --secret=<secret-key> --system
+
+6. Configure the master zone. Replace ``<name>`` with the realm name, zone
+   name, or zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
+   name(s) in the zonegroup. Replace ``<access-key>`` and ``<secret-key>``
+   with the system user's keys from the previous step:
+
+   .. prompt:: bash #
+
+      radosgw-admin zone modify --rgw-realm=<name> --rgw-zonegroup=<name> \
+                                  --rgw-zone=<name> --endpoints http://<fqdn>:80 \
+                                  --access-key=<access-key> --secret=<secret-key> \
+                                  --master --default
+
+   The zone's gateways sign their requests to other zones with these keys.
+   You need the same keys again to pull the realm and to create each
+   secondary zone.
 
 7. Commit the updated configuration:
 
