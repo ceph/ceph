@@ -1556,7 +1556,7 @@ int RGWCompleteMultipart_ObjStore::get_params(optional_yield y)
   upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
-    op_ret = -ENOTSUP;
+    op_ret = -ERR_NO_SUCH_UPLOAD;
     return op_ret;
   }
 
@@ -1573,7 +1573,8 @@ int RGWListMultipart_ObjStore::get_params(optional_yield y)
   upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
-    op_ret = -ENOTSUP;
+    op_ret = -ERR_NO_SUCH_UPLOAD;
+    return op_ret;
   }
   string marker_str = s->info.args.get("part-number-marker");
 
