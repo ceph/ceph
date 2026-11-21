@@ -6,6 +6,12 @@ import { BehaviorSubject, of } from 'rxjs';
 import { SmbClusterResourcePageComponent } from './smb-cluster-resource-page.component';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
 import { CLIENT_COMPAT, SMBCluster } from '../smb.model';
+import {
+  SMB_CEPHFS_CONTEXT,
+  SMB_CONTEXT,
+  SMB_RGW_CONTEXT,
+  SmbContext
+} from '~/app/shared/constants/smb.constant';
 
 describe('SmbClusterResourcePageComponent', () => {
   let component: SmbClusterResourcePageComponent;
@@ -15,7 +21,7 @@ describe('SmbClusterResourcePageComponent', () => {
   let clusterSubject: BehaviorSubject<SMBCluster | null>;
   let mockSmbClusterResourceStateService: { cluster$: any };
 
-  beforeEach(async () => {
+  const setup = async (ctx: SmbContext = SMB_CEPHFS_CONTEXT) => {
     // Default emission for a successful load
     clusterSubject = new BehaviorSubject<SMBCluster | null>({
       cluster_id: 'test-cluster',
@@ -29,6 +35,7 @@ describe('SmbClusterResourcePageComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [SmbClusterResourcePageComponent],
       providers: [
+        { provide: SMB_CONTEXT, useValue: ctx },
         {
           provide: SmbClusterResourceStateService,
           useValue: mockSmbClusterResourceStateService
@@ -50,6 +57,10 @@ describe('SmbClusterResourcePageComponent', () => {
     fixture = TestBed.createComponent(SmbClusterResourcePageComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+  };
+
+  beforeEach(async () => {
+    await setup();
   });
 
   it('should create', () => {
@@ -88,6 +99,14 @@ describe('SmbClusterResourcePageComponent', () => {
       label: 'Compatibility',
       value: CLIENT_COMPAT.MacOS
     });
+  });
+
+  it('should not show compatibility field for rgw smb', async () => {
+    TestBed.resetTestingModule();
+    await setup(SMB_RGW_CONTEXT);
+
+    expect(component.overviewFields.length).toBe(2);
+    expect(component.overviewFields.map((f) => f.label)).not.toContain('Compatibility');
   });
 
   it('should set loadError = true and selection = undefined when cluster emits null (service error)', () => {

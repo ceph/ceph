@@ -7,19 +7,21 @@ export enum StorageBackend {
 }
 
 export type SmbContext =
-  | { backend: StorageBackend.CEPHFS; basePath: 'cephfs/smb' }
-  | { backend: StorageBackend.RGW; basePath: 'rgw/smb' };
+  | { backend: StorageBackend.CEPHFS; basePath: 'cephfs/smb'; showMacOsCompat: boolean }
+  | { backend: StorageBackend.RGW; basePath: 'rgw/smb'; showMacOsCompat: boolean };
 
 export const SMB_CONTEXT = new InjectionToken<SmbContext>('SMB_CONTEXT');
 
 export const SMB_CEPHFS_CONTEXT: SmbContext = {
   backend: StorageBackend.CEPHFS,
-  basePath: 'cephfs/smb'
+  basePath: 'cephfs/smb',
+  showMacOsCompat: true
 };
 
 export const SMB_RGW_CONTEXT: SmbContext = {
   backend: StorageBackend.RGW,
-  basePath: 'rgw/smb'
+  basePath: 'rgw/smb',
+  showMacOsCompat: false
 };
 
 export const SMB_BASE_CEPHFS = SMB_CEPHFS_CONTEXT.basePath;

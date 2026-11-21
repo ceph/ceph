@@ -50,6 +50,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   private readonly ctx = inject(SMB_CONTEXT);
   private readonly clusterPath = `${this.ctx.basePath}/cluster`;
   private readonly usersGroupsPath = `${this.ctx.basePath}/standalone`;
+  readonly showMacOsCompat = this.ctx.showMacOsCompat;
   smbForm: CdFormGroup;
   hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
   hasOrchestrator: boolean;
@@ -391,10 +392,12 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
 
-    const clientCompat: ClientCompat = rawFormValue.client_compat
-      ? CLIENT_COMPAT.MacOS
-      : CLIENT_COMPAT.Default;
-    requestModel.cluster_resource.client_compat = clientCompat;
+    if (this.showMacOsCompat) {
+      const clientCompat: ClientCompat = rawFormValue.client_compat
+        ? CLIENT_COMPAT.MacOS
+        : CLIENT_COMPAT.Default;
+      requestModel.cluster_resource.client_compat = clientCompat;
+    }
 
     if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
