@@ -2390,6 +2390,7 @@ void MDSRankDispatcher::handle_mds_map(
 	    // -> stopped (missing) -> starting -> active
 	    restart.insert(r);
 	    mdcache->migrator->handle_mds_failure_or_stop(r);
+	    mdcache->drop_stray_requests_to(r);
 	    if (mdsmap->get_tableserver() == whoami)
 	      snapserver->handle_mds_failure_or_stop(r);
 	  }
@@ -2569,6 +2570,7 @@ void MDSRankDispatcher::handle_mds_map(
     for (const auto& r : stopped)
       if (oldstopped.count(r) == 0) {     // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(r);
+	mdcache->drop_stray_requests_to(r);
 	if (mdsmap->get_tableserver() == whoami)
 	  snapserver->handle_mds_failure_or_stop(r);
       }
@@ -2634,6 +2636,7 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   dout(5) << "handle_mds_failure mds." << who << dendl;
 
   mdcache->handle_mds_failure(who);
+  mdcache->drop_stray_requests_to(who);
 
   if (mdsmap->get_tableserver() == whoami)
     snapserver->handle_mds_failure_or_stop(who);
