@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 import json
 from typing import List, Optional, Dict, Any, Tuple
 from ceph.deployment.service_spec import ServiceSpec
-from orchestrator import OrchestratorError
+from orchestrator import DaemonDescription, OrchestratorError
 from .service_registry import register_cephadm_service
 from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
 
@@ -100,3 +100,12 @@ class CephadmAgent(CephService):
 
         return config, self.get_dependencies(
             self.mgr, spec, daemon_spec.daemon_type)
+
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+        # Drop the agent's keyring, counter and listener port. Otherwise a
+        # report still in flight from the removed agent is accepted, and a
+        # later agent on this host starts with the old counter and port: the
+        # mgr then sees every report as out of date and keeps messaging it.
+        assert daemon.hostname is not None
+        self.mgr.agent_cache.rm_agent(daemon.hostname)

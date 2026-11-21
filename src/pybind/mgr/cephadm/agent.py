@@ -5,7 +5,7 @@ import ssl
 import threading
 import time
 
-from orchestrator import DaemonDescriptionStatus, OrchestratorError
+from orchestrator import DaemonDescriptionStatus, OrchestratorError, OrchestratorEvent
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
@@ -902,9 +902,13 @@ class AgentMessageThread(threading.Thread):
 
 
 class CephadmAgentHelpers:
+    # max hostnames listed per category in the use_agent waiting message
+    WAITING_MAX_HOSTS = 5
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.agent = mgr.http_server.agent
+        self._last_waiting_msg: Optional[str] = None
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         for host in hosts:
@@ -973,13 +977,138 @@ class CephadmAgentHelpers:
     # or services setup would have to be individually changed to expect an agent service or
     # daemons, OR we can put this in its own function then mock the function
     def _apply_agent(self) -> None:
-        spec = ServiceSpec(
+        self.mgr.spec_store.save(self.agent_spec())
+
+    @staticmethod
+    def agent_spec() -> ServiceSpec:
+        """
+        The only agent spec cephadm supports: an agent on every host, with a
+        listener certificate signed by the cephadm root CA. The agent
+        listener cannot work without TLS, and every host needs an agent.
+        """
+        return ServiceSpec(
             service_type=CephadmAgent.TYPE,
             placement=PlacementSpec(host_pattern='*'),
             ssl=True,
             certificate_source=CertificateSource.CEPHADM_SIGNED.value,
         )
-        self.mgr.spec_store.save(spec)
+
+    def check_agent_spec_apply(self, spec: ServiceSpec) -> Tuple[ServiceSpec, str]:
+        """
+        Validate an 'orch apply' of the agent service.
+
+        The agent service is owned by mgr/cephadm/use_agent. An applied
+        agent spec is refused while use_agent is false (the serve loop
+        would remove it again) and is otherwise replaced by agent_spec(),
+        with a warning if it differed.
+
+        Returns the spec to save and a note for the apply output.
+        """
+        if not self.mgr.use_agent:
+            raise OrchestratorError(
+                'The agent service is managed by the mgr/cephadm/use_agent setting. '
+                'To deploy agents, run: '
+                'ceph config set mgr mgr/cephadm/use_agent true')
+        canonical = self.agent_spec()
+        canonical.preview_only = spec.preview_only
+        if spec.to_json() == canonical.to_json():
+            return canonical, ''
+        self.mgr.log.warning(
+            f'Replaced the applied agent spec {spec.to_json()} with the spec managed by '
+            f'use_agent {canonical.to_json()}')
+        return canonical, (
+            '\nWARNING: the agent service is managed by the mgr/cephadm/use_agent '
+            'setting. The applied spec was replaced with the default agent spec '
+            '(all hosts, cephadm-signed TLS); other settings are ignored.'
+        )
+
+    def use_agent_waiting_reason(self) -> Optional[str]:
+        """
+        With use_agent=true, the serve loop applies only the agent spec until
+        every reachable host has sent up-to-date metadata. Say what it is
+        waiting for, by host, or return None if it is not waiting.
+        """
+        if not self.mgr.use_agent:
+            return None
+        cache = self.mgr.cache
+        unreachable = {h.hostname for h in cache.get_unreachable_hosts()}
+        waiting = [h for h in cache.get_hosts()
+                   if h not in unreachable and not cache.host_metadata_up_to_date(h)]
+        if not waiting:
+            return None
+
+        spec = self.mgr.spec_store.active_specs.get(CephadmAgent.TYPE)
+        blockers: List[str] = []
+        if spec is None:
+            blockers.append('the agent service is being (re)created')
+        elif spec.unmanaged:
+            blockers.append(
+                "the agent service is unmanaged, so agents are not deployed "
+                "(run 'ceph orch set-managed agent')")
+        endpoint = self.mgr.http_server.agent
+        if not endpoint or not endpoint.server_port:
+            blockers.append('the cephadm agent endpoint is not ready yet')
+
+        agent_hosts = {dd.hostname for dd in cache.get_daemons_by_type(CephadmAgent.TYPE)}
+        categories: Dict[str, List[str]] = {
+            'without an agent daemon': [],
+            'with no report from their agent yet': [],
+            'waiting for their agent to acknowledge the latest request': [],
+        }
+        for h in sorted(waiting):
+            if h not in agent_hosts:
+                categories['without an agent daemon'].append(h)
+            elif h not in self.mgr.agent_cache.agent_ports:
+                categories['with no report from their agent yet'].append(h)
+            else:
+                categories['waiting for their agent to acknowledge the latest request'].append(h)
+
+        def _hosts(hosts: List[str]) -> str:
+            shown = ', '.join(hosts[:self.WAITING_MAX_HOSTS])
+            more = len(hosts) - self.WAITING_MAX_HOSTS
+            return f'{shown}, and {more} more' if more > 0 else shown
+
+        parts = [f'{len(hosts)} {what} ({_hosts(hosts)})'
+                 for what, hosts in categories.items() if hosts]
+        msg = (f'use_agent: other services are not applied until all hosts report '
+               f'up-to-date metadata. Waiting for {len(waiting)} host(s): '
+               + '; '.join(parts))
+        if blockers:
+            msg += '. Blocked because ' + '; '.join(blockers)
+        return msg
+
+    def report_use_agent_waiting(self) -> None:
+        """
+        Log the waiting reason at INFO when it changes (DEBUG otherwise) and
+        record it as an event on the agent service, visible with
+        'ceph orch ls agent --format yaml'.
+        """
+        msg = self.use_agent_waiting_reason()
+        if msg is None:
+            if self._last_waiting_msg is not None:
+                self.mgr.log.info('use_agent: all hosts have up-to-date metadata, '
+                                  'applying all services')
+                self._last_waiting_msg = None
+            return
+        if msg != self._last_waiting_msg:
+            self.mgr.log.info(msg)
+            self._last_waiting_msg = msg
+        else:
+            self.mgr.log.debug(msg)
+        spec = self.mgr.spec_store.active_specs.get(CephadmAgent.TYPE)
+        if spec is not None:
+            self.mgr.events.for_service(spec, OrchestratorEvent.INFO, msg)
+
+    def check_agent_service_remove(self) -> None:
+        """
+        Refuse 'orch rm agent' while use_agent is true: the serve loop would
+        re-create the service right away.
+        """
+        if self.mgr.use_agent:
+            raise OrchestratorError(
+                'The agent service is managed by the mgr/cephadm/use_agent setting. '
+                'To remove the agents, run: '
+                'ceph config set mgr mgr/cephadm/use_agent false')
 
     def _handle_use_agent_setting(self) -> bool:
         need_apply = False
@@ -991,18 +1120,29 @@ class CephadmAgentHelpers:
             for agent in self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
                 if agent.hostname not in self.mgr.agent_cache.agent_keys:
                     self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
-            if CephadmAgent.TYPE not in self.mgr.spec_store:
+            # Check active specs, not the whole store: after use_agent was
+            # turned off (or 'orch rm agent'), the agent spec stays in the
+            # store, marked deleted, until every agent daemon is removed.
+            # Such a spec is never applied, so it has to be revived here.
+            if CephadmAgent.TYPE not in self.mgr.spec_store.active_specs:
+                if self.mgr.spec_store.undelete(CephadmAgent.TYPE):
+                    self.mgr.log.info(
+                        'use_agent is enabled: cancelled the pending removal of the agent service')
+                # (re)write the spec cephadm expects, also over a revived one
                 self.mgr.agent_helpers._apply_agent()
                 need_apply = True
         else:
-            if CephadmAgent.TYPE in self.mgr.spec_store:
+            # A spec that is already pending removal must not be removed
+            # again: rm() would re-save it and this handler would report
+            # a change on every serve loop pass until the purge.
+            if CephadmAgent.TYPE in self.mgr.spec_store.active_specs:
                 self.mgr.spec_store.rm(CephadmAgent.TYPE)
                 need_apply = True
             if not self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
-                self.mgr.agent_cache.agent_counter = {}
-                self.mgr.agent_cache.agent_timestamp = {}
-                self.mgr.agent_cache.agent_keys = {}
-                self.mgr.agent_cache.agent_ports = {}
+                # Normally already done per host when each agent daemon was
+                # removed. Also drop the stored entries: clearing only the
+                # in-memory maps brought the old state back on mgr restart.
+                self.mgr.agent_cache.rm_all_agents()
         return need_apply
 
     def _check_agent(self, host: str) -> bool:
