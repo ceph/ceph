@@ -94,7 +94,7 @@ private:
   public:
     SharedLRU<K, V> *cache;
     K key;
-    Cleanup(SharedLRU<K, V> *cache, K key) : cache(cache), key(key) {}
+    Cleanup(SharedLRU<K, V> *cache, K key) : cache(cache), key(std::move(key)) {}
     void operator()(V *ptr) {
       cache->remove(key, ptr);
       delete ptr;
