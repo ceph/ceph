@@ -175,9 +175,8 @@ Commands
    Resharding is usually a long process, which involves walking through entire RocksDB key space
    and moving some of them to different column families.
    Option --resharding-ctrl provides performance control over resharding process.
-   Interrupted resharding will prevent OSD from running.
-   Interrupted resharding does not corrupt data. It is always possible to continue previous resharding,
-   or select any other sharding scheme, including reverting to original one.
+   Resharding must not be interrupted: an interrupted resharding leaves the database in a state
+   that cannot be safely resumed or reverted, the OSD will not start anymore and has to be redeployed.
 
 :command:`show-sharding` --path *osd path*
 
