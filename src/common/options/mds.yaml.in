@@ -1605,6 +1605,27 @@ options:
   default: 0
   services:
   - mds
+- name: mds_inject_export_frozen_delay
+  type: float
+  level: dev
+  desc: delay (in seconds) an export once its subtree is frozen
+  long_desc: Testing only. Each export waits this long, once, after its
+    subtree is frozen and before it takes the locks of the directory inode,
+    which keeps the subtree frozen for that long.
+  default: 0
+  services:
+  - mds
+- name: mds_inject_scatter_request_delay
+  type: float
+  level: dev
+  desc: delay (in seconds) the handling of a request from another MDS to
+    scatter a lock
+  long_desc: Testing only. The auth of an inode handles a scatter request
+    from a replica this long after it is received, as if the message had
+    been held up on the way.
+  default: 0
+  services:
+  - mds
 - name: mds_request_load_average_decay_rate
   type: float
   level: advanced
