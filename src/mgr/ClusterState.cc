@@ -134,6 +134,20 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
   }
   for (auto p : stats->pool_stat) {
     pending_inc.pool_statfs_updates.insert_or_assign(std::make_pair(p.first, from), p.second);
+    pending_inc.pool_statfs_rm.erase(std::make_pair(p.first, from));
+  }
+  // The OSD reports every pool it holds a PG of. Drop its usage for the
+  // other pools, or a pool keeps the usage an OSD last reported for it
+  // after the OSD's last PG of the pool has moved away.
+  for (auto& p : existing_pools) {
+    if (stats->pool_stat.count(p.first)) {
+      continue;
+    }
+    auto key = std::make_pair(p.first, from);
+    pending_inc.pool_statfs_updates.erase(key);
+    if (pg_map.pool_statfs.count(key)) {
+      pending_inc.pool_statfs_rm.insert(key);
+    }
   }
 }
 
