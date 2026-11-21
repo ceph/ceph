@@ -40,7 +40,6 @@
 using std::dec;
 using std::hex;
 using std::less;
-using std::list;
 using std::make_pair;
 using std::map;
 using std::pair;
@@ -743,7 +742,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
 }
 
 void ECCommon::ReadPipeline::get_want_to_read_shards(
-    const list<ec_align_t> &to_read,
+    std::span<const ec_align_t> to_read,
     ECUtil::shard_extent_set_t &want_shard_reads) {
   if (sinfo.supports_partial_reads()) {
     // Optimised.
@@ -764,7 +763,7 @@ void ECCommon::ReadPipeline::get_want_to_read_shards(
 }
 
 void ECCommon::ReadPipeline::get_want_to_read_all_shards(
-    const list<ec_align_t> &to_read,
+    std::span<const ec_align_t> to_read,
     ECUtil::shard_extent_set_t &want_shard_reads)
 {
   for (const auto &single_region: to_read) {
@@ -872,7 +871,7 @@ static ostream &_prefix(std::ostream *_dout,
 }
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct(
-    const map<hobject_t, std::list<ec_align_t>> &reads,
+    const map<hobject_t, std::vector<ec_align_t>> &reads,
     const bool fast_read,
     const uint64_t object_size,
     GenContextURef<ec_extents_t&&> &&func) {
@@ -982,7 +981,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 }
 
 void ECCommon::ReadPipeline::kick_reads() {
-  while (in_progress_client_reads.size() &&
+  while (!in_progress_client_reads.empty() &&
          in_progress_client_reads.front().is_complete()) {
          in_progress_client_reads.front().run();
          in_progress_client_reads.pop_front();
@@ -1019,6 +1018,7 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op) {
 
   op->pending_cache_ops = op->plan.plans.size();
   waiting_commit.push_back(op);
+  op->cache_ops.reserve(std::size(op->plan.plans));
 
   for (auto &plan: op->plan.plans) {
     ECExtentCache::OpRef cache_op = extent_cache.prepare(plan.hoid,
@@ -1255,15 +1255,16 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
 };
 
 void ECCommon::RMWPipeline::try_finish_rmw() {
-  while (waiting_commit.size() > 0) {
-    OpRef op = waiting_commit.front();
+  while (!waiting_commit.empty()) {
+    auto &op = waiting_commit.front();
 
     if (op->pending_commits != 0 || op->pending_cache_ops != 0) {
       return;
     }
 
+    auto ready = std::move(op);
     waiting_commit.pop_front();
-    finish_rmw(op);
+    finish_rmw(ready);
   }
 }
 

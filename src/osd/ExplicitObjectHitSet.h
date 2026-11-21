@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <vector>
 #include <unordered_set>
 
 #include "HitSet.h"
@@ -33,8 +34,8 @@ public:
     HitSet::Impl *get_new_impl() const override {
       return new ExplicitObjectHitSet;
     }
-    static std::list<Params> generate_test_instances() {
-      std::list<Params> o;
+    static std::vector<Params> generate_test_instances() {
+      std::vector<Params> o;
       o.emplace_back();
       return o;
     }
@@ -81,8 +82,8 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static std::list<ExplicitObjectHitSet> generate_test_instances() {
-    std::list<ExplicitObjectHitSet> o;
+  static std::vector<ExplicitObjectHitSet> generate_test_instances() {
+    std::vector<ExplicitObjectHitSet> o;
     o.emplace_back();
     o.emplace_back();
     o.back().insert(hobject_t());

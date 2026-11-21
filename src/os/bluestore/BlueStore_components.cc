@@ -395,7 +395,7 @@ bool bluestore::TransContext::add_writing(Onode* o, uint32_t off, uint32_t len)
 
 void bluestore::TransContext::finish_writing()
 {
-  write_list_t finished;
+  write_batch finished;
   {
     std::lock_guard l(writings_lock);
     finished.swap(writings);
