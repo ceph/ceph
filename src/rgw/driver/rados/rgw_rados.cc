@@ -8484,6 +8484,12 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       // sdk's TransferManager.download()
       ldpp_dout(dpp, 4) << "requested part #" << *params.part_num
           << ": " << cpp_strerror(r) << dendl;
+      // part 1 of a non-multipart object spans the whole object: report a full range.
+      // the !parts_count guard excludes a multipart object merely missing part 1.
+      if (plaintext_obj_size && !params.parts_count) {
+        params.part_ofs = 0;
+        params.full_obj_size = plaintext_obj_size;
+      }
     } else if (r < 0) {
       ldpp_dout(dpp, 4) << "failed to read part #" << *params.part_num
           << ": " << cpp_strerror(r) << dendl;

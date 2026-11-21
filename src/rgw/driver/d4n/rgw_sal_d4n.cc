@@ -1999,9 +1999,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
         if (params.part_num && *(params.part_num) != 1) {
           return -ERR_INVALID_PART;
         }
+        // partNumber 1 on a non-multipart object spans the whole object: full range.
+        // accounted_size is the plaintext size for plain/CBC/AEAD/compressed.
+        params.part_ofs = 0;
+        params.full_obj_size = source->get_accounted_size();
       } else {
-        // the base filter already forwards params to next and copies the
-        // parts count and part range fields back
+        // the base filter forwards params to next and copies the results back.
         return FilterReadOp::prepare(y, dpp);
       }
     }
