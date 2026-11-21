@@ -8334,6 +8334,77 @@ void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
   *total_items = onode_items;
 }
 
+// https://tracker.ceph.com/issues/82941
+// An all-zero (or empty) bluestore_cache_age_bins_* string made the mempool
+// thread set every cache shard's age-bin ring to capacity 0, and the next
+// insert into that cache dereferenced the front of an empty ring.
+TEST_P(StoreTestSpecificAUSize, AllZeroCacheAgeBins) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  for (const char* opt : {"bluestore_cache_age_bins_kv",
+                          "bluestore_cache_age_bins_kv_onode",
+                          "bluestore_cache_age_bins_meta",
+                          "bluestore_cache_age_bins_data"}) {
+    SetVal(g_conf(), opt, "0 0 0 0 0 0 0 0 0 0");
+  }
+  SetVal(g_conf(), "bluestore_cache_age_bin_interval", "0.1");
+  SetVal(g_conf(), "bluestore_default_buffered_read", "true");
+  g_conf().apply_changes(nullptr);
+  StartDeferred(4096);
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  const unsigned num_objects = 16;
+  const unsigned object_size = 64 * 1024;
+  auto hoid = [](unsigned i) {
+    return ghobject_t(hobject_t(sobject_t("obj" + stringify(i), CEPH_NOSNAP)));
+  };
+  bufferlist data;
+  data.append(std::string(object_size, 'x'));
+  for (unsigned i = 0; i < num_objects; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid(i), 0, object_size, data);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // remount with empty caches, let the mempool thread import the all-zero
+  // bins, then insert into every cache: onodes and rocksdb blocks on the
+  // first read of each object, data buffers on every read
+  ch.reset();
+  r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount();
+  ASSERT_EQ(r, 0);
+  ch = store->open_collection(cid);
+  ASSERT_TRUE(ch);
+  for (int pass = 0; pass < 2; ++pass) {
+    sleep(1);
+    for (unsigned i = 0; i < num_objects; ++i) {
+      bufferlist bl;
+      r = store->read(ch, hoid(i), 0, object_size, bl);
+      ASSERT_EQ(r, (int)object_size);
+      ASSERT_TRUE(bl_eq(data, bl));
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    for (unsigned i = 0; i < num_objects; ++i) {
+      t.remove(cid, hoid(i));
+    }
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
 
   if (string(GetParam()) != "bluestore")

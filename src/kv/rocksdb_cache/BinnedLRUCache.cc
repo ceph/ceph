@@ -16,6 +16,7 @@
 
 #include "BinnedLRUCache.h"
 
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -601,7 +602,10 @@ uint32_t BinnedLRUCacheShard::get_bin_count() const {
 
 void BinnedLRUCacheShard::set_bin_count(uint32_t count) {
   std::lock_guard<std::mutex> l(mutex_);
-  age_bins.set_capacity(count);
+  // keep at least one bin: push_front() on a zero-capacity circular_buffer
+  // inserts nothing, and front() then dereferences null (all-zero
+  // bluestore_cache_age_bins_* config)
+  age_bins.set_capacity(std::max<uint32_t>(count, 1));
 }
 
 std::string BinnedLRUCacheShard::GetPrintableOptions() const {
