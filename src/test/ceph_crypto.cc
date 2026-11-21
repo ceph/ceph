@@ -60,6 +60,18 @@ TEST(MD5, Restart) {
   ASSERT_EQ(0, err);
 }
 
+TEST(MD5NonCrypto, Simple) {
+  ceph::crypto::MD5NonCrypto h;
+  h.Update((const unsigned char*)"abc", 3);
+  unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  h.Final(digest);
+  unsigned char want_digest[CEPH_CRYPTO_MD5_DIGESTSIZE] = {
+    0x90, 0x01, 0x50, 0x98, 0x3c, 0xd2, 0x4f, 0xb0,
+    0xd6, 0x96, 0x3f, 0x7d, 0x28, 0xe1, 0x7f, 0x72,
+  };
+  ASSERT_EQ(0, memcmp(digest, want_digest, CEPH_CRYPTO_MD5_DIGESTSIZE));
+}
+
 TEST(HMACSHA1, Simple) {
   ceph::crypto::HMACSHA1 h((const unsigned char*)"sekrit", 6);
   h.Update((const unsigned char*)"foo", 3);
