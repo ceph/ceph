@@ -4880,7 +4880,7 @@ TEST(LibCephFS, AsyncReadAndWriteMultiClient) {
   UserPerm *w_perms, *r_perms = NULL;
   Inode *w_parent, *w_inode, *r_parent, *r_inode = NULL;
   struct ceph_statx stx = {0};
-  struct ceph_ll_io_info io_info;
+  struct ceph_ll_io_info io_info = {};
   struct iovec iov;
   struct Fh *w_fh, *r_fh;
   uint8_t buf[131072];
@@ -5055,13 +5055,16 @@ void write_fsync_io_callback(struct ceph_ll_io_info *io_info) {
     std::cout << "fsync" << std::endl;
     fsync_done = true;
   }
-  cond.notify_one();
+  // the writer and the fsync threads wait on the same condition
+  // variable; notify_one() could wake the thread whose operation is
+  // still in flight, losing the wakeup for the other one.
+  cond.notify_all();
 }
 
 static void writer_func(struct ceph_mount_info *cmount, Fh *fh) {
   int iterations = 2;
   uint8_t buf[131072];
-  struct ceph_ll_io_info io_info;
+  struct ceph_ll_io_info io_info = {};
   struct iovec iov;
 
   io_info.callback = write_fsync_io_callback;
@@ -5076,7 +5079,10 @@ static void writer_func(struct ceph_mount_info *cmount, Fh *fh) {
     iov.iov_base = buf;
     iov.iov_len = sizeof(buf);
     io_info.result = 0;
-    write_done = false;
+    {
+      std::scoped_lock lock(mtx);
+      write_done = false;
+    }
     ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &io_info), 0);
     std::cout << ": waiting for write to finish" << std::endl;
     {
@@ -5092,9 +5098,13 @@ static void writer_func(struct ceph_mount_info *cmount, Fh *fh) {
 
 static void fsync_func(struct ceph_mount_info *cmount, Inode *in) {
   int iterations = 1000;
-  struct ceph_ll_io_info io_info;
+  struct ceph_ll_io_info io_info = {};
 
   io_info.callback = write_fsync_io_callback;
+  // write_fsync_io_callback() uses this to tell a fsync completion
+  // from a write completion.
+  io_info.write = false;
+  io_info.syncdataonly = false;
 
   std::cout << ": fsync thread sleeping" << std::endl;
   sleep(3);
@@ -5102,7 +5112,10 @@ static void fsync_func(struct ceph_mount_info *cmount, Inode *in) {
 
   while (--iterations > 0) {
     io_info.result = 0;
-    fsync_done = false;
+    {
+      std::scoped_lock lock(mtx);
+      fsync_done = false;
+    }
     ASSERT_EQ(ceph_ll_nonblocking_fsync(cmount, in, &io_info), 0);
     std::cout << ": waiting for fsync to finish" << std::endl;
     {
@@ -5204,7 +5217,7 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   // using a 128MiB buffer and construct the write io_info struct
   auto out_buf = std::make_unique<uint64_t[]>(BUFSIZE);
   std::fill(out_buf.get(), out_buf.get() + BUFSIZE, 65);
-  struct ceph_ll_io_info w_io_info;
+  struct ceph_ll_io_info w_io_info = {};
   struct iovec w_iov;
   w_io_info.callback = io_callback;
   w_io_info.iov = &w_iov;
@@ -5219,7 +5232,7 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
 
   // using a zero-sized buffer and contruct read in_info struct
   auto in_buf = std::make_unique<uint64_t[]>(0);
-  struct ceph_ll_io_info r_io_info;
+  struct ceph_ll_io_info r_io_info = {};
   struct iovec r_iov;
   r_io_info.callback = io_callback;
   r_io_info.iov = &r_iov;
