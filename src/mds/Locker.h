@@ -297,6 +297,9 @@ private:
 
   void handle_quiesce_failure(const MDRequestRef& mdr, std::string_view& marker);
 
+  // scatter requests held back by mds_inject_scatter_request_delay
+  std::set<const MLock*> delayed_scatter_requests;
+
   uint64_t calc_new_max_size(const inode_const_ptr& pi, uint64_t size);
   __u32 get_xattr_total_length(mempool_xattr_map &xattr);
   void decode_new_xattrs(mempool_inode *inode,
