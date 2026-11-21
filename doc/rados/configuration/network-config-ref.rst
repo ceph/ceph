@@ -346,12 +346,77 @@ General Settings
 ----------------
 
 .. confval:: ms_type
+.. confval:: ms_public_type
+.. confval:: ms_cluster_type
 .. confval:: ms_async_op_threads
 .. confval:: ms_initial_backoff
 .. confval:: ms_max_backoff
 .. confval:: ms_die_on_bad_msg
 .. confval:: ms_dispatch_throttle_bytes
 .. confval:: ms_inject_socket_failures
+
+.. _rados-config-rdma:
+
+RDMA
+----
+
+.. warning:: The RDMA transport (``async+rdma``) is experimental, and its
+   support is limited.
+
+To send all messenger traffic over RDMA, set :confval:`ms_type` to
+``async+rdma``. To use RDMA on only the public network or only the cluster
+network, set :confval:`ms_public_type` or :confval:`ms_cluster_type` instead.
+Set the RDMA options before the daemons start. Daemons read most of them once,
+when they first set up the RDMA device.
+
+Before you enable RDMA, check the following:
+
+- The transport. With :confval:`ms_async_rdma_type` set to ``ib``, the default,
+  for InfiniBand and RoCE, each RDMA connection begins with a TCP connection to
+  the peer's messenger address. The two ends use that TCP connection to
+  exchange queue pair details, so every daemon must also be reachable over TCP
+  at its messenger address. For iWARP, set :confval:`ms_async_rdma_type` to
+  ``iwarp`` and :confval:`ms_async_rdma_cm` to ``true``.
+- The device, port, and GID. Run ``ibv_devinfo`` to find the device name and an
+  active port, and set :confval:`ms_async_rdma_device_name` and
+  :confval:`ms_async_rdma_port_num`. On RoCE, set
+  :confval:`ms_async_rdma_gid_idx` to the GID table entry for the IP address
+  and RoCE version to use.
+- The locked-memory limit. Ceph registers its send and receive buffers with the
+  RDMA device, which locks them in memory. A daemon logs a warning when it sets
+  up RDMA unless its locked-memory limit (``ulimit -l``) is unlimited.
+- Containers. cephadm configures RDMA device access and an unlimited
+  locked-memory limit only for NFS daemons that have ``enable_rdma`` set (see
+  the NFS over RDMA section of :ref:`deploy-cephadm-nfs-ganesha`). For other
+  daemons that run in containers, check that the container can open the RDMA
+  device and that its locked-memory limit is high enough.
+
+For example, to use RDMA on the cluster network with the device ``mlx5_0``,
+port 1, and GID index 3, run the following commands and then restart the OSDs:
+
+.. prompt:: bash #
+
+   ceph config set global ms_cluster_type async+rdma
+   ceph config set global ms_async_rdma_device_name mlx5_0
+   ceph config set global ms_async_rdma_port_num 1
+   ceph config set global ms_async_rdma_gid_idx 3
+
+.. confval:: ms_async_rdma_type
+.. confval:: ms_async_rdma_cm
+.. confval:: ms_async_rdma_device_name
+.. confval:: ms_async_rdma_port_num
+.. confval:: ms_async_rdma_gid_idx
+.. confval:: ms_async_rdma_local_gid
+.. confval:: ms_async_rdma_roce_ver
+.. confval:: ms_async_rdma_sl
+.. confval:: ms_async_rdma_dscp
+.. confval:: ms_async_rdma_support_srq
+.. confval:: ms_async_rdma_receive_queue_len
+.. confval:: ms_async_rdma_receive_buffers
+.. confval:: ms_async_rdma_send_buffers
+.. confval:: ms_async_rdma_buffer_size
+.. confval:: ms_async_rdma_enable_hugepage
+.. confval:: ms_async_rdma_polling_us
 
 
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
