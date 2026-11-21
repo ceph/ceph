@@ -11,6 +11,11 @@
 // private string-overload mark path directly (there is currently no public
 // caller of it).
 struct MgrOpRequestTestAccess {
+  static constexpr uint8_t flag_start_mon_command =
+      MgrOpRequest::flag_start_mon_command;
+  static constexpr uint8_t flag_finish_mon_command =
+      MgrOpRequest::flag_finish_mon_command;
+
   static void mark_reached_module(MgrOpRequest* op, const std::string& s) {
     op->mark_flag_point_string(MgrOpRequest::flag_reached_module, s);
   }
@@ -53,4 +58,23 @@ TEST_F(MgrOpRequestTestHelper, MarkFlagPointStringSetsLastEventDetail) {
       << "Expected the stale detail \"py_test_module\" to be replaced by the "
          "latest detail; Got: \""
       << req->_get_state_string() << "\"";
+}
+
+TEST_F(MgrOpRequestTestHelper, MarkFinishMonCommandSetsCorrectFlag) {
+  auto msg = ceph::make_message<MCommand>();
+  auto req = tracker->create_request<MgrOpRequest>(msg);
+  ASSERT_TRUE(req);
+
+  req->mark_start_mon_command();
+  EXPECT_EQ(req->state_flag(), MgrOpRequestTestAccess::flag_start_mon_command)
+      << "mark_start_mon_command() should set the start-mon-command flag.";
+
+  req->mark_finish_mon_command();
+  EXPECT_EQ(req->state_flag(), MgrOpRequestTestAccess::flag_finish_mon_command)
+      << "Current: flag_start_mon_command set twice, flag_finish_mon_command "
+         "never set; Expected: flag_finish_mon_command set after "
+         "mark_finish_mon_command().";
+  EXPECT_EQ(req->_get_state_string(), "mon command finished")
+      << "_get_state_string() should report the finished state after "
+         "mark_finish_mon_command().";
 }
