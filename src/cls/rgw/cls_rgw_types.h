@@ -282,7 +282,7 @@ void encode_packed_val(T val, ceph::buffer::list& bl)
       c |= 1;
       encode(c, bl);
       encode((uint8_t)val, bl);
-    } else if ((uint64_t)val <= 0x10000) {
+    } else if ((uint64_t)val < 0x10000) {
       c |= 2;
       encode(c, bl);
       encode((uint16_t)val, bl);
