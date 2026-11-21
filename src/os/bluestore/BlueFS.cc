@@ -746,7 +746,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   dout(1) << __func__
 	  << " osd_uuid " << osd_uuid
 	  << dendl;
-
+  read_only = false; // mkfs is only in r/w
   // set volume selector if not provided before/outside
   if (vselector == nullptr) {
     vselector.reset(
@@ -1132,9 +1132,10 @@ int BlueFS::_bdev_read_random(uint8_t ndev, uint64_t off, uint64_t len,
   return bdev[ndev]->read_random(off, len, buf, buffered);
 }
 
-int BlueFS::mount()
+int BlueFS::mount(bool read_only)
 {
-  dout(1) << __func__ << dendl;
+  dout(1) << __func__ << " " << (read_only ? "RO" : "RW") << dendl;
+  this->read_only = read_only;
 
   _init_logger();
   int r = _open_super();
@@ -1247,8 +1248,9 @@ int BlueFS::maybe_verify_layout(const bluefs_layout_t& layout) const
 void BlueFS::umount(bool avoid_compact)
 {
   dout(1) << __func__ << dendl;
-
-  sync_metadata(avoid_compact);
+  if (!read_only) {
+    sync_metadata(avoid_compact);
+  }
   if (cct->_conf->bluefs_check_volume_selector_on_mount) {
     _check_vselector_LNF();
   }
@@ -1331,6 +1333,7 @@ int BlueFS::_write_super(int dev)
   ++super.seq;
   super._version = log.uses_envelope_mode ?
     bluefs_super_t::ENVELOPE_MODE_ENABLED : bluefs_super_t::BASELINE;
+  ceph_assert(!read_only);
   // build superblock
   bufferlist bl;
   encode(super, bl);
@@ -2301,6 +2304,7 @@ int BlueFS::device_migrate_to_new(
   dout(10) << __func__ << " devs_source " << devs_source
 	   << " dev_target " << dev_target << dendl;
   ceph_assert(dev_target == (int)BDEV_NEWDB || dev_target == (int)BDEV_NEWWAL);
+  ceph_assert(!read_only);
 
   int flags = 0;
 
@@ -4632,6 +4636,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
            << std::dec << " from " << (int)id
            << " cooldown " << cooldown_deadline
            << dendl;
+  ceph_assert(!read_only); // allocation changes state, we do not allow it
   ceph_assert(id < alloc.size());
   int64_t alloc_len = 0;
   PExtentVector extents;
@@ -4759,6 +4764,7 @@ int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)/*_LF*/
   std::lock_guard fl(f->lock);
   dout(10) << __func__ << " file " << f->fnode << " 0x"
 	   << std::hex << off << "~" << len << std::dec << dendl;
+  ceph_assert(!read_only);
   if (f->deleted) {
     dout(10) << __func__ << "  deleted, no-op" << dendl;
     return 0;
