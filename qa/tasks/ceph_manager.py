@@ -337,14 +337,79 @@ class OSDThrasher(Thrasher):
                 stdout=StringIO(),
                 stderr=StringIO())
 
-    def kill_osd(self, osd=None, mark_down=False, mark_out=False):
+    def _get_safe_to_kill_osds(self):
         """
-        :param osd: Osd to be killed.
-        :mark_down: Mark down if true.
-        :mark_out: Mark out if true.
+        Return list of OSDs that can be killed without violating any PG's min_size.
+        This provides soft protection against systematic min_size violations while
+        still allowing testing of edge cases.
+        """
+        safe_osds = set(self.live_osds)
+        
+        try:
+            pgs = self.ceph_manager.get_pg_stats()
+            if not pgs:
+                self.log('No PG stats available, allowing all live OSDs')
+                return list(safe_osds)
+            
+            pools_info = {}
+            for pg in pgs:
+                pool_id = int(pg['pgid'].split('.')[0])
+                
+                # Cache pool info to avoid repeated lookups
+                if pool_id not in pools_info:
+                    try:
+                        pool_info = self.ceph_manager.get_pool_dump(pool_id)
+                        min_size = pool_info.get('min_size')
+                        size = pool_info.get('size')
+                        if min_size is None or size is None:
+                            raise Exception(f'Pool {pool_id} missing required min_size or size in pool info')
+                        pools_info[pool_id] = {
+                            'min_size': min_size,
+                            'size': size
+                        }
+                    except Exception as e:
+                        self.log(f'Failed to get pool {pool_id} info: {e}')
+                        continue
+                
+                acting = pg.get('acting', [])
+                min_size = pools_info[pool_id]['min_size']
+                
+                # If this PG is at or below min_size, don't kill any of its OSDs
+                if len(acting) <= min_size:
+                    for osd in acting:
+                        if osd in safe_osds:
+                            safe_osds.discard(osd)
+                            self.log(f'OSD {osd} cannot be killed: PG {pg["pgid"]} '
+                                   f'has acting set {acting} at/below min_size {min_size}')
+        
+        except Exception as e:
+            self.log(f'Exception while checking safe OSDs: {e}')
+            # On error, return all live OSDs (fail-safe to allow thrashing)
+            return list(self.live_osds)
+        
+        return list(safe_osds)
+
+    def kill_osd(self, osd=None, mark_down=False, mark_out=False, respect_min_size=False):
+        """
+        :param osd: osd to be killed.
+        :param mark_down: Mark down if true.
+        :param mark_out: Mark out if true.
+        :param respect_min_size: If true, try to avoid violating PG min_size.
         """
         if osd is None:
-            osd = random.choice(self.live_osds)
+            if respect_min_size:
+                # Try to pick an OSD that won't violate min_size
+                safe_osds = self._get_safe_to_kill_osds()
+                if safe_osds:
+                    osd = random.choice(safe_osds)
+                    self.log(f'Selected OSD {osd} from {len(safe_osds)} safe candidates')
+                else:
+                    # No safe OSDs
+                    self.log('No safe OSDs available and random check failed, '
+                               'skipping kill to protect min_size')
+                    return
+            else:
+                osd = random.choice(self.live_osds)
         self.log("Killing osd %s, live_osds are %s" % (str(osd),
                                                        str(self.live_osds)))
         self.live_osds.remove(osd)
