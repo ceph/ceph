@@ -1625,26 +1625,30 @@ class CephFSMountBase(object):
         proc = self._run_python(pyscript)
         proc.wait()
 
-    def compare_trees(self, src, dst):
+    def compare_trees(self, src, dst, compare_data=True):
         """
         Compare two directory trees. Compare based on file names and contents.
 
         :param src:
         :param dst:
+        :param compare_data: hash regular-file bytes. A locked fscrypt file
+            cannot be opened, so callers comparing a locked tree pass False.
         :return:
         """
         pyscript = dedent("""
             import os
             import errno
+            import hashlib
 
-            def _md5hash_file(self, file):
+            def _md5hash_file(file):
                 md5 = hashlib.md5()
                 contents = ''
                 with open(file, 'r') as f:
                     contents = f.read()
-                md5.update(contents)
+                md5.update(contents.encode("utf-8"))
                 return md5.hexdigest()
 
+            compare_data = {compare_data}
             files = os.listdir('{src}')
             for file in files:
                 src_file = '{src}/' + file
@@ -1656,23 +1660,66 @@ class CephFSMountBase(object):
                     log.debug('path_dne:=' + dst_file)
                     raise
 
-                if os.path.islink('{src}'):
+                if os.path.islink(src_file):
                     #do link check
                     if os.readlink(src_file) != os.readlink(dst_file):
                         raise
-                elif os.path.isfile('{src}'):
+                elif os.path.isfile(src_file):
                     #check reported size
                     rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
                     if not rsize_match:
                         raise
 
-                    #check contents
-                    src_hash = self._md5hash_file(src_file)
-                    dest_hash = self._md5hash_file(dst_file)
-                    if src_hash != dest_hash:
-                        raise
-            """).format(src=src, dst=dst)
+                    if compare_data:
+                        #check contents
+                        src_hash = _md5hash_file(src_file)
+                        dest_hash = _md5hash_file(dst_file)
+                        if src_hash != dest_hash:
+                            raise
+            """).format(src=src, dst=dst, compare_data=compare_data)
         proc = self._run_python(pyscript)
+        proc.wait()
+
+    def copy_tree(self, src_path, dst_path):
+        """
+        Copy tree from src to dst. It will copy contents and certain xattrs
+
+        :param src_path
+        :param dst_path
+        :return:
+        """
+
+        pyscript = dedent("""
+            import os
+            import shutil
+            src_path = {src_path!r}
+            dst_path = {dst_path!r}
+            xattrs = ['ceph.fscrypt.auth', 'ceph.fscrypt.file', 'ceph.alternate_name']
+            for dirpath, dirnames, filenames in os.walk(src_path):
+                rel_path = os.path.relpath(dirpath, src_path)
+                cur_dst_path = os.path.join(dst_path, rel_path)
+                os.makedirs(cur_dst_path, exist_ok=True)
+
+                for xattr in xattrs:
+                    try:
+                        value = os.getxattr(dirpath, xattr)
+                    except OSError:
+                        continue
+                    os.setxattr(cur_dst_path, xattr, value)
+
+                for file in filenames:
+                    src_file = os.path.join(dirpath, file)
+                    dst_file = os.path.join(cur_dst_path, file)
+
+                    shutil.copy2(src_file, dst_file)
+                    for xattr in xattrs:
+                        try:
+                            value = os.getxattr(src_file, xattr)
+                        except OSError:
+                            continue
+                        os.setxattr(dst_file, xattr, value)
+        """).format(src_path=src_path, dst_path=dst_path)
+        proc = self._run_python(pyscript, timeout=90)
         proc.wait()
 
     def touch_os(self, fs_path):
