@@ -23,11 +23,10 @@ describe('Add storage - create osds page', () => {
     it('should create OSDs', () => {
       const hostnames = ['ceph-node-00', 'ceph-node-01'];
       for (const hostname of hostnames) {
-        osds.create('hdd', hostname, true);
+        cy.get('cd-create-cluster-step-2 cd-osd-list [aria-label="Create"]').click();
+        osds.create('hdd', hostname);
 
-        // Go to the Review section and Expand the cluster
-        // because the drive group spec is only stored
-        // in frontend and will be lost when refreshed
+        // Complete storage setup after creating this host's OSDs.
         onboarding.selectStep('Review');
         onboarding.submitStorage();
         cy.get('cd-overview').should('exist');

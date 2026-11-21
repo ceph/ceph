@@ -35,8 +35,8 @@ describe('Hosts page', () => {
 
     it('should display inventory', function () {
       for (const host of this.hosts) {
-        hosts.clickTab('cd-host-details', host.name, 'Physical Disks');
-        cy.get('cd-host-details').within(() => {
+        hosts.clickHostTab(host.name, 'Storage Devices');
+        cy.get('cd-host-resource-page cd-inventory').within(() => {
           hosts.expectTableCount('total', host.devices.length);
         });
       }
@@ -44,8 +44,8 @@ describe('Hosts page', () => {
 
     it('should display daemons', function () {
       for (const host of this.hosts) {
-        hosts.clickTab('cd-host-details', host.name, 'Daemons');
-        cy.get('cd-host-details').within(() => {
+        hosts.clickHostTab(host.name, 'Service instances');
+        cy.get('cd-host-resource-page cd-service-daemon-list').within(() => {
           hosts.getTableCount('total').should('be.gte', 0);
         });
       }

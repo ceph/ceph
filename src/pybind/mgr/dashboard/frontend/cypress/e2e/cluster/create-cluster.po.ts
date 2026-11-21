@@ -40,13 +40,6 @@ export class CreateClusterHostPageHelper extends HostsPageHelper {
     index: { url: '#/add-storage', id: 'cd-create-cluster' },
     add: { url: '', id: 'cd-host-form' }
   };
-
-  columnIndex = {
-    hostname: 1,
-    labels: 2,
-    status: 3,
-    services: 0
-  };
 }
 
 export class CreateClusterServicePageHelper extends ServicesPageHelper {
