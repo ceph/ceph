@@ -372,6 +372,23 @@
         </cds-checkbox>
       </div>
 
+      <!-- Persistent handles -->
+      @if (!isRgw) {
+        <div class="form-item">
+          <cds-checkbox
+            id="persistent_handles"
+            formControlName="persistent_handles"
+            i18n
+            >Persistent Handles
+          </cds-checkbox>
+          <cd-help-text i18n>
+            Allows clients to maintain persistent connections and recover file handles after
+            failover for this CephFS share. Inherited from the cluster default unless changed.
+            Persistent handles can only be enabled before the cluster is first deployed.
+          </cd-help-text>
+        </div>
+      }
+
       <!-- QoS rate limiting -->
       @if (!isRgw) {
         <div
