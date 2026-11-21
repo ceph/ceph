@@ -8296,7 +8296,11 @@ int Client::walk(std::string_view path, walk_dentry_result* wdr, const UserPerm&
   ldout(cct, 10) << __func__ << ": " << path << dendl;
 
   std::scoped_lock lock(client_lock);
-  return path_walk(cwd, path, wdr, perms, {.followsym = followsym});
+  int r = path_walk(cwd, path, wdr, perms, {.followsym = followsym});
+  // Callers cannot take client_lock, so drop the dentry pin here rather
+  // than handing it to them.
+  wdr->dn.reset();
+  return r;
 }
 
 int Client::path_walk(InodeRef dirinode, const filepath& origpath, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options)
@@ -19823,22 +19827,30 @@ SubvolumeMetricTracker::aggregate(bool clean) {
 int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mode_t mode) {
   ldout(cct, 10) << "fcopyfile spath=" << spath << " dpath=" << dpath << " mode=" << mode << dendl;
 
-  walk_dentry_result wdrsrc;
+  // The walk result pins the source dentry, and dropping that pin
+  // updates the dentry LRU, which requires client_lock. Copy what we
+  // need and let the walk result go out of scope under the lock
+  // (thereby the dentry put()).
+  mode_t src_mode;
+  size_t size;
+  std::string alt_name;
+  FSCrypt_Options foptions;
   {
     std::scoped_lock lock(client_lock);
+    walk_dentry_result wdrsrc;
     if (int rc = path_walk(cwd, spath, &wdrsrc, perms, {.followsym = false}); rc < 0) {
       return rc;
     }
+
+    auto& srcin = wdrsrc.target;
+    src_mode = srcin->mode;
+    size = srcin->size;
+    alt_name = wdrsrc.alternate_name;
+    foptions.fscrypt_auth = srcin->fscrypt_auth;
+    foptions.fscrypt_file = srcin->fscrypt_file;
   }
 
-  auto& srcin = wdrsrc.target;
-  std::string alt_name = wdrsrc.alternate_name;
-
-  FSCrypt_Options foptions;
-  foptions.fscrypt_auth = srcin->fscrypt_auth;
-  foptions.fscrypt_file = srcin->fscrypt_file;
-
-  if (srcin->is_symlink()){
+  if (S_ISLNK(src_mode)) {
     char linkpath[4096];
 
     int link_size = readlink(spath, linkpath, 4096, perms);
@@ -19849,15 +19861,14 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
       ldout(cct, 10) << "fcopyfile could not create symlink=" << dpath << " r=" << r << dendl;
       return r;
     }
-  } else if(srcin->is_dir()) {
+  } else if (S_ISDIR(src_mode)) {
     int r = do_mkdirat(CEPHFS_AT_FDCWD, dpath, mode, perms, alt_name, foptions);
     if (r < 0) {
       ldout(cct, 10) << "fcopyfile could not create dest dir=" << dpath << " r=" << r << dendl;
       return r;
     }
-  } else if(srcin->is_file()) {
+  } else if (S_ISREG(src_mode)) {
     int r = 0;
-    size_t size = srcin->size;
 
     int dest = do_openat(CEPHFS_AT_FDCWD, dpath, O_CREAT | O_TRUNC | O_WRONLY, perms, mode, 0,0,0, NULL, alt_name, foptions);
     if (dest < 0) {

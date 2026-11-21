@@ -381,6 +381,7 @@ public:
   friend class C_Client_RequestInterrupt;
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend class C_Client_CacheRelease; // Asserts on client_lock
+  friend class Dentry; // for client_lock assert check
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
   template <typename T> friend struct RWRefState;
@@ -1227,7 +1228,8 @@ protected:
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
-  // path traversal for testing, looking at walk_dentry_result
+  // path traversal for testing, looking at walk_dentry_result (dn is not
+  // returned)
   int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true);
 
   int make_request(MetaRequest *req, const UserPerm& perms,
