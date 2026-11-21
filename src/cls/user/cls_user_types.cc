@@ -48,6 +48,21 @@ void cls_user_bucket_entry::dump(Formatter *f) const
   encode_json("creation_time", utime_t(creation_time), f);
   encode_json("count", count, f);
   encode_json("user_stats_sync", user_stats_sync, f);
+  if (storage_class_stats) { // omitted if unknown
+    // sorted, so the output doesn't depend on the hash order
+    const std::map<std::string, cls_user_bucket_entry> sorted(
+        storage_class_stats->begin(), storage_class_stats->end());
+    f->open_array_section("storage_class_stats");
+    for (const auto& [storage_class, e] : sorted) {
+      f->open_object_section("entry");
+      encode_json("storage_class", storage_class, f);
+      encode_json("size", e.size, f);
+      encode_json("size_rounded", e.size_rounded, f);
+      encode_json("count", e.count, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i)
@@ -67,6 +82,15 @@ list<cls_user_bucket_entry> cls_user_bucket_entry::generate_test_instances()
   cls_user_bucket_entry entry;
   cls_user_gen_test_bucket_entry(&entry, 0);
   ls.push_back(std::move(entry));
+
+  cls_user_bucket_entry sc_entry;
+  cls_user_gen_test_bucket_entry(&sc_entry, 1);
+  sc_entry.storage_class_stats.emplace();
+  auto& sc = (*sc_entry.storage_class_stats)["COLD"];
+  sc.size = sc_entry.size;
+  sc.size_rounded = sc_entry.size_rounded;
+  sc.count = sc_entry.count;
+  ls.push_back(std::move(sc_entry));
   return ls;
 }
 
@@ -106,6 +130,19 @@ void cls_user_header::dump(Formatter *f) const
   encode_json("stats", stats, f);
   encode_json("last_stats_sync", utime_t(last_stats_sync), f);
   encode_json("last_stats_update", utime_t(last_stats_update), f);
+  if (storage_class_stats) { // omitted if unknown
+    // sorted, so the output doesn't depend on the hash order
+    const std::map<std::string, cls_user_stats> sorted(
+        storage_class_stats->begin(), storage_class_stats->end());
+    f->open_array_section("storage_class_stats");
+    for (const auto& [storage_class, s] : sorted) {
+      f->open_object_section("entry");
+      encode_json("storage_class", storage_class, f);
+      s.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 list<cls_user_header> cls_user_header::generate_test_instances()
@@ -115,6 +152,12 @@ list<cls_user_header> cls_user_header::generate_test_instances()
   cls_user_header h;
   cls_user_gen_test_header(&h);
   ls.push_back(std::move(h));
+
+  cls_user_header sc_h;
+  cls_user_gen_test_header(&sc_h);
+  sc_h.storage_class_stats.emplace();
+  cls_user_gen_test_stats(&(*sc_h.storage_class_stats)["COLD"]);
+  ls.push_back(std::move(sc_h));
   return ls;
 }
 
