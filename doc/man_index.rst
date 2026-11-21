@@ -6,6 +6,7 @@
    :hidden:
 
    man/8/ceph-authtool
+   man/8/ceph-bluestore-tool
    man/8/ceph-clsinfo
    man/8/ceph-conf
    man/8/ceph-create-keys
@@ -16,6 +17,8 @@
    man/8/ceph-fuse
    man/8/ceph-mds
    man/8/ceph-mon
+   man/8/ceph-monstore-tool
+   man/8/ceph-objectstore-tool
    man/8/ceph-osd
    man/8/ceph-post-file
    man/8/ceph-rbdnamer
