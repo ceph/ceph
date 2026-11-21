@@ -1,7 +1,7 @@
 export enum StepTitles {
-  CreateRealmAndZonegroup = 'Create Realm & Zonegroup',
-  CreateZone = 'Create Zone',
-  SelectCluster = 'Select Cluster',
+  CreateRealmAndZonegroup = 'Create realm & zonegroup',
+  CreateZone = 'Create zone',
+  SelectCluster = 'Select cluster',
   Review = 'Review'
 }
 
