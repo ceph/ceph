@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 import cherrypy
 
@@ -159,8 +159,12 @@ class Docs(BaseController):
             if param['required']:
                 required_params.append(param['name'])
 
-            props = {}
-            if 'type' in param:
+            props: Dict[str, Any] = {}
+            if 'type' in param and get_origin(param['type']) is dict:  # e.g. Dict[str, str]
+                _, value_type = get_args(param['type'])
+                props['type'] = str(SchemaType.OBJECT)
+                props['additionalProperties'] = {'type': cls._type_to_str(value_type)}
+            elif 'type' in param:
                 props['type'] = cls._type_to_str(param['type'])
                 if 'nested_params' in param:
                     if props['type'] == str(SchemaType.ARRAY):  # dict in array
