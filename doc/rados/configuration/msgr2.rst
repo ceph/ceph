@@ -35,10 +35,9 @@ Starting with Nautilus, we now have three different address types:
 * **v2**: ``v2:1.2.3.4:578/89012`` identifies a daemon binding to a
   port speaking the new v2 protocol
 * **v1**: ``v1:1.2.3.4:578/89012`` identifies a daemon binding to a
-  port speaking the legacy v1 protocol.  Any address that was
-  previously shown with any prefix is now shown as a ``v1:`` address.
-* **TYPE_ANY** ``any:1.2.3.4:578/89012`` identifies a client that can
-  speak either version of the protocol. Prior to Nautilus, clients would appear as
+  port speaking the legacy v1 protocol.
+* **TYPE_ANY**: ``1.2.3.4:0/123456`` identifies a client that can speak
+  either version of the protocol. Prior to Nautilus, clients would appear as
   ``1.2.3.4:0/123456``, where the port of 0 indicates they are clients
   and do not accept incoming connections.  Starting with Nautilus,
   these clients are now internally represented by a **TYPE_ANY**
@@ -47,15 +46,9 @@ Starting with Nautilus, we now have three different address types:
   protocol(s) the daemons are using.
 
 Because daemons now bind to multiple ports, they are now described by
-a vector of addresses instead of a single address.  For example,
-dumping the monitor map on a Nautilus cluster now includes lines
-like::
+a vector of addresses instead of a single address.  For example, the
+Monitor lines of ``ceph mon dump`` look like this::
 
-  epoch 1
-  fsid 50fcf227-be32-4bcb-8b41-34ca8370bd16
-  last_changed 2019-02-25 11:10:46.700821
-  created 2019-02-25 11:10:46.700821
-  min_mon_release 14 (nautilus)
   0: [v2:10.0.0.10:3300/0,v1:10.0.0.10:6789/0] mon.foo
   1: [v2:10.0.0.11:3300/0,v1:10.0.0.11:6789/0] mon.bar
   2: [v2:10.0.0.12:3300/0,v1:10.0.0.12:6789/0] mon.baz
@@ -67,9 +60,8 @@ possible; otherwise it will fall back to the legacy v1 protocol.  Legacy
 clients will only see the v1 addresses and will continue to connect as
 they did before, with the v1 protocol.
 
-Starting in Nautilus, the ``mon_host`` configuration option and ``-m
-<mon-host>`` command line options support the same bracketed address
-vector syntax.
+The ``mon_host`` configuration option and the ``-m <mon-host>`` command
+line option accept the same bracketed lists of addresses.
 
 
 Bind configuration options
@@ -78,17 +70,15 @@ Bind configuration options
 Two new configuration options control whether the v1 and/or v2
 protocol is used:
 
-  * :confval:`ms_bind_msgr1` [default: true] controls whether a daemon binds
-    to a port speaking the v1 protocol
-  * :confval:`ms_bind_msgr2` [default: true] controls whether a daemon binds
-    to a port speaking the v2 protocol
+.. confval:: ms_bind_msgr1
+.. confval:: ms_bind_msgr2
 
 Similarly, two options control whether IPv4 and IPv6 addresses are used:
 
-  * :confval:`ms_bind_ipv4` [default: true] controls whether a daemon binds
-    to an IPv4 address
-  * :confval:`ms_bind_ipv6` [default: false] controls whether a daemon binds
-    to an IPv6 address
+* :confval:`ms_bind_ipv4` [default: true] controls whether a daemon binds
+  to an IPv4 address
+* :confval:`ms_bind_ipv6` [default: false] controls whether a daemon binds
+  to an IPv6 address
 
 Connection modes
 ----------------
@@ -119,8 +109,8 @@ The v2 protocol supports two connection modes:
   - full encryption of all post-authentication traffic, including a
     cryptographic integrity check.
 
-  In Nautilus, secure mode uses the `AES-GCM
-  <https://en.wikipedia.org/wiki/Galois/Counter_Mode>`_ stream cipher,
+  Secure mode uses `AES-128-GCM
+  <https://en.wikipedia.org/wiki/Galois/Counter_Mode>`_,
   which is generally very fast on modern processors (e.g., faster than
   a SHA-256 cryptographic hash).
 
@@ -147,15 +137,10 @@ Compression modes
 
 The v2 protocol supports two compression modes:
 
-* *force* mode provides:
-
-  - In multi-availability zones deployment, compressing replication messages between OSDs saves latency.
-  - In the public cloud, inter-AZ communications are expensive. Thus, minimizing message 
-    size reduces network costs to cloud provider.
-  - When using instance storage on AWS (probably other public clouds as well) the instances with NVMe
-    provide low network bandwidth relative to the device bandwidth. 
-    In this case, NW compression can improve the overall performance since this is clearly 
-    the bottleneck.
+* *force* mode compresses messages of at least ``ms_osd_compress_min_size``
+  bytes on connections between OSDs. It reduces that traffic at the cost of
+  CPU time, which helps where the network between OSDs is slow or costly, for
+  example between availability zones in a public cloud.
 
 * *none* mode provides:
 
@@ -179,9 +164,8 @@ allowing administrators to set different requirements on communication between O
 Transitioning from v1-only to v2-plus-v1
 ----------------------------------------
 
-By default, ``ms_bind_msgr2`` is true starting with Nautilus 14.2.z.
-However, until the monitors start using v2, only limited services will
-start advertising v2 addresses.
+If ``ceph health`` reports ``MON_MSGR2_NOT_ENABLED``, one or more Monitors
+have only a v1 address in the monitor map.
 
 For most users, the monitors are binding to the default legacy port ``6789``
 for the v1 protocol.  When this is the case, enabling v2 is as simple as:
@@ -190,6 +174,9 @@ for the v1 protocol.  When this is the case, enabling v2 is as simple as:
 
    ceph mon enable-msgr2
 
+This adds a v2 address on port ``3300`` to each Monitor whose only address is
+a v1 address on port ``6789``.
+
 If the monitors are bound to non-standard ports, you will need to
 specify an additional port for v2 explicitly.  For example, if your
 monitor ``mon.a`` binds to ``1.2.3.4:1111``, and you want to add v2 on
@@ -197,10 +184,7 @@ port ``1112``:
 
 .. prompt:: bash $
 
-   ceph mon set-addrs a [v2:1.2.3.4:1112,v1:1.2.3.4:1111]
-
-Once the monitors bind to v2, each daemon will start advertising a v2
-address when it is next restarted.
+   ceph mon set-addrs a '[v2:1.2.3.4:1112,v1:1.2.3.4:1111]'
 
 
 .. _msgr2_ceph_conf:
@@ -208,11 +192,9 @@ address when it is next restarted.
 Updating ceph.conf and mon_host
 -------------------------------
 
-Prior to Nautilus, a CLI user or daemon will normally discover the
-monitors via the ``mon_host`` option in ``/etc/ceph/ceph.conf``.  The
-syntax for this option has expanded starting with Nautilus to allow
-support for the new bracketed list format.  For example, an old line
-like::
+A CLI user or daemon normally discovers the Monitors via the ``mon_host``
+option in ``/etc/ceph/ceph.conf``, which accepts bracketed lists of addresses.
+For example, a line that lists only v1 addresses, like::
 
   mon_host = 10.0.0.1:6789,10.0.0.2:6789,10.0.0.3:6789
 
@@ -225,27 +207,38 @@ be omitted::
 
   mon_host = 10.0.0.1,10.0.0.2,10.0.0.3
 
-Once v2 has been enabled on the monitors, ``ceph.conf`` may need to be
+Once v2 has been enabled on the Monitors, ``ceph.conf`` may need to be
 updated to either specify no ports (this is usually simplest), or
-explicitly specify both the v2 and v1 addresses.  Note, however, that
-the new bracketed syntax is only understood by Nautilus and later, so
-do not make that change on hosts that have not yet had their ceph
-packages upgraded.
+explicitly specify both the v2 and v1 addresses.
 
 When you are updating ``ceph.conf``, note the new ``ceph config
 generate-minimal-conf`` command (which generates a barebones config
-file with just enough information to reach the monitors) and the
+file with just enough information to reach the Monitors) and the
 ``ceph config assimilate-conf`` (which moves config file options into
-the monitors' configuration database) may be helpful.  For example,::
+the Monitors' configuration database) may be helpful.  For example:
 
-  # ceph config assimilate-conf < /etc/ceph/ceph.conf
-  # ceph config generate-minimal-config > /etc/ceph/ceph.conf.new
-  # cat /etc/ceph/ceph.conf.new
+.. prompt:: bash #
+
+   ceph config assimilate-conf -i /etc/ceph/ceph.conf -o /etc/ceph/ceph.conf.unassimilated
+   ceph config generate-minimal-conf > /etc/ceph/ceph.conf.new
+   cat /etc/ceph/ceph.conf.new
+
+::
+
   # minimal ceph.conf for 0e5a806b-0ce5-4bc6-b949-aa6f68f5c2a3
   [global]
           fsid = 0e5a806b-0ce5-4bc6-b949-aa6f68f5c2a3
           mon_host = [v2:10.0.0.1:3300/0,v1:10.0.0.1:6789/0]
-  # mv /etc/ceph/ceph.conf.new /etc/ceph/ceph.conf
+
+Before you replace the file, read ``/etc/ceph/ceph.conf.unassimilated``: it
+lists the options that were not imported into the Monitor configuration
+database. The old file's ``fsid`` and ``mon_host`` lines always appear in it,
+because the Monitors do not store these options, and the new file already has
+both. Add to the new file any other options that the host still needs.
+
+.. prompt:: bash #
+
+   mv /etc/ceph/ceph.conf.new /etc/ceph/ceph.conf
 
 Protocol
 --------
