@@ -406,6 +406,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     remount_finisher(m->cct),
     async_ino_releasor(m->cct),
     objecter_finisher(m->cct),
+    nonblocking_read_finisher(m->cct, "Client::nonblocking_read", "fn_client_nbrd"),
     m_command_hook(this),
     fscid(0),
     subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
@@ -658,6 +659,7 @@ void Client::_pre_init()
   timer.init();
 
   objecter_finisher.start();
+  nonblocking_read_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
 #if defined(__linux__)
   fscrypt.reset(new FSCrypt(cct));
@@ -912,6 +914,9 @@ void Client::shutdown()
 
   objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
+
+  nonblocking_read_finisher.wait_for_empty();
+  nonblocking_read_finisher.stop();
 
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger.get());
@@ -11907,8 +11912,29 @@ void Client::C_Read_Sync_NonBlocking::start()
 }
 void Client::C_Read_Sync_NonBlocking::retry()
 {
+  // finish() may have to ask the MDS for the file size (a short read
+  // without the Fs cap) and wait for the reply. It must not wait in the
+  // Objecter's dispatch, on a messenger worker thread: that thread may be
+  // the one that has to read the reply. Nor on objecter_finisher, which
+  // completes the writes whose cap references the MDS may be waiting for
+  // before it answers.
+  //
+  // The Fr reference is put as soon as the OSD has replied, before the
+  // completion is queued: a completion waiting for the MDS on the finisher
+  // must not keep the reads queued behind it from giving back the
+  // references the MDS is waiting for (it may have to revoke Fr from this
+  // client before it can answer). Nothing in the dispatch blocks:
+  // client_lock is not held across a wait for the MDS.
   filer->read_trunc(in->ino, &in->layout, in->snapid, pos, left, &tbl, 0,
-                    in->truncate_size, in->truncate_seq, this);
+                    in->truncate_size, in->truncate_seq,
+                    new LambdaContext([this](int r) {
+                      if (have_caps) {
+                        std::scoped_lock l(clnt->client_lock);
+                        clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
+                      }
+                      clnt->nonblocking_read_finisher.queue(
+                        new LambdaContext([this](int r) { complete(r); }), r);
+                    }));
 }
 
 /**
@@ -11964,19 +11990,17 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 
     // reverify size
     {
+      // As in the blocking path (_read), the Fr reference is not held
+      // while waiting for the MDS (retry() put it when the OSD replied).
       r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
       if (r < 0)
         goto error;
     }
 
-    // eof?  short read.
-    if ((uint64_t)pos >= effective_size)
-      goto success;
-
-    wanted = left;
-    retry();
-    clnt->client_lock.unlock();
-    return;
+    // eof: a short read. pos has reached the size known before the
+    // getattr (the zero fill above stops there, or at the end of the
+    // request), so there is nothing to read on from here. Reading on
+    // would need the Fr caps back through get_caps(), which may wait.
   }
 
 success:
@@ -12013,6 +12037,10 @@ success:
   }
 error:
 
+  // onfinish puts the Fr reference it was created with, before client_lock
+  // is released: give it one to put.
+  if (have_caps)
+    in->get_cap_ref(CEPH_CAP_FILE_RD);
   onfinish->complete(r);
   fini = true;
 
