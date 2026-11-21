@@ -2713,13 +2713,15 @@ struct segment_header_t {
   }
 
   DENC(segment_header_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.modify_time, p);
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.dirty_tail, p);
     denc(v.alloc_tail, p);
-    denc(v.log_tail, p);
+    if (struct_v >= 2) {
+      denc(v.log_tail, p);
+    }
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.category, p);

@@ -201,9 +201,8 @@ CircularJournalSpace::read_header()
   }
   if (!device->is_end_to_end_data_protection()) {
     auto bliter = bl.cbegin();
-    auto test_crc = bliter.crc32c(
-      ceph::encoded_sizeof_bounded<cbj_header_t>(),
-      -1);
+    // Use the actual encoded header size for v1/v2 compatibility.
+    auto test_crc = bliter.crc32c(bp.get_off(), -1);
     ceph_le32 recorded_crc_le;
     decode(recorded_crc_le, bliter);
     uint32_t recorded_crc = recorded_crc_le;
