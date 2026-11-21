@@ -1113,7 +1113,26 @@ int execute_peer_remove(const po::variables_map &vm,
     return r;
   }
 
+  // removing a peer is idempotent at the librbd level, so check that the
+  // peer exists to avoid silently succeeding on a mistyped or stale UUID
   librbd::RBD rbd;
+  std::vector<librbd::mirror_peer_site_t> mirror_peers;
+  r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
+  if (r < 0) {
+    std::cerr << "rbd: failed to list mirror peers: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (std::none_of(mirror_peers.begin(), mirror_peers.end(),
+                   [&uuid](const librbd::mirror_peer_site_t& peer) {
+                     return peer.uuid == uuid;
+                   })) {
+    std::cerr << "rbd: mirror peer " << uuid << " does not exist"
+              << std::endl;
+    return -ENOENT;
+  }
+
   r = rbd.mirror_peer_site_remove(io_ctx, uuid);
   if (r < 0) {
     std::cerr << "rbd: error removing mirror peer: "
