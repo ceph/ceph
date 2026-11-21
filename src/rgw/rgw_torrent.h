@@ -18,14 +18,15 @@ void bencode_end(bufferlist& bl);
 //key len
 void bencode_key(std::string_view key, bufferlist& bl);
 
-//single values
-void bencode(int value, bufferlist& bl);
+//single values. bencoded integers have no size limit, so take 64 bits to fit
+//object lengths over 2G and creation dates past 2038
+void bencode(int64_t value, bufferlist& bl);
 
 //single values
 void bencode(std::string_view str, bufferlist& bl);
 
 //dictionary elements
-void bencode(std::string_view key, int value, bufferlist& bl);
+void bencode(std::string_view key, int64_t value, bufferlist& bl);
 
 //dictionary elements
 void bencode(std::string_view key, std::string_view value, bufferlist& bl);

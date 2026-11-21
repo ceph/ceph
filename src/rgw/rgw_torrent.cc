@@ -32,7 +32,7 @@ void bencode_key(std::string_view key, bufferlist& bl)
 }
 
 //single values
-void bencode(int value, bufferlist& bl)
+void bencode(int64_t value, bufferlist& bl)
 {
   bl.append(fmt::format("i{}", value));
   bencode_end(bl);
@@ -45,7 +45,7 @@ void bencode(std::string_view str, bufferlist& bl)
 }
 
 //dictionary elements
-void bencode(std::string_view key, int value, bufferlist& bl)
+void bencode(std::string_view key, int64_t value, bufferlist& bl)
 {
   bencode_key(key, bl);
   bencode(value, bl);
@@ -169,8 +169,6 @@ bufferlist RGWPutObj_Torrent::bencode_torrent(std::string_view filename) const
 
   // Only encode create_date and sha1 info. Other fields will be added during
   // GetObjectTorrent by rgw_read_torrent_file()
-  // issue tracked here: https://tracker.ceph.com/issues/61160
-  // coverity[store_truncates_time_t:SUPPRESS]
   bencode(CREATION_DATE, std::time(nullptr), bl);
 
   bencode_key(INFO_PIECES, bl);
