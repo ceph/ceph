@@ -648,16 +648,12 @@ public:
     merge_notify_gate.dispatch_in_background(
       "set_ready_to_merge_target", *this,
       [this, lu, les, lec] {
-        const auto &pool = get_pool();
-        return shard_services.seastore_pending_merge_shards_ok(
-          pgid, pool.get_pg_num(), pool.get_pg_num_pending()
-        ).then([this, lu, les, lec](bool ok) {
-          if (!ok) {
-            return seastar::now();
-          }
-          return shard_services.set_ready_to_merge_target(
-            pgid.pgid, lu, les, lec);
-        });
+        // No cross-shard check here: the monitor needs READY from every
+        // source too, and a cross-shard source only sends it once its
+        // objects are staged on this PG's shard (see
+        // set_ready_to_merge_source). merge_pg re-checks as a safety net.
+        return shard_services.set_ready_to_merge_target(
+          pgid.pgid, lu, les, lec);
       });
   }
   void set_ready_to_merge_source(eversion_t lu) final {
@@ -666,9 +662,14 @@ public:
     merge_notify_gate.dispatch_in_background(
       "set_ready_to_merge_source", *this,
       [this, lu] {
+        // Seastore cross-shard merge: copy this PG's objects to the
+        // target's shard BEFORE telling the monitor we are ready, so the
+        // pg_num decrement is never committed for a merge we can't do.
+        // The PG is PEERED+PREMERGE (no client IO) while this runs.
         const auto &pool = get_pool();
-        return shard_services.seastore_pending_merge_shards_ok(
-          pgid, pool.get_pg_num(), pool.get_pg_num_pending()
+        return shard_services.prepare_seastore_merge_source(
+          pgid, get_store_index(), get_collection_ref(),
+          pool.get_pg_num(), pool.get_pg_num_pending()
         ).then([this, lu](bool ok) {
           if (!ok) {
             return seastar::now();

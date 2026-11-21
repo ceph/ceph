@@ -737,12 +737,6 @@ public:
   seastar::future<bool> seastore_merge_shards_ok(
     spg_t target, const std::set<spg_t>& merge_sources);
 
-  // Run seastore_merge_shards_ok() for the pending merge that pgid (source
-  // or target) belongs to. Called before READY is sent so that the monitor
-  // never commits a pg_num decrement for a cross-shard merge.
-  seastar::future<bool> seastore_pending_merge_shards_ok(
-    spg_t pgid, unsigned pg_num, unsigned pg_num_pending);
-
   // Read up to `num_obj_we_want` objects of `coll` (on this shard),
   // starting at `start`, into copied_object_t boxes. Returns the boxes and
   // where the next slice should start (ghobject_t::get_max() once the end
@@ -812,6 +806,10 @@ public:
   // merge has committed (step 5), and for leftover staging collections.
   seastar::future<> remove_collection_fully(
     store_index_t store_index, coll_t cid);
+
+  // Step 5. Run on the target's shard once the merge transaction has
+  // committed: delete the source's original collection on its own shard.
+  seastar::future<> remove_merged_source_collection(spg_t source);
 
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)

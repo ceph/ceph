@@ -225,10 +225,21 @@ seastar::future<bool> ShardServices::seastore_merge_shards_ok(
   if (!is_seastore_objectstore()) {
     co_return true;
   }
-  const core_id_t target_core = co_await get_pg_mapping(target);
+  const auto target_mapping = co_await get_pg_mapping_full(target);
   std::optional<pg_t> cross_shard_source;
   for (const auto& src : merge_sources) {
-    if (co_await get_pg_mapping(src) != target_core) {
+    // merge_collection only works inside one store, so the source must be
+    // on the same core AND the same store shard as the target...
+    if (co_await get_pg_mapping_full(src) == target_mapping) {
+      continue;
+    }
+    // ...unless it has already been copied to the target's shard.
+    const bool staged = co_await container().invoke_on(
+      target_mapping.first,
+      [src](ShardServices& target_svc) {
+        return target_svc.is_merge_source_staged(src);
+      });
+    if (!staged) {
       cross_shard_source = src.pgid;
       break;
     }
@@ -243,19 +254,7 @@ seastar::future<bool> ShardServices::seastore_merge_shards_ok(
   co_return false;
 }
 
-seastar::future<bool> ShardServices::seastore_pending_merge_shards_ok(
-  spg_t pgid,
-  unsigned pg_num,
-  unsigned pg_num_pending)
-{
-  // pgid is either a merge source (find its parent) or the target itself
-  spg_t target = pgid;
-  pgid.is_merge_source(pg_num, pg_num_pending, &target);
-  std::set<spg_t> merge_sources;
-  target.is_split(pg_num_pending, pg_num, &merge_sources);
-  co_return co_await seastore_merge_shards_ok(target, merge_sources);
-}
-
+//function with which we read objects from source pg on that shard
 seastar::future<std::tuple<std::vector<copied_object_t>, ghobject_t>>
 ShardServices::read_collection_chunk(
   store_index_t store_index,
@@ -537,6 +536,24 @@ seastar::future<> ShardServices::remove_collection_fully(
     co_await crimson::os::with_store_do_transaction(store, coll, std::move(t));
     start = next;
   }
+}
+
+seastar::future<> ShardServices::remove_merged_source_collection(spg_t source)
+{
+  LOG_PREFIX(ShardServices::remove_merged_source_collection);
+  auto it = local_state.staged_merge_sources.find(source);
+  if (it == local_state.staged_merge_sources.end()) {
+    co_return;
+  }
+  const auto [source_core, source_store] = it->second;
+  local_state.staged_merge_sources.erase(it);
+  INFO("merge committed; removing original collection of {} on shard {}",
+       source, source_core);
+  co_await container().invoke_on(
+    source_core,
+    [source, source_store](ShardServices& source_svc) {
+      return source_svc.remove_collection_fully(source_store, coll_t(source));
+    });
 }
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
