@@ -209,6 +209,93 @@ Cache sizing can depend on a number of factors. These factors include:
 
 To help calculate the Ceph Object Gateway's memory usage of a cache, it should be noted that each cache entry, encompassing all of the op metrics, is 1360 bytes. This is an estimate and subject to change if metrics are added or removed from the op metrics list.
 
+Op Latency Histograms and Error Counters
+========================================
+
+RGW records request latency histogram for every operation as
+``rgw_op_hist``, and counts failed requests as ``rgw_op_err``.
+Both are labeled perf counters and always enabled. A label set is
+created on its first request, so only operations that are actually
+used appear.
+
+.. list-table:: RGW Op Latency and Error Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - ``rgw_op_hist`` / ``lat``
+     - Histogram
+     - Request latency distribution
+   * - ``rgw_op_err`` / ``errors``
+     - Counter
+     - Requests answered with an error status (HTTP <200 or >=400)
+
+Both metrics share the following labels. ``rgw_op_err`` adds ``ret``.
+
+.. list-table:: Op Latency and Error Labels
+   :widths: 25 100
+   :header-rows: 1
+
+   * - Label
+     - Values
+   * - ``api``
+     - The API of the request: ``s3``, ``swift``, ``swift-auth``, ``iam``,
+       ``sts``, ``sns``, ``s3vectors``, ``s3control`` or ``admin``.
+       ``system`` for requests by system users, for example multisite sync.
+       ``unknown`` if the request failed before an API was determined.
+   * - ``op``
+     - The operation name, for example ``get_obj``, ``put_obj`` or
+       ``list_bucket``. HEAD object requests are reported as ``head_obj``
+       and multipart part uploads as ``upload_part``. ``unknown`` if no
+       operation was created, for example for unsupported methods.
+   * - ``status``
+     - HTTP status class: ``1xx``, ``2xx``, ``3xx``, ``4xx`` or ``5xx``.
+       ``unknown`` otherwise.
+   * - ``ret``
+     - ``rgw_op_err`` only. The internal return value that caused the error:
+       a negative errno, for example ``-5`` (``EIO``), or a negative RGW error
+       code, for example ``-2218`` (rate limited). ``0`` if the error status
+       was set without an internal return value. 
+
+The latency covers the request from the start of processing to its
+end, including authentication, permission checks and failed requests.
+Requests rejected by the HTTP frontend before processing starts, for
+example malformed HTTP headers, are not recorded.
+
+The ``counter dump`` command includes histograms only for the loggers listed
+in its ``histograms`` argument. To export the latency histograms to
+Prometheus, add ``rgw_op_hist`` to :confval:`exporter_histograms`::
+
+    ceph config set global exporter_histograms rgw_op_hist
+
+Prometheus then receives ``ceph_rgw_op_hist_lat_seconds_bucket``,
+``ceph_rgw_op_hist_lat_seconds_sum`` and ``ceph_rgw_op_hist_lat_seconds_count``
+with the labels above. The error counter is exported as
+``ceph_rgw_op_err_errors`` without additional configuration.
+
+* 99th percentile latency of successful S3 GET requests:
+
+  .. code-block:: promql
+
+      histogram_quantile(0.99, sum by (le) (
+        rate(ceph_rgw_op_hist_lat_seconds_bucket{api="s3", op="get_obj", status="2xx"}[5m])))
+
+* Server error ratio per operation:
+
+  .. code-block:: promql
+
+      sum by (op) (rate(ceph_rgw_op_hist_lat_seconds_count{status="5xx"}[5m]))
+        /
+      sum by (op) (rate(ceph_rgw_op_hist_lat_seconds_count[5m]))
+
+* Causes of server errors:
+
+  .. code-block:: promql
+
+      topk(10, sum by (api, op, ret) (rate(ceph_rgw_op_err_errors{status="5xx"}[5m])))
+
 Lifecycle Metrics
 =================
 
@@ -689,3 +776,4 @@ The following Ceph Object Gateway op metrics related settings can be set via ``c
 The following are notable ceph-exporter related settings can be set via ``ceph config set global CONFIG_VARIABLE VALUE``.
 
 .. confval:: exporter_stats_period
+.. confval:: exporter_histograms
