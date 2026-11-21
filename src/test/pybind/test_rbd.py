@@ -2980,7 +2980,7 @@ class TestTrash(object):
 
         RBD().trash_move(ioctx, image_name1, 0)
         RBD().trash_move(ioctx, image_name2, 1000)
-        RBD().trash_purge(ioctx, datetime.now())
+        RBD().trash_purge(ioctx, datetime.now(timezone.utc))
 
         entries = list(RBD().trash_list(ioctx))
         eq([image_id2], [x['id'] for x in entries])
