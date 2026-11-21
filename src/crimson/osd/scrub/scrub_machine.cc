@@ -452,7 +452,7 @@ void ReplicaActive::handle_reservation_request(
         "immediately granting reservation request from {}",
         dpp,
         from);
-      reply = make_message<MOSDScrubReserve>(
+      reply = crimson::make_message<MOSDScrubReserve>(
         spg_t(pg_id.pgid, primary_shard),
         map_epoch,
         MOSDScrubReserve::GRANT,
@@ -465,7 +465,7 @@ void ReplicaActive::handle_reservation_request(
         dpp,
         from);
       m_reservation_status = reservation_status_t::unreserved;
-      reply = make_message<MOSDScrubReserve>(
+      reply = crimson::make_message<MOSDScrubReserve>(
         spg_t(pg_id.pgid, primary_shard),
         map_epoch,
         MOSDScrubReserve::REJECT,
@@ -500,7 +500,7 @@ sc::result ReplicaActive::react(const events::reserver_granted_t &event)
   pending_reservation_nonce = 0;
 
   // notify the primary
-  auto grant_msg = make_message<MOSDScrubReserve>(
+  auto grant_msg = crimson::make_message<MOSDScrubReserve>(
       spg_t(pg_id.pgid, pg.get_primary().shard), reservation.request_epoch,
             MOSDScrubReserve::GRANT, pg.get_pg_whoami(), reservation.nonce);
   std::ignore = pg.get_shard_services().send_to_osd(reservation.from.osd, std::move(grant_msg), reservation.request_epoch);
