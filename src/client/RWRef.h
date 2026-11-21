@@ -82,6 +82,8 @@
 
 #include <string>
 #include "include/ceph_assert.h"
+#include <atomic>
+
 #include "common/ceph_mutex.h"
 
 /* The status mechanism info */
@@ -93,8 +95,10 @@ struct RWRefState {
     /*
      * This will be status mechanism. Currently you need to define
      * it by yourself.
+     *
+     * Atomic: readers check it without the lock (see RWRef).
      */
-    T state;
+    std::atomic<T> state;
 
     /*
      * User defined method to check whether the "require" state
@@ -124,14 +128,11 @@ struct RWRefState {
     virtual bool is_valid_state(T require) const = 0;
 
     int64_t get_state() const {
-      std::scoped_lock l{lock};
       return state;
     }
 
     bool check_current_state(T require) const {
       ceph_assert(is_valid_state(require));
-
-      std::scoped_lock l{lock};
       return state == require;
     }
 
@@ -140,9 +141,32 @@ struct RWRefState {
     virtual ~RWRefState() {}
 
   private:
+    /*
+     * Readers run without the lock: a reader bumps reader_cnt and then
+     * checks the state; a writer changes the state and then waits for
+     * reader_cnt to drop to zero.  Both sides use sequentially consistent
+     * atomics, so either the reader sees the new state, or the writer sees
+     * the reader and waits for it.  A reader that drops reader_cnt to zero
+     * while a writer waits (waiters) wakes it under the lock.
+     */
+    void put_reader() {
+      // Drop a ref that is not the last one without the lock.  The last one
+      // goes under the lock: a writer may only see the count at zero once we
+      // are done with this state, as it may free it right away (unmount).
+      uint64_t c = reader_cnt.load();
+      while (c > 1) {
+        if (reader_cnt.compare_exchange_weak(c, c - 1))
+          return;
+      }
+      std::scoped_lock l{lock};
+      if (reader_cnt.fetch_sub(1) == 1 && waiters.load() > 0)
+        cond.notify_all();
+    }
+
     mutable ceph::mutex lock;
     ceph::condition_variable cond;
-    uint64_t reader_cnt = 0;
+    std::atomic<uint64_t> reader_cnt = 0;
+    std::atomic<int> waiters = 0;
 };
 
 template<typename T>
@@ -155,13 +179,15 @@ public:
     :S(s), is_reader(ir) {
     ceph_assert(S.is_valid_state(require));
 
-    std::scoped_lock l{S.lock};
     if (likely(is_reader)) { // Readers will update the reader_cnt
+      S.reader_cnt++;
       if (S.check_reader_state(require)) {
-        S.reader_cnt++;
         satisfied = true;
+      } else {
+        S.put_reader();
       }
     } else { // Writers will update the state
+      std::scoped_lock l{S.lock};
       is_reader = false;
 
       /*
@@ -215,13 +241,14 @@ public:
 
     std::unique_lock l{S.lock};
 
+    S.waiters++;
     S.cond.wait(l, [this] {
       return !S.reader_cnt;
     });
+    S.waiters--;
   }
 
   ~RWRef() {
-    std::scoped_lock l{S.lock};
     if (!is_reader)
       return;
 
@@ -231,8 +258,7 @@ public:
     /*
      * Decrease the refcnt and notify the waiters
      */
-    if (--S.reader_cnt == 0)
-      S.cond.notify_all();
+    S.put_reader();
   }
 
 private:
