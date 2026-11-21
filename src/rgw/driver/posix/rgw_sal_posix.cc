@@ -3160,13 +3160,14 @@ std::unique_ptr<MultipartUpload> POSIXBucket::get_multipart_upload(
 }
 
 int POSIXBucket::list_multiparts(const DoutPrefixProvider *dpp,
-				  const std::string& prefix,
-				  std::string& marker,
-				  const std::string& delim,
-				  const int& max_uploads,
-				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
-				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+                                 const std::string& prefix,
+                                 std::string& marker,
+                                 const std::string& delim,
+                                 const int& max_uploads,
+                                 const bool allow_unordered, // currently ignored
+                                 std::vector<std::unique_ptr<MultipartUpload>>& uploads,
+                                 std::map<std::string, bool> *common_prefixes,
+                                 bool *is_truncated, optional_yield y)
 {
   int count = 0;
   int ret;
