@@ -6,10 +6,12 @@ import contextlib
 import copy
 import json
 import logging
+import re
 import shlex
 import time
 import threading
 
+from teuthology import contextutil
 from teuthology.exceptions import ConfigError, CommandFailedError
 from teuthology.task import ssh_keys
 
@@ -655,6 +657,207 @@ def write_metadata_file(ctx, config, *, roles=None):
                 mfile,
             ],
         )
+
+
+def _smb_daemon_hostnames(ctx, admin_remote, cluster_id, cluster_name='ceph'):
+    from .cephadm import _shell
+
+    out = StringIO()
+    _shell(
+        ctx,
+        cluster_name,
+        admin_remote,
+        args=[
+            'ceph',
+            'orch',
+            'ps',
+            '--daemon-type',
+            'smb',
+            '--format',
+            'json',
+        ],
+        stdout=out,
+    )
+    daemons = json.loads(out.getvalue())
+
+    return sorted({
+        d['hostname']
+        for d in daemons
+        if d.get('daemon_id', '').split('.')[0] == cluster_id
+    })
+
+
+def _remote_for_hostname(ctx, hostname):
+    for remote in ctx.cluster.remotes:
+        if hostname in (remote.shortname, remote.hostname):
+            return remote
+    return None
+
+
+@contextlib.contextmanager
+def power_off_smb_daemon_host(ctx, config):
+    """Power off an SMB daemon host other than the admin host, restoring
+    it once the wrapped tasks finish.
+    """
+    admin_role = config.get('admin_role', 'host.a')
+    cluster_id = config['cluster_id']
+    (admin_remote,) = ctx.cluster.only(admin_role).remotes.keys()
+    admin_hostnames = {
+        h
+        for r in ctx.cluster.only(admin_role).remotes.keys()
+        for h in (r.shortname, r.hostname)
+    }
+
+    hostnames = _smb_daemon_hostnames(
+        ctx,
+        admin_remote,
+        cluster_id,
+    )
+
+    target_hostname = next(
+        (
+            hostname
+            for hostname in hostnames
+            if hostname not in admin_hostnames
+        ),
+        None,
+    )
+
+    if not target_hostname:
+        raise RuntimeError(
+            f'could not find an smb daemon for cluster {cluster_id} '
+            'on a non-admin host'
+        )
+
+    target_remote = _remote_for_hostname(ctx, target_hostname)
+
+    if not target_remote:
+        raise RuntimeError(
+            f'no teuthology remote found for host {target_hostname}'
+        )
+
+    assert getattr(target_remote.console, 'has_ipmi_credentials', True), (
+        f'{target_hostname} has no console credentials configured; '
+        'cannot power it off'
+    )
+
+    log.info(
+        'powering off %s (running smb.%s) to simulate an unplanned outage',
+        target_hostname,
+        cluster_id,
+    )
+    setattr(ctx, 'smb_offline_host', target_remote)
+    try:
+        target_remote.console.power_off()
+        yield
+    finally:
+        log.info('powering %s back on', target_remote.shortname)
+        target_remote.console.power_on()
+        if not target_remote.console.check_status(300):
+            raise RuntimeError(
+                f'{target_remote.shortname} did not come back up '
+                'after power on'
+            )
+
+        from teuthology import misc as teuthology
+
+        teuthology.reconnect(ctx, 60, [target_remote])
+        setattr(ctx, 'smb_offline_host', None)
+
+
+def wait_for_ctdb_healthy(ctx, config):
+    """Poll until the orchestrator's smb daemon set settles on node_count
+    hosts, excluding the offline one. If require_ctdb_healthy,
+    also require CTDB to report all nodes OK before returning.
+    """
+    admin_role = config.get('admin_role', 'host.a')
+    cluster_id = config['cluster_id']
+    node_count = config['node_count']
+    timeout = config.get('timeout', 360)
+    sleep_s = config.get('sleep_s', 15)
+    require_ctdb_healthy = config.get('require_ctdb_healthy', True)
+
+    (admin_remote,) = ctx.cluster.only(admin_role).remotes.keys()
+
+    matchers = [
+        re.compile(rf'pnn:{i} .*OK')
+        for i in range(node_count)
+    ]
+    matchers.append(
+        re.compile(rf'Number of nodes:{node_count}\b')
+    )
+
+    last_status = ''
+    try:
+        with contextutil.safe_while(
+            sleep=sleep_s,
+            tries=timeout // sleep_s,
+        ) as proceed:
+            while proceed():
+                offline_remote = getattr(ctx, 'smb_offline_host', None)
+
+                hostnames = _smb_daemon_hostnames(
+                    ctx,
+                    admin_remote,
+                    cluster_id,
+                )
+
+                remotes = []
+                for hostname in hostnames:
+                    candidate = _remote_for_hostname(ctx, hostname)
+                    if candidate is None or candidate is offline_remote:
+                        continue
+                    remotes.append(candidate)
+
+                if len(remotes) != node_count:
+                    log.warning(
+                        'orch daemon set for smb.%s not settled yet '
+                        '(hosts=%s); waiting for rescheduling',
+                        cluster_id, sorted(hostnames),
+                    )
+                    continue
+
+                if not require_ctdb_healthy:
+                    log.info(
+                        'orch daemon set for smb.%s settled on %s',
+                        cluster_id, sorted(hostnames),
+                    )
+                    return
+
+                remote = remotes[0]
+                out = StringIO()
+
+                result = remote.run(
+                    args=[
+                        'sudo',
+                        ctx.cephadm,
+                        'enter',
+                        '-i',
+                        f'smb.{cluster_id}',
+                        'ctdb',
+                        'status',
+                    ],
+                    stdout=out,
+                    stderr=out,
+                    check_status=False,
+                )
+                last_status = out.getvalue()
+                if result.exitstatus == 0 and all(
+                    m.search(last_status)
+                    for m in matchers
+                ):
+                    log.info(
+                        'ctdb healthy for smb.%s',
+                        cluster_id,
+                    )
+                    return
+    except contextutil.MaxWhileTries:
+        log.error(
+            'ctdb status for smb.%s did not converge:\n%s',
+            cluster_id,
+            last_status,
+        )
+        raise
 
 
 _DEFAULT_META_FILE = '/var/tmp/ceph-smb-test-meta.json'
