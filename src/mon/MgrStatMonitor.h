@@ -26,6 +26,8 @@ struct Subscription;
   std::map<std::string,ProgressEvent> pending_progress_events;
   ceph::buffer::list pending_service_map_bl;
   std::map<uint64_t, PoolAvailability> pending_pool_availability;
+  // committed version that pending_pool_availability is based on
+  version_t pending_pool_availability_version = 0;
 
 public:
   MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
@@ -99,8 +101,10 @@ public:
     return digest;
   }
 
-  const std::map<uint64_t, PoolAvailability>& get_pool_availability() {
-    return pool_availability;
+  // the latest calculated state, which can be newer than the committed state
+  std::map<uint64_t, PoolAvailability> get_pool_availability() {
+    std::scoped_lock l(lock);
+    return pending_pool_availability;
   }
 
   ceph_statfs get_statfs(OSDMap& osdmap,
