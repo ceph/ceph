@@ -1,6 +1,8 @@
-from typing import List, Optional, Union
+import os
+from typing import List, Optional, Set, Tuple, Union
 
 from ceph_volume import process
+from ceph_volume.api import lvm as api
 from ceph_volume.api.lvm import Volume, get_lvs
 from ceph_volume.util import disk
 from ceph_volume.util import encryption as encryption_utils
@@ -25,6 +27,7 @@ class OsdLvmMappers:
         )
         self.dmcrypt_open_opts = dmcrypt_open_opts
         self.encrypted = False
+        self.hw_opal_only = False
         if lvs is None:
             lvs = get_lvs(
                 tags={'ceph.osd_id': self.credentials.osd_id, 'ceph.osd_fsid': osd_fsid}
@@ -35,8 +38,12 @@ class OsdLvmMappers:
         self._close_wal_mapper()
         self._close_db_mapper()
         self._close_block_mapper()
+        if self.hw_opal_only:
+            self._close_hw_opal_devices()
 
     def open(self) -> None:
+        if self.hw_opal_only:
+            self._open_hw_opal_devices()
         self._rescan_physical_volumes()
         self._refresh_osd_volumes_from_lvm()
         paths = [
@@ -46,7 +53,7 @@ class OsdLvmMappers:
         ]
         if paths:
             process.call(['lvchange', '-ay'] + paths, run_on_host=True)
-        if self.encrypted:
+        if self.encrypted and not self.hw_opal_only:
             for role in ('block', 'db', 'wal'):
                 self._luks_open_role(role)
 
@@ -81,10 +88,12 @@ class OsdLvmMappers:
     def _sync_encryption_flags(self) -> None:
         self.encrypted = False
         self.with_tpm = False
+        self.hw_opal_only = False
         if self.block_volume is None:
             return
         self.encrypted = self.block_volume.tags.get('ceph.encrypted', '0') == '1'
         self.with_tpm = self.block_volume.tags.get('ceph.with_tpm') == '1'
+        self.hw_opal_only = self.block_volume.tags.get('ceph.hw_opal_only') == '1'
 
     def _device_uuid_for_role(self, role: str) -> Optional[str]:
         if self.block_volume is None:
@@ -104,17 +113,17 @@ class OsdLvmMappers:
         return '/dev/mapper/%s' % uuid_value
 
     def _block_crypt_path(self) -> Optional[str]:
-        if not self.encrypted:
+        if not self.encrypted or self.hw_opal_only:
             return None
         return self._crypt_mapper_device_path(self._device_uuid_for_role('block'))
 
     def _db_crypt_path(self) -> Optional[str]:
-        if not self.encrypted:
+        if not self.encrypted or self.hw_opal_only:
             return None
         return self._crypt_mapper_device_path(self._device_uuid_for_role('db'))
 
     def _wal_crypt_path(self) -> Optional[str]:
-        if not self.encrypted:
+        if not self.encrypted or self.hw_opal_only:
             return None
         return self._crypt_mapper_device_path(self._device_uuid_for_role('wal'))
 
@@ -153,6 +162,77 @@ class OsdLvmMappers:
             with_tpm=self.with_tpm,
             options=self.dmcrypt_open_opts,
         )
+
+    def _hw_opal_targets(self) -> List[Tuple[str, str]]:
+        targets: List[Tuple[str, str]] = []
+        seen: Set[str] = set()
+        for vol in (self.block_volume, self.db_volume, self.wal_volume):
+            if vol is None:
+                continue
+            role = vol.tags.get('ceph.type', '')
+            luks_device = vol.tags.get('ceph.luks_device') or vol.tags.get(
+                'ceph.%s_luks_device' % role, ''
+            )
+            luks_uuid = vol.tags.get('ceph.luks_uuid') or vol.tags.get(
+                'ceph.%s_luks_uuid' % role, ''
+            )
+            if not luks_device or not luks_uuid:
+                continue
+            if luks_uuid in seen:
+                continue
+            seen.add(luks_uuid)
+            targets.append((luks_device, luks_uuid))
+        return targets
+
+    def _open_hw_opal_devices(self) -> None:
+        if not self.hw_opal_only:
+            return
+        secret = self.credentials.resolve_secret(self._lockbox_secret_from_block_lv())
+        for luks_device, luks_uuid in self._hw_opal_targets():
+            mapper_path = '/dev/mapper/%s' % luks_uuid
+            if os.path.exists(mapper_path):
+                continue
+            if self.with_tpm:
+                encryption_utils.luks_open(
+                    secret,
+                    luks_device,
+                    luks_uuid,
+                    with_tpm=1,
+                )
+            else:
+                encryption_utils.luks_open(
+                    secret,
+                    luks_device,
+                    luks_uuid,
+                    key_size=encryption_utils.HW_OPAL_KEY_SIZE,
+                )
+            if not os.path.exists(mapper_path):
+                raise RuntimeError(
+                    'Unable to open OPAL LUKS mapping %s for %s'
+                    % (luks_uuid, luks_device)
+                )
+
+    def _close_hw_opal_devices(self) -> None:
+        if not self.hw_opal_only:
+            return
+        for luks_device, luks_uuid in self._hw_opal_targets():
+            mapper_path = '/dev/mapper/%s' % luks_uuid
+            if not os.path.exists(mapper_path):
+                continue
+            vgs = api.get_device_vgs(mapper_path, 'ceph')
+            retain = False
+            for vg in vgs:
+                other_lvs = get_lvs(filters={'vg_name': vg.vg_name})
+                for lv in other_lvs:
+                    if lv.tags.get('ceph.osd_fsid') == self.osd_fsid:
+                        continue
+                    if lv.tags.get('ceph.osd_id'):
+                        retain = True
+                        break
+                if retain:
+                    break
+            if not retain:
+                encryption_utils.dmcrypt_close(mapper_path)
 
     def _refresh_osd_volumes_from_lvm(self) -> None:
         refreshed = get_lvs(

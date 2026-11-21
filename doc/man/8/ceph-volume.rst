@@ -108,6 +108,15 @@ Optional arguments:
 
    Enable encryption for the underlying OSD devices
 
+.. option:: --hw-opal-only
+
+   Enable SED OPAL hardware-only encryption via cryptsetup ``--hw-opal-only``
+   (LUKS on the physical device, LVM on the mapper). Implies encrypted OSD
+   setup and is mutually exclusive with ``--dmcrypt``. Optional environment
+   variable ``CEPH_VOLUME_OPAL_ADMIN_KEY`` sets the OPAL admin password;
+   otherwise the LUKS key is reused (and can be recovered from the OSD
+   lockbox on zap).
+
 .. option:: --crush-device-class
 
    Define a CRUSH device class to assign the OSD to
@@ -224,6 +233,15 @@ Optional arguments:
 .. option:: --dmcrypt
 
    Enable encryption for the underlying OSD devices
+
+.. option:: --hw-opal-only
+
+   Enable SED OPAL hardware-only encryption via cryptsetup ``--hw-opal-only``
+   (LUKS on the physical device, LVM on the mapper). Implies encrypted OSD
+   setup and is mutually exclusive with ``--dmcrypt``. Optional environment
+   variable ``CEPH_VOLUME_OPAL_ADMIN_KEY`` sets the OPAL admin password;
+   otherwise the LUKS key is reused (and can be recovered from the OSD
+   lockbox on zap).
 
 .. option:: --osd-id OSD_ID
 

@@ -1598,6 +1598,8 @@ Usage:
   ceph orch daemon add osd host:device1,device2,...
   ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=false]
   ceph orch daemon add osd host:data_devices=device1[,encrypted=true,tpm2=true]
+  ceph orch daemon add osd host:data_devices=device1[,hw_opal_only=true]
+  ceph orch daemon add osd host:data_devices=device1[,hw_opal_only=true,tpm2=true]
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)

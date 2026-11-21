@@ -4,6 +4,7 @@ import logging
 import re
 import json
 import shlex
+import tempfile
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
@@ -16,10 +17,110 @@ from .disk import (
     BackingDeviceRotation,
 )
 from packaging import version
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
+
+HW_OPAL_KEY_SIZE = '256'
+
+
+def validate_hw_opal_cli_args(args: Any) -> None:
+    if getattr(args, 'hw_opal_only', False) and getattr(args, 'dmcrypt', False):
+        raise RuntimeError(
+            '--dmcrypt and --hw-opal-only are mutually exclusive'
+        )
+
+
+def get_opal_admin_key(luks_key: str) -> str:
+    # Prefer a stable admin PIN from the environment. Otherwise reuse the LUKS
+    # key (also stored in the OSD lockbox), which zap can recover later.
+    return os.environ.get('CEPH_VOLUME_OPAL_ADMIN_KEY') or luks_key
+
+
+def hw_opal_mapping_name(device: str) -> str:
+    kname = lsblk(device).get('KNAME') or os.path.basename(device)
+    return 'ceph-hw-opal-%s' % kname
+
+
+def device_has_luks2(device: str) -> bool:
+    try:
+        return CephLuks2(device).has_luks2_signature
+    except RuntimeError:
+        return False
+
+
+def luks_format_hw_opal(key: str, admin_key: str, device: str) -> None:
+    with tempfile.NamedTemporaryFile(mode='w', delete=True) as keyfile:
+        keyfile.write(key)
+        keyfile.flush()
+        command: List[str] = [
+            'cryptsetup',
+            '--batch-mode',
+            '--type', 'luks2',
+            '--hw-opal-only',
+            # cryptsetup ignores --key-size/--cipher for --hw-opal-only
+            '--force-password',  # machine-generated / lockbox keys skip pwquality
+            '--key-file', keyfile.name,
+            'luksFormat',
+            device,
+        ]
+        # OPAL admin password is read from stdin (EOL-terminated); LUKS key from --key-file.
+        _, stderr, returncode = process.call(
+            command,
+            stdin=admin_key + '\n',
+            terminal_verbose=True,
+            show_command=True,
+        )
+        if returncode != 0:
+            raise RuntimeError(
+                'Unable to format %s with cryptsetup --hw-opal-only: %s'
+                % (device, ' '.join(stderr))
+            )
+
+
+def luks_erase_hw_opal(device: str,
+                       admin_key: str,
+                       factory_reset: bool = False) -> None:
+    command: List[str] = ['cryptsetup', '--batch-mode']
+    if factory_reset:
+        command.append('--hw-opal-factory-reset')
+    command.extend(['erase', '--key-file', '-', device])
+    _, stderr, returncode = process.call(
+        command,
+        stdin=admin_key,
+        terminal_verbose=True,
+        show_command=True,
+    )
+    if returncode != 0:
+        raise RuntimeError(
+            'Unable to erase OPAL LUKS on %s: %s' % (device, ' '.join(stderr))
+        )
+
+
+def prepare_hw_opal_device(
+    key: str,
+    device: str,
+    mapping: str,
+    with_tpm: int = 0,
+    enroll_tpm2: Optional[Callable[[str], None]] = None,
+) -> str:
+    mapper_path = '/dev/mapper/%s' % mapping
+    if os.path.exists(mapper_path):
+        return mapper_path
+
+    if not device_has_luks2(device):
+        luks_format_hw_opal(key, get_opal_admin_key(key), device)
+        if with_tpm and enroll_tpm2 is not None:
+            enroll_tpm2(device)
+
+    if with_tpm:
+        luks_open(key, device, mapping, with_tpm=1)
+    else:
+        luks_open(key, device, mapping, key_size=HW_OPAL_KEY_SIZE)
+    if not os.path.exists(mapper_path):
+        raise RuntimeError('Unable to open OPAL LUKS mapping %s' % mapper_path)
+    return mapper_path
 
 def set_dmcrypt_no_workqueue(target_version: str = '2.3.4') -> None:
     """Set `conf.dmcrypt_no_workqueue` to `True` if the installed version
@@ -212,7 +313,9 @@ def luks_open(key: str,
               device: str,
               mapping: str,
               with_tpm: int = 0,
-              options: Optional[str] = None) -> None:
+              options: Optional[str] = None,
+              key_size: Optional[str] = None,
+              run_on_host: Optional[bool] = None) -> None:
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
 
@@ -226,6 +329,8 @@ def luks_open(key: str,
     """
     command: List[str] = []
     extra_args: List[str] = []
+    if run_on_host is None:
+        run_on_host = bool(with_tpm)
     if with_tpm:
         command = ['/usr/lib/systemd/systemd-cryptsetup',
                    'attach',
@@ -236,9 +341,11 @@ def luks_open(key: str,
         if bypass_workqueue(device):
             command[-1] += ',no-read-workqueue,no-write-workqueue'
     else:
+        if key_size is None:
+            key_size = get_key_size_from_conf()
         base_cmd: List[str] = [
             "cryptsetup",
-            "--key-size", str(get_key_size_from_conf()),
+            "--key-size", str(key_size),
             "--key-file", "-",
             "--allow-discards",
         ]
@@ -256,7 +363,7 @@ def luks_open(key: str,
                             '--perf-no_write_workqueue'])
 
     process.call(command,
-                 run_on_host=with_tpm,
+                 run_on_host=run_on_host,
                  stdin=key,
                  terminal_verbose=True,
                  show_command=True)

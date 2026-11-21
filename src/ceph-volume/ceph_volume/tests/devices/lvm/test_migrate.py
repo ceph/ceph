@@ -1064,6 +1064,74 @@ class TestNew(object):
             '--dev-target', '/dev/mapper/target_uuid',
             '--command', 'bluefs-bdev-new-wal']
 
+    @patch('os.getuid')
+    def test_newwal_hw_opal_skips_dmcrypt(self, m_getuid, monkeypatch, patch_udevdata):
+        monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
+        m_getuid.return_value = 0
+
+        source_tags = (
+            'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234,'
+            'ceph.encrypted=1,ceph.hw_opal_only=1'
+        )
+        data_vol = api.Volume(
+            lv_name='volume1',
+            lv_uuid='datauuid',
+            vg_name='vg',
+            lv_path='/dev/VolGroup/lv1',
+            lv_tags=source_tags,
+        )
+        self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol}
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
+
+        self.mock_process_input = []
+        monkeypatch.setattr(process, 'call', self.mock_process)
+
+        self.mock_volume = api.Volume(
+            lv_name='target_volume1',
+            lv_uuid='target_uuid',
+            vg_name='vg',
+            lv_path='/dev/VolGroup/target_volume',
+            lv_tags='',
+        )
+        monkeypatch.setattr(api, 'get_lv_by_fullname', self.mock_get_lv_by_fullname)
+        monkeypatch.setattr(
+            'ceph_volume.systemd.systemctl.osd_is_active', lambda id: False
+        )
+
+        self.mock_volumes = []
+        self.mock_volumes.append([data_vol])
+        self.mock_volumes.append([data_vol])
+        self.mock_volumes.append([])
+        self.mock_volumes.append([])
+        monkeypatch.setattr(migrate.api, 'get_lvs', self.mock_get_lvs)
+        monkeypatch.setattr(
+            migrate, 'get_cluster_name', lambda osd_id, osd_fsid: 'cluster'
+        )
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+
+        prepare_calls = []
+
+        def track_prepare_dmcrypt(*args, **kwargs):
+            prepare_calls.append(kwargs)
+            return '/dev/mapper/' + kwargs['mapping']
+
+        monkeypatch.setattr(
+            encryption_utils, 'prepare_dmcrypt', track_prepare_dmcrypt
+        )
+
+        migrate.NewWAL(argv=[
+            '--osd-id', '2',
+            '--osd-fsid', '55BD4219-16A7-4037-BC20-0F158EFCC83D',
+            '--target', 'vgname/new_wal']).main()
+
+        assert prepare_calls == []
+        n = len(self.mock_process_input)
+        assert self.mock_process_input[n - 1] == [
+            'ceph-bluestore-tool',
+            '--path', '/var/lib/ceph/osd/cluster-2',
+            '--dev-target', '/dev/VolGroup/target_volume',
+            '--command', 'bluefs-bdev-new-wal']
+
 class TestMigrate(object):
 
     def test_invalid_osd_id_passed(self, is_root):
