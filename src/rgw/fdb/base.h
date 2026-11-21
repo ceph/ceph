@@ -39,6 +39,8 @@
 #include <concepts>
 #include <cstdint>
 #include <exception>
+#include <initializer_list>
+#include <stdexcept>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -48,16 +50,6 @@
 
 #include <mutex>
 #include <thread>
-
-#ifdef __cpp_lib_flat_map
- #include <flat_map>
- template <typename ...Args>
- using flat_map = std::flat_map<Args...>;
-#else
- #include <boost/container/flat_map.hpp>
- template <typename ...Args>
- using flat_map = boost::container::flat_map<Args...>;
-#endif
 
 // Wrangle some forward declarations:
 namespace ceph::libfdb {
@@ -107,6 +99,7 @@ struct future_value;
 
 inline void transaction_replay_ready(transaction& txn);
 inline void finish_version_stamps(transaction& txn, std::error_code error) noexcept;
+inline future_value take_watch_future(watch_handle&& watch);
 
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      byte_view key,
@@ -197,6 +190,13 @@ template <typename FnT>
 concept value_callback =
  value_invocable<FnT> &&
  std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
+
+template <typename FnT>
+concept raw_key_value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>,
+                       std::span<const std::uint8_t>> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>,
+                                           std::span<const std::uint8_t>>>;
 
 template <typename T>
 concept decoded_value_sink =
@@ -313,6 +313,12 @@ struct future_value final
   }
  }
 
+ [[nodiscard]] fdb_error_t set_callback(FDBCallback callback, void *context) noexcept
+ {
+  // The callback may destroy this owner inline, so this call remains last:
+  return fdb_future_set_callback(raw_handle(), callback, context);
+ }
+
  FDBFuture *raw_ptr_or_throw() const
  {
   if (auto *future = raw_handle(); nullptr != future) {
@@ -326,7 +332,7 @@ struct future_value final
 
 inline byte_view as_byte_view(concepts::libfdb_key_view auto key)
 {
- return byte_view(reinterpret_cast<const std::uint8_t *>(key.data()), key.size());
+ return byte_view(reinterpret_cast<const std::uint8_t *>(std::data(key)), std::size(key));
 }
 
 } // namespace detail
@@ -407,10 +413,16 @@ class watch_handle final
  }
 
  private:
+ friend detail::future_value detail::take_watch_future(watch_handle&& watch);
  friend class transaction;
 };
 
 namespace detail {
+
+inline future_value take_watch_future(watch_handle&& watch)
+{
+ return std::move(watch.watch_future);
+}
 
 inline byte_view as_byte_view(const concepts::libfdb_key auto& key)
 requires (!concepts::libfdb_key_view<decltype(key)>)
@@ -549,12 +561,12 @@ inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix
 
  std::ranges::copy(prefix, std::back_inserter(out));
 
- if (not std::in_range<std::uint32_t>(out.size())) {
+ if (not std::in_range<std::uint32_t>(std::size(out))) {
   throw libfdb_exception(std::errc::invalid_argument, "version-stamped prefix is too large");
  }
 
- const auto versionstamp_offset = static_cast<std::uint32_t>(out.size());
- out.resize(out.size() + versionstamp_byte_count);
+ const auto versionstamp_offset = static_cast<std::uint32_t>(std::size(out));
+ out.resize(std::size(out) + versionstamp_byte_count);
 
  std::ranges::copy(suffix, std::back_inserter(out));
 
@@ -623,13 +635,20 @@ inline std::string key_after(std::string_view key)
  return std::string(key) + '\0';
 }
 
-inline select as_half_open_select(const select& selection)
+inline select as_half_open_select(select selection)
 {
- auto half_open = select {
-  selection.begin_inclusive ? selection.begin_key : key_after(selection.begin_key),
-  selection.end_inclusive ? key_after(selection.end_key) : selection.end_key
- };
+ if (not selection.begin_inclusive) {
+  selection.begin_key.push_back('\0');
+ }
 
+ if (selection.end_inclusive) {
+  selection.end_key.push_back('\0');
+ }
+
+ // Preserve the constructor's reserved-key clamping while transferring buffers.
+ auto half_open = select {
+  std::move(selection.begin_key), std::move(selection.end_key), true, false
+ };
  half_open.options = selection.options;
 
  return half_open;
@@ -644,13 +663,98 @@ inline constexpr option_flag_t option_flag;
 
 using option_value = std::variant<option_flag_t, std::int64_t, std::string, std::vector<std::uint8_t>>;
 
-// i.e. option /code/ to the value of the option itself (e.g. FDB_FOO, 42):
+// Owning sequence of option applications. Order and repetitions matter.
+// Breaking change: option_map and its associative interface have been removed.
 template <typename OptionCodeT>
-using option_map = flat_map<OptionCodeT, option_value>; 
+class option_list final
+{
+ public:
+ using value_type = std::pair<OptionCodeT, option_value>;
+ using size_type = typename std::vector<value_type>::size_type;
+ using const_iterator = typename std::vector<value_type>::const_iterator;
 
-using network_options = option_map<FDBNetworkOption>;
-using database_options = option_map<FDBDatabaseOption>;
-using transaction_options = option_map<FDBTransactionOption>;
+ private:
+ std::vector<value_type> entries;
+
+ public:
+ option_list() = default;
+
+ option_list(std::initializer_list<value_type> values)
+  : entries(values)
+ {}
+
+ const_iterator begin() const noexcept { return entries.begin(); }
+ const_iterator cbegin() const noexcept { return entries.cbegin(); }
+
+ const_iterator end() const noexcept { return entries.end(); }
+ const_iterator cend() const noexcept { return entries.cend(); }
+
+ bool empty() const noexcept { return entries.empty(); }
+ size_type size() const noexcept { return entries.size(); }
+
+ void clear() noexcept { entries.clear(); }
+ void reserve(const size_type count) { entries.reserve(count); }
+
+ void push_back(const value_type& value) { entries.push_back(value); }
+ void push_back(value_type&& value) { entries.push_back(std::move(value)); }
+
+ template <typename ...ArgTs>
+ requires std::constructible_from<value_type, ArgTs...>
+ value_type& emplace_back(ArgTs&& ...args)
+ {
+  return entries.emplace_back(std::forward<ArgTs>(args)...);
+ }
+
+ // As with vector::append_range, the range must not overlap this container.
+ template <std::ranges::input_range RangeT>
+ requires std::convertible_to<std::ranges::range_reference_t<RangeT>, value_type>
+ void append_range(RangeT&& values)
+ {
+  if constexpr (std::ranges::sized_range<RangeT>) {
+   const auto count = std::ranges::size(values);
+
+   if (count > entries.max_size() - entries.size()) {
+    throw libfdb_exception(std::errc::value_too_large, "too many option entries");
+   }
+
+   entries.reserve(entries.size() + count);
+  }
+
+  std::ranges::copy(values, std::back_inserter(entries));
+ }
+
+ void append(std::initializer_list<value_type> values)
+ {
+  append_range(values);
+ }
+
+ // Replace every matching value in place; an absent code inserts nothing.
+ size_type replace_all(const OptionCodeT code, const option_value& value)
+ {
+  size_type count = 0;
+
+  for (auto& entry : entries) {
+   if (entry.first == code) {
+    entry.second = value;
+    ++count;
+   }
+  }
+
+  return count;
+ }
+
+ size_type erase(const OptionCodeT code)
+ {
+  return std::erase_if(entries, [code](const auto& entry) {
+   return entry.first == code;
+  });
+ }
+
+};
+
+using network_options = option_list<FDBNetworkOption>;
+using database_options = option_list<FDBDatabaseOption>;
+using transaction_options = option_list<FDBTransactionOption>;
 
 // Caller-supplied database sources are tagged so paths and connection strings
 // cannot be confused:
@@ -746,8 +850,8 @@ struct fdb_bytes final
 constexpr fdb_bytes as_fdb_bytes(const byte_view bytes)
 {
  return {
-  .data = bytes.data(),
-  .length = checked_fdb_size(bytes.size())
+  .data = std::data(bytes),
+  .length = checked_fdb_size(std::size(bytes))
  };
 }
 
@@ -763,12 +867,12 @@ constexpr byte_view result_bytes(const std::uint8_t *data, const int length)
 
 inline std::string_view as_string_view(const byte_view bytes) noexcept
 {
- if (bytes.empty()) {
+ if (std::empty(bytes)) {
   return {};
  }
 
  return std::string_view(
-  reinterpret_cast<const char *>(bytes.data()), bytes.size());
+  reinterpret_cast<const char *>(std::data(bytes)), std::size(bytes));
 }
 
 inline std::string_view key_view(const auto& result)
@@ -857,9 +961,9 @@ inline auto apply_option_value(auto& set_option,
  return std::invoke(set_option, code, input.data, input.length);
 }
 
-inline void apply_options(auto&& option_map, auto&& set_option)
+inline void apply_options(auto&& options, auto&& set_option)
 {
- std::ranges::for_each(option_map, [&set_option](const auto& option) {
+ std::ranges::for_each(options, [&set_option](const auto& option) {
     const auto apply = [&set_option, code = option.first](const auto& value) {
       return apply_option_value(set_option, code, value);
     };
