@@ -80,9 +80,6 @@ class Auth(RESTController, ControllerAuthMixin):
                 mgr.ACCESS_CTRL_DB.save()
                 token = JwtManager.gen_token(username, ttl=ttl)
 
-                # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
-                token = token.decode('utf-8') if isinstance(token, bytes) else token
-
                 self._set_token_cookie(url_prefix, token)
                 if isinstance(Settings.MULTICLUSTER_CONFIG, str):
                     try:
