@@ -54,6 +54,7 @@ export class ErasureCodeProfileFormModalComponent
   };
   plugin = this.PLUGIN.ISA;
   icons = Icons;
+  fastEc = false;
 
   form: CdFormGroup;
   plugins: string[];
@@ -434,7 +435,9 @@ export class ErasureCodeProfileFormModalComponent
             this.form.get('crushDeviceClass'),
             false
           );
-          this.plugins = plugins;
+          this.plugins = this.fastEc
+            ? plugins.filter((p) => p === this.PLUGIN.JERASURE || p === this.PLUGIN.ISA)
+            : plugins;
           this.names = names;
           this.preValidateNumericInputFields();
           this.cdr.detectChanges();

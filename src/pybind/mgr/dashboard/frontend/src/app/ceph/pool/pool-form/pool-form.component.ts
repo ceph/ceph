@@ -240,6 +240,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
         }),
         pgAutoscaleMode: new UntypedFormControl(null),
         ecOverwrites: new UntypedFormControl(false),
+        ecOptimizations: new UntypedFormControl(false),
         compression: compressionForm,
         max_bytes: new UntypedFormControl(0, [Validators.min(0)]),
         maxBytesUnit: new UntypedFormControl(this.maxBytesUnits[2]),
@@ -355,7 +356,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private disableForEdit() {
-    ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach((controlName) =>
+    ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites', 'ecOptimizations'].forEach((controlName) =>
       this.form.get(controlName).disable()
     );
   }
@@ -383,6 +384,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       pgAutoscaleMode: pool.pg_autoscale_mode,
       pgNum: pool.pg_num,
       ecOverwrites: pool.flags_names.includes('ec_overwrites'),
+      ecOptimizations: pool.flags_names.includes('ec_optimizations'),
       mode: pool.options.compression_mode,
       algorithm: pool.options.compression_algorithm,
       minBlobSize: minBlobSizeConverted[0],
@@ -744,9 +746,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   addErasureCodeProfile() {
-    this.addModal(ErasureCodeProfileFormModalComponent, (profile: ErasureCodeProfile) =>
-      this.reloadECPs(profile)
-    );
+    this.hideOpenTooltips();
+    const modalRef = this.modalService.show(ErasureCodeProfileFormModalComponent);
+    if (this.form.getValue('ecOptimizations')) {
+      modalRef.fastEc = true;
+    }
+    modalRef.submitAction.subscribe((profile: ErasureCodeProfile) => this.reloadECPs(profile));
   }
 
   private addModal(modalComponent: Type<any>, reload: (item: any) => void) {
@@ -1013,7 +1018,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.assignFormField(pool, {
         externalFieldName: 'flags',
         formControlName: 'ecOverwrites',
-        replaceFn: () => (this.isErasure ? ['ec_overwrites'] : undefined)
+        replaceFn: () => {
+          if (!this.isErasure) return undefined;
+          const flags = [];
+          if (this.form.getValue('ecOverwrites')) flags.push('ec_overwrites');
+          if (this.form.getValue('ecOptimizations')) flags.push('ec_optimizations');
+          return flags.length ? flags : undefined;
+        }
       });
       if (this.editing) {
         this.assignFormFields(pool, [

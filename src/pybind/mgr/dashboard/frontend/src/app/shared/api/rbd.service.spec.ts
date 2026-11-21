@@ -175,7 +175,7 @@ describe('RbdService', () => {
       expect(service.isRBDCapablePool({ type: 'replicated', flags_names: '' })).toBe(true);
     });
 
-    it('should return true for erasure pools with supports_omap', () => {
+    it('should return true for erasure pools with supports_omap and ec_overwrites', () => {
       expect(
         service.isRBDCapablePool({ type: 'erasure', flags_names: 'ec_overwrites,supports_omap' })
       ).toBe(true);
@@ -183,6 +183,12 @@ describe('RbdService', () => {
 
     it('should return false for erasure pools without supports_omap', () => {
       expect(service.isRBDCapablePool({ type: 'erasure', flags_names: 'ec_overwrites' })).toBe(
+        false
+      );
+    });
+
+    it('should return false for erasure pools with supports_omap but without ec_overwrites', () => {
+      expect(service.isRBDCapablePool({ type: 'erasure', flags_names: 'supports_omap' })).toBe(
         false
       );
     });

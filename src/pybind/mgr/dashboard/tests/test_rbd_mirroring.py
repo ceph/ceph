@@ -185,6 +185,9 @@ class IsRbdCapablePoolTest(unittest.TestCase):
         self.assertTrue(_is_rbd_capable_pool(
             {'type': 3, 'flags_names': 'ec_overwrites,supports_omap'}))
 
+    def test_ec_pool_with_omap_without_overwrites(self):
+        self.assertFalse(_is_rbd_capable_pool({'type': 3, 'flags_names': 'supports_omap'}))
+
     def test_ec_pool_no_flags(self):
         self.assertFalse(_is_rbd_capable_pool({'type': 3}))
 
