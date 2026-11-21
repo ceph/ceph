@@ -8288,7 +8288,8 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
 int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 				 RGWRados* store, RGWBucketInfo& bucket_info,
 				 RGWObjectCtx* rctx, RGWObjManifest* manifest,
-				 int part_num, int* parts_count, bool prefetch,
+				 int part_num, int* parts_count,
+				 uint64_t* part_offset_out, bool prefetch,
 				 RGWObjState** pstate, RGWObjManifest** pmanifest)
 {
   if (!manifest) {
@@ -8321,6 +8322,9 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
     return -ERR_INVALID_PART;
   }
   const auto part_offset = iter.get_ofs();
+  if (part_offset_out) {
+    *part_offset_out = part_offset;
+  }
 
   // read the part's head object
   if (prefetch) {
@@ -8435,21 +8439,30 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   if (params.part_num) {
+    // capture whole-object details before the redirect below swaps astate to
+    // the part head. the Content-Range header needs the full object size, and
+    // the manifest part offset only matches the returned length for plain
+    // (uncompressed, unencrypted) objects
+    const uint64_t full_obj_size = astate->size;
+    const bool compressed = astate->attrset.count(RGW_ATTR_COMPRESSION);
+    bool encrypted = false;
     map<string, bufferlist> src_attrset;
     for (auto& iter : astate->attrset) {
       if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
         ldpp_dout(dpp, 4) << "get src crypt attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
+        encrypted = true;
       } else if (iter.first == RGW_ATTR_ETAG) {
         ldpp_dout(dpp, 4) << "copy src etag attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
       }
     }
     int parts_count = 0;
+    uint64_t part_ofs = 0;
     // use the manifest to redirect to the requested part number
     r = get_part_obj_state(dpp, y, store, bucket_info, &source->get_ctx(),
                            manifest, *params.part_num, &parts_count,
-                           part_prefetch, &astate, &manifest);
+                           &part_ofs, part_prefetch, &astate, &manifest);
     if (r == -ERR_INVALID_PART && *params.part_num == 1) {
       // for non-multipart uploads, treat requests for the first part as a
       // request for the entire range. this behavior is expected by the java
@@ -8466,6 +8479,12 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       return -ERR_INVALID_PART;
     } else {
       params.parts_count = parts_count;
+      // only a plain object's stored part offset matches the length the client
+      // receives; skip the header for compressed or encrypted objects
+      if (!compressed && !encrypted) {
+        params.part_ofs = part_ofs;
+        params.full_obj_size = full_obj_size;
+      }
     }
 
     for (auto& iter : src_attrset) {

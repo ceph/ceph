@@ -478,6 +478,9 @@ protected:
   std::optional<int> multipart_part_num;
   // PartsCount response when partNumber is specified
   std::optional<int> multipart_parts_count;
+  // Content-Range for a partNumber read: the part's plaintext offset + object size.
+  std::optional<uint64_t> multipart_part_ofs;
+  std::optional<uint64_t> multipart_full_obj_size;
 
   // For AEAD encryption ciphers: preserve original encrypted size before plaintext conversion.
   // Used by decrypt filter for range clamping. For non-AEAD modes, equals s->obj_size.

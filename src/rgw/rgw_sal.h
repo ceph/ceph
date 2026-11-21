@@ -1184,6 +1184,9 @@ class Object {
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
+        /// partNumber read: the part's plaintext offset and object size, for Content-Range.
+        std::optional<uint64_t> part_ofs;
+        std::optional<uint64_t> full_obj_size;
       } params;
 
       virtual ~ReadOp() = default;

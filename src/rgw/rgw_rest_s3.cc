@@ -535,6 +535,13 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   if (range_str)
     dump_range(s, start, end, s->obj_size);
+  else if (multipart_part_num && multipart_part_ofs &&
+           multipart_full_obj_size && total_len) {
+    // a partNumber read returns a part; report its place in the object the
+    // same way a Range request does, which the AWS SDKs rely on
+    dump_range(s, *multipart_part_ofs, *multipart_part_ofs + total_len - 1,
+               *multipart_full_obj_size);
+  }
 
   if (s->system_request &&
       s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
