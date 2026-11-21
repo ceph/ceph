@@ -472,17 +472,17 @@ class IngressService(CephService):
             bare_ip = ipaddress.ip_interface(vip).ip
             host_ip = ''
             interface = None
-            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-                if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
-                    interface = list(ifaces.keys())[0]
-                    for ip_addr in ifaces[interface]:
-                        if ip_addr != str(bare_ip):
-                            host_ip = ip_addr
-                            break
-                    logger.info(
-                        f'{bare_ip} is in {subnet} on {host} interface {interface}'
-                    )
-                    break
+            network = self.mgr.cache.get_network_for_ip(host, str(bare_ip))
+            if network:
+                subnet, ifaces = network
+                interface = list(ifaces.keys())[0]
+                for ip_addr in ifaces[interface]:
+                    if ip_addr != str(bare_ip):
+                        host_ip = ip_addr
+                        break
+                logger.info(
+                    f'{bare_ip} is in {subnet} on {host} interface {interface}'
+                )
             # try to find interface by matching spec.virtual_interface_networks
             if not interface and spec.virtual_interface_networks:
                 for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
