@@ -1615,6 +1615,9 @@ protected:
 
   friend struct C_ProxyWrite_Commit;
 
+  // track last warning time for CLS method policing per cls method
+  std::map<std::string, ceph::coarse_mono_time> cls_method_last_warned;
+
   // -- chunkop --
   enum class refcount_t {
     INCREMENT_REF,
