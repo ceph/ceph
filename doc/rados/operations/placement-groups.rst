@@ -390,6 +390,13 @@ the total cluster capacity. However, if the cluster contains a second pool that
 has ``target_size_ratio`` set to 1.0, then both pools are expected to use 50%
 of the total cluster capacity.
 
+The ratios are treated as relative weights only when in aggregate they ask for
+more than the whole cluster. When their sum is 1.0 or less, each ratio is taken
+as the fraction of the cluster that the pool is expected to consume, and the
+remainder is left for pools that have no target size set. A single pool with
+``target_size_ratio`` set to 0.1 is therefore expected to use a tenth of the
+cluster, rather than all of it.
+
 The ``ceph osd pool create`` command has two command-line options that can be
 used to set the target size of a pool at creation time: ``--target-size-bytes
 <bytes>`` and ``--target-size-ratio <ratio>``.
