@@ -1597,6 +1597,50 @@ TEST_P(seastore_test_t, simple_extent_test)
   });
 }
 
+TEST_P(seastore_test_t, cross_collection_batch)
+{
+  run_async([this] {
+    coll_t coll2_name{spg_t{pg_t{1, 0}}};
+    auto coll2 = sharded_seastore->create_new_collection(coll2_name).get();
+    {
+      CTransaction t;
+      t.create_collection(coll2_name, 0);
+      sharded_seastore->do_transaction(coll2, std::move(t)).get();
+    }
+
+    auto make_write = [](coll_t cid, const ghobject_t &oid, char fill) {
+      bufferlist bl;
+      bl.append(std::string(4096, fill));
+      CTransaction t;
+      t.write(cid, oid, 0, bl.length(), bl);
+      return t;
+    };
+
+    // The first transaction runs alone, the next two are queued behind it and
+    // are merged into a single batch although they belong to different
+    // collections and write the same object name.
+    std::vector<seastar::future<>> futs;
+    futs.push_back(sharded_seastore->do_transaction(
+      coll, make_write(coll_name, make_oid(1), 'x')));
+    futs.push_back(sharded_seastore->do_transaction(
+      coll, make_write(coll_name, make_oid(0), 'a')));
+    futs.push_back(sharded_seastore->do_transaction(
+      coll2, make_write(coll2_name, make_oid(0), 'b')));
+    seastar::when_all_succeed(futs.begin(), futs.end()).get();
+
+    auto check = [this](CollectionRef c, const ghobject_t &oid, char fill) {
+      auto ret = sharded_seastore->read(c, oid, 0, 4096).unsafe_get();
+      bufferlist expected;
+      expected.append(std::string(4096, fill));
+      EXPECT_EQ(ret, expected);
+    };
+    check(coll, make_oid(1), 'x');
+    check(coll, make_oid(0), 'a');
+    check(coll2, make_oid(0), 'b');
+  });
+}
+
+
 TEST_P(seastore_test_t, fiemap_empty)
 {
   run_async([this] {
