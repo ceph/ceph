@@ -789,11 +789,21 @@ Usage::
 
     ceph mgr module enable <module>
 
-Subcommand ``module disable`` will disable an active Manager module.
+Subcommand ``module disable`` will disable an active Manager module. It
+refuses to disable an always-on module; see ``module force disable``.
 
 Usage::
 
     ceph mgr module disable <module>
+
+Subcommand ``module force disable`` will disable an always-on Manager module.
+Because this disables operations and removes commands that other Ceph tools
+expect, the command requires ``--yes-i-really-mean-it``. Subcommand ``module
+enable`` turns the module back on.
+
+Usage::
+
+    ceph mgr module force disable <module> --yes-i-really-mean-it
 
 Subcommand ``metadata`` will report metadata about all Manager daemons or, if
 the name is specified, a single Manager daemon.
