@@ -190,13 +190,17 @@ class XFSTestsDev(CephFSTestCase):
         log.info(f'distro and version detected is "{distro}" and "{version}".')
 
         if distro in ('redhatenterpriseserver', 'redhatenterprise', 'centos',
-                      'centosstream', 'rhel'):
+                      'centosstream', 'rhel', 'rocky'):
             deps = """\
                     acl attr automake bc dbench dump e2fsprogs fio gawk gcc \
                     gdbm-devel git indent kernel-devel libacl-devel \
                     libaio-devel libcap-devel libtool libuuid-devel lvm2 \
                     make psmisc python3 quota sed sqlite udftools \
                     xfsprogs""".split()
+            # EL10 ships neither dump nor udftools, not even in EPEL. xfstests
+            # needs them only for ext* dump/restore and udf tests.
+            if major_ver_num >= 10:
+                deps = [d for d in deps if d not in ('dump', 'udftools')]
 
             if self.install_xfsprogs:
                 if distro == 'centosstream' and major_ver_num == 8:
