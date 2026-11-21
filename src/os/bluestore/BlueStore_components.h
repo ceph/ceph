@@ -16,6 +16,7 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_COMPONENTS_H
 
 #include "BlueStore_objects.h"
+#include "common/dout.h"
 
 namespace bluestore {
 
@@ -400,44 +401,39 @@ namespace bluestore {
     }
 
     void flush() {
+      bool res;
       std::unique_lock l(qlock);
-      while (true) {
-	// std::set flag before the check because the condition
-	// may become true outside qlock, and we need to make
-	// sure those threads see waiters and signal qcond.
-	++kv_submitted_waiters;
-	if (q.empty() || _is_all_kv_submitted()) {
-	  --kv_submitted_waiters;
-	  return;
-	}
-	qcond.wait(l);
-	--kv_submitted_waiters;
-      }
+      ++kv_submitted_waiters;
+      do {
+        res = qcond.wait_for(l, std::chrono::seconds(1), [&]() {
+          return q.empty() || _is_all_kv_submitted();
+        });
+        if (!res) {
+          lgeneric_subdout(store->cct, bluestore, 1) << "flush() timeouted after 1s" << dendl;
+        }
+      } while (!res);
+      --kv_submitted_waiters;
     }
 
     void flush_all_but_last() {
+      bool res;
       std::unique_lock l(qlock);
       ceph_assert(q.size() >= 1);
-      while (true) {
-	// std::set flag before the check because the condition
-	// may become true outside qlock, and we need to make
-	// sure those threads see waiters and signal qcond.
-	++kv_submitted_waiters;
-	if (q.size() <= 1) {
-	  --kv_submitted_waiters;
-	  return;
-	}
-	else {
-	  auto it = q.rbegin();
-	  it++;
-	  if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
-	    --kv_submitted_waiters;
-	    return;
-	  }
-	}
-	qcond.wait(l);
-	--kv_submitted_waiters;
-      }
+      ++kv_submitted_waiters;
+      do {
+        res = qcond.wait_for(l, std::chrono::seconds(1), [&]() {
+          if (q.size() <= 1) {
+            return true;
+          }
+          auto it = q.rbegin();
+          it++;
+          return it->get_state() >= TransContext::STATE_KV_SUBMITTED;
+        });
+        if (!res) {
+          lgeneric_subdout(store->cct, bluestore, 1) << "flush_all_but_last() timeouted after 1s" << dendl;
+        }
+      } while (!res);
+      --kv_submitted_waiters;
     }
 
     bool flush_commit(Context* c) {

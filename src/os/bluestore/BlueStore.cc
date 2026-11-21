@@ -11395,7 +11395,7 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
   _txc_update_store_statfs(txc);
 }
 
-void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
+void BlueStore::_txc_apply_kv(TransContext *txc, bool osr_lock_held)
 {
   ceph_assert(txc->get_state() == TransContext::STATE_KV_QUEUED);
   {
@@ -11413,8 +11413,14 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     ceph_assert(r == 0);
     txc->set_state(TransContext::STATE_KV_SUBMITTED);
     if (txc->osr->kv_submitted_waiters) {
-      std::lock_guard l(txc->osr->qlock);
-      txc->osr->qcond.notify_all();
+      if (osr_lock_held) {
+        // We already have the lock
+        txc->osr->qcond.notify_all();
+      } else {
+        // We need to take a lock.
+        std::lock_guard l(txc->osr->qlock);
+        txc->osr->qcond.notify_all();
+      }
     }
 
 #if defined(WITH_LTTNG)
@@ -11424,7 +11430,7 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 	transaction_kv_submit_latency,
 	txc->osr->get_sequencer_id(),
 	(uint64_t)txc,
-	sync_submit_transaction,
+	osr_lock_held,
 	ceph::to_seconds<double>(mono_clock::now() - start));
     }
 #endif
