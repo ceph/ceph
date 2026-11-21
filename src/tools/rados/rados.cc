@@ -3056,6 +3056,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     set<string> keys;
     keys.insert(*omap_key);
 
+    // omap_rm_keys() succeeds whether or not the key exists, so look it up
+    // first to report a missing key instead of silently exiting 0
+    map<string, bufferlist> values;
+    ret = io_ctx.omap_get_vals_by_keys(*obj_name, keys, &values);
+    if (ret < 0) {
+      cerr << "error removing omap key " << pool_name << "/" << prettify(*obj_name) << "/"
+	   << prettify(*omap_key) << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
+    if (values.find(*omap_key) == values.end()) {
+      cerr << "No such key: " << pool_name << "/" << prettify(*obj_name) << "/"
+           << prettify(*omap_key) << std::endl;
+      return 1;
+    }
+
     ret = io_ctx.omap_rm_keys(*obj_name, keys);
     if (ret < 0) {
       cerr << "error removing omap key " << pool_name << "/" << prettify(*obj_name) << "/"
