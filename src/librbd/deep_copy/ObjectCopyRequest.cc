@@ -285,6 +285,11 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
 template <typename I>
 void ObjectCopyRequest<I>::process_copyup() {
   if (m_snapshot_sparse_bufferlist.empty()) {
+    if (!m_dst_object_removed.empty()) {
+      send_post_write_update_object_map();
+      return;
+    }
+
     // no data to copy or truncate/zero. only the copyup state machine cares
     // about whether the object exists or not, and it always copies from
     // snap id 0.
@@ -327,6 +332,11 @@ void ObjectCopyRequest<I>::send_write_object() {
     ceph_assert(snap_map_it != m_snap_map.end());
 
     auto dst_snap_id = snap_map_it->second.front();
+    if (m_src_snap_id_start > 0) {
+      // incremental copy: a destination object that is backed by the
+      // parent must be truncated (whiteout) instead of being removed
+      hide_parent = dst_object_overlaps_parent(dst_snap_id);
+    }
     auto dst_may_exist_it = m_dst_object_may_exist.find(dst_snap_id);
     ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
     if (!dst_may_exist_it->second && !sparse_bufferlist.empty()) {
@@ -452,7 +462,81 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
     return;
   }
 
-  finish(0);
+  send_post_write_update_object_map();
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::send_post_write_update_object_map() {
+  if (m_dst_object_removed.empty() ||
+      !m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    finish(0);
+    return;
+  }
+
+  m_dst_image_ctx->owner_lock.lock_shared();
+  m_dst_image_ctx->image_lock.lock_shared();
+  if (m_dst_image_ctx->object_map == nullptr) {
+    // possible that exclusive lock was lost in background
+    lderr(m_cct) << "object map is not initialized" << dendl;
+
+    m_dst_image_ctx->image_lock.unlock_shared();
+    m_dst_image_ctx->owner_lock.unlock_shared();
+    finish(-EINVAL);
+    return;
+  }
+
+  auto src_snap_seq = *m_dst_object_removed.begin();
+  m_dst_object_removed.erase(m_dst_object_removed.begin());
+  auto it = m_snap_map.find(src_snap_seq);
+  ceph_assert(it != m_snap_map.end());
+  auto dst_snap_id = it->second.front();
+
+  ldout(m_cct, 20) << "dst_snap_id=" << dst_snap_id << ", object_state="
+                   << static_cast<uint32_t>(OBJECT_NONEXISTENT) << dendl;
+
+  int r;
+  auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
+  if (finish_op_ctx == nullptr) {
+    lderr(m_cct) << "lost exclusive lock" << dendl;
+    m_dst_image_ctx->image_lock.unlock_shared();
+    m_dst_image_ctx->owner_lock.unlock_shared();
+    finish(r);
+    return;
+  }
+
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
+      handle_post_write_update_object_map(r);
+      finish_op_ctx->complete(0);
+    });
+
+  // the object was flagged OBJECT_PENDING before it was removed, so the
+  // update is skipped if the object map did not flag it as existing
+  auto dst_image_ctx = m_dst_image_ctx;
+  bool sent = dst_image_ctx->object_map->template aio_update<
+    Context, &Context::complete>(dst_snap_id, m_dst_object_number,
+                                 OBJECT_NONEXISTENT, OBJECT_PENDING, {}, false,
+                                 ctx);
+
+  // NOTE: state machine might complete before we reach here
+  dst_image_ctx->image_lock.unlock_shared();
+  dst_image_ctx->owner_lock.unlock_shared();
+  if (!sent) {
+    ceph_assert(dst_snap_id == CEPH_NOSNAP);
+    ctx->complete(0);
+  }
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_post_write_update_object_map(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to update object map: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  send_post_write_update_object_map();
 }
 
 template <typename I>
@@ -646,7 +730,17 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
       m_src_snap_id_start > 0 &&
       m_snapshot_delta.count({m_src_snap_id_start, m_src_snap_id_start}) == 0);
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
-  uint64_t prev_end_size = 0;
+
+  // In an incremental copy the destination object already matches the
+  // source object as of the start snapshot, but the size of that object is
+  // not known since the snapshot delta only describes the changes after the
+  // start snapshot.  Assume the largest possible size so that zeroed extents
+  // at the end of the object are copied as truncates instead of being
+  // mistaken for extents beyond the end of the object and dropped.
+  bool incremental = (m_src_snap_id_start > 0);
+  bool object_existed_at_start = object_exists;
+  uint64_t prev_end_size = (
+    incremental && object_exists ? m_dst_image_ctx->layout.object_size : 0);
 
   // compute zero ops from the zeroed intervals
   for (auto &it : m_dst_zero_interval) {
@@ -691,6 +785,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     // collect known zeroed extents from the snapshot delta for the current
     // src snapshot. If this is the first snapshot, we might need to handle
     // the whiteout case if it overlaps with the parent
+    interval_set<uint64_t> trunc_interval;
     auto first_src_snap_id = m_snap_map.begin()->first;
     auto snapshot_delta_it = m_snapshot_delta.lower_bound(
       {(hide_parent && src_snap_seq == first_src_snap_id ?
@@ -711,6 +806,10 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
                              << image_interval.get_len() << dendl;
             zero_interval.union_insert(
               image_interval.get_off(), image_interval.get_len());
+            if (incremental) {
+              trunc_interval.union_insert(
+                image_interval.get_off(), image_interval.get_len());
+            }
           } else if (hide_parent &&
                      write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS) {
             ldout(m_cct, 20) << "zeroed (hide parent) extent: "
@@ -738,14 +837,34 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     zero_interval.subtract(intersection);
 
     // update end_size if there are writes into higher offsets
-    uint64_t end_size = prev_end_size;
+    uint64_t data_end = 0;
     auto iter = m_snapshot_sparse_bufferlist.find(src_snap_seq);
     if (iter != m_snapshot_sparse_bufferlist.end()) {
       for (auto &sparse_bufferlist : iter->second) {
         object_exists = true;
-        end_size = std::max(
-          end_size, sparse_bufferlist.get_off() + sparse_bufferlist.get_len());
+        data_end = std::max(
+          data_end, sparse_bufferlist.get_off() + sparse_bufferlist.get_len());
       }
+    }
+    uint64_t end_size = std::max(prev_end_size, data_end);
+
+    if (!trunc_interval.empty()) {
+      // list-snaps reports a truncated or removed object as a zeroed extent
+      // from the new end of the object (zero if it was removed) up to its
+      // previous end.  It computes that from the full object history, so the
+      // new end is known even though the incremental copy is not aware of
+      // the previous end.
+      uint64_t trunc_offset = m_dst_image_ctx->layout.object_size;
+      for (auto [image_offset, image_length] : trunc_interval) {
+        striper::LightweightObjectExtents object_extents;
+        io::util::area_to_object_extents(m_dst_image_ctx, image_offset,
+                                         image_length, m_image_area, 0,
+                                         &object_extents);
+        for (auto& object_extent : object_extents) {
+          trunc_offset = std::min(trunc_offset, object_extent.offset);
+        }
+      }
+      end_size = std::max(trunc_offset, data_end);
     }
 
     ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
@@ -764,7 +883,13 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
         if (object_extent.offset + object_extent.length >= end_size) {
           // zero interval at the object end
-          if ((object_extent.offset == 0 && hide_parent) ||
+          bool whiteout = hide_parent;
+          if (incremental && object_extent.offset == 0) {
+            // a destination object that is backed by the parent is
+            // truncated instead of removed (see send_write_object)
+            whiteout = dst_object_overlaps_parent(dst_snap_seq);
+          }
+          if ((object_extent.offset == 0 && whiteout) ||
               (object_extent.offset < prev_end_size)) {
             ldout(m_cct, 20) << "truncate " << object_extent.offset
                              << dendl;
@@ -775,7 +900,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
               {io::SPARSE_EXTENT_STATE_ZEROED, length});
           }
 
-          object_exists = (object_extent.offset > 0 || hide_parent);
+          object_exists = (object_extent.offset > 0 || whiteout);
           end_size = std::min(end_size, object_extent.offset);
         } else {
           // zero interval inside the object
@@ -797,6 +922,14 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
         dst_object_map_state = OBJECT_EXISTS_CLEAN;
       }
       m_dst_object_state[src_snap_seq] = dst_object_map_state;
+    } else if (incremental && object_existed_at_start &&
+               dst_may_exist_it->second) {
+      // the destination object map for this snapshot was derived from the
+      // start snapshot and still flags the object as existing. As with
+      // regular I/O, flag it as pending before the object is removed and as
+      // nonexistent once it has been removed.
+      m_dst_object_state[src_snap_seq] = OBJECT_PENDING;
+      m_dst_object_removed.insert(src_snap_seq);
     }
 
     ldout(m_cct, 20) << "dst_snap_seq=" << dst_snap_seq << ", "
@@ -835,6 +968,30 @@ void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
 
   ldout(m_cct, 20) << "dst_object_may_exist=" << m_dst_object_may_exist
                    << dendl;
+}
+
+template <typename I>
+bool ObjectCopyRequest<I>::dst_object_overlaps_parent(
+    librados::snap_t dst_snap_id) {
+  std::shared_lock image_locker{m_dst_image_ctx->image_lock};
+  if (m_dst_image_ctx->parent == nullptr) {
+    return false;
+  }
+
+  uint64_t raw_overlap = 0;
+  int r = m_dst_image_ctx->get_parent_overlap(dst_snap_id, &raw_overlap);
+  if (r < 0) {
+    ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
+                    << dst_snap_id << ": " << cpp_strerror(r) << dendl;
+    return false;
+  } else if (raw_overlap == 0) {
+    return false;
+  }
+
+  auto parent_extents = m_image_extents;
+  uint64_t object_overlap = m_dst_image_ctx->prune_parent_extents(
+    parent_extents, m_image_area, raw_overlap, false);
+  return (object_overlap > 0);
 }
 
 } // namespace deep_copy
