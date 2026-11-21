@@ -651,6 +651,7 @@ class Orchestrator(object):
             'nfs': self.apply_nfs,
             'node-exporter': self.apply_node_exporter,
             'ceph-exporter': self.apply_ceph_exporter,
+            'fcm-dedup': self.apply_fcm_dedup,
             'osd': lambda dg: self.apply_drivegroups([dg]),  # type: ignore
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
@@ -908,6 +909,10 @@ class Orchestrator(object):
         """Update existing a ceph exporter daemon(s)"""
         raise NotImplementedError()
 
+    def apply_fcm_dedup(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing fcm-dedup daemon(s)"""
+        raise NotImplementedError()
+
     def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Loki daemon(s)"""
         raise NotImplementedError()
@@ -1053,6 +1058,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'prometheus': 'prometheus',
         'node-exporter': 'node-exporter',
         'ceph-exporter': 'ceph-exporter',
+        'fcm-dedup': 'fcm-dedup',
         'loki': 'loki',
         'promtail': 'promtail',
         'alloy': 'alloy',
@@ -1096,6 +1102,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'pushgateway': ['pushgateway'],
         'node-exporter': ['node-exporter'],
         'ceph-exporter': ['ceph-exporter'],
+        'fcm-dedup': ['fcm-dedup'],
         'crash': ['crash'],
         'container': ['container'],
         'agent': ['agent'],
