@@ -96,6 +96,7 @@ add_options(rbd)
 add_options(rbd-mirror)
 add_options(immutable-object-cache)
 add_options(ceph-exporter)
+add_options(nvmeof)
 
 # if set to empty string, system default luarocks package location (if exist) will be used
 set(rgw_luarocks_location "")

@@ -1,0 +1,130 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: nvmeof_gateway_allowed_consecutive_spdk_ping_failures
+  type: int
+  level: advanced
+  desc: Conf [gateway] allowed_consecutive_spdk_ping_failures
+  default: 1
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_spdk_ping_interval_in_seconds
+  type: float
+  level: advanced
+  desc: Conf [gateway] spdk_ping_interval_in_seconds
+  default: 2.0
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_ping_spdk_under_lock
+  type: bool
+  level: advanced
+  desc: Conf [gateway] ping_spdk_under_lock
+  default: false
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_rebalance_period_sec
+  type: int
+  level: advanced
+  desc: Conf [gateway] rebalance_period_sec
+  default: 7
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_max_ns_to_change_lb_grp
+  type: int
+  level: advanced
+  desc: Conf [gateway] max_ns_to_change_lb_grp
+  default: 8
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_state_update_interval_sec
+  type: int
+  level: advanced
+  desc: Conf [gateway] state_update_interval_sec
+  default: 5
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_break_update_interval_sec
+  type: int
+  level: advanced
+  desc: Conf [gateway] break_update_interval_sec
+  default: 25
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_log_level
+  type: str
+  level: advanced
+  desc: Conf [gateway-logs] log_level
+  default: INFO
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_log_files_rotation_enabled
+  type: bool
+  level: advanced
+  desc: Conf [gateway-logs] log_files_rotation_enabled
+  default: true
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_verbose_log_messages
+  type: bool
+  level: advanced
+  desc: Conf [gateway-logs] verbose_log_messages
+  default: true
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_max_log_file_size_in_mb
+  type: int
+  level: advanced
+  desc: Conf [gateway-logs] max_log_file_size_in_mb
+  default: 10
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_gateway_max_log_files_count
+  type: int
+  level: advanced
+  desc: Conf [gateway-logs] max_log_files_count
+  default: 20
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_spdk_timeout
+  type: float
+  level: advanced
+  desc: Conf [spdk] timeout
+  default: 60.0
+  services:
+  - client
+  flags:
+  - runtime
+- name: nvmeof_spdk_notifications_interval
+  type: int
+  level: advanced
+  desc: Conf [spdk] notifications_interval
+  default: 60
+  services:
+  - client
+  flags:
+  - runtime
