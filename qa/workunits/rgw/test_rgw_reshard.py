@@ -6,6 +6,7 @@ import logging as log
 import json
 import os
 from common import exec_cmd, boto_connect, create_user, put_objects, create_unlinked_objects
+from botocore.config import Config
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -399,7 +400,10 @@ def main():
     ok_keys = ['a', 'b', 'c']
     unlinked_keys = ['x', 'y', 'z']
     put_objects(ver_bucket, ok_keys)
-    create_unlinked_objects(connection, ver_bucket, unlinked_keys)
+    # don't retry the PUTs that fail with an injected error: each retry adds
+    # another unlinked version
+    no_retry = boto_connect(ACCESS_KEY, SECRET_KEY, Config(retries={'total_max_attempts': 1}))
+    create_unlinked_objects(no_retry, no_retry.Bucket(VER_BUCKET_NAME), unlinked_keys)
     cmd = exec_cmd(f'radosgw-admin bucket reshard --bucket {VER_BUCKET_NAME} --num-shards 17 --yes-i-really-mean-it')
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {VER_BUCKET_NAME} --fix --min-age-hours 0 --rgw-olh-pending-timeout-sec 0 --dump-keys')
     json_out = json.loads(out)

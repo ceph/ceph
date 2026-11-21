@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
 import logging as log
+import hashlib
 import json
+import os
+import time
 import botocore
 from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects
 from botocore.config import Config
@@ -22,6 +25,94 @@ DISPLAY_NAME = 'Check Testing'
 ACCESS_KEY = 'OJODXSLNX4LUNHQG99PA'
 SECRET_KEY = '3l6ffld34qaymfomuh832j94738aie2x4p2o8h6n'
 BUCKET_NAME = 'check-bucket'
+FAIL_BUCKET_NAME = 'check-write-failure-bucket'
+# larger than the head object, so the object has tails
+FAIL_OBJ_SIZE = 6 * 1024 * 1024
+CEPH_CFG_PROPAGATION_WAIT = 5  # seconds for 'ceph config set/rm' to reach radosgw
+BUCKET_TAG_QUICK_TIMEOUT = 30  # pending index entries 'bucket check' leaves alone
+
+def put_with_injected_error(bucket, key, body, option):
+    """
+    PUT with an error injected by the given rgw_debug_inject option, after
+    the head object is written. The PUT is expected to fail with an error
+    that clients retry
+    """
+    exec_cmd(f'ceph config set client {option} 2')  # ENOENT
+    try:
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        try:
+            bucket.put_object(Key=key, Body=body)
+            raise AssertionError(f'PUT succeeded with {option} set')
+        except botocore.exceptions.ClientError as e:
+            log.debug(f'PUT with {option} failed as expected: {e}')
+            status = e.response['ResponseMetadata']['HTTPStatusCode']
+            assert status == 500, f'PUT with {option} failed with {status}'
+    finally:
+        exec_cmd(f'ceph config rm client {option}')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+def bi_list(bucket_name, key):
+    out = exec_cmd(f'radosgw-admin bi list --bucket {bucket_name} --object {key}')
+    return json.loads(out.replace(b'\x80', b'0x80'))
+
+def test_write_failure_after_head_write(connection):
+    """
+    a failure after the head object is written must not remove the tails
+    that the committed head references. connection must not retry
+    """
+    try:
+        bucket = connection.Bucket(FAIL_BUCKET_NAME)
+        bucket.object_versions.all().delete()
+        bucket.delete()
+    except botocore.exceptions.ClientError as e:
+        if not e.response['Error']['Code'] == 'NoSuchBucket':
+            raise
+    bucket = connection.create_bucket(Bucket=FAIL_BUCKET_NAME)
+
+    # TESTCASE 'a failed bucket index update after the head write keeps the object data'
+    log.debug('TEST: a failed bucket index update after the head write keeps the object data\n')
+    key = 'index-failure'
+    bucket.put_object(Key=key, Body=os.urandom(FAIL_OBJ_SIZE))
+    body = os.urandom(FAIL_OBJ_SIZE + 1024 * 1024)
+    put_with_injected_error(bucket, key, body, 'rgw_debug_inject_index_complete_err')
+    # the old object's tails are already queued for gc
+    exec_cmd('radosgw-admin gc process --include-all')
+    assert bucket.Object(key).get()['Body'].read() == body
+    # bucket check repairs the pending index entry from the head once it's
+    # older than the tag timeout
+    time.sleep(BUCKET_TAG_QUICK_TIMEOUT + 1)
+    exec_cmd(f'radosgw-admin bucket check --fix --check-objects --bucket {FAIL_BUCKET_NAME}')
+    entries = [e['entry'] for e in bi_list(FAIL_BUCKET_NAME, key) if e['type'] == 'plain']
+    assert len(entries) == 1, entries
+    entry = entries[0]
+    assert not entry['pending_map'], entry
+    # size is what's stored, which differs if rgw compresses the object
+    assert entry['meta']['accounted_size'] == len(body), entry
+    assert entry['meta']['etag'] == hashlib.md5(body).hexdigest(), entry
+
+    # TESTCASE 'a failed olh update after the head write keeps the version data'
+    log.debug('TEST: a failed olh update after the head write keeps the version data\n')
+    connection.BucketVersioning(FAIL_BUCKET_NAME).enable()
+    key = 'olh-failure'
+    body = os.urandom(FAIL_OBJ_SIZE)
+    put_with_injected_error(bucket, key, body, 'rgw_debug_inject_set_olh_err')
+    exec_cmd('radosgw-admin gc process --include-all')
+    instances = [e['entry']['instance'] for e in bi_list(FAIL_BUCKET_NAME, key)
+                 if e['type'] == 'instance']
+    assert len(instances) == 1, instances
+    obj = connection.ObjectVersion(FAIL_BUCKET_NAME, key, instances[0]).get()
+    assert obj['Body'].read() == body
+    # the failed version isn't the current one
+    try:
+        bucket.Object(key).get()
+        raise AssertionError('the failed version is current')
+    except botocore.exceptions.ClientError as e:
+        assert e.response['Error']['Code'] == 'NoSuchKey', e
+
+    exec_cmd(f'radosgw-admin bucket check unlinked --fix --min-age-hours 0 '
+             f'--rgw-olh-pending-timeout-sec 0 --bucket {FAIL_BUCKET_NAME}')
+    bucket.object_versions.all().delete()
+    bucket.delete()
 
 def main():
     """
@@ -190,6 +281,8 @@ def main():
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
     bucket.delete()
+
+    test_write_failure_after_head_write(connection)
 
 main()
 log.info("Completed bucket check tests")

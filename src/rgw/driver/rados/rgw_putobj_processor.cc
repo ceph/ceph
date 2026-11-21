@@ -427,9 +427,10 @@ int AtomicObjectProcessor::complete(
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
-    if (r == -ETIMEDOUT) {
-      // The head object write may eventually succeed, clear the set of objects for deletion. if it
-      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+    if (r == -ETIMEDOUT || obj_op.meta.head_written) {
+      // The head object write succeeded or may eventually succeed, clear the set of objects for
+      // deletion. if it doesn't ever succeed, we'll orphan any tail objects as if we'd crashed
+      // before that write
       writer.clear_written();
     }
     return r;
@@ -573,8 +574,11 @@ int MultipartObjectProcessor::complete(
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
-  if (r < 0)
+  if (r < 0) {
+    // unlike a whole object, the part isn't referenced until it's recorded in
+    // the upload below, so its tails can be removed even after a head write
     return r;
+  }
 
   RGWUploadPartInfo info;
   string p = "part.";
@@ -836,9 +840,10 @@ int AppendObjectProcessor::complete(
 			attrs, rctx, writer.get_trace(),
 			flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
-      if (r == -ETIMEDOUT) {
-      // The head object write may eventually succeed, clear the set of objects for deletion. if it
-      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+      if (r == -ETIMEDOUT || obj_op.meta.head_written) {
+      // The head object write succeeded or may eventually succeed, clear the set of objects for
+      // deletion. if it doesn't ever succeed, we'll orphan any tail objects as if we'd crashed
+      // before that write
       writer.clear_written();
     }
     return r;
