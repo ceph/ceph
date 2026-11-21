@@ -23,6 +23,7 @@
 
 #include "common/LogEntry.h"
 #include "common/ceph_mutex.h"
+#include "common/perf_counters_collection.h"
 #include "common/ostream_temp.h"
 #include "common/ref.h"
 #include "include/health.h"
@@ -257,6 +258,8 @@ private:
   version_t last_log_sent;
   version_t last_log;
   std::deque<LogEntry> log_queue;
+  // "clog": the queue of entries the monitors have not acknowledged yet
+  PerfCountersRef logger;
 
   std::map<std::string, LogChannelRef> channels;
 
