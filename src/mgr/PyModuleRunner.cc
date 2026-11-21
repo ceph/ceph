@@ -18,10 +18,16 @@
 
 #include "PyModule.h"
 
+#include "common/config_proxy.h"
 #include "common/debug.h"
+#include "global/global_context.h"
 #include "mgr/Gil.h"
 
 #include "PyModuleRunner.h"
+
+#include <chrono>
+#include <future>
+#include <thread>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -80,25 +86,45 @@ int PyModuleRunner::serve()
   return r;
 }
 
-void PyModuleRunner::shutdown()
+bool PyModuleRunner::shutdown()
 {
   ceph_assert(pClassInstance != nullptr);
 
-  Gil gil(py_module->pMyThreadState, true);
+  const auto timeout =
+      g_conf().get_val<std::chrono::seconds>("mgr_module_shutdown_timeout");
 
-  auto pValue = PyObject_CallMethod(pClassInstance,
-      const_cast<char*>("shutdown"), nullptr);
+  // Run the call and the serve() thread join off this thread so a hung
+  // module cannot block us (e.g. standby->active promotion) forever.
+  std::packaged_task<void()> task([this] {
+    {
+      Gil gil(py_module->pMyThreadState, true);
+      auto pValue = PyObject_CallMethod(pClassInstance,
+          const_cast<char*>("shutdown"), nullptr);
+      if (pValue != nullptr) {
+        Py_DECREF(pValue);
+      } else {
+        derr << "Failed to invoke shutdown() on " << get_name() << dendl;
+        derr << handle_pyerror(true, get_name(), "PyModuleRunner::shutdown") << dendl;
+      }
+    }
+    thread.join();
+  });
+  auto fut = task.get_future();
+  std::thread(std::move(task)).detach();
 
-  if (pValue != NULL) {
-    Py_DECREF(pValue);
-  } else {
-    derr << "Failed to invoke shutdown() on " << get_name() << dendl;
-    derr << handle_pyerror(true, get_name(), "PyModuleRunner::shutdown") << dendl;
+  const bool finished =
+      fut.wait_for(timeout) != std::future_status::timeout;
+  if (!finished) {
+    derr << "shutdown() on " << get_name() << " timed out after "
+         << timeout.count() << "s" << dendl;
+    py_module->fail("shutdown() timed out after " +
+                    std::to_string(timeout.count()) + "s");
   }
   if (py_module->perfcounter) {
     py_module->perfcounter->set(py_module->l_pym_alive, 0);
   }
   dead = true;
+  return finished;
 }
 
 void PyModuleRunner::log(const std::string &record)

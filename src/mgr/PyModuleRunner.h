@@ -58,7 +58,10 @@ protected:
 
 public:
   int serve();
-  void shutdown();
+  // Returns false if shutdown() and the serve() thread did not finish
+  // within mgr_module_shutdown_timeout. The module code is then still
+  // running, so the caller must not destroy this object.
+  bool shutdown();
   void log(const std::string &record);
 
   const char *get_thread_name() const

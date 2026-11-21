@@ -52,6 +52,11 @@ private:
   std::unique_ptr<StandbyPyModules> standby_modules;
   std::unique_ptr<ThreadMonitor> thread_monitor;
 
+  // Standby modules left behind when a module's shutdown() timed out
+  // during promotion. The abandoned module still references their
+  // state, so they are intentionally never destroyed.
+  std::unique_ptr<StandbyPyModules> leaked_standby_modules;
+
   PyThreadState *pMainThreadState;
 
   // We have our own copy of MgrMap, because we are constructed
