@@ -895,6 +895,72 @@ A full list of supported attributes:
    :exclude-members: from_json
 
 
+.. _cephadm-osd-spec-explain:
+
+Explaining Device Selection
+---------------------------
+
+To understand why an OSD spec does, or does not, select a device, run:
+
+.. prompt:: bash #
+
+   ceph orch osd spec explain [<service_name>] [--host <hostname> ...] [--verbose]
+
+Without ``service_name``, all the OSD specs of the cluster are explained. To
+explain a spec before applying it, pass the spec file instead:
+
+.. prompt:: bash #
+
+   ceph orch osd spec explain -i <osd_spec_file>
+
+The command only uses the device inventory cached by cephadm (see ``ceph
+orch device ls --refresh``): it doesn't run anything on the hosts and never
+deploys anything.
+
+For each host matched by the placement of the spec, the command reports
+whether cephadm can deploy OSDs on it (for example, the host may be offline,
+in maintenance or have the ``_no_schedule`` label), which devices are selected
+for each role (``data_devices``, ``db_devices``, ``wal_devices``), and, for
+each other device, why it is not selected:
+
+- the filter criteria that don't match, with the expected value and the value
+  reported by the inventory,
+- or the reason why a device matching the filters is not selected: it is
+  unavailable (with the reject reasons of ``ceph orch device ls``), used by an
+  OSD of another spec, already selected for another role, or beyond the
+  ``limit`` of the role.
+
+Unlike the deployment itself, all the filter criteria are evaluated, so that
+all the mismatching ones are reported at once. Use ``--host`` to restrict the
+output to some hosts, ``--verbose`` to also show the criteria that match, and
+``--format json`` or ``--format yaml`` for a machine-readable output.
+
+Example output:
+
+.. code-block:: console
+
+   osd.hdd_ssd_db
+     host node1: eligible, inventory updated 3m ago
+       data_devices: 0 selected
+       db_devices: 1 selected (/dev/sdc)
+       NOTE: data_devices selects no device: no OSD will be created
+       PATH      TYPE  SIZE     MODEL                 ROLE          SELECTED  REASON
+       /dev/sdb  hdd   3.64 TB  ST4000NM0035          data_devices  no        size: '3.64 TB' (3.64e+12 B), expected >= 4TB (4e+12 B) [1]
+                                                      db_devices    no        model: 'ST4000NM0035', expected contains 'MZ7L3'
+       /dev/sdc  ssd   1.75 TB  SAMSUNG MZ7L31T9HBLT  data_devices  no        size: '1.75 TB' (1.75e+12 B), expected >= 4TB (4e+12 B)
+                                                                              rotational: 0 (non-rotational), expected 1 (rotational) [2]
+                                                      db_devices    yes       selected
+
+   [1] the size filter is compared to '3.64 TB', which ceph-volume computes in base 1024 (TiB, GiB) but labels TB, GB, while the filter uses base 1000 units. The device actually has 4000787030016 bytes and would match the filter in base 1000
+   [2] as reported by the kernel (/sys/block/<dev>/queue/rotational); RAID controllers and virtual disks may report it wrongly
+
+.. note::
+
+   Devices that ``ceph-volume inventory`` filters out, such as devices with
+   partitions or mounted devices, are not part of the cephadm inventory and
+   are therefore not reported.
+
+
 Examples
 ========
 

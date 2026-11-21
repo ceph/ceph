@@ -758,6 +758,21 @@ class Orchestrator(object):
         """ Get a preview for OSD deployments """
         raise NotImplementedError()
 
+    def explain_osdspecs(self,
+                         service_name: Optional[str] = None,
+                         osdspecs: Optional[List[DriveGroupSpec]] = None,
+                         hosts: Optional[List[str]] = None
+                         ) -> OrchResult[List[Dict[str, Any]]]:
+        """
+        Explain which devices OSD specs select on each host, and why the
+        other devices are not selected.
+
+        :param service_name: explain this stored OSD spec only
+        :param osdspecs: explain these specs instead of the stored ones
+        :param hosts: limit the explanation to these hosts
+        """
+        raise NotImplementedError()
+
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
                     replace_block: bool = False,

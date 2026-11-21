@@ -24,6 +24,14 @@
   with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
   when running custom-built images targeting an older CPU generation.
 
+* Cephadm: The new ``ceph orch osd spec explain`` command explains which
+  devices an OSD spec selects on each host and why the other devices are not
+  selected: the filter criteria that don't match, with the expected value and
+  the value reported by the inventory, or the reason why a matching device is
+  not used (unavailable, used by another spec, selected for another role,
+  limit reached). It works on the stored OSD specs or, with ``-i``, on a spec
+  file before it is applied.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
