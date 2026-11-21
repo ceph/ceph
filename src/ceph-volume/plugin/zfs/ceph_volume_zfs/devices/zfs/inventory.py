@@ -2,9 +2,8 @@ import argparse
 import json
 from textwrap import dedent
 
-# import ceph_volume.process
-
 from ceph_volume_zfs.util.disk import Disks
+
 
 class Inventory(object):
 
@@ -18,15 +17,21 @@ class Inventory(object):
             print(json.dumps(inventory.json_report()))
         elif self.args.format == 'json-pretty':
             print(json.dumps(inventory.json_report(), indent=4, sort_keys=True))
+        elif self.args.verbose:
+            print(inventory.verbose_report())
         else:
             print(inventory.pretty_report())
 
     def main(self):
         sub_command_help = dedent("""
-	Generate an inventory of available devices
+        Generate an inventory of available devices
+
+        Use --verbose for a per-disk report that also lists the
+        partitions on each disk with their zpool, mount and swap state.
         """)
         parser = argparse.ArgumentParser(
             prog='ceph-volume zfs inventory',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
             description=sub_command_help,
         )
         parser.add_argument(
@@ -40,6 +45,13 @@ class Inventory(object):
             choices=['plain', 'json', 'json-pretty'],
             default='plain',
             help='Output format',
+        )
+        parser.add_argument(
+            '-v', '--verbose',
+            action='store_true',
+            default=False,
+            help=('Add partition, mount and swap detail per disk. Only '
+                  'applies to the plain format'),
         )
 
         self.args = parser.parse_args(self.argv)
