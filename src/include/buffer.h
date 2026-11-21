@@ -50,6 +50,7 @@
 
 #include <exception>
 #include <type_traits>
+#include <optional>
 
 #include "page.h"
 #include "crc32c.h"
@@ -280,6 +281,13 @@ struct error_code;
     }
 
     int get_mempool() const;
+    // Record crc32c(base, this ptr's data) == crc in the raw buffer's crc
+    // cache, as list::crc32c() does once it has computed one, for a caller
+    // that computed it some other way (e.g. as the data arrived).
+    void set_crc32c_cache(uint32_t base, uint32_t crc) const;
+    // This ptr's crc32c from seed `crc`, if the raw buffer's crc cache has it
+    // (for any seed), as list::crc32c() would use it; otherwise nullopt.
+    std::optional<uint32_t> cached_crc32c(uint32_t crc) const;
     void reassign_to_mempool(int pool);
     void try_assign_to_mempool(int pool);
 
