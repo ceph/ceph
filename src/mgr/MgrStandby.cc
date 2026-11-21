@@ -287,8 +287,10 @@ int MgrStandby::init()
   objecter.start();
   timer.init();
 
-  py_module_registry.init();
+  // Must precede py_module_registry.init(), so that Gil counts GIL
+  // waits from the first module load.
   mgr_perf_start(g_ceph_context);
+  py_module_registry.init();
 
 
   tick();

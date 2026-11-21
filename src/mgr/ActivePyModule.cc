@@ -32,7 +32,7 @@ using namespace std::literals;
 int ActivePyModule::load(ActivePyModules *py_modules)
 {
   ceph_assert(py_modules);
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
@@ -64,7 +64,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 
   ceph_assert(pClassInstance != nullptr);
 
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   auto _start = ceph::mono_clock::now();
   // Execute
@@ -98,7 +98,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
 
   ceph_assert(pClassInstance != nullptr);
 
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   // Construct python-ized LogEntry
   PyFormatter f;
@@ -130,7 +130,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
 
 bool ActivePyModule::method_exists(const std::string &method) const
 {
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
   if (boundMethod == nullptr) {
@@ -155,7 +155,7 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
 
   // deserialize arguments.
 
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   auto pmodule = py_module->pPickleModule;
   auto pickled_args_bytes = py_bytes_from_span(pickled_args);
@@ -241,7 +241,7 @@ void ActivePyModule::config_notify()
     return;
   }
 
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
   dout(20) << "Calling " << py_module->get_name() << "._config_notify..."
 	   << dendl;
   auto remoteResult = PyObject_CallMethod(pClassInstance,
@@ -270,7 +270,7 @@ int ActivePyModule::handle_command(
     return -EINVAL;
   }
 
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   PyFormatter f;
   TOPNSPC::common::cmdmap_dump(cmdmap, &f);

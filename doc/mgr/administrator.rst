@@ -157,6 +157,65 @@ debugging performance issues or memory leaks. The ``notify_avg_usec`` and
 the CPU and memory counters monitor resource consumption. The default monitoring
 interval is 2 seconds.
 
+The same ``perf dump`` reports how long Manager threads wait for the Python GIL:
+
+- ``mgr.gil_acquire_lat``: waits when C++ code calls into a module
+- ``mgr.gil_reacquire_lat``: waits when a module returns from a call into the
+  Manager
+- ``mgr.gil_slow_waits``: number of waits longer than 5 ms, the default
+  Python switch interval (``sys.getswitchinterval()``). Each such wait means
+  the thread waited through at least one full time slice of another thread.
+
+Read them from any admin node (they are not exported to Prometheus):
+
+.. prompt:: bash #
+
+   ceph tell mgr perf dump mgr
+
+.. code-block:: console
+
+   {
+       "mgr": {
+           "cache_hit": 31,
+           "cache_miss": 24,
+           "gil_acquire_lat": {
+               "avgcount": 162,
+               "sum": 1.985349939,
+               "max_inc": 0.729734332,
+               "avgtime": 0.012255246
+           },
+           "gil_reacquire_lat": {
+               "avgcount": 525,
+               "sum": 0.878017325,
+               "max_inc": 0.232865668,
+               "avgtime": 0.001672413
+           },
+           "gil_slow_waits": 46
+       }
+   }
+
+On an idle Manager ``gil_slow_waits`` stays at 0. A count that keeps
+growing means modules are waiting on each other, and Manager commands and
+metrics can be slow.
+
+``max_inc`` in the two latency counters is the longest single wait. Waits that
+happen inside Python itself (I/O, ``time.sleep()``, the rados bindings) are not
+counted. To log a sample of slow waits (at most one per second) with the
+waiting module and the module holding the GIL, run
+``ceph config set mgr debug_mgr 5``. Each logged line also reports how many
+slow waits were skipped and the longest of them. To log every slow wait,
+use ``debug_mgr 20``.
+
+A logged line looks like this:
+
+.. code-block:: console
+
+   mgr log_slow_wait Gil::acquire: module 'balancer' waited 0.082760066s for the GIL, held by module 'selftest' at eval (/usr/share/ceph/mgr/selftest/module.py:505) (4 slow waits not logged since the last report, worst 0.292184323s in 'balancer')
+
+Here ``balancer`` is the module being slowed down, and ``selftest``, which
+held the GIL when the wait started, is the likely cause. The per-module
+``cpu_usage`` counters described above help confirm a busy module.
+
 
 Automatic Stats Period Tuning
 ------------------------------
