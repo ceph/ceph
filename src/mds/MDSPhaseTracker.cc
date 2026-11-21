@@ -92,12 +92,6 @@ MDSPhaseTracker::MDSPhaseTracker(CephContext *cct, ceph::fair_mutex& mds_lock)
   PerfCountersBuilder plb(cct, "mds_phase", l_mdsp_first, l_mdsp_last);
 
   plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
-  plb.add_time(l_mdsp_lock_wait, "lock_wait",
-               "Time spent waiting to acquire mds_lock");
-  plb.add_time(l_mdsp_lock_held, "lock_held",
-               "Time mds_lock was held; over wall time, rank utilization");
-  plb.add_u64_counter(l_mdsp_lock_acquisitions, "lock_acquisitions",
-                      "mds_lock acquisitions");
 
   /* Every phase is a time_avg, so that "sum" is the total time charged to the
    * phase and "avgcount" is the number of times it was entered. */
@@ -173,34 +167,22 @@ void MDSPhaseTracker::set_enabled(bool enable)
   if (enable) {
     reset();
   }
-  /* Enable the mutex accounting before the phases and disable it after, so
-   * that the lock stats always cover at least the period the phase counters
-   * do -- utilization is then never under-reported against them. */
-  if (enable) {
-    mds_lock.set_track_stats(true);
-    enabled.store(true, std::memory_order_relaxed);
-  } else {
-    enabled.store(false, std::memory_order_relaxed);
-    mds_lock.set_track_stats(false);
-  }
+  enabled.store(enable, std::memory_order_relaxed);
 }
 
 void MDSPhaseTracker::reset()
 {
   /* Called from handle_conf_change() without mds_lock, so Timers on other
    * threads may be in flight over this reset: a message being dispatched, an
-   * IO completion, the tick, a cache or log trim.  Zero the counters and take
-   * the mds_lock baselines first and only then publish a new generation.  A
-   * Timer that started before the bump is dropped by its destructor, and one
-   * that starts after it necessarily started after the counters were zeroed,
-   * so nothing charges time from before the reset into counters that are
-   * supposed to describe only the period since it. */
+   * IO completion, the tick, a cache or log trim.  Zero the counters first
+   * and only then publish a new generation.  A Timer that started before the
+   * bump is dropped by its destructor, and one that starts after it
+   * necessarily started after the counters were zeroed, so nothing charges
+   * time from before the reset into counters that are supposed to describe
+   * only the period since it. */
   {
     std::lock_guard l(stats_mutex);
     logger->reset();
-    const auto stats = mds_lock.get_stats();
-    baseline_lock_stats = stats;
-    last_lock_stats = stats;
     since_ns = now_ns();
   }
 
@@ -258,25 +240,6 @@ void MDSPhaseTracker::account(int phase, ceph::timespan exclusive)
   logger->tinc(phase, exclusive);
 }
 
-void MDSPhaseTracker::update_lock_stats()
-{
-  if (!is_enabled()) {
-    return;
-  }
-
-  /* fair_mutex keeps running totals; publish the delta since the last call so
-   * that the perf counters behave like every other Ceph counter. */
-  std::lock_guard l(stats_mutex);
-  const auto now = mds_lock.get_stats();
-  logger->tinc(l_mdsp_lock_wait, std::chrono::nanoseconds(
-                 static_cast<int64_t>(now.wait_ns - last_lock_stats.wait_ns)));
-  logger->tinc(l_mdsp_lock_held, std::chrono::nanoseconds(
-                 static_cast<int64_t>(now.held_ns - last_lock_stats.held_ns)));
-  logger->inc(l_mdsp_lock_acquisitions,
-              now.acquisitions - last_lock_stats.acquisitions);
-  last_lock_stats = now;
-}
-
 void MDSPhaseTracker::dump(ceph::Formatter *f) const
 {
   f->open_object_section("phase_times");
@@ -290,20 +253,13 @@ void MDSPhaseTracker::dump(ceph::Formatter *f) const
 
   /* Everything below is reported for the period since tracking was enabled,
    * which is also the period the perf counters cover.  It is all read under
-   * stats_mutex, which reset() also holds while zeroing: a reset landing
-   * mid-dump would otherwise report a baseline newer than the mds_lock
-   * snapshot it is subtracted from -- an unsigned wrap -- or zeroed phase
-   * totals against the elapsed time of the window before it. */
-  uint64_t elapsed_ns, lock_held_ns, lock_wait_ns, lock_acquisitions;
+   * stats_mutex, which reset() also holds while zeroing. */
+  uint64_t elapsed_ns;
   std::vector<std::tuple<uint64_t, uint64_t, int>> by_time;
   by_time.reserve(num_phases);
   {
     std::lock_guard l(stats_mutex);
-    const auto stats = mds_lock.get_stats();
     elapsed_ns = now_ns() - since_ns;
-    lock_acquisitions = stats.acquisitions - baseline_lock_stats.acquisitions;
-    lock_wait_ns = stats.wait_ns - baseline_lock_stats.wait_ns;
-    lock_held_ns = stats.held_ns - baseline_lock_stats.held_ns;
     for (int i = 0; i < num_phases; ++i) {
       const auto [ns, count] = logger->get_tavg_ns(l_mdsp_phase_first + i);
       by_time.emplace_back(ns, count, i);
@@ -311,16 +267,8 @@ void MDSPhaseTracker::dump(ceph::Formatter *f) const
   }
   const double elapsed = to_seconds(elapsed_ns);
   f->dump_float("elapsed_sec", elapsed);
-
-  f->open_object_section("mds_lock");
-  f->dump_unsigned("acquisitions", lock_acquisitions);
-  f->dump_float("wait_sec", to_seconds(lock_wait_ns));
-  f->dump_float("held_sec", to_seconds(lock_held_ns));
-  /* The single most actionable number here: a rank whose lock is busy for
-   * most of the wall clock cannot go any faster without being split up. */
-  f->dump_float("utilization",
-                elapsed_ns ? double(lock_held_ns) / elapsed_ns : 0);
-  f->close_section();
+  f->dump_string("mds_lock_note",
+                 "use ceph-lockstat for mds_lock wait/hold utilization");
 
   /* Report the busiest phase first: the answer to "what is this rank doing?"
    * should be the first line of the output. */

@@ -676,16 +676,18 @@ const std::string &PerfCounters::get_name() const
   return m_name;
 }
 
-PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
-	   int lower_bound, int upper_bound)
-  : m_cct(cct),
-    m_lower_bound(lower_bound),
-    m_upper_bound(upper_bound),
-    m_name(name)
+PerfCounters::PerfCounters(CephContext* cct, const std::string& name,
+                           int lower_bound, int upper_bound) :
+  m_cct(cct), m_lower_bound(lower_bound), m_upper_bound(upper_bound),
+  m_name(name)
 #ifndef WITH_CRIMSON
-    ,
-    m_lock_name(std::string("PerfCounters::") + name.c_str()),
-    m_lock(ceph::make_mutex(m_lock_name))
+  ,
+  m_lock_name(std::string("PerfCounters::") + name.c_str()),
+#ifdef CEPH_LOCKSTAT
+  m_lock(ceph::make_mutex("PerfCounters::m_lock"))
+#else
+  m_lock(ceph::make_mutex(m_lock_name))
+#endif
 #endif
 {
   m_data.resize(upper_bound - lower_bound - 1);

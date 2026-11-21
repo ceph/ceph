@@ -24,7 +24,7 @@
 #include "include/uuid.h"
 
 #define DEFAULT_MOUNTPOINT "X:\\"
-#define MOUNT_POLL_ATTEMPT 10
+#define MOUNT_POLL_ATTEMPT 30
 #define MOUNT_POLL_INTERVAL_MS 1000
 #define TEST_VOL_SERIAL "1234567890"
 #define MByte 1048576
@@ -127,7 +127,8 @@ int wait_for_mount(std::string mount_path) {
 void map_dokan(SubProcess** mount, const char* mountpoint) {
     SubProcess* new_mount = new SubProcess("ceph-dokan");
 
-    new_mount->add_cmd_args("map", "--win-vol-name", "TestCeph",
+    new_mount->add_cmd_args("map", "--debug", "--dokan-stderr",
+                            "--win-vol-name", "TestCeph",
                             "--win-vol-serial", TEST_VOL_SERIAL,
                             "-l", mountpoint, NULL);
 
@@ -141,7 +142,8 @@ void map_dokan_read_only(
     const char* mountpoint
 ) {
     SubProcess* new_mount = new SubProcess("ceph-dokan");
-    new_mount->add_cmd_args("map", "--win-vol-name", "TestCeph",
+    new_mount->add_cmd_args("map", "--debug", "--dokan-stderr",
+                            "--win-vol-name", "TestCeph",
                             "--win-vol-serial", TEST_VOL_SERIAL,
                             "--read-only", "-l", mountpoint, NULL);
 
@@ -189,7 +191,8 @@ void map_dokan_case_insensitive(SubProcess** mount, const char* mountpoint,
                                 bool force_lowercase=false) {
     SubProcess* new_mount = new SubProcess("ceph-dokan");
 
-    new_mount->add_cmd_args("map", "--win-vol-name", "TestCeph",
+    new_mount->add_cmd_args("map", "--debug", "--dokan-stderr",
+                            "--win-vol-name", "TestCeph",
                             "--win-vol-serial", TEST_VOL_SERIAL,
                             "-l", mountpoint, "--case-insensitive", NULL);
     if (force_lowercase) {

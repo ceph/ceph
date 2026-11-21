@@ -30,6 +30,10 @@
 #include "common/dout.h"
 #include "include/ceph_assert.h"
 
+#ifdef CEPH_LOCKSTAT
+#include "common/lockstat.h"
+#endif
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
@@ -38,6 +42,9 @@ std::function<void ()> NetworkStack::add_thread(Worker* w)
 {
   return [this, w]() {
       rename_thread(w->id);
+#ifdef CEPH_LOCKSTAT
+      ceph::lockstat_detail::LockStat::set_thread_iopath(true);
+#endif
       const unsigned EventMaxWaitUs = 30000000;
       w->center.set_owner();
       ldout(cct, 10) << __func__ << " starting" << dendl;

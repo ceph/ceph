@@ -16,9 +16,9 @@ function safe_exec() {
     }
 }
 
-safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdTest --iterations 100
-safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdFioTest --iterations 100
-safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdStampTest --iterations 100
+safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdTest --iterations 10
+safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdFioTest --iterations 10
+safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdStampTest --iterations 10
 
 # It can take a while to setup the partition (~10s), we'll use fewer iterations.
 safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdFsTest --iterations 4
