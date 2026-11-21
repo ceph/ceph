@@ -578,6 +578,7 @@ public:
   TrivialEvent(Initialize)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
+  TrivialEvent(RechooseActing)
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RejectTooFullRemoteReservation)
@@ -894,6 +895,16 @@ public:
   struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
     PastIntervals::PriorSet prior_set;
     bool history_les_bound;  //< need osd_find_best_info_ignore_history_les
+    /// optimized EC: shards for which GetMissing sent this interval back to
+    /// GetLog because they were behind the log tail without being backfill
+    /// targets. A second time for the same shard means choose_acting() did
+    /// not act on it, and the PG must not activate.
+    std::set<pg_shard_t> rechosen_behind_log_tail;
+    /// the shards among them that the PG went Incomplete for, already
+    /// reported in the cluster log
+    std::set<pg_shard_t> behind_log_tail_reported;
+    /// the PG is Incomplete because of them, not for lack of complete shards
+    bool incomplete_behind_log_tail = false;
 
     explicit Peering(my_context ctx);
     void exit();
@@ -1617,11 +1628,15 @@ public:
       boost::statechart::custom_reaction< QueryState >,
       boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
-      boost::statechart::transition< NeedUpThru, WaitUpThru >
+      boost::statechart::custom_reaction< RechooseActing >,
+      boost::statechart::transition< NeedUpThru, WaitUpThru >,
+      boost::statechart::transition< IsIncomplete, Incomplete >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
+    boost::statechart::result react(const RechooseActing&);
+    bool rechoose_acting_if_behind_log_tail();
   };
 
   struct WaitUpThru : boost::statechart::state< WaitUpThru, Peering >, NamedState {
@@ -1978,8 +1993,12 @@ private:
     bool exclude_nonprimary_shards,
     bool *history_les_bound = nullptr) const;
 
+  /// the tail the primary's log will have once GetLog has merged the log
+  /// of the shard with info get_log_info
+  eversion_t log_tail_after_getlog(const pg_info_t &get_log_info) const;
+
   static void calc_ec_acting(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const eversion_t &log_tail,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,
@@ -1992,7 +2011,7 @@ private:
 
 public:
   static void calc_ec_acting_stretch(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const eversion_t &log_tail,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,
