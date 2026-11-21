@@ -1515,7 +1515,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
     return ret;
 
   // check if the bucket is owned by my zonegroup, if not, refuse to remove it
-  if (!forwarded_request && bucket->get_info().zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+  if (!forwarded_request && !driver->get_zone()->get_zonegroup().equals(bucket->get_info().zonegroup)) {
     ldpp_dout(dpp, 0) << "ERROR: The bucket's zonegroup does not match. "
                       << "Removal is not allowed. Please execute this operation "
                       << "on the bucket's zonegroup: " << bucket->get_info().zonegroup << dendl;
