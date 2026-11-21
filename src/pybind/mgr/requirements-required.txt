@@ -16,3 +16,4 @@ werkzeug
 natsort
 bcrypt
 cheroot~=10.0
+pandas

@@ -100,6 +100,7 @@ Administration
     CephFS Snapshot Mirroring <cephfs-mirroring>
     CephFS Snapshot Mirroring Checkpoints <cephfs-mirroring-checkpoints>
     Purge Queue <purge-queue>
+    MDS Partitioner <mds-partitioner>
 
 .. raw:: html
 

@@ -343,6 +343,7 @@ BuildRequires:	python3dist(pyopenssl)
 BuildRequires:	socat
 BuildRequires:	python3dist(asyncssh)
 BuildRequires:	python3dist(natsort)
+BuildRequires:	python3dist(pandas)
 %if 0%{?openruyi}
 BuildRequires:	python3dist(cryptography)
 BuildRequires:	python3dist(jsonpatch)
@@ -645,6 +646,7 @@ Recommends:	ceph-mgr-iostat = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-localpool = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-mds-autoscaler = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-mds-partitioner = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-mirroring = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-nvmeof = %{_epoch_prefix}%{version}-%{release}
@@ -742,6 +744,7 @@ Requires:       ceph-mgr-insights = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-iostat = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-localpool = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-mds-autoscaler = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-mds-partitioner = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-mirroring = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-nvmeof = %{_epoch_prefix}%{version}-%{release}
@@ -899,6 +902,18 @@ Obsoletes:      ceph-mgr-modules-core < %{_epoch_prefix}%{version}-%{release}
 %description mgr-mds-autoscaler
 ceph-mgr-mds-autoscaler is a ceph-mgr module that automatically scales
 the number of MDS daemons based on file system needs.
+
+%package mgr-mds-partitioner
+BuildArch:      noarch
+Summary:        Ceph Manager module for partitioning CephFS metadata workloads
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       python3dist(pandas)
+%description mgr-mds-partitioner
+ceph-mgr-mds-partitioner is a ceph-mgr module that distributes CephFS
+metadata workloads across MDS ranks.
 
 %package mgr-mirroring
 BuildArch:      noarch
@@ -2332,6 +2347,9 @@ fi
 
 %files mgr-mds-autoscaler
 %{_datadir}/ceph/mgr/mds_autoscaler
+
+%files mgr-mds-partitioner
+%{_datadir}/ceph/mgr/mds_partitioner
 
 %files mgr-mirroring
 %{_datadir}/ceph/mgr/mirroring

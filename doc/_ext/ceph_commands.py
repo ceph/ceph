@@ -294,6 +294,9 @@ class CephMgrCommands(Directive):
                          'cheroot.ssl',
                          'cheroot.ssl.builtin']
 
+        # make mds_partitioner happy
+        mock_imports += ['pandas']
+
         for m in mock_imports:
             args = {}
             parts = m.split('=', 1)

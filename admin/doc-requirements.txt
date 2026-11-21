@@ -18,3 +18,4 @@ sphinxcontrib-openapi
 m2r2
 natsort
 docutils
+pandas
