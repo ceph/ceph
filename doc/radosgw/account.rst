@@ -155,6 +155,14 @@ To view account stats::
 
     radosgw-admin account stats --account-id={accountid} --sync-stats
 
+To view the info, including quotas, and stats of all accounts::
+
+    radosgw-admin account list --stats
+
+This doesn't sync the stats of each account, so they may lag behind recent
+writes (see ``rgw_user_quota_bucket_sync_interval``). Use ``--max-entries`` and
+``--marker`` to page through a large number of accounts.
+
 To enable an account quota::
 
     radosgw-admin quota set --quota-scope=account --account-id={accountid} --max-size=10G

@@ -722,6 +722,36 @@ def task(ctx, config):
         ['bucket', 'link', '--bucket', bucket_name, '--account-id', account_id],
         check_status=True)
 
+    # TESTCASE 'account list stats', 'account', 'list --stats', 'includes info and stats of the account', 'succeeds'
+    (err, acct_stats) = rgwadmin(ctx, client,
+        ['account', 'stats', '--account-id', account_id, '--sync-stats'],
+        check_status=True)
+    (err, out) = rgwadmin(ctx, client, ['account', 'list', '--stats'],
+        check_status=True)
+    entries = [e for e in out if e['info']['id'] == account_id]
+    assert len(entries) == 1
+    assert entries[0]['info']['name'] == account_name
+    assert 'quota' in entries[0]['info']
+    assert 'bucket_quota' in entries[0]['info']
+    assert entries[0]['stats'] == acct_stats['stats']
+    assert entries[0]['last_synced'] == acct_stats['last_synced']
+
+    # TESTCASE 'account list stats paginated', 'account', 'list --stats', 'pages cover all accounts', 'succeeds'
+    (err, all_ids) = rgwadmin(ctx, client, ['account', 'list'], check_status=True)
+    listed_ids = []
+    marker = None
+    while True:
+        cmd = ['account', 'list', '--stats', '--max-entries', '1']
+        if marker:
+            cmd += ['--marker', marker]
+        (err, out) = rgwadmin(ctx, client, cmd, check_status=True)
+        assert len(out['accounts']) <= 1
+        listed_ids += [e['info']['id'] for e in out['accounts']]
+        if not out['truncated']:
+            break
+        marker = out['marker']
+    assert sorted(listed_ids) == sorted(all_ids)
+
     # relink the bucket to the first user and delete the account
     rgwadmin(ctx, client,
         ['bucket', 'link', '--bucket', bucket_name, '--uid', user1],

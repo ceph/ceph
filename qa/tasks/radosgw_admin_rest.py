@@ -1091,6 +1091,69 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
     assert ret == 200
 
+    # TESTCASE 'account-stats-empty' 'account-stats' 'getting the stats of an account without buckets' 'succeeds'
+    # re-create the account
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'], {'id' : account_id})
+    assert ret == 200
+    assert out['stats']['size'] == 0
+    assert out['stats']['size_actual'] == 0
+    assert out['stats']['num_objects'] == 0
+    assert 'last_synced' in out
+    assert 'last_updated' in out
+
+    # TESTCASE 'account-stats-sync' 'account-stats' 'getting the synced stats of an account with an object' 'succeeds'
+    acct_access_key = 'Vq7Ys3kHjM0iWbCd2Ln8'
+    acct_secret_key = 'pX4rT9sUe1wQz6yBn3mK8cJv5hLg2aFd7oRi0tNb'
+    acct_bucket_name = 'acctstatsbucket'
+    acct_body = 'account stats'
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'create',
+            '--account-id', account_id,
+            '--account-root',
+            '--uid', 'acctstatsuser',
+            '--display-name', 'acctstatsuser',
+            '--access-key', acct_access_key,
+            '--secret', acct_secret_key,
+            ], check_status=True)
+
+    acct_connection = boto3.client(service_name='s3',
+                                   aws_access_key_id=acct_access_key,
+                                   aws_secret_access_key=acct_secret_key,
+                                   endpoint_url=endpoint.url(),
+                                   use_ssl=False)
+    acct_connection.create_bucket(Bucket=acct_bucket_name)
+    acct_connection.put_object(Bucket=acct_bucket_name, Key='obj', Body=acct_body)
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'], {'id' : account_id, 'sync-stats' : True})
+    assert ret == 200
+    assert out['stats']['size'] == len(acct_body)
+    assert out['stats']['size_actual'] == 4096
+    assert out['stats']['num_objects'] == 1
+
+    # TESTCASE 'account-stats-by-name' 'account-stats' 'getting the stats of an account by name' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'], {'name' : account_id})
+    assert ret == 200
+    assert out['stats']['num_objects'] == 1
+
+    # TESTCASE 'account-stats-invalid-args' 'account-stats' 'verify get stats requests with invalid args fail' 'fails'
+    # verify request with no account id or name fails
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'])
+    assert ret == 400
+
+    # verify request for a non-existent account fails
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'], {'id' : 'RGW99999999999999999'})
+    assert ret == 404
+
+    # cleanup the account
+    acct_connection.delete_object(Bucket=acct_bucket_name, Key='obj')
+    acct_connection.delete_bucket(Bucket=acct_bucket_name)
+    rgwadmin(ctx, client, ['user', 'rm', '--uid', 'acctstatsuser'], check_status=True)
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'rm'], {'id' : account_id})
+    assert ret == 200
+
     # TESTCASE 'rm account caps' 'user-caps-rm' 'verify access after removing user caps for account read and write' 'fails'
     (err, out) = rgwadmin(ctx, client, [
             'caps', 'rm',
@@ -1111,6 +1174,10 @@ def task(ctx, config):
 
     # checking failed access to get account info
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 403
+
+    # checking failed access to get account stats
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'], {'id' : account_id})
     assert ret == 403
 
     # checking failed access to remove account
@@ -1137,6 +1204,10 @@ def task(ctx, config):
 
     # checking get account info access
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'info'], {'id' : account_id})
+    assert ret == 200
+
+    # checking get account stats access
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, [('account', 'stats'), 'info'], {'id' : account_id})
     assert ret == 200
 
     # checking remove account access
