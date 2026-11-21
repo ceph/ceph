@@ -480,7 +480,7 @@ struct formatter<crimson::osd::scrub::blocked_range_t> {
   template <typename FormatContext>
   auto format(const crimson::osd::scrub::blocked_range_t& r,
               FormatContext& ctx) const {
-    return format_to(
+    return fmt::format_to(
         ctx.out(),
         "blocked_range[{} -> {}]",
         r.begin,
