@@ -576,6 +576,113 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 namespace ceph::async { class spawn_throttle; }
 
+/**
+ * Interface for a bucket listing backend.
+ */
+struct ILCBucketLister {
+  virtual ~ILCBucketLister() = default;
+
+  virtual std::string_view get_bucket_name () const noexcept = 0;
+
+  virtual bool bucket_versioned() const noexcept = 0;
+
+  virtual bool allow_unordered() const noexcept = 0;
+
+  virtual int list(rgw::sal::Bucket::ListParams& params,
+                   int max_entries,
+                   rgw::sal::Bucket::ListResults& results,
+                   optional_yield y) = 0;
+};
+
+/**
+ * @brief Presents a sanitized view of the bucket index for the LC to operate on.
+ *
+ * Lists objects in a bucket for the LC to process.
+ * Relies on a bucket lister backend as the source of objects data.
+ * Accumulates per-object data such as the number of current/non-current
+ * instances per-object (which a specific LC rule might act upon).
+ * It also detects and skips any objects (all versions) which are inconsistent
+ * with a valid object state to protect from a potential data loss such as:
+ * - multiple-non-current versions newer than the current;
+ * - no current version;
+ * - multiple current versions.
+ */
+class LCObjsLister {
+
+  using obj_iter_type = std::vector<rgw_bucket_dir_entry>::iterator;
+
+  ILCBucketLister* backend;
+  const DoutPrefixProvider *dpp;
+
+  rgw::sal::Bucket::ListParams list_params;
+  rgw::sal::Bucket::ListResults list_results;
+  std::string prefix;
+  obj_iter_type obj_iter;
+  rgw_bucket_dir_entry pre_obj;
+  uint64_t num_noncurrent{0};
+  int64_t delay_ms;
+  int64_t page_index{-1};
+  bool stopped_mid_obj{false};
+  std::string skipped_key_name;
+  uint64_t skipped_not_current{0}, skipped_multiple_currents{0};
+
+  const uint64_t list_count;
+
+ public:
+
+  LCObjsLister(ILCBucketLister *backend,
+               CephContext *cct,
+               const DoutPrefixProvider *_dpp = nullptr);
+
+  ~LCObjsLister();
+
+  void set_prefix(const std::string &p) {
+    prefix = p;
+    list_params.prefix = prefix;
+  }
+
+  int init(boost::asio::yield_context y);
+
+  int fetch(boost::asio::yield_context y);
+
+  void delay();
+
+  bool get_obj(rgw_bucket_dir_entry *obj) const;
+
+  rgw_bucket_dir_entry get_prev_obj() const noexcept { return pre_obj; }
+
+  bool next(boost::asio::yield_context y);
+
+  boost::optional<std::string> next_key_name() const;
+
+  uint64_t get_num_noncurrent() const noexcept { return num_noncurrent; }
+
+  // the object whose remaining versions the last next() skipped; the
+  // versions of it that were already returned must not be processed either
+  const std::string& skipped_key() const noexcept { return skipped_key_name; }
+
+  // true if the listing stopped at a failed or empty page while the
+  // current object may have more versions on the next page
+  bool stopped_mid_object() const noexcept { return stopped_mid_obj; }
+
+  uint64_t get_entry_pos() const noexcept {
+    return (page_index * list_count) + (obj_iter - list_results.objs.begin());
+  }
+
+private:
+
+  // assuming obj_iter points to the first instance of an object 'foo' will do either of:
+  // - return the same iter if the first instance is current;
+  // - if the first one is non-current skips to the next object key which has its first instance as current
+  obj_iter_type skip_to_key_with_first_current(obj_iter_type from, boost::asio::yield_context y);
+
+  // looks at the object key pointed to by the @from iterator and skips to the first instance of the next object
+  obj_iter_type skip_to_the_next_key(obj_iter_type from, boost::asio::yield_context y);
+
+  void log_skipped(const rgw_obj_key& key, uint64_t& count, const char* reason);
+
+}; /* LCObjsLister */
+
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;

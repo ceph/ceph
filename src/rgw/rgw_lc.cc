@@ -457,125 +457,47 @@ static bool should_list_unordered(const rgw::bucket_index_layout_generation& cur
   return current_index.layout.type == rgw::BucketIndexType::Normal
     && rgw::num_shards(current_index.layout.normal) > threshold;
 }
-class LCObjsLister {
-  rgw::sal::Driver* driver;
-  rgw::sal::Bucket* bucket;
-  rgw::sal::Bucket::ListParams list_params;
-  rgw::sal::Bucket::ListResults list_results;
-  string prefix;
-  vector<rgw_bucket_dir_entry>::iterator obj_iter;
-  rgw_bucket_dir_entry pre_obj;
-  uint64_t num_noncurrent{0};
-  int64_t delay_ms;
 
-public:
-  LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
-      driver(_driver), bucket(_bucket) {
-    list_params.list_versions = bucket->versioned();
+class BucketLister : public ILCBucketLister {
 
-    CephContext* cct = driver->ctx();
-    uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
+  rgw::sal::Bucket *bucket;
+  CephContext *cct;
+  const DoutPrefixProvider* dpp;
 
+ public:
+
+  BucketLister(rgw::sal::Bucket *_bucket,
+               CephContext *_cct,
+               const DoutPrefixProvider *_dpp)
+      : bucket{_bucket},
+        cct{_cct},
+        dpp{_dpp}
+  {
+    ceph_assert(bucket);
+    ceph_assert(_cct);
+  }
+
+  std::string_view get_bucket_name() const noexcept override {
+    return bucket->get_name();
+  }
+
+  bool bucket_versioned() const noexcept override {
+    return bucket->versioned();
+  }
+
+  bool allow_unordered() const noexcept override {
+    auto threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
     const auto& current_index = bucket->get_info().layout.current_index;
-    list_params.allow_unordered = should_list_unordered(current_index, threshold);
-
-    delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
+    return should_list_unordered(current_index, threshold);
   }
 
-  void set_prefix(const string& p) {
-    prefix = p;
-    list_params.prefix = prefix;
+  int list(rgw::sal::Bucket::ListParams& params,
+           int max_entries,
+           rgw::sal::Bucket::ListResults& results,
+           optional_yield y) override {
+    return bucket->list(dpp, params, max_entries, results, y);
   }
-
-  int init(const DoutPrefixProvider *dpp, optional_yield y) {
-    return fetch(dpp, y);
-  }
-
-  int fetch(const DoutPrefixProvider *dpp, optional_yield y) {
-    CephContext* cct = dpp->get_cct();
-    int cnt = cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt");
-    int ret = bucket->list(dpp, list_params, cnt, list_results, y);
-    if (ret < 0) {
-      return ret;
-    }
-
-    obj_iter = list_results.objs.begin();
-
-    return 0;
-  }
-
-  void delay(const DoutPrefixProvider* dpp) {
-    if (delay_ms) {
-      maybe_warn_about_blocking(dpp);
-      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-    }
-  }
-
-  bool get_obj(const DoutPrefixProvider *dpp, optional_yield y,
-	       rgw_bucket_dir_entry **obj,
-	       std::function<void(void)> fetch_barrier
-	       = []() { /* nada */}) {
-    if (obj_iter == list_results.objs.end()) {
-      if (!list_results.is_truncated) {
-        delay(dpp);
-        return false;
-      } else {
-	fetch_barrier();
-        list_params.marker = rgw::lc::list_resume_marker(pre_obj, list_params.list_versions);
-        int ret = fetch(dpp, y);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret
-				 << dendl;
-          return false;
-        }
-      }
-      delay(dpp);
-      if (obj_iter == list_results.objs.end()) {
-        return false;
-      }
-    }
-
-    if (obj_iter->key.name == pre_obj.key.name) {
-      ++num_noncurrent;
-    } else {
-      num_noncurrent = 0; // XXX the first element must be current or a delete marker (?)
-    }
-
-    /* returning address of entry in objs */
-    *obj = &(*obj_iter);
-    return true;
-  }
-
-  rgw_bucket_dir_entry get_prev_obj() {
-    return pre_obj;
-  }
-
-  void next() {
-    pre_obj = *obj_iter;
-    ++obj_iter;
-  }
-
-  boost::optional<std::string> next_key_name() {
-    if (obj_iter == list_results.objs.end()) {
-      return boost::none;
-    }
-    if ((obj_iter + 1) == list_results.objs.end()) {
-      /* At the last object in the current page */
-      if (list_results.is_truncated) {
-        /* More pages exist. Cannot determine if next object has same name
-         * without fetching next page. Return current object name to indicate
-         * uncertainty and prevent incorrect DM deletion at page boundaries. */
-        return obj_iter->key.name;
-      }
-      /* No more pages, definitively no next object */
-      return boost::none;
-    }
-
-    return ((obj_iter + 1)->key.name);
-  }
-
-  uint64_t get_num_noncurrent() { return num_noncurrent; }
-}; /* LCObjsLister */
+};
 
 struct op_env {
 
@@ -1936,6 +1858,204 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
   return execute(*action, o, dpp, batch_counters, cached_tags, false, y);
 }
 
+LCObjsLister::LCObjsLister(ILCBucketLister *_backend,
+                           CephContext* cct,
+                           const DoutPrefixProvider *_dpp) :
+  backend(_backend),
+  dpp(_dpp),
+  list_count{cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt")}
+{
+  list_params.list_versions = _backend->bucket_versioned();
+  list_params.allow_unordered = _backend->allow_unordered();
+
+  delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
+}
+
+LCObjsLister::~LCObjsLister() {
+  if (skipped_not_current || skipped_multiple_currents) {
+    ldpp_dout(dpp, 1) << "WARNING: lifecycle skipped "
+      << skipped_not_current + skipped_multiple_currents
+      << " objects with inconsistent index entries ("
+      << skipped_not_current << " newest version not current, "
+      << skipped_multiple_currents << " multiple currents) in bucket="
+      << backend->get_bucket_name() << " prefix=" << prefix << dendl;
+  }
+}
+
+// warn about the first few skipped objects, then log at a debug level
+void LCObjsLister::log_skipped(const rgw_obj_key& key, uint64_t& count,
+                               const char* reason) {
+  ++count;
+  const int level =
+    skipped_not_current + skipped_multiple_currents <= 10 ? 1 : 5;
+  ldpp_dout(dpp, level) << "WARNING: lifecycle skipping object " << key
+    << " (" << reason << ") in bucket=" << backend->get_bucket_name()
+    << dendl;
+}
+
+int LCObjsLister::init(boost::asio::yield_context y) {
+  int res = fetch(y);
+  if (res < 0)
+    return  res;
+
+  obj_iter = skip_to_key_with_first_current(obj_iter, y);
+
+  return 0;
+}
+
+void LCObjsLister::delay() {
+  if (delay_ms) {
+    maybe_warn_about_blocking(dpp);
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+  }
+}
+
+int LCObjsLister::fetch(boost::asio::yield_context y) {
+  if (!list_results.objs.empty()) {
+    list_params.marker = rgw::lc::list_resume_marker(list_results.objs.back(),
+                                                     list_params.list_versions);
+  }
+  int ret = backend->list(list_params, list_count, list_results, y);
+  if (ret < 0) {
+    list_results.objs.clear();
+    list_results.is_truncated = false;
+    obj_iter = list_results.objs.end();
+    return ret;
+  }
+
+  obj_iter = list_results.objs.begin();
+  ++page_index;
+  return 0;
+}
+
+LCObjsLister::obj_iter_type LCObjsLister::skip_to_key_with_first_current(obj_iter_type from, boost::asio::yield_context y) {
+  if (list_results.objs.empty() || from == list_results.objs.end())
+    return list_results.objs.end();
+
+  // if the @from is already pointing at the current just return it and set the counters;
+  do {
+    auto first = *from;
+    if (first.is_current()) {
+      num_noncurrent=0;
+      return from;
+    }
+
+    log_skipped(from->key, skipped_not_current, "newest version is not current");
+    from = skip_to_the_next_key(from, y);
+  }
+  while (from != list_results.objs.end());
+
+  return from;
+}
+
+LCObjsLister::obj_iter_type LCObjsLister::skip_to_the_next_key (obj_iter_type from, boost::asio::yield_context y) {
+  auto cur_obj = *from;
+
+  auto i=from+1;
+  do {
+    for (; i!=list_results.objs.end(); ++i) {
+      if (i->key.name!=cur_obj.key.name) {
+        return i;
+      }
+    }
+
+    // we reached the end of the current list results batch;
+    // need to fetch the next page and start over;
+    if (!list_results.is_truncated) {
+      return list_results.objs.end();
+    }
+    int ret = fetch(y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret << dendl;
+      return list_results.objs.end();
+    }
+    delay();
+    if (list_results.objs.empty()) {
+      return list_results.objs.end();
+    }
+    i = obj_iter;
+  }
+  while (true);
+}
+
+
+bool LCObjsLister::get_obj(rgw_bucket_dir_entry *obj) const {
+  ceph_assert(obj!=nullptr);
+
+  if (obj_iter != list_results.objs.end()) {
+    *obj = *obj_iter;
+    return  true;
+  }
+
+  return false;
+}
+
+bool LCObjsLister::next(boost::asio::yield_context y) {
+  skipped_key_name.clear();
+  if (obj_iter == list_results.objs.end())
+    return false;
+
+  pre_obj = *obj_iter++;
+  if (obj_iter == list_results.objs.end()) {
+    if (!list_results.is_truncated) {
+      delay();
+      return false;
+    } else {
+      int ret = fetch(y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret << dendl;
+        stopped_mid_obj = true;
+        return false;
+      }
+    }
+    delay();
+    if (obj_iter == list_results.objs.end()) {
+      stopped_mid_obj = true;
+      return false;
+    }
+  }
+
+  if (obj_iter->key.name == pre_obj.key.name) {
+    if (!obj_iter->is_current())
+      ++num_noncurrent;
+    else {
+      log_skipped(obj_iter->key, skipped_multiple_currents, "multiple currents");
+      skipped_key_name = obj_iter->key.name;
+      obj_iter = skip_to_the_next_key(obj_iter, y);
+      obj_iter = skip_to_key_with_first_current(obj_iter, y);
+    }
+  }
+  else
+    obj_iter = skip_to_key_with_first_current(obj_iter, y);
+
+  if (obj_iter != list_results.objs.end()) {
+    ldpp_dout(dpp, 20) << "LCObjsLister::next(): advanced to " << obj_iter->key
+      << " at position " << get_entry_pos()
+      << " in bucket=" << backend->get_bucket_name() << dendl;
+  }
+
+  return obj_iter != list_results.objs.end();
+}
+
+boost::optional<std::string> LCObjsLister::next_key_name() const {
+  if (obj_iter == list_results.objs.end()) {
+    return boost::none;
+  }
+  if ((obj_iter + 1) == list_results.objs.end()) {
+    /* At the last object in the current page */
+    if (list_results.is_truncated) {
+      /* More pages exist. Cannot determine if next object has same name
+       * without fetching next page. Return current object name to indicate
+       * uncertainty and prevent incorrect DM deletion at page boundaries. */
+      return obj_iter->key.name;
+    }
+    /* No more pages, definitely no next object */
+    return boost::none;
+  }
+
+  return ((obj_iter + 1)->key.name);
+}
+
 int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 			     time_t stop_at, bool once,
 			     boost::asio::yield_context yield)
@@ -2095,7 +2215,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       pre_marker = next_marker;
     }
 
-    LCObjsLister ol(driver, bucket.get());
+    CephContext* cct = driver->ctx();
+    BucketLister bl(bucket.get(), cct, this);
+    LCObjsLister ol(&bl, cct, this);
     ol.set_prefix(prefix_iter->first);
 
     std::vector<lc_op*> active_ops;
@@ -2116,7 +2238,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       continue;
     }
 
-    ret = ol.init(this, yield);
+    ret = ol.init(yield);
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
@@ -2280,9 +2402,27 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       key_group.clear();
     };
 
-    rgw_bucket_dir_entry* o{nullptr};
-    for (auto offset = 0; ol.get_obj(this, yield, &o /* , fetch_barrier */); ++offset, ol.next()) {
-      const auto obj = *o;
+    auto drop_key_group = [&] {
+      for (size_t i = 0; i < key_group.size(); ++i) {
+        batch_counters.decrement_pending();
+      }
+      key_group.clear();
+    };
+
+    // drop the queued versions of an object the lister skipped; a group
+    // already flushed at the 1000-version cap can't be recalled
+    auto drop_skipped_key_group = [&] {
+      if (!key_group.empty() &&
+          ol.skipped_key() == key_group.front().obj.key.name) {
+        drop_key_group();
+      }
+    };
+
+    rgw_bucket_dir_entry e;
+    for (auto offset = 0; ol.get_obj(&e); ++offset, ol.next(yield)) {
+      const auto obj = e;
+
+      drop_skipped_key_group();
 
       // Update all rules to capture current lister state before spawning
       for (auto& rule : rules) {
@@ -2318,10 +2458,18 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
 			     << worker->ix << " bucket=" << bucket_name
 			     << dendl;
+	  // the rest of this object is unchecked; the next run lists it again
+	  if (ol.next_key_name() == obj.key.name) {
+	    drop_key_group();
+	  }
 	  flush_key_group();
 	  return 0;
 	}
       }
+    }
+    drop_skipped_key_group();
+    if (ol.stopped_mid_object()) {
+      drop_key_group();
     }
     flush_key_group();
   }
