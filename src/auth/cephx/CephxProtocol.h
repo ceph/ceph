@@ -411,7 +411,8 @@ struct CephXTicketHandler {
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
-				 ceph::buffer::list::const_iterator& indata);
+				 ceph::buffer::list::const_iterator& indata,
+				 const utime_t& now);
   // to access the service
   CephXAuthorizer *build_authorizer(uint64_t global_id) const;
 
