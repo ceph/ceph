@@ -233,6 +233,9 @@ int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, const std::string& oid
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, ceph::buffer::list& updates);
 
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, ceph::buffer::list& updates);
+// out receives encode(bool): true when this call wrote a bilog record.
+void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, ceph::buffer::list& updates,
+                             ceph::buffer::list* out);
 
 /* usage logging */
 // these overloads which call io_ctx.operate() should not be called in the rgw.

@@ -357,6 +357,7 @@ class RGWRados
   friend class rgw::sal::MPRadosSerializer;
   friend class rgw::sal::LCRadosSerializer;
   friend class rgw::sal::RadosStore;
+  friend class RGWIndexCompletionManager;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx(const DoutPrefixProvider *dpp);
@@ -390,6 +391,7 @@ class RGWRados
   bool run_reshard_thread{false};
   bool run_notification_thread{false};
   bool run_bucket_logging_thread{false};
+  bool background_workers_stopped{false};
 
   RGWMetaNotifier* meta_notifier{nullptr};
   RGWDataNotifier* data_notifier{nullptr};
@@ -651,6 +653,11 @@ public:
   virtual int init_rados();
   int init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore);
   void finalize();
+  // stop and join background workers that may submit index completions
+  void stop_background_workers();
+  // unblock reshard_wait, then wait for already-spawned completions.
+  // invoke before the datalog and io_context are shut down.
+  void drain_index_completions();
 
   int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type, const std::map<std::string, std::string>& meta);
   int update_service_map(const DoutPrefixProvider *dpp, std::map<std::string, std::string>&& status);
@@ -1735,6 +1742,13 @@ public:
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
 				RGWBucketListNameFilter force_check_filter = {});
+  // send the suggestions collected by check_disk_state() to a bucket index
+  // shard. for InIndex buckets this also adds the datalog entry when the
+  // CLS wrote a bilog record while applying them.
+  void suggest_index_changes(const DoutPrefixProvider *dpp,
+                             const RGWBucketInfo& bucket_info,
+                             librados::IoCtx& ioctx, const std::string& oid,
+                             int shard_id, bufferlist& updates);
   int cls_bucket_head_async(const DoutPrefixProvider *dpp,
 			    const RGWBucketInfo& bucket_info,
 			    const rgw::bucket_index_layout_generation& idx_layout,
