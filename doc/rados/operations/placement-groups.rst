@@ -243,9 +243,16 @@ root's allocation. The budget assigned to each root is:
 
 .. math::
 
-   \sum_{\text{OSD}_i \in R} \frac{\text{mon_target_pg_per_osd}}{|\text{roots}(\text{OSD}_i)|}
+   B_R = \sum_{i \in R}
+   \left\lfloor \frac{T}{|\operatorname{roots}(i)|} \right\rfloor
 
-This ensures that the total PG budget is distributed proportionally across all roots.
+Here, :math:`B_R` is the PG replica budget for root :math:`R`, :math:`T` is
+``mon_target_pg_per_osd``, and :math:`\operatorname{roots}(i)` is the set of
+CRUSH roots that contain OSD :math:`i` and are used by pools. Each OSD's contribution
+is rounded down before the contributions are summed, matching the autoscaler's
+integer division. Consequently, some budget can remain unallocated. If
+:math:`T` is smaller than the number of roots sharing an OSD, that OSD
+contributes zero to each root.
 
 Consider a cluster with the following topology:
 
