@@ -44,11 +44,18 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
 	    });
           });
 	} else if (coll.is_temp(&pgid)) {
-	  logger().warn(
-	    "found temp collection on crimson osd, should be impossible: {}",
-	    coll);
-	  ceph_assert(0 == "temp collection on crimson osd, should be impossible");
-	  return seastar::now();
+	  // The only TEMP collections crimson creates are seastore
+	  // cross-shard merge staging copies (ShardServices::
+	  // merge_staging_cid). One surviving a restart means the merge did
+	  // not commit: the source's original collection is still intact,
+	  // so drop the copy; the next READY makes a fresh one.
+	  logger().warn("load_pgs: removing leftover merge staging collection {}",
+	                coll);
+	  return this->with_remote_shard_state(
+	    shard_core,
+	    [coll, store_index](PerShardState &, ShardServices &shard_services) {
+	      return shard_services.remove_collection_fully(store_index, coll);
+	    });
 	} else {
 	  logger().warn("ignoring unrecognized collection: {}", coll);
 	  return seastar::now();

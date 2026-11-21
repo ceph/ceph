@@ -235,10 +235,21 @@ seastar::future<bool> ShardServices::seastore_merge_shards_ok(
   if (!is_seastore_objectstore()) {
     co_return true;
   }
-  const core_id_t target_core = co_await get_pg_mapping(target);
+  const auto target_mapping = co_await get_pg_mapping_full(target);
   std::optional<pg_t> cross_shard_source;
   for (const auto& src : merge_sources) {
-    if (co_await get_pg_mapping(src) != target_core) {
+    // merge_collection only works inside one store, so the source must be
+    // on the same core AND the same store shard as the target...
+    if (co_await get_pg_mapping_full(src) == target_mapping) {
+      continue;
+    }
+    // ...unless it has already been copied to the target's shard.
+    const bool staged = co_await container().invoke_on(
+      target_mapping.first,
+      [src](ShardServices& target_svc) {
+        return target_svc.is_merge_source_staged(src);
+      });
+    if (!staged) {
       cross_shard_source = src.pgid;
       break;
     }
@@ -251,6 +262,308 @@ seastar::future<bool> ShardServices::seastore_merge_shards_ok(
   co_await abort_seastore_cross_shard_merge(
     target, *cross_shard_source, &merge_sources, true);
   co_return false;
+}
+
+//function with which we read objects from source pg on that shard
+seastar::future<std::tuple<std::vector<copied_object_t>, ghobject_t>>
+ShardServices::read_collection_chunk(
+  store_index_t store_index,
+  crimson::os::CollectionRef coll,
+  ghobject_t start,
+  uint64_t num_obj_we_want)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  auto store = get_store(store_index);
+
+  // next slice of names, in sorted order: from `start`, no end limit
+  // (GHMAX), at most num_obj_we_want of them. `next` is where the following
+  // slice should start, or GHMAX if we reached the end.
+  auto [oids, next] = co_await with_store<&FuturizedStore::Shard::list_objects>(
+    store, coll, start, ghobject_t::get_max(), num_obj_we_want, 0);
+
+  // Bulk one-time read: tell the store not to keep this data in its cache
+  // (same flag backfill/recovery uses in replicated_recovery_backend.cc).
+  constexpr uint32_t flags = CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
+  // Error handling: on a read error we do NOT crash the OSD. Each
+  // handle_error below turns the store error into a normal exception, which
+  // makes this whole function fail. The caller can then cancel the merge
+  // (abort_seastore_cross_shard_merge) and leave the source PG where it is.
+
+  std::vector<copied_object_t> boxes;
+  for (auto& oid : oids) {
+    copied_object_t box;
+    box.oid = oid;
+    // first ask the size, then read that many bytes
+    // (stat already reports errors as exceptions, so it needs no handler)
+    auto st = co_await with_store<&FuturizedStore::Shard::stat>(
+      store, coll, oid, flags);
+    box.data = co_await with_store<&FuturizedStore::Shard::read>(
+      store, coll, oid, 0 , st.st_size , flags
+    ).handle_error(FuturizedStore::Shard::read_errorator::all_same_way(
+      [](const std::error_code& e) {
+        return seastar::make_exception_future<ceph::bufferlist>(
+          std::system_error(e, "read_collection_chunk: read failed"));
+      }));
+
+    // attrs: all of the object's labels (xattrs) at once
+    box.attrs = co_await with_store<&FuturizedStore::Shard::get_attrs>(
+      store, coll, oid, flags
+    ).handle_error(FuturizedStore::Shard::get_attrs_ertr::all_same_way(
+      [](const std::error_code& e) {
+        return seastar::make_exception_future<FuturizedStore::Shard::attrs_t>(
+          std::system_error(e, "read_collection_chunk: get_attrs failed"));
+      }));
+
+    // omap header: enodata means the object has none, so leave it empty;
+    // enoent (object missing) is a real error
+    box.omap_header = co_await with_store<&FuturizedStore::Shard::omap_get_header>(
+      store, coll, oid, flags
+    ).handle_error(
+      crimson::ct_error::enodata::handle([] {
+        return seastar::make_ready_future<ceph::bufferlist>();
+      }),
+      crimson::ct_error::enoent::handle([] {
+        return seastar::make_exception_future<ceph::bufferlist>(
+          std::system_error(std::make_error_code(std::errc::no_such_file_or_directory),
+                            "read_collection_chunk: omap_get_header failed"));
+      }));
+
+    // omap: walk every key/value pair from the start and copy it into the box
+    co_await with_store<&FuturizedStore::Shard::omap_iterate>(
+      store, coll, oid, ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&box](std::string_view key, std::string_view value) {
+        ceph::bufferlist bl;
+        bl.append(value);
+        box.omap.emplace(std::string{key}, std::move(bl));
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      }, flags, nullptr
+    ).handle_error(FuturizedStore::Shard::read_errorator::all_same_way(
+      [](const std::error_code& e) {
+        return seastar::make_exception_future<ObjectStore::omap_iter_ret_t>(
+          std::system_error(e, "read_collection_chunk: omap_iterate failed"));
+      }));
+
+    boxes.push_back(std::move(box));
+  }
+  co_return std::make_tuple(std::move(boxes), next);
+}
+
+seastar::future<> ShardServices::make_empty_staging_collection(
+  store_index_t store_index,
+  coll_t staging)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  co_await remove_collection_fully(store_index, staging);
+  auto store = get_store(store_index);
+  auto coll = co_await with_store<&FuturizedStore::Shard::create_new_collection>(
+    store, staging);
+  ceph::os::Transaction t;
+  // bits unused: this collection is only merged into the target, then removed
+  t.create_collection(staging, 0);
+  co_await crimson::os::with_store_do_transaction(
+    store, std::move(coll), std::move(t));
+}
+
+seastar::future<> ShardServices::write_staging_chunk(
+  store_index_t store_index,
+  coll_t staging,
+  const std::vector<copied_object_t>& objs)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  auto store = get_store(store_index);
+  auto coll = co_await with_store<&FuturizedStore::Shard::open_collection>(
+    store, staging);
+
+  // `objs` lives on the source's shard. Bufferlist refcounts are not
+  // atomic under crimson, so never share its buffers: copy the raw bytes
+  // into new buffers allocated here. (Reading through ptr::c_str() and
+  // buffers() does not touch any refcount.)
+  auto deep_copy = [](const ceph::bufferlist& from) {
+    ceph::bufferlist to;
+    for (const auto& p : from.buffers()) {
+      to.append(p.c_str(), p.length());
+    }
+    return to;
+  };
+
+  ceph::os::Transaction t;
+  for (const auto& obj : objs) {
+    t.touch(staging, obj.oid);
+    if (obj.data.length()) {
+      auto data = deep_copy(obj.data);
+      t.write(staging, obj.oid, 0, data.length(), data);
+    }
+    if (!obj.attrs.empty()) {
+      std::map<std::string, ceph::bufferlist, std::less<>> attrs;
+      for (const auto& [k, v] : obj.attrs) {
+        attrs.emplace(k, deep_copy(v));
+      }
+      t.setattrs(staging, obj.oid, attrs);
+    }
+    if (obj.omap_header.length()) {
+      t.omap_setheader(staging, obj.oid, deep_copy(obj.omap_header));
+    }
+    if (!obj.omap.empty()) {
+      std::map<std::string, ceph::bufferlist> omap;
+      for (const auto& [k, v] : obj.omap) {
+        omap.emplace(k, deep_copy(v));
+      }
+      t.omap_setkeys(staging, obj.oid, omap);
+    }
+  }
+  co_await crimson::os::with_store_do_transaction(
+    store, std::move(coll), std::move(t));
+}
+
+seastar::future<> ShardServices::copy_merge_source_to_target_shard(
+  spg_t source,
+  spg_t target,
+  store_index_t source_store_index,
+  crimson::os::CollectionRef source_coll)
+{
+  LOG_PREFIX(ShardServices::copy_merge_source_to_target_shard);
+  const auto [target_core, target_store] = co_await get_pg_mapping_full(target);
+  const core_id_t source_core = seastar::this_shard_id();
+  const coll_t staging = merge_staging_cid(source);
+  INFO("copying source {} (shard {}) to staging {} on target {} (shard {})",
+       source, source_core, staging, target, target_core);
+
+  // Step 1: on the target's shard, start from a fresh empty staging
+  // collection. A copy left by an earlier, cancelled merge is stale (the
+  // source went back to ACTIVE), so it is thrown away.
+  co_await container().invoke_on(
+    target_core,
+    [source, staging, target_store](ShardServices& target_svc) {
+      target_svc.clear_merge_source_staged(source);
+      return target_svc.make_empty_staging_collection(target_store, staging);
+    });
+
+  // Step 2: read a chunk here, write it there, until no objects are left.
+  const uint64_t chunk = crimson::common::local_conf()->osd_target_transaction_size;
+  ghobject_t next;
+  uint64_t copied = 0;
+  do {
+    auto [objs, cursor] = co_await read_collection_chunk(
+      source_store_index, source_coll, next, chunk);
+    copied += objs.size();
+    // Hand the boxes to the target shard; foreign_ptr frees them back here.
+    auto fobjs = seastar::make_foreign(
+      std::make_unique<std::vector<copied_object_t>>(std::move(objs)));
+    co_await container().invoke_on(
+      target_core,
+      [target_store, staging, fobjs = std::move(fobjs)]
+      (ShardServices& target_svc) {
+        return target_svc.write_staging_chunk(target_store, staging, *fobjs);
+      });
+    next = cursor;
+  } while (next != ghobject_t::get_max());
+
+  co_await container().invoke_on(
+    target_core,
+    [source, source_core, source_store_index](ShardServices& target_svc) {
+      target_svc.local_state.staged_merge_sources[source] =
+        {source_core, source_store_index};
+    });
+  INFO("source {} staged on shard {}: {} objects", source, target_core, copied);
+}
+
+seastar::future<bool> ShardServices::prepare_seastore_merge_source(
+  spg_t source,
+  store_index_t source_store_index,
+  crimson::os::CollectionRef source_coll,
+  unsigned pg_num,
+  unsigned pg_num_pending)
+{
+  LOG_PREFIX(ShardServices::prepare_seastore_merge_source);
+  if (!is_seastore_objectstore()) {
+    co_return true;
+  }
+  spg_t target;
+  if (!source.is_merge_source(pg_num, pg_num_pending, &target)) {
+    co_return true;
+  }
+  if (co_await get_pg_mapping_full(source) ==
+      co_await get_pg_mapping_full(target)) {
+    co_return true;  // same shard: merge_collection works directly
+  }
+  try {
+    co_await copy_merge_source_to_target_shard(
+      source, target, source_store_index, std::move(source_coll));
+    co_return true;
+  } catch (const std::exception& e) {
+    ERROR("copy of source {} to target {}'s shard failed: {}; stopping merge",
+          source, target, e.what());
+  }
+  std::set<spg_t> merge_sources;
+  target.is_split(pg_num_pending, pg_num, &merge_sources);
+  co_await abort_seastore_cross_shard_merge(
+    target, source.pgid, &merge_sources, true);
+  co_return false;
+}
+
+seastar::future<> ShardServices::remove_collection_fully(
+  store_index_t store_index, coll_t cid)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  auto store = get_store(store_index);
+  // open_collection returns a null ref if cid does not exist here
+  auto coll = co_await with_store<&FuturizedStore::Shard::open_collection>(
+    store, cid);
+  if (!coll) {
+    co_return;
+  }
+  const uint64_t chunk = crimson::common::local_conf()->osd_target_transaction_size;
+  // Keep the pgmeta object until the final transaction, which also
+  // removes the collection (as PG::do_delete_work does). A crash halfway
+  // through then leaves a collection that can still be loaded as a PG,
+  // instead of one without pgmeta, which aborts the OSD on startup.
+  std::optional<ghobject_t> pgmeta;
+  ghobject_t start;
+  while (true) {
+    auto [oids, next] = co_await with_store<&FuturizedStore::Shard::list_objects>(
+      store, coll, start, ghobject_t::get_max(), chunk, 0);
+    ceph::os::Transaction t;
+    for (auto& oid : oids) {
+      if (oid.is_pgmeta()) {
+        pgmeta = oid;
+        continue;
+      }
+      t.remove(cid, oid);
+    }
+    if (next == ghobject_t::get_max()) {
+      if (pgmeta) {
+        t.remove(cid, *pgmeta);
+      }
+      t.remove_collection(cid);
+      co_await crimson::os::with_store_do_transaction(store, coll, std::move(t));
+      co_return;
+    }
+    co_await crimson::os::with_store_do_transaction(store, coll, std::move(t));
+    start = next;
+  }
+}
+
+seastar::future<> ShardServices::remove_merged_source_collection(spg_t source)
+{
+  LOG_PREFIX(ShardServices::remove_merged_source_collection);
+  auto it = local_state.staged_merge_sources.find(source);
+  if (it == local_state.staged_merge_sources.end()) {
+    co_return;
+  }
+  const auto [source_core, source_store] = it->second;
+  local_state.staged_merge_sources.erase(it);
+  INFO("merge committed; removing original collection of {} on shard {}",
+       source, source_core);
+  co_await container().invoke_on(
+    source_core,
+    [source, source_store](ShardServices& source_svc) {
+      return source_svc.remove_collection_fully(source_store, coll_t(source));
+    });
 }
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
