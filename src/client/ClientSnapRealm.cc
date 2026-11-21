@@ -37,6 +37,7 @@ void SnapRealm::build_snap_context()
   cached_snap_context.snaps.reserve(snaps.size());
   for (set<snapid_t>::reverse_iterator p = snaps.rbegin(); p != snaps.rend(); ++p)
     cached_snap_context.snaps.push_back(*p);
+  published_snapc.store(std::make_shared<const SnapContext>(cached_snap_context));
 }
 
 void SnapRealm::dump(Formatter *f) const

@@ -4794,7 +4794,9 @@ void Client::queue_cap_snap(Inode *in, const SnapContext& old_snapc)
     ldout(cct, 10) << __func__ << " already have pending cap_snap on " << *in << dendl;
     return;
   } else if (dirty || (used & CEPH_CAP_FILE_WR)) {
+    std::unique_lock il(in->lock);  // the write fast path checks cap_snaps
     const auto &capsnapem = in->cap_snaps.emplace(std::piecewise_construct, std::make_tuple(old_snapc.seq), std::make_tuple(in));
+    il.unlock();
     ceph_assert(capsnapem.second); /* element inserted */
     CapSnap &capsnap = capsnapem.first->second;
     capsnap.context = old_snapc;
@@ -5265,7 +5267,10 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 {
   if (!in->is_any_caps()) {
     ceph_assert(in->snaprealm == 0);
-    in->snaprealm = get_snap_realm(realm);
+    {
+      std::scoped_lock il(in->lock);  // the write fast path reads snaprealm
+      in->snaprealm = get_snap_realm(realm);
+    }
     in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
     ldout(cct, 15) << __func__ << " first one, opened snaprealm " << in->snaprealm << dendl;
   } else {
@@ -5274,7 +5279,10 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 	realm != inodeno_t(-1) && in->snaprealm->ino != realm) {
       in->snaprealm_item.remove_myself();
       auto oldrealm = in->snaprealm;
-      in->snaprealm = get_snap_realm(realm);
+      {
+        std::scoped_lock il(in->lock);
+        in->snaprealm = get_snap_realm(realm);
+      }
       in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
       put_snap_realm(oldrealm);
     }
@@ -5414,8 +5422,12 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   if (!in.is_any_caps()) {
     ldout(cct, 15) << __func__ << " last one, closing snaprealm " << in.snaprealm << dendl;
     in.snaprealm_item.remove_myself();
-    put_snap_realm(in.snaprealm);
-    in.snaprealm = 0;
+    SnapRealm *realm = in.snaprealm;
+    {
+      std::scoped_lock il(in.lock);
+      in.snaprealm = 0;
+    }
+    put_snap_realm(realm);
   }
 }
 
@@ -5444,7 +5456,10 @@ void Client::remove_session_caps(MetaSession *s, int err)
     if (cap->wanted | cap->issued)
       in->flags |= I_CAP_DROPPED;
     remove_cap(cap, false);
-    in->cap_snaps.clear();
+    {
+      std::scoped_lock il(in->lock);
+      in->cap_snaps.clear();
+    }
     if (dirty_caps) {
       lderr(cct) << __func__ << " still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps) {
@@ -6153,7 +6168,14 @@ void Client::_handle_snap(MetaSession *session, const MConstRef<MClientSnap>& m)
 
 	in->snaprealm_item.remove_myself();
 	to_move[in] = in->snaprealm->get_snap_context();
-	put_snap_realm(in->snaprealm);
+	SnapRealm *old = in->snaprealm;
+	{
+	  // the write fast path reads snaprealm under Inode::lock: never
+	  // leave it pointing at a realm we may free
+	  std::scoped_lock il(in->lock);
+	  in->snaprealm = nullptr;
+	}
+	put_snap_realm(old);
       }
     }
 
@@ -6173,7 +6195,10 @@ void Client::_handle_snap(MetaSession *session, const MConstRef<MClientSnap>& m)
   if (realm) {
     for (auto p = to_move.begin(); p != to_move.end(); ++p) {
       Inode *in = p->first;
-      in->snaprealm = realm;
+      {
+        std::scoped_lock il(in->lock);
+        in->snaprealm = realm;
+      }
       realm->inodes_with_caps.push_back(&in->snaprealm_item);
       realm->nref++;
       // queue for snap writeback
@@ -6525,7 +6550,10 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MCo
       in->flushing_cap_tids.erase(capsnap.flush_tid);
       if (in->flushing_caps == 0 && in->flushing_cap_tids.empty())
 	in->flushing_cap_item.remove_myself();
-      in->cap_snaps.erase(it);
+      {
+        std::scoped_lock il(in->lock);
+        in->cap_snaps.erase(it);
+      }
 
       ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
       signal_caps_inode(in);
@@ -18582,6 +18610,123 @@ int Client::ll_commit_blocks(Inode *in,
     return 0;
 }
 
+/*
+ * A buffered write that the caps allow and that needs nothing from the MDS,
+ * with the expensive part (mapping, the cache write) under Inode::lock and
+ * oc_lock only: the steady state of a writer rewriting a file in place.
+ * client_lock is taken just to time-stamp the inode, mark Fw dirty and
+ * drop the cap refs, as _write_success() and _write() do.  Anything else
+ * (extending the file, inline data, fscrypt, snapshots pending, suid/sgid,
+ * O_DIRECT/O_SYNC/O_DSYNC/O_APPEND, missing or revoked caps, an unchecked
+ * pool, a full pool, write-through caching) returns false, and the caller
+ * writes under client_lock.  A writer throttled by writeback waits for it
+ * at the end, with no lock held.  The caller holds a ref on f.
+ */
+bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
+{
+  const auto& conf = cct->_conf;
+  uint64_t len = bl.length();
+  if (!conf->client_oc || len == 0)
+    return false;
+  if (!(f->mode & CEPH_FILE_MODE_WR) ||
+      (f->flags & (O_DIRECT | O_SYNC | O_DSYNC | O_APPEND)) ||
+      f->gen != fd_gen)
+    return false;
+  Inode *in = f->inode.get();
+  if (in->snapid != CEPH_NOSNAP)
+    return false;
+
+  OCFastPath fast;
+  utime_t start = mono_clock_now();
+  std::unique_lock il(in->lock);
+  uint64_t endoff = off + len;
+  if (in->inline_version != CEPH_INLINE_NONE ||
+      in->is_fscrypt_enabled() ||
+      (in->flags & (I_ERROR_FILELOCK | I_CAP_DROPPED)) ||
+      (conf->client_check_pool_perm &&
+       !(in->pool_perm_ok & CEPH_CAP_FILE_WR)) ||
+      !(in->caps_file_wanted() & CEPH_CAP_FILE_WR) ||
+      (in->mode & (S_ISUID | S_ISGID)) ||
+      endoff > in->size ||   // extending: max_size, quota, size updates
+      endoff > in->max_size ||
+      !in->cap_snaps.empty() ||
+      !in->snaprealm)
+    return false;
+
+  const int need = CEPH_CAP_FILE_WR | CEPH_CAP_AUTH_SHARED;
+  int implemented;
+  int have = in->caps_issued(&implemented);
+  int revoking = implemented & ~have;
+  if ((have & need) != need || !(have & CEPH_CAP_FILE_BUFFER) ||
+      (revoking & CEPH_CAP_FILE_BUFFER))
+    return false;
+  auto snapc = in->snaprealm->get_published_snap_context();
+  if (!snapc || objecter->osdmap_pool_full(in->layout.pool_id))
+    return false;
+
+  // map the range before taking oc_lock, as for reads
+  auto wr = objectcacher->prepare_write(*snapc, bl, ceph::real_clock::now(),
+                                        0, 0);
+  Striper::file_to_extents(cct, in->ino, &in->layout, off, len,
+                           in->truncate_size, wr->extents);
+
+  in->get_cap_ref(CEPH_CAP_FILE_WR);
+  // a writer throttled by writeback waits below, with no lock held: the
+  // writeback completions that end the wait take Inode::lock
+  bool wait_writeback = false;
+  bool write_thru = false;
+  oc_call([&] {
+    // write-through waits for its flush in writex(): client_lock path
+    if (objectcacher->get_max_dirty() == 0) {
+      write_thru = true;
+      return 0;
+    }
+    if (!in->oset.dirty_or_tx)
+      get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    return objectcacher->writex(wr, &in->oset, nullptr, nullptr, true,
+                                &wait_writeback);
+  });
+  if (write_thru) {
+    delete wr;
+    int last = put_cap_ref_fast(in, CEPH_CAP_FILE_WR);
+    il.unlock();
+    if (last) {
+      std::scoped_lock cl(client_lock);
+      _put_cap_ref_last(in, last);
+    }
+    return false;
+  }
+  cap_hit();
+  ldout(cct, 10) << __func__ << " " << in->vino() << " " << off << "~" << len << dendl;
+  il.unlock();
+
+  {
+    ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
+    std::scoped_lock cl(client_lock);
+    {
+      std::scoped_lock il2(in->lock);
+      in->mtime = in->ctime = ceph_clock_now();
+      in->change_attr++;
+    }
+    in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+    put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    put_cap_ref(in, CEPH_CAP_FILE_WR);
+  }
+  if (wait_writeback) {
+    ceph_assert(!Inode::Lock::held_by_me());  // never wait holding it
+    oc_call([&] { objectcacher->wait_for_writeback_space(len); });
+  }
+
+  update_write_io_size(len);
+  utime_t lat = mono_clock_now();
+  lat -= start;
+  subvolume_tracker->add_metric(in->ino, SimpleIOMetric{true, lat, (uint32_t)len});
+  update_io_stat_write(lat);
+  *pr = len;
+  return true;
+}
+
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -18599,6 +18744,25 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   bufferlist bl;
   if (len > 0)
     bl.append(data, len);
+
+  // try to write to the cache without client_lock for the most part first
+  if (fh && off >= 0 && len > 0 && _ll_get_fh(fh)) {
+    int64_t r;
+    bool done = _write_fast(fh, off, bl, &r);
+    _put_fh(fh);
+    if (done) {
+      ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
+                    << " (fast)" << dendl;
+      tout(cct) << "ll_write" << std::endl;
+      tout(cct) << (uintptr_t)fh << std::endl;
+      tout(cct) << off << std::endl;
+      tout(cct) << len << std::endl;
+      if (logger) {
+        dec_sync_in_flight();
+      }
+      return r;
+    }
+  }
 
   std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {

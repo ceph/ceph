@@ -1347,6 +1347,7 @@ protected:
   void _put_cap_ref_last(Inode *in, int last);
   bool _read_fast(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
                   int *pr, bool nowait = false);
+  bool _write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr);
   bool _ll_preadv_fast(Fh *fh, const struct iovec *iov, int iovcnt,
                        int64_t off, Context *onfinish, bufferlist *bl,
                        int64_t *pr);
@@ -2628,7 +2629,7 @@ private:
     st.fhs.erase(f);
   }
   std::unordered_set<dir_result_t*> opened_dirs;
-  uint64_t fd_gen = 1;
+  std::atomic<uint64_t> fd_gen = 1;  // the write fast path reads it
 
   bool   mount_aborted = false;
   bool   blocklisted = false;
