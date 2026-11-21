@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <thread>
 #include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"
@@ -58,6 +59,13 @@ void Inode::Lock::lock()
   ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
 #endif
   m.lock();
+  // keep new readers out and wait for those inside: they only look, and
+  // leave soon
+  writer.store(true, std::memory_order_seq_cst);
+  for (int spins = 0; readers.load(std::memory_order_seq_cst) != 0; ++spins) {
+    if (spins > 100)
+      std::this_thread::yield();
+  }
   owner.store(me, std::memory_order_relaxed);
   depth = 1;
 #ifdef CEPH_DEBUG_MUTEX
@@ -77,7 +85,43 @@ void Inode::Lock::unlock()
   held = nullptr;
 #endif
   owner.store(pthread_t(), std::memory_order_relaxed);
+  writer.store(false, std::memory_order_release);
   m.unlock();
+}
+
+void Inode::Lock::lock_shared()
+{
+  if (owner.load(std::memory_order_relaxed) == pthread_self()) {
+    ++depth;   // we hold it exclusively: that will do
+    return;
+  }
+#ifdef CEPH_DEBUG_MUTEX
+  ceph_assert(held == nullptr);             // never two Inode::locks
+  ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
+#endif
+  readers.fetch_add(1, std::memory_order_seq_cst);
+  if (writer.load(std::memory_order_seq_cst)) {
+    // a writer is in or waiting for us: let it go first
+    readers.fetch_sub(1, std::memory_order_release);
+    std::lock_guard l(m);
+    readers.fetch_add(1, std::memory_order_seq_cst);
+  }
+#ifdef CEPH_DEBUG_MUTEX
+  held = this;
+#endif
+}
+
+void Inode::Lock::unlock_shared()
+{
+  if (owner.load(std::memory_order_relaxed) == pthread_self()) {
+    unlock();
+    return;
+  }
+#ifdef CEPH_DEBUG_MUTEX
+  ceph_assert(held == this);
+  held = nullptr;
+#endif
+  readers.fetch_sub(1, std::memory_order_release);
 }
 
 void Inode::print(std::ostream& out) const
@@ -353,7 +397,7 @@ void Inode::try_touch_cap(mds_rank_t mds)
  * Those callers should refrain from taking new references to implemented
  * caps!
  */
-bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
+bool Inode::caps_issued_mask(unsigned mask, bool allow_impl, bool touch)
 {
   int c = snap_caps;
   int i = 0;
@@ -364,7 +408,10 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
   if (auth_cap &&
       cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
-    auth_cap->touch();
+    if (touch)
+      auth_cap->touch();
+    else
+      auth_cap->mark_referenced();
     client->cap_hit();
     return true;
   }
@@ -373,7 +420,10 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     Cap &cap = pair.second;
     if (cap_is_valid(cap)) {
       if ((cap.issued & mask) == mask) {
-        cap.touch();
+        if (touch)
+          cap.touch();
+        else
+          cap.mark_referenced();
 	client->cap_hit();
 	return true;
       }
@@ -388,7 +438,10 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
   if ((c & mask) == mask) {
     // bah.. touch them all
     for (auto &pair : caps) {
-      pair.second.touch();
+      if (touch)
+        pair.second.touch();
+      else
+        pair.second.mark_referenced();
     }
     client->cap_hit();
     return true;

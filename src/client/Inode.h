@@ -58,6 +58,15 @@ public:
     // move to back of LRU
     session->caps.push_back(&cap_item);
   }
+  // the data path, which may not reorder session->caps (client_lock), marks
+  // the cap instead; trim_caps() gives a marked cap a second chance
+  void mark_referenced() {
+    // look first: readers of one inode share its cap, do not bounce the
+    // cache line when it is marked already
+    if (!referenced.load(std::memory_order_relaxed))
+      referenced.store(true, std::memory_order_relaxed);
+  }
+  std::atomic<bool> referenced = false;
 
   void dump(Formatter *f) const;
 
@@ -130,6 +139,8 @@ struct Inode : RefCountedObject {
    *
    *   caps (and each Cap's issued/implemented), open_by_mode, flags,
    *   size, max_size, truncate_seq/truncate_size, layout, pool_perm_ok,
+   *   the attributes getattr returns (mode, uid, gid, nlink, rdev, the
+   *   times, time_warp_seq, change_attr, dirstat, rstat),
    *   inline_version/inline_data, fscrypt_auth/fscrypt_file, and the
    *   waitfor_caps lists
    *     change them under client_lock and lock, read them under either;
@@ -145,11 +156,19 @@ struct Inode : RefCountedObject {
    * builds (CEPH_DEBUG_MUTEX) also track the Inode::lock each thread holds
    * and check both rules on the first acquisition; release builds keep no
    * per-thread state, which the data path would pay for on every call.
+   *
+   * Readers that only look (getattr from the caps) may share it
+   * (std::shared_lock): they count themselves in, and leave and queue on
+   * the mutex when a writer is in or waiting, so a stream of readers
+   * never starves a writer, which may hold client_lock.  A shared holder
+   * must not take the lock exclusively, nor call the helpers that do.
    */
   class Lock {
   public:
     void lock();
     void unlock();
+    void lock_shared();
+    void unlock_shared();
     // whether this thread holds any Inode::lock (debug builds; release
     // builds do not know, and say no)
     static bool held_by_me() {
@@ -164,6 +183,9 @@ struct Inode : RefCountedObject {
     int depth = 0;   // changed by the owner only
     // the owner, for the recursion: only the owner can find itself here
     std::atomic<pthread_t> owner{};
+    // shared holders, and whether a writer is in or about to be
+    std::atomic<uint32_t> readers{0};
+    std::atomic<bool> writer{false};
 #ifdef CEPH_DEBUG_MUTEX
     static thread_local Lock *held;
 #endif
@@ -411,7 +433,9 @@ struct Inode : RefCountedObject {
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
   void try_touch_cap(mds_rank_t mds);
-  bool caps_issued_mask(unsigned mask, bool allow_impl=false);
+  // touch: move the cap used to the back of the session's cap LRU, which
+  // needs client_lock; without it the cap is only marked referenced
+  bool caps_issued_mask(unsigned mask, bool allow_impl=false, bool touch=true);
   int caps_used();
   int caps_file_wanted();
   int caps_wanted();

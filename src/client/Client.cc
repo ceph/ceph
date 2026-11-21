@@ -1186,6 +1186,7 @@ void Client::update_inode_file_time(Inode *in, int issued, uint64_t time_warp_se
   ldout(cct, 10) << __func__ << " " << *in << " " << ccap_string(issued)
 		 << " ctime " << ctime << " mtime " << mtime << dendl;
 
+  std::scoped_lock il(in->lock);  // getattr reads the times without client_lock
   if (time_warp_seq > in->time_warp_seq)
     ldout(cct, 10) << " mds time_warp_seq " << time_warp_seq
 		   << " is higher than local time_warp_seq "
@@ -1286,7 +1287,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     was_new = true;
   }
 
-  in->rdev = st->rdev;
+  {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
+    in->rdev = st->rdev;
+  }
   if (in->is_symlink())
     in->symlink = st->symlink;
 
@@ -1307,7 +1311,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   bool need_snapdir_attr_refresh = false;
   if ((new_version || (new_issued & CEPH_CAP_AUTH_SHARED)) &&
       !(issued & CEPH_CAP_AUTH_EXCL)) {
-    in->mode = st->mode;
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
+    // the fast paths read the type bits (is_dir(), is_file()) with no
+    // lock: store only a change, which never touches those bits
+    if (in->mode != st->mode)
+      in->mode = st->mode;
     in->uid = st->uid;
     in->gid = st->gid;
     in->btime = st->btime;
@@ -1325,6 +1333,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
       !(issued & CEPH_CAP_LINK_EXCL)) {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->nlink = st->nlink;
   }
 
@@ -1353,11 +1362,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   if (in->is_dir()) {
     if (new_version || (new_issued & CEPH_CAP_FILE_SHARED)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->dirstat = st->dirstat;
     }
     // dir_layout/rstat/quota are not tracked by capability, update them only if
     // the inode stat is from auth mds
     if (new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->dir_layout = st->dir_layout;
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
       in->rstat = st->rstat;
@@ -1388,8 +1399,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   /* always take a newer change attr */
   ldout(cct, 12) << __func__ << " client inode change_attr: " << in->change_attr << " , mds inodestat change_attr:  " << st->change_attr << dendl;
-  if (st->change_attr > in->change_attr)
+  if (st->change_attr > in->change_attr) {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->change_attr = st->change_attr;
+  }
 
   if (st->version > in->version)
     in->version = st->version;
@@ -5604,16 +5617,27 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
     << " caps " << caps_size << dendl;
 
   uint64_t trimmed = 0;
+  // at most one second chance per cap and call: the data path may mark the
+  // caps referenced again while we go round
+  size_t second_chances = caps_size;
   auto p = s->caps.begin();
   std::set<Dentry *> to_trim; /* this avoids caps other than the one we're
                                * looking at from getting deleted during traversal. */
   while ((caps_size - trimmed) > max && !p.end()) {
     Cap *cap = *p;
-    InodeRef in(&cap->inode);
 
     // Increment p early because it will be invalidated if cap
     // is deleted inside remove_cap
     ++p;
+
+    // used by the data path since its last trim: give it a second chance
+    if (second_chances > 0 &&
+        cap->referenced.exchange(false, std::memory_order_relaxed)) {
+      --second_chances;
+      cap->touch();
+      continue;
+    }
+    InodeRef in(&cap->inode);
 
     if (in->dirty_caps || in->cap_snaps.size())
       cap_delay_requeue(in.get());
@@ -6179,6 +6203,7 @@ void Client::handle_quota(const MConstRef<MClientQuota>& m)
   if (it != inode_map.end()) {
     Inode *in = it->second;
     if (in) {
+      std::scoped_lock il(in->lock);
       in->quota = m->quota;
       in->rstat = m->rstat;
     }
@@ -6641,7 +6666,9 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 
   if ((new_caps & CEPH_CAP_AUTH_SHARED) &&
       !(issued & CEPH_CAP_AUTH_EXCL)) {
-    in->mode = m->head.mode;
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
+    if (in->mode != m->head.mode)  // see add_update_inode()
+      in->mode = m->head.mode;
     in->uid = m->head.uid;
     in->gid = m->head.gid;
     in->btime = m->btime;
@@ -6649,6 +6676,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   bool deleted_inode = false;
   if ((new_caps & CEPH_CAP_LINK_SHARED) &&
       !(issued & CEPH_CAP_LINK_EXCL)) {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->nlink = m->head.nlink;
     if (in->nlink == 0)
       deleted_inode = true;
@@ -6662,6 +6690,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   }
 
   if ((new_caps & CEPH_CAP_FILE_SHARED) && m->dirstat_is_valid()) {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->dirstat.nfiles = m->get_nfiles();
     in->dirstat.nsubdirs = m->get_nsubdirs();
   }
@@ -6689,8 +6718,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   }
 
   /* always take a newer change attr */
-  if (m->get_change_attr() > in->change_attr)
+  if (m->get_change_attr() > in->change_attr) {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->change_attr = m->get_change_attr();
+  }
 
   // max_size
   if (cap == in->auth_cap &&
@@ -9119,6 +9150,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (!mask) {
     // caller just needs us to bump the ctime
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->ctime = ceph_clock_now();
     if (issued & CEPH_CAP_AUTH_EXCL)
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
@@ -9138,6 +9170,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->ctime = ceph_clock_now();
       in->uid = stx->stx_uid;
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
@@ -9156,6 +9189,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->ctime = ceph_clock_now();
       in->gid = stx->stx_gid;
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
@@ -9174,6 +9208,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     ldout(cct,10) << "changing mode to " << std::oct << stx->stx_mode << dendl;
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->ctime = ceph_clock_now();
       in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
@@ -9186,6 +9221,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mask &= ~CEPH_SETATTR_MODE;
     }
   } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) && S_ISREG(in->mode)) {
+    std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     if (kill_sguid && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
       in->mode &= ~(S_ISUID|S_ISGID);
     } else {
@@ -9204,6 +9240,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     ldout(cct,10) << "changing btime to " << in->btime << dendl;
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->ctime = ceph_clock_now();
       in->btime = utime_t(stx->stx_btime);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
@@ -9434,6 +9471,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (mask & CEPH_SETATTR_MTIME) {
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
       in->time_warp_seq++;
@@ -9441,6 +9479,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mask &= ~CEPH_SETATTR_MTIME;
     } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_mtime) > in->mtime) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
@@ -9457,6 +9496,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (mask & CEPH_SETATTR_ATIME) {
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
       in->time_warp_seq++;
@@ -9464,6 +9504,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       mask &= ~CEPH_SETATTR_ATIME;
     } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_atime) > in->atime) {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
@@ -9481,7 +9522,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (!mask) {
-    in->change_attr++;
+    {
+      std::scoped_lock il(in->lock);  // getattr reads these without client_lock
+      in->change_attr++;
+    }
     if (in->is_dir() && in->snapid == CEPH_NOSNAP) {
       vinodeno_t vino(in->ino, CEPH_SNAPDIR);
       auto it = inode_map.find(vino);
@@ -9756,7 +9800,8 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat)
 {
-  ldout(cct, 10) << __func__ << " on " << *in << dendl;
+  // may run without client_lock (_getattr_fast()): no *in
+  ldout(cct, 10) << __func__ << " on " << in->vino() << dendl;
   memset(st, 0, sizeof(struct stat));
   if (use_faked_inos())
     st->st_ino = in->faked_ino;
@@ -9831,7 +9876,8 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 
 void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 {
-  ldout(cct, 10) << __func__ << " on " << *in << dendl;
+  // may run without client_lock (_getattr_fast()): no *in
+  ldout(cct, 10) << __func__ << " on " << in->vino() << dendl;
   memset(stx, 0, sizeof(struct ceph_statx));
 
   /*
@@ -13257,8 +13303,11 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
   }
 
   // mtime
-  in->mtime = in->ctime = ceph_clock_now();
-  in->change_attr++;
+  {
+    std::scoped_lock il(in->lock);
+    in->mtime = in->ctime = ceph_clock_now();
+    in->change_attr++;
+  }
   in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
   return r;
@@ -15778,11 +15827,36 @@ int Client::_ll_getattr(Inode *in, int caps, const UserPerm& perms)
     return _getattr(in, caps, perms);
 }
 
+/*
+ * getattr from the caps alone, under Inode::lock without client_lock:
+ * the fields fill_stat()/fill_statx() read change under Inode::lock as
+ * well (see Inode.h).  Returns false when the caps do not cover @mask (or
+ * for a snapshot), and the caller goes through client_lock.  It only
+ * looks (a cap is marked referenced, atomically), so it shares the lock
+ * with other readers: @fill must not take Inode::lock exclusively.
+ */
+template <typename F>
+bool Client::_getattr_fast(Inode *in, unsigned mask, F&& fill)
+{
+  if (in->snapid != CEPH_NOSNAP)
+    return false;
+  std::shared_lock il(in->lock);
+  if (mask && !in->caps_issued_mask(mask, true, false))
+    return false;
+  fill();
+  return true;
+}
+
 int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
+
+  if (_getattr_fast(in, CEPH_STAT_CAP_INODE_ALL, [&] { fill_stat(in, attr); })) {
+    ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = 0 (fast)" << dendl;
+    return 0;
+  }
 
   std::scoped_lock lock(client_lock);
 
@@ -15801,10 +15875,15 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
+  unsigned mask = statx_to_mask(flags, want);
+  if (_getattr_fast(in, mask, [&] { fill_statx(in, mask, stx); })) {
+    ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = 0 (fast)" << dendl;
+    return 0;
+  }
+
   std::scoped_lock lock(client_lock);
 
   int res = 0;
-  unsigned mask = statx_to_mask(flags, want);
 
   if (mask && !in->caps_issued_mask(mask, true))
     res = _ll_getattr(in, mask, perms);
@@ -18864,8 +18943,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         in->inline_data = bl;
         in->inline_version++;
       }
-      in->mtime = in->ctime = ceph_clock_now();
-      in->change_attr++;
+      {
+        std::scoped_lock il(in->lock);
+        in->mtime = in->ctime = ceph_clock_now();
+        in->change_attr++;
+      }
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     } else {
       if (in->inline_version < CEPH_INLINE_NONE) {
@@ -18883,8 +18965,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		  offset, length,
 		  ceph::real_clock::now(),
 		  0, true, &onfinish);
-      in->mtime = in->ctime = ceph_clock_now();
-      in->change_attr++;
+      {
+        std::scoped_lock il(in->lock);
+        in->mtime = in->ctime = ceph_clock_now();
+        in->change_attr++;
+      }
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
       client_lock.unlock();
@@ -18895,16 +18980,18 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   } else if (!(mode & FALLOC_FL_KEEP_SIZE)) {
     uint64_t size = offset + length;
     if (size > in->effective_size()) {
-      std::scoped_lock il(in->lock);
-      if (in->is_fscrypt_enabled()) {
-        in->set_effective_size(size);
+      {
+        std::scoped_lock il(in->lock);
+        if (in->is_fscrypt_enabled()) {
+          in->set_effective_size(size);
 #if defined(__linux__)
-        size = fscrypt_next_block_start(size);
+          size = fscrypt_next_block_start(size);
 #endif
+        }
+        in->size = size;
+        in->mtime = in->ctime = ceph_clock_now();
+        in->change_attr++;
       }
-      in->size = size;
-      in->mtime = in->ctime = ceph_clock_now();
-      in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
       if (is_quota_bytes_approaching(in, fh->actor_perms)) {
