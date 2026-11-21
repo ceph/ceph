@@ -13,6 +13,8 @@
 
 #include <unordered_map>
 
+#include <boost/container/small_vector.hpp>
+
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -260,9 +262,67 @@ void ObjectCacher::Object::maybe_rebuild_buffer(BufferHead *bh)
   if (bl.get_num_buffers() <= 1)
     return;
 
-  auto wasted = bl.get_wasted_space();
-  if (wasted * 2 > bl.length() &&
-      wasted > (1U << BUFFER_MEMORY_WEIGHT))
+  // Rebuilding copies the data so that the unused parts of the raw buffers
+  // can be freed.  A raw buffer that other BufferHeads (or anyone else)
+  // also reference is only freed once all of them let go of it: charging
+  // it whole copies a BufferHead that small writes split again and again
+  // out of one large buffer on every write, which frees nothing and only
+  // adds memory (and holds the cache's lock for the copy).
+  // This runs a few times per cached write.  Charging every buffer its
+  // whole raw buffer bounds the waste from above: when even that is not
+  // enough to rebuild (a BufferHead merged out of whole small writes),
+  // stop here, in one pass.  Else group the buffers by raw buffer, on the
+  // stack, not in a map.
+  uint64_t used = 0, upper = 0;
+  for (const auto& p : bl.buffers()) {
+    if (!p.have_raw())
+      continue;
+    used += p.length();
+    upper += p.raw_length();
+  }
+  auto rebuild_worth = [&](uint64_t wasted) {
+    return wasted * 2 > bl.length() &&
+           (wasted > (1U << BUFFER_MEMORY_WEIGHT) ||
+            bl.length() <= (1U << BUFFER_MEMORY_WEIGHT));
+  };
+  if (!rebuild_worth(upper > used ? upper - used : 0))
+    return;
+  boost::container::small_vector<std::pair<const char*, const ceph::buffer::ptr*>, 16> raws;
+  for (const auto& p : bl.buffers()) {
+    if (p.have_raw())
+      raws.emplace_back(p.raw_c_str(), &p);
+  }
+  std::sort(raws.begin(), raws.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+  // What a rebuild frees: all of a raw buffer only this BufferHead holds.
+  // One that others hold too stays: copying out of it frees nothing now.
+  // Charge it, at its share, only to a BufferHead that is small (cheap to
+  // copy: small pieces must not keep a large raw buffer alive for good) or
+  // made of small pieces (small writes merged into a large clean one: every
+  // later split and merge walks all of its pieces, so consolidate them).
+  // Other large ones wait until they hold the raw buffer alone: writes that
+  // split a large clean BufferHead would copy most of it on every split.
+  bool small = bl.length() <= (64U << 10) ||
+               bl.length() < (uint64_t)bl.get_num_buffers() * (16U << 10);
+  uint64_t wasted = 0;
+  for (size_t i = 0; i < raws.size();) {
+    size_t j = i + 1;
+    uint64_t in_use = raws[i].second->length();
+    while (j < raws.size() && raws[j].first == raws[i].first)
+      in_use += raws[j++].second->length();
+    unsigned refs = j - i;   // this BufferHead's refs to the raw buffer
+    const auto* p = raws[i].second;
+    auto nref = std::max<unsigned>(p->raw_nref(), refs);
+    uint64_t charge = 0;
+    if (nref == refs)
+      charge = p->raw_length();
+    else if (small)
+      charge = (uint64_t)p->raw_length() * refs / nref;
+    if (charge > in_use)
+      wasted += charge - in_use;
+    i = j;
+  }
+  if (rebuild_worth(wasted))
     bl.rebuild();
 }
 
