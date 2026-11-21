@@ -106,6 +106,7 @@ TYPE_FEATUREFUL(lock_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
+TYPE(cls_lock_lock_reply)
 TYPE(cls_lock_unlock_op)
 TYPE(cls_lock_break_op)
 TYPE(cls_lock_get_info_op)
