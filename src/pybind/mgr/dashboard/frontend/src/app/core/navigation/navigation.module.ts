@@ -50,7 +50,7 @@ import ClusterIcon from '@carbon/icons/es/web-services--cluster/20';
 import MultiClusterIcon from '@carbon/icons/es/edge-cluster/20';
 import BlockIcon from '@carbon/icons/es/datastore/20';
 import ObjectIcon from '@carbon/icons/es/object-storage/20';
-import FileIcon from '@carbon/icons/es/file-storage/20';
+import FileIcon from '@carbon/icons/es/file--storage/20';
 import ObservabilityIcon from '@carbon/icons/es/observed--hail/20';
 import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
