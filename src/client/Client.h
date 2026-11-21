@@ -1335,6 +1335,7 @@ protected:
     finish_contexts(cct, ls, 0);
   }
   void signal_caps_inode(Inode *in);
+  void wait_on_caps(Inode *in);
 
   // -- metadata cache stuff
 
@@ -1487,6 +1488,19 @@ protected:
   };
   // the OCScope this thread is in, if any
   static thread_local OCScope *oc_scope;
+public:
+  // whether this thread holds oc_lock (is in an OCScope)
+  static bool oc_lock_held() {
+    return oc_scope != nullptr;
+  }
+  ceph::mutex& get_oc_lock() {
+    return oc_lock;
+  }
+  // for assertions (debug builds)
+  bool client_lock_held() const {
+    return ceph_mutex_is_locked_by_me(client_lock);
+  }
+protected:
 
   template <typename F>
   auto oc_call(F&& f) {

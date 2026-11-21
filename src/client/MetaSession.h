@@ -4,6 +4,7 @@
 #ifndef CEPH_CLIENT_METASESSION_H
 #define CEPH_CLIENT_METASESSION_H
 
+#include <atomic>
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/xlist.h"
@@ -21,8 +22,11 @@ struct MetaSession {
   mds_rank_t mds_num;
   ConnectionRef con;
   version_t seq = 0;
-  uint64_t cap_gen = 0;
-  utime_t cap_ttl, last_cap_renew_request;
+  // cap_gen and cap_ttl change under client_lock; the data path reads them
+  // (Inode::cap_is_valid()) without it
+  std::atomic<uint64_t> cap_gen = 0;
+  std::atomic<utime_t> cap_ttl;
+  utime_t last_cap_renew_request;
   uint64_t cap_renew_seq = 0;
   entity_addrvec_t addrs;
   feature_bitset_t mds_features;

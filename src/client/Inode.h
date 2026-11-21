@@ -124,6 +124,52 @@ struct CapSnap {
 #define I_ERROR_FILELOCK	(1 << 5)
 
 struct Inode : RefCountedObject {
+  /*
+   * Inode::lock protects the state the file data path (ll_read and
+   * friends) uses without Client::client_lock:
+   *
+   *   caps (and each Cap's issued/implemented), open_by_mode, flags,
+   *   size, max_size, truncate_seq/truncate_size, layout,
+   *   inline_version/inline_data, fscrypt_auth/fscrypt_file, and the
+   *   waitfor_caps lists
+   *     change them under client_lock and lock, read them under either;
+   *
+   *   cap_refs, fhs
+   *     the data path changes them under lock alone: read and change
+   *     them under lock only.
+   *
+   * Lock order: Client::client_lock -> Inode::lock -> Client::oc_lock.
+   * Never hold two Inode::locks.  The lock is recursive, so the helpers
+   * below may take it whether or not the caller holds it: Lock counts the
+   * recursion itself, over a plain mutex (which lockdep tracks).  Debug
+   * builds (CEPH_DEBUG_MUTEX) also track the Inode::lock each thread holds
+   * and check both rules on the first acquisition; release builds keep no
+   * per-thread state, which the data path would pay for on every call.
+   */
+  class Lock {
+  public:
+    void lock();
+    void unlock();
+    // whether this thread holds any Inode::lock (debug builds; release
+    // builds do not know, and say no)
+    static bool held_by_me() {
+#ifdef CEPH_DEBUG_MUTEX
+      return held != nullptr;
+#else
+      return false;
+#endif
+    }
+  private:
+    ceph::mutex m = ceph::make_mutex("Client::Inode::lock");
+    int depth = 0;   // changed by the owner only
+    // the owner, for the recursion: only the owner can find itself here
+    std::atomic<pthread_t> owner{};
+#ifdef CEPH_DEBUG_MUTEX
+    static thread_local Lock *held;
+#endif
+  };
+  mutable Lock lock;
+
   ceph::coarse_mono_time hold_caps_until;
   Client *client;
 
@@ -221,7 +267,8 @@ struct Inode : RefCountedObject {
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
-  unsigned flags = 0;
+  // atomic: the data path tests flags without client_lock
+  std::atomic<unsigned> flags = 0;
 
   quota_info_t quota;
 
@@ -350,6 +397,11 @@ struct Inode : RefCountedObject {
   bool put_open_ref(int mode);
 
   void get_cap_ref(int cap);
+  int cap_ref_count(int c) {
+    std::scoped_lock l(lock);
+    auto p = cap_refs.find(c);
+    return p == cap_refs.end() ? 0 : p->second;
+  }
   int put_cap_ref(int cap);
   bool is_last_cap_ref(int c);
   bool is_any_caps();
@@ -367,8 +419,14 @@ struct Inode : RefCountedObject {
   bool have_valid_size();
   Dir *open_dir();
 
-  void add_fh(Fh *f) {fhs.insert(f);}
-  void rm_fh(Fh *f) {fhs.erase(f);}
+  void add_fh(Fh *f) {
+    std::scoped_lock l(lock);
+    fhs.insert(f);
+  }
+  void rm_fh(Fh *f) {
+    std::scoped_lock l(lock);
+    fhs.erase(f);
+  }
   void set_async_err(int r);
   void dump(Formatter *f) const;
   void print(std::ostream&) const;
