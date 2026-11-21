@@ -5708,6 +5708,11 @@ static_assert(not lfdb::concepts::supported_invocation_result<std::expected<int,
 static_assert(lfdb::concepts::supported_invocation_result<std::unique_ptr<throwing_transfer>>);
 static_assert(std::is_nothrow_move_constructible_v<lfdb::transaction_result<std::string, std::string>>);
 
+using expected_body = decltype([](lfdb::transaction_handle&) -> std::expected<int, int> { return 1; });
+static_assert(not lfdb::detail::transaction_op<expected_body>);
+static_assert(lfdb::detail::bound_transaction_op<std::reference_wrapper<expected_body>>);
+static_assert(lfdb::detail::borrowed_transaction_op<expected_body>);
+
 TEST_CASE("manual and managed completion preserve their error contracts", "[fdb][completion]")
 {
  janitor dbh;
