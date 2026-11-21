@@ -14,6 +14,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rest.h"
 #include "rgw_acl.h"
+#include "rgw_crypt.h"
 #include "rgw_zone.h"
 
 #include "services/svc_zone.h"
@@ -751,6 +752,14 @@ public:
 
     req_params.get_op = true;
     req_params.prepend_metadata = true;
+
+    /*
+     * The default is to skip decryption. That is right for a peer zone, which
+     * gets the crypt metadata separately and can decrypt later. Our
+     * destination is an external S3 that will never have Ceph's keys, so
+     * ciphertext there is readable by nobody. Ask the source to decrypt.
+     */
+    req_params.skip_decrypt = false;
 
     req_params.unmod_ptr = &src_properties.mtime;
     req_params.etag = src_properties.etag;
@@ -1621,6 +1630,21 @@ public:
           src_pg_ver = 0; /* all or nothing */
         }
       }
+      /*
+       * With SSE-C the client sends the key on every request, so a background
+       * sync has no key and the source cannot decrypt for us. Copying the
+       * ciphertext would leave the destination holding bytes nobody can read,
+       * so refuse the object and say why.
+       */
+      if (const auto mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+          boost::algorithm::starts_with(mode, "SSE-C")) {
+        ldpp_dout(dpp, 0) << "ERROR: cannot sync SSE-C encrypted object "
+            << src_bucket << "/" << key << ": the client sends the encryption "
+            << "key on each request, so sync has no key to decrypt with"
+            << dendl;
+        return set_cr_error(-ERR_NOT_IMPLEMENTED);
+      }
+
       ldpp_dout(dpp, 4) << "AWS: download begin: z=" << sc->source_zone
                               << " b=" << src_bucket << " k=" << key << " size=" << size
                               << " mtime=" << mtime << " etag=" << etag
