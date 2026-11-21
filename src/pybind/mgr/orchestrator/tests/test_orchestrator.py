@@ -1,10 +1,11 @@
 
+import copy
 import json
 import textwrap
 
 import pytest
 import yaml
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.inventory import Devices, Device
@@ -16,7 +17,7 @@ from mgr_module import HandleCommandResult
 from test_orchestrator import TestOrchestrator as _TestOrchestrator
 
 from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus, OrchResult, OrchestratorError
-from orchestrator import OrchestratorValidationError
+from orchestrator import OrchestratorValidationError, OrchestratorEvent
 from orchestrator.module import to_format, Format, OrchestratorCli, preview_table_osd
 from unittest import mock
 
@@ -72,6 +73,94 @@ def test_daemon_description():
 
     dd = DaemonDescription.from_json(json_data)
     assert dd.status.value == DaemonDescriptionStatus.error.value
+
+
+def _copy_cases():
+    utc = timezone.utc
+    ist = timezone(timedelta(hours=5, minutes=30))
+    t_utc = datetime(2026, 11, 3, 12, 40, 2, 123456, tzinfo=utc)
+    t_ist = datetime(2026, 11, 3, 18, 10, 2, 654321, tzinfo=ist)
+
+    yield DaemonDescription()
+    yield DaemonDescription(daemon_type='mon', daemon_id='a', hostname='h1')
+
+    yield DaemonDescription(
+        daemon_type='osd', daemon_id='3', hostname='h1',
+        container_id='c1', container_image_id='i1',
+        container_image_name='quay.io/ceph/ceph:v20',
+        container_image_digests=['sha256:1', 'sha256:2'],
+        version='20.2.0', status=DaemonDescriptionStatus.running,
+        status_desc='running', last_refresh=t_utc, created=t_ist,
+        started=t_utc, last_configured=t_ist, last_deployed=t_utc,
+        osdspec_affinity='all-hdd',
+        events=[OrchestratorEvent(t_ist, 'daemon', 'osd.3', 'INFO',
+                                  'Deployed "osd.3"\non h1'),
+                OrchestratorEvent(t_utc, 'daemon', 'osd.3', 'ERROR', '')],
+        is_active=True, memory_usage=1024, memory_request=2048,
+        memory_limit=4096, cpu_percentage='1.5%', service_name='osd.all-hdd',
+        ports=[6800, 6801], ip='10.0.0.1', deployed_by=['sha256:1'],
+        systemd_unit='ceph-fsid@osd.3', rank=0, rank_generation=1,
+        extra_container_args=['--cpus=2'],
+        extra_entrypoint_args=['--debug_ms=1'],
+        pending_daemon_config=True, user_stopped=True)
+
+    # osd.<N> service names from old cephadm versions are dropped
+    yield DaemonDescription(daemon_type='osd', daemon_id='7',
+                            service_name='osd.7')
+    # osdspec_affinity is only kept for OSDs
+    yield DaemonDescription(daemon_type='mgr', daemon_id='x',
+                            osdspec_affinity='foo', status_desc='error',
+                            status=DaemonDescriptionStatus.error)
+    # None takes the constructor default
+    dd = DaemonDescription(daemon_type='mds', daemon_id='fs.a')
+    dd.is_active = None
+    dd.pending_daemon_config = None
+    dd.user_stopped = None
+    dd.events = None
+    yield dd
+    # daemon_name is recomputed; ad-hoc attributes are not copied
+    dd = DaemonDescription(daemon_type='rgw', daemon_id='old')
+    dd.daemon_id = 'new'
+    dd.something_else = 1
+    yield dd
+
+
+def _assert_same_daemon(a, b):
+    assert list(vars(a)) == list(vars(b))
+    for k in vars(a):
+        va, vb = getattr(a, k), getattr(b, k)
+        if k == 'events':
+            assert [e.to_json() for e in va] == [e.to_json() for e in vb]
+            assert [repr(e.created) for e in va] == [repr(e.created) for e in vb]
+        else:
+            assert type(va) is type(vb), k
+            assert va == vb, k
+            assert repr(va) == repr(vb), k
+
+
+@pytest.mark.parametrize('dd', list(_copy_cases()))
+def test_daemon_description_copy_matches_json_round_trip(dd):
+    expected = DaemonDescription.from_json(dd.to_json())
+    copied = copy.copy(dd)
+    assert type(copied) is DaemonDescription
+    _assert_same_daemon(copied, expected)
+    assert copied.to_json() == expected.to_json()
+    # same attribute names as a freshly constructed object
+    assert list(vars(copied)) == list(vars(DaemonDescription()))
+    # what the round trip creates afresh is not shared with the original
+    assert copied.events is not dd.events
+    for e_copy, e_orig in zip(copied.events, dd.events or []):
+        assert e_copy is not e_orig
+
+
+def test_daemon_description_copy_is_independent():
+    dd = next(c for c in _copy_cases() if c.daemon_type == 'osd' and c.events)
+    copied = copy.copy(dd)
+    copied.status = DaemonDescriptionStatus.error
+    copied.events = []
+    assert dd.status == DaemonDescriptionStatus.running
+    assert dd.status_desc == 'running'
+    assert len(dd.events) == 2
 
 
 def test_apply():
