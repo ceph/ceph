@@ -224,18 +224,21 @@ class SMBService(CephService):
         )
 
     @classmethod
-    def _lookup_rgw_creds_uri(
+    def _lookup_rgw_creds_uris(
         cls, mgr: 'CephadmOrchestrator', cluster_id: str
-    ) -> Optional[str]:
-        from smb.external import rgw_config_key as _smb_rgw_config_key
+    ) -> List[str]:
+        """Return the uris of all the stubs holding RGW credentials. The
+        credentials of a cluster are spread over multiple config-key entries.
+        """
+        from smb.external import stored_rgw_stub_keys
         from smb.mon_store import MonKeyConfigStore
-        _rgw_entry = MonKeyConfigStore(mgr)[_smb_rgw_config_key(cluster_id)]
-        if _rgw_entry.exists():
-            return _rgw_entry.uri
-        return None
+        store = MonKeyConfigStore(mgr)
+        return [
+            store[key].uri for key in stored_rgw_stub_keys(store, cluster_id)
+        ]
 
-    def _rgw_creds_uri(self, cluster_id: str) -> Optional[str]:
-        return self._lookup_rgw_creds_uri(self.mgr, cluster_id)
+    def _rgw_creds_uris(self, cluster_id: str) -> List[str]:
+        return self._lookup_rgw_creds_uris(self.mgr, cluster_id)
 
     def generate_config(
             self,
@@ -253,14 +256,14 @@ class SMBService(CephService):
         config_blobs['cluster_id'] = smb_spec.cluster_id
         config_blobs['features'] = smb_spec.features
         config_blobs['config_uri'] = smb_spec.config_uri
-        # For RGW clusters, append the private-store config as an extra URI
+        # For RGW clusters, append the private-store configs as extra URIs
         # loaded after the public config.  sambacc's config:merge is a general
         # merge mechanism; here the mgr populates it with only the RGW
         # credential fields, keeping the public config the primary source of
         # truth.
-        rgw_creds_uri = self._rgw_creds_uri(smb_spec.cluster_id)
-        if rgw_creds_uri:
-            config_blobs['extra_config_uris'] = [rgw_creds_uri]
+        rgw_creds_uris = self._rgw_creds_uris(smb_spec.cluster_id)
+        if rgw_creds_uris:
+            config_blobs['extra_config_uris'] = rgw_creds_uris
         _add_cfg(config_blobs, 'join_sources', smb_spec.join_sources)
         _add_cfg(config_blobs, 'user_sources', smb_spec.user_sources)
         _add_cfg(config_blobs, 'custom_dns', smb_spec.custom_dns)
@@ -630,8 +633,8 @@ class SMBService(CephService):
                     )
                 )
 
-        rgw_creds_uri = cls._lookup_rgw_creds_uri(mgr, smb_spec.cluster_id) or ''
-        out.append(Dep.FIELD('rgw_creds_uri', rgw_creds_uri))
+        rgw_creds_uris = cls._lookup_rgw_creds_uris(mgr, smb_spec.cluster_id)
+        out.append(Dep.FIELD('rgw_creds_uri', ','.join(rgw_creds_uris)))
         return out
 
     def choose_next_action(

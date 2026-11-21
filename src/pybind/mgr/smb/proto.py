@@ -145,6 +145,16 @@ class FindingConfigStore(ConfigStore, Protocol):
         ...  # pragma: no cover
 
 
+class PrefixFindingConfigStore(ConfigStore, Protocol):
+    """A protocol for a config store that can list the keys of a namespace
+    that start with a prefix without listing everything else.
+    """
+
+    def find_keys(self, ns: str, prefix: str) -> Collection[str]:
+        """Return the names of entries in the namespace starting with prefix."""
+        ...  # pragma: no cover
+
+
 class TransactingConfigStore(ConfigStore, Protocol):
     """A protocol for a config store that supports transactions.
     Using the transactions can make using the store more robust or

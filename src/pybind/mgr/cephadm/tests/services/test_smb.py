@@ -2,6 +2,8 @@ import json
 import logging
 from unittest.mock import patch
 
+import pytest
+
 from ceph.smb.constants import REMOTE_CONTROL
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
 from cephadm import utils
@@ -14,6 +16,51 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeplo
 from ceph.deployment.service_spec import PlacementSpec
 
 _SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-any'
+
+_RGW_URI_BASE = 'rados:mon-config-key:smb/config/foxtrot'
+# The test mgr reports every config-key as existing so the legacy stub is
+# always found. The chunked credential stubs are found by prefix and are
+# listed in numeric (not name) order.
+_RGW_LEGACY_URI = f'{_RGW_URI_BASE}/config.smb.rgw'
+_RGW_CHUNK_URIS = [
+    f'{_RGW_URI_BASE}/rgw.0.json',
+    f'{_RGW_URI_BASE}/rgw.1.json',
+    f'{_RGW_URI_BASE}/rgw.2.json',
+    f'{_RGW_URI_BASE}/rgw.10.json',
+]
+_RGW_STUB_URIS = [_RGW_LEGACY_URI] + _RGW_CHUNK_URIS
+_FAKE_CONFIG_KEYS = {
+    'smb/config/foxtrot/rgw.0.json': '{}',
+    'smb/config/foxtrot/rgw.1.json': '{}',
+    'smb/config/foxtrot/rgw.2.json': '{}',
+    'smb/config/foxtrot/rgw.10.json': '{}',
+    # entries that must not be mistaken for credential stubs
+    'smb/config/foxtrot/config.smb': '{}',
+    'smb/config/foxtrot/join.j1.json': '{}',
+    'smb/config/foxtrot/rgw.cred-a.0.json': '{}',
+    'smb/config/foxtrot2/rgw.0.json': '{}',
+}
+
+
+def _set_fake_config_keys(cephadm_module, keys):
+    """Make the test mgr answer `config-key dump <prefix>` like the mon:
+    only keys starting with the requested prefix are returned.
+    """
+
+    def _dump(cmd):
+        return json.dumps(
+            {k: v for k, v in keys.items() if k.startswith(cmd['key'])}
+        )
+
+    # the test mgr looks up '_mon_command_mock_<prefix with spaces as _>' and
+    # the prefix keeps its '-', so the name is not a valid identifier
+    setattr(cephadm_module, '_mon_command_mock_config-key_dump', _dump)
+
+
+@pytest.fixture(autouse=True)
+def _fake_rgw_config_keys(cephadm_module):
+    _set_fake_config_keys(cephadm_module, _FAKE_CONFIG_KEYS)
+
 
 cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
 
@@ -58,7 +105,7 @@ class TestSMB:
                 'cluster_id': 'foxtrot',
                 'features': [],
                 'config_uri': 'rados://.smb/foxtrot/config.json',
-                'extra_config_uris': ['rados:mon-config-key:smb/config/foxtrot/config.smb.rgw'],
+                'extra_config_uris': _RGW_STUB_URIS,
                 'config': '',
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
@@ -129,7 +176,7 @@ class TestSMB:
                 'cluster_id': 'foxtrot',
                 'features': ['domain'],
                 'config_uri': 'rados://.smb/foxtrot/config2.json',
-                'extra_config_uris': ['rados:mon-config-key:smb/config/foxtrot/config.smb.rgw'],
+                'extra_config_uris': _RGW_STUB_URIS,
                 'join_sources': [
                     'rados://.smb/foxtrot/join1.json',
                     'rados:mon-config-key:smb/config/foxtrot/join2.json',
@@ -379,7 +426,7 @@ def test_smb_get_dependencies(cephadm_module):
     deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
     assert deps == [
         'smb+field:features=domain',
-        'smb+field:rgw_creds_uri=rados:mon-config-key:smb/config/foxtrot/config.smb.rgw',
+        f'smb+field:rgw_creds_uri={",".join(_RGW_STUB_URIS)}',
         'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
     ]
 
@@ -572,3 +619,58 @@ def test_pool_caps_from_uri(cephadm_module):
         'allow r pool=.smb namespace=',
         'allow rwx pool=.smb namespace= object_prefix cluster.meta.',
     ]
+
+
+def test_smb_rgw_creds_uris_lists_all_chunks_of_the_cluster(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    uris = SMBService._lookup_rgw_creds_uris(cephadm_module, 'foxtrot')
+
+    # legacy stub first, then every chunk in numeric order. other clusters
+    # and non-chunk entries are not picked up.
+    assert uris == _RGW_STUB_URIS
+
+
+def test_smb_rgw_creds_uris_without_chunks(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    _set_fake_config_keys(
+        cephadm_module, {'smb/config/foxtrot/config.smb': '{}'}
+    )
+
+    uris = SMBService._lookup_rgw_creds_uris(cephadm_module, 'foxtrot')
+
+    assert uris == [_RGW_LEGACY_URI]
+
+
+def test_smb_rgw_creds_uri_dependency_tracks_chunk_set(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+    )
+    rgw_dep = 'smb+field:rgw_creds_uri='
+
+    def _rgw_deps():
+        deps = SMBService.get_dependencies(
+            cephadm_module, spec, spec.service_type
+        )
+        return [d for d in deps if d.startswith(rgw_dep)]
+
+    deps_before = _rgw_deps()
+    assert deps_before == [rgw_dep + ','.join(_RGW_STUB_URIS)]
+
+    # a new chunk (e.g. the shares needing another entry) changes the uris
+    # the daemons must be deployed with
+    keys = dict(_FAKE_CONFIG_KEYS)
+    keys['smb/config/foxtrot/rgw.11.json'] = '{}'
+    _set_fake_config_keys(cephadm_module, keys)
+    deps_added = _rgw_deps()
+    assert deps_added != deps_before
+    assert f'{_RGW_URI_BASE}/rgw.11.json' in deps_added[0]
+
+    # removing the credentials entirely drops them from the dependency
+    _set_fake_config_keys(cephadm_module, {})
+    deps_removed = _rgw_deps()
+    assert deps_removed == [rgw_dep + _RGW_LEGACY_URI]

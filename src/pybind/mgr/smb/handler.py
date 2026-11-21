@@ -1683,28 +1683,37 @@ def _save_pending_rgw_config(
     store: ConfigStore,
     cluster_conf: _ClusterConf,
 ) -> None:
-    """Save an RGW credential stub to the private store for RGW clusters.
+    """Save the RGW credential stubs to the private store for RGW clusters.
 
-    Writes a stub using sambacc's config:merge mechanism, which merges the
+    Writes stubs using sambacc's config:merge mechanism, which merges the
     provided JSON on top of the primary config at load time.  The mgr
-    populates the stub with only the RGW credential fields here; everything else
-    stays in the public RADOS config.  The stub URI is passed to the container
-    via extra_config_uris so credentials never appear in the public pool.
+    populates the stubs with only the RGW credential fields here; everything
+    else stays in the public RADOS config.  The stub URIs are passed to the
+    container via extra_config_uris so credentials never appear in the public
+    pool.
+
+    A mon config-key entry is size limited so the options of all RGW shares
+    are packed, in share name order, into as few numbered entries as fit the
+    limit, whatever credential each share uses. Only entries written here are
+    added to the change group cache. Entries of removed shares or surplus
+    chunks are not cached and so are pruned by the caller.
+
+    When no RGW shares remain the existing stubs are kept, without any
+    shares, rather than pruned. The uris of the stubs are part of the
+    configuration of deployed daemons, so pruning them would needlessly
+    redeploy the daemons and the empty stubs make sure that no credentials of
+    removed shares are left behind. They are removed with the cluster.
     """
     cluster_id = cluster_conf.resource.cluster_id
-    rgw_shares = [s for s in cluster_conf.shares if s.resource.rgw]
-    centry = store[external.rgw_config_key(cluster_id)]
-    if not rgw_shares and not centry.exists():
-        # cluster never had RGW shares, so no stub needed
-        return
     cred_map = {
         c.rgw_credential_id: c
         for c in cluster_conf.change_group.rgw_credentials
     }
-    merge_shares: Dict[str, Any] = {}
-    for sc in rgw_shares:
+    rgw_shares: Dict[str, Dict[str, Any]] = {}
+    for sc in cluster_conf.shares:
         rgw = sc.resource.rgw
-        assert rgw is not None
+        if rgw is None:
+            continue
         assert rgw.credential_ref is not None
         cred = cred_map.get(rgw.credential_ref)
         if cred is None:
@@ -1714,20 +1723,26 @@ def _save_pending_rgw_config(
                 rgw.credential_ref,
             )
             continue
-        access_key = cred.access_key_id or ''
-        secret_key = cred.secret_access_key or ''
-        merge_shares[sc.resource.name] = {
+        rgw_shares[sc.resource.name] = {
             'options': {
-                'ceph_rgw:access_key': access_key,
-                'ceph_rgw:secret_access_key': secret_key,
+                'ceph_rgw:access_key': cred.access_key_id or '',
+                'ceph_rgw:secret_access_key': cred.secret_access_key or '',
             }
         }
-    stub = {
-        'samba-container-config': 'v0',
-        'config:merge': {'shares': merge_shares},
-    }
-    centry.set(stub)
-    cluster_conf.change_group.cache_updated_entry(centry)
+    if rgw_shares:
+        # sorted so that the same shares always land in the same entries
+        ordered = dict(sorted(rgw_shares.items()))
+        for idx, chunk in enumerate(external.chunk_rgw_shares(ordered)):
+            entry = store[external.rgw_chunk_config_key(cluster_id, idx)]
+            entry.set(external.rgw_stub(chunk))
+            cluster_conf.change_group.cache_updated_entry(entry)
+        return
+    # No RGW shares remain. Keep (and empty) any stubs that exist. A cluster
+    # that never had RGW shares has none and gets none.
+    for ekey in external.stored_rgw_stub_keys(store, cluster_id):
+        entry = store[ekey]
+        entry.set(external.rgw_stub({}))
+        cluster_conf.change_group.cache_updated_entry(entry)
 
 
 def _save_pending_spec_backup(
