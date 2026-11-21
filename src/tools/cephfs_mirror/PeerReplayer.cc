@@ -2938,9 +2938,7 @@ void PeerReplayer::SnapDiffSync::finish_crawl(int ret, double crawl_duration_sec
     auto &entry = m_sync_stack.top();
     if (entry.is_directory()) {
       dout(20) << ": closing local directory=" << entry.epath << dendl;
-      if (ceph_close_snapdiff(&(entry.info)) < 0) {
-        derr << ": failed to close snapdiff directory=" << entry.epath << dendl;
-      }
+      fini_directory(entry);
     }
 
     m_sync_stack.pop();
@@ -3114,8 +3112,12 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
   }
 
   // record that we are going to "dirty" the data under this
-  // directory root
-  auto snap_id_str{stringify(current.second)};
+  // directory root, and the snapshot the changes are diffed from
+  // ("<current>:<base>", base 0 for a remote scan), so that an
+  // interrupted sync is only resumed against the same base. Daemons
+  // that predate the base read the leading snap id only.
+  uint64_t base_snap_id = (fh.p_mnt == m_local_mount) ? (*prev).second : 0;
+  auto snap_id_str{stringify(current.second) + ":" + stringify(base_snap_id)};
   r = ceph_fsetxattr(m_remote_mount, fh.r_fd_dir_root, "ceph.mirror.dirty_snap_id",
                      snap_id_str.c_str(), snap_id_str.size(), 0);
   if (r < 0) {
@@ -3259,11 +3261,26 @@ int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &curre
     }
 
     val[xlen] = '\0';
-    uint64_t dirty_snap_id = atoll(val);
+    // "<snap-id>[:<base-snap-id>]", see do_synchronize()
+    char *end = nullptr;
+    uint64_t dirty_snap_id = strtoull(val, &end, 10);
+    boost::optional<uint64_t> dirty_base_snap_id;
+    if (*end == ':') {
+      dirty_base_snap_id = strtoull(end + 1, nullptr, 10);
+    }
 
-    dout(20) << ": dirty_snap_id: " << dirty_snap_id << " vs (" << current.second
-             << "," << (prev ? stringify((*prev).second) : "~") << ")" << dendl;
-    if (prev && (dirty_snap_id == (*prev).second || dirty_snap_id == current.second)) {
+    dout(20) << ": dirty_snap_id: " << dirty_snap_id << ", base: "
+             << (dirty_base_snap_id ? stringify(*dirty_base_snap_id) : "~")
+             << " vs (" << current.second << ","
+             << (prev ? stringify((*prev).second) : "~") << ")" << dendl;
+    // dirty == prev: the sync of prev completed, the remote matches prev.
+    // dirty == current: an earlier attempt at current did not complete. It
+    // can only be resumed as a diff from the base that attempt used: from
+    // any other base (e.g. once that base was deleted), entries that are in
+    // neither snapshot would stay on the remote.
+    if (prev && (dirty_snap_id == (*prev).second ||
+                 (dirty_snap_id == current.second && dirty_base_snap_id &&
+                  *dirty_base_snap_id == (*prev).second))) {
       dout(5) << ": match -- using incremental sync with local scan" << dendl;
       r = do_synchronize(dir_root, current, prev);
     } else {
