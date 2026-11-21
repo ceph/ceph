@@ -341,6 +341,118 @@ ShardServices::read_collection_chunk(
   co_return std::make_tuple(std::move(boxes), next);
 }
 
+seastar::future<> ShardServices::make_empty_staging_collection(
+  store_index_t store_index,
+  coll_t staging)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  co_await remove_collection_fully(store_index, staging);
+  auto store = get_store(store_index);
+  auto coll = co_await with_store<&FuturizedStore::Shard::create_new_collection>(
+    store, staging);
+  ceph::os::Transaction t;
+  // bits unused: this collection is only merged into the target, then removed
+  t.create_collection(staging, 0);
+  co_await crimson::os::with_store_do_transaction(
+    store, std::move(coll), std::move(t));
+}
+
+seastar::future<> ShardServices::write_staging_chunk(
+  store_index_t store_index,
+  coll_t staging,
+  const std::vector<copied_object_t>& objs)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  auto store = get_store(store_index);
+  auto coll = co_await with_store<&FuturizedStore::Shard::open_collection>(
+    store, staging);
+
+  // `objs` lives on the source's shard. Bufferlist refcounts are not
+  // atomic under crimson, so never share its buffers: copy the raw bytes
+  // into new buffers allocated here. (Reading through ptr::c_str() and
+  // buffers() does not touch any refcount.)
+  auto deep_copy = [](const ceph::bufferlist& from) {
+    ceph::bufferlist to;
+    for (const auto& p : from.buffers()) {
+      to.append(p.c_str(), p.length());
+    }
+    return to;
+  };
+
+  ceph::os::Transaction t;
+  for (const auto& obj : objs) {
+    t.touch(staging, obj.oid);
+    if (obj.data.length()) {
+      auto data = deep_copy(obj.data);
+      t.write(staging, obj.oid, 0, data.length(), data);
+    }
+    if (!obj.attrs.empty()) {
+      std::map<std::string, ceph::bufferlist, std::less<>> attrs;
+      for (const auto& [k, v] : obj.attrs) {
+        attrs.emplace(k, deep_copy(v));
+      }
+      t.setattrs(staging, obj.oid, attrs);
+    }
+    if (obj.omap_header.length()) {
+      t.omap_setheader(staging, obj.oid, deep_copy(obj.omap_header));
+    }
+    if (!obj.omap.empty()) {
+      std::map<std::string, ceph::bufferlist> omap;
+      for (const auto& [k, v] : obj.omap) {
+        omap.emplace(k, deep_copy(v));
+      }
+      t.omap_setkeys(staging, obj.oid, omap);
+    }
+  }
+  co_await crimson::os::with_store_do_transaction(
+    store, std::move(coll), std::move(t));
+}
+
+seastar::future<> ShardServices::remove_collection_fully(
+  store_index_t store_index, coll_t cid)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  auto store = get_store(store_index);
+  // open_collection returns a null ref if cid does not exist here
+  auto coll = co_await with_store<&FuturizedStore::Shard::open_collection>(
+    store, cid);
+  if (!coll) {
+    co_return;
+  }
+  const uint64_t chunk = crimson::common::local_conf()->osd_target_transaction_size;
+  // Keep the pgmeta object until the final transaction, which also
+  // removes the collection (as PG::do_delete_work does). A crash halfway
+  // through then leaves a collection that can still be loaded as a PG,
+  // instead of one without pgmeta, which aborts the OSD on startup.
+  std::optional<ghobject_t> pgmeta;
+  ghobject_t start;
+  while (true) {
+    auto [oids, next] = co_await with_store<&FuturizedStore::Shard::list_objects>(
+      store, coll, start, ghobject_t::get_max(), chunk, 0);
+    ceph::os::Transaction t;
+    for (auto& oid : oids) {
+      if (oid.is_pgmeta()) {
+        pgmeta = oid;
+        continue;
+      }
+      t.remove(cid, oid);
+    }
+    if (next == ghobject_t::get_max()) {
+      if (pgmeta) {
+        t.remove(cid, *pgmeta);
+      }
+      t.remove_collection(cid);
+      co_await crimson::os::with_store_do_transaction(store, coll, std::move(t));
+      co_return;
+    }
+    co_await crimson::os::with_store_do_transaction(store, coll, std::move(t));
+    start = next;
+  }
+}
+
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
   assert_core();

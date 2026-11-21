@@ -739,6 +739,35 @@ public:
     ghobject_t start,
     uint64_t num_obj_we_want);
 
+  // Staging collection used for a cross-shard merge source: the source's
+  // TEMP collection id, created on the TARGET's store. Crimson does not use
+  // TEMP collections otherwise, so load_pgs can recognise leftovers.
+  static coll_t merge_staging_cid(spg_t source) {
+    return coll_t(source).get_temp();
+  }
+
+  // Runs on the target's shard. Leaves `staging` existing and empty:
+  // throws away any stale copy left by a cancelled merge, then creates
+  // the collection. Its bits are unused (it is only ever merged into the
+  // target, which gets its bits from merge_from), so they are 0.
+  seastar::future<> make_empty_staging_collection(
+    store_index_t store_index,
+    coll_t staging);
+
+  // Step 1b. Runs on the target's shard. Deep-copies `objs` (which were
+  // read on the source's shard) into a transaction on the existing
+  // `staging` collection and commits it.
+  seastar::future<> write_staging_chunk(
+    store_index_t store_index,
+    coll_t staging,
+    const std::vector<copied_object_t>& objs);
+
+  // Remove every object in `cid` on `store_index` (this shard), then the
+  // collection itself. Used for the original source collection once the
+  // merge has committed (step 5), and for leftover staging collections.
+  seastar::future<> remove_collection_fully(
+    store_index_t store_index, coll_t cid);
+
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
   FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
