@@ -394,6 +394,14 @@
 	...
 }
 {
+   rocksdb never destroys Env::Default(), so its thread pool queues stay reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*rocksdb*ThreadPoolImpl*Impl*Submit*
+   ...
+}
+{
 	rocksdb config parsing
 	Memcheck:Leak
 	...
