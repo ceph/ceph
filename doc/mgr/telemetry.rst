@@ -230,6 +230,7 @@ To list all collections, run the following command:
 
   NAME                            STATUS                                               DESC
   basic_base                      NOT REPORTING: NOT OPTED-IN                          Basic information about the cluster (capacity, number and type of daemons, version, etc.)
+  basic_dashboard_usage           NOT REPORTING: NOT OPTED-IN                          Dashboard usage and adoption metrics
   basic_mds_metadata              NOT REPORTING: NOT OPTED-IN                          MDS metadata
   basic_pool_flags                NOT REPORTING: NOT OPTED-IN                          Per-pool flags
   basic_pool_options_bluestore    NOT REPORTING: NOT OPTED-IN                          Per-pool bluestore config options

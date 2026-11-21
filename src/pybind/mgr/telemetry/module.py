@@ -100,6 +100,7 @@ class Collection(str, enum.Enum):
     basic_pool_options_bluestore = 'basic_pool_options_bluestore'
     basic_pool_flags = 'basic_pool_flags'
     basic_stretch_cluster = 'basic_stretch_cluster'
+    basic_dashboard_usage = 'basic_dashboard_usage'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -179,6 +180,12 @@ MODULE_COLLECTION : List[Dict] = [
         "description": "Stretch mode information for stretch clusters",
         "channel": "basic",
         "nag": False
+    },
+    {
+        "name": Collection.basic_dashboard_usage,
+        "description": "Dashboard usage and adoption metrics",
+        "channel": "basic",
+        "nag": True
     },
 ]
 
@@ -1360,6 +1367,16 @@ class Module(MgrModule):
                 report['balancer'] = {
                     'active': False
                 }
+
+            # Dashboard metrics are provided by the Dashboard module.
+            # Include them only when the user has enabled this collection.
+            if self.is_enabled_collection(Collection.basic_dashboard_usage):
+                try:
+                    report['dashboard'] = self.remote(
+                        'dashboard', 'gather_telemetry'
+                    )
+                except ImportError:
+                    report['dashboard'] = {}
 
             # Rook
             self.get_rook_data(report)
