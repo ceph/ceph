@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include <chrono>
+#include <boost/container/small_vector.hpp>
 #include <seastar/core/sleep.hh>
 
 #include "crimson/os/seastore/extent_placement_manager.h"
@@ -40,7 +41,7 @@ SegmentedOolWriter::alloc_write_ertr::future<>
 SegmentedOolWriter::write_record(
   Transaction& t,
   record_t&& record,
-  std::list<LogicalCachedExtentRef>&& extents,
+  ool_logical_extents_vec_t&& extents,
   bool with_atomic_roll_segment)
 {
   LOG_PREFIX(SegmentedOolWriter::write_record);
@@ -85,26 +86,28 @@ SegmentedOolWriter::write_record(
 SegmentedOolWriter::alloc_write_iertr::future<>
 SegmentedOolWriter::do_write(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  ool_extents_vec_base_t& extents,
+  std::size_t extent_idx)
 {
   LOG_PREFIX(SegmentedOolWriter::do_write);
-  assert(!extents.empty());
+  assert(extent_idx < extents.size());
   if (!record_submitter.is_available()) {
     DEBUGT("{} extents={} wait ...",
            t, segment_allocator.get_name(),
-           extents.size());
+           extents.size() - extent_idx);
     return trans_intr::make_interruptible(
       record_submitter.wait_available()
-    ).si_then([this, &t, &extents] {
-      return do_write(t, extents);
+    ).si_then([this, &t, &extents, extent_idx] {
+      return do_write(t, extents, extent_idx);
     });
   }
   record_t record(record_type_t::OOL, t.get_src());
-  std::list<LogicalCachedExtentRef> pending_extents;
+  ool_logical_extents_vec_t pending_extents;
+  pending_extents.reserve(extents.size() - extent_idx);
   auto commit_time = seastar::lowres_system_clock::now();
 
-  for (auto it = extents.begin(); it != extents.end();) {
-    auto& ext = *it;
+  for (; extent_idx < extents.size(); ++extent_idx) {
+    auto& ext = extents[extent_idx];
     assert(ext->is_logical());
     auto extent = ext->template cast<LogicalCachedExtent>();
     record_size_t wouldbe_rsize = record.size;
@@ -115,7 +118,7 @@ SegmentedOolWriter::do_write(
       auto num_extents = pending_extents.size();
       DEBUGT("{} extents={} submit {} extents and roll, unavailable ...",
              t, segment_allocator.get_name(),
-             extents.size(), num_extents);
+             extents.size() - extent_idx, num_extents);
       auto fut_write = alloc_write_ertr::now();
       if (num_extents > 0) {
         assert(record_submitter.check_action(record.size) !=
@@ -129,14 +132,14 @@ SegmentedOolWriter::do_write(
         ).safe_then([fut_write=std::move(fut_write)]() mutable {
           return std::move(fut_write);
         })
-      ).si_then([this, &t, &extents] {
-        return do_write(t, extents);
+      ).si_then([this, &t, &extents, extent_idx] {
+        return do_write(t, extents, extent_idx);
       });
     }
 
     TRACET("{} extents={} add extent to record -- {}",
            t, segment_allocator.get_name(),
-           extents.size(), *extent);
+           extents.size() - extent_idx, *extent);
     ceph::bufferlist bl;
     extent->prepare_write();
     bl.append(extent->get_bptr());
@@ -152,18 +155,17 @@ SegmentedOolWriter::do_write(
         std::move(bl)},
       modify_time);
     pending_extents.push_back(extent);
-    it = extents.erase(it);
 
     assert(record_submitter.check_action(record.size) == action);
     if (action == action_t::SUBMIT_FULL) {
       DEBUGT("{} extents={} submit {} extents ...",
              t, segment_allocator.get_name(),
-             extents.size(), pending_extents.size());
+             extents.size() - extent_idx, pending_extents.size());
       return trans_intr::make_interruptible(
         write_record(t, std::move(record), std::move(pending_extents))
-      ).si_then([this, &t, &extents] {
-        if (!extents.empty()) {
-          return do_write(t, extents);
+      ).si_then([this, &t, &extents, next_idx = extent_idx + 1] {
+        if (next_idx < extents.size()) {
+          return do_write(t, extents, next_idx);
         } else {
           return alloc_write_iertr::now();
         }
@@ -184,7 +186,7 @@ SegmentedOolWriter::do_write(
 SegmentedOolWriter::alloc_write_iertr::future<>
 SegmentedOolWriter::alloc_write_ool_extents(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  ool_extents_vec_base_t& extents)
 {
   if (extents.empty()) {
     co_return;
@@ -1313,7 +1315,7 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics(store_index_t s
 RandomBlockOolWriter::alloc_write_iertr::future<>
 RandomBlockOolWriter::alloc_write_ool_extents(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  ool_extents_vec_base_t& extents)
 {
   if (extents.empty()) {
     co_return;
@@ -1365,13 +1367,14 @@ RandomBlockOolWriter::alloc_write_ool_extents(
 RandomBlockOolWriter::alloc_write_iertr::future<>
 RandomBlockOolWriter::do_write(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  ool_extents_vec_base_t& extents)
 {
   LOG_PREFIX(RandomBlockOolWriter::do_write);
   assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
   std::vector<write_info_t> writes;
+  writes.reserve(extents.size());
   for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
     assert(paddr.is_absolute());

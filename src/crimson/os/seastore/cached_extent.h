@@ -45,14 +45,18 @@ void intrusive_ptr_release(CachedExtent *);
 
 // Note: BufferSpace::to_full_ptr() also creates extent ptr.
 
-inline ceph::bufferptr create_extent_ptr_rand(extent_len_t len) {
+inline ceph::bufferptr create_extent_ptr_uninit(extent_len_t len) {
   assert(is_aligned(len, CEPH_PAGE_SIZE));
   assert(len > 0);
   return ceph::bufferptr(alloc_dma_or_page_aligned(len));
 }
 
+inline ceph::bufferptr create_extent_ptr_rand(extent_len_t len) {
+  return create_extent_ptr_uninit(len);
+}
+
 inline ceph::bufferptr create_extent_ptr_zero(extent_len_t len) {
-  auto bp = create_extent_ptr_rand(len);
+  auto bp = create_extent_ptr_uninit(len);
   bp.zero();
   return bp;
 }
