@@ -552,26 +552,28 @@ bool MgrCap::parse(const std::string& str, std::ostream *err) {
       }
     }
 
-    if (!profile_err.str().empty()) {
-      if (err != nullptr) {
-        *err << "mgr capability parse failed during profile evaluation: "
-             << profile_err.str();
-      }
-      return false;
+    if (profile_err.str().empty()) {
+      return true;
     }
-    return true;
-  }
 
-  // Make sure no grants are kept after parsing failed!
-  grants.clear();
-
-  if (err) {
+    if (err != nullptr) {
+      *err << "mgr capability parse failed during profile evaluation: "
+           << profile_err.str();
+    }
+    // fall through to the cleanup below: a profile-evaluation failure must
+    // leave the object empty, same as a grammar-parse failure
+  } else if (err) {
     if (iter != end)
       *err << "mgr capability parse failed, stopped at '"
            << std::string(iter, end) << "' of '" << str << "'";
     else
       *err << "mgr capability parse failed, stopped at end of '" << str << "'";
   }
+
+  // Make sure no grants are kept after parsing failed!
+  // Also clear text so encode() does not emit a stale or partial value.
+  grants.clear();
+  text.clear();
 
   return false;
 }
