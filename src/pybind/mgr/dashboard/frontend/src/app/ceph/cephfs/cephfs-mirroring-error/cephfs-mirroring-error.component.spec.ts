@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error.component';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -44,14 +45,14 @@ describe('CephfsMirroringErrorComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should enable mirroring and snap_schedule modules when enableModule is called', () => {
+  it('should enable only the mirroring module when enableModule is called', () => {
     fixture.detectChanges();
     component.enableModule();
     expect(mgrModuleServiceMock.updateModuleState).toHaveBeenCalledWith(
-      ['mirroring', 'snap_schedule'],
+      'mirroring',
       false,
       null,
-      'cephfs/mirroring',
+      CEPHFS_MIRRORING_URL,
       expect.any(String),
       false,
       expect.any(String)

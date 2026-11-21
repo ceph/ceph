@@ -175,7 +175,8 @@ describe('MgrModuleService', () => {
 
       expect(service.enable).toHaveBeenCalledWith('mirroring', false);
       expect(service.enable).toHaveBeenCalledWith('snap_schedule', false);
-      expect(service.list).toHaveBeenCalledTimes(1);
+      // First module: reconnect list(); second module: post-success list() settle check.
+      expect(service.list).toHaveBeenCalledTimes(2);
       expect(notificationService.show).toHaveBeenCalledWith(
         jasmine.any(Number),
         jasmine.any(String)

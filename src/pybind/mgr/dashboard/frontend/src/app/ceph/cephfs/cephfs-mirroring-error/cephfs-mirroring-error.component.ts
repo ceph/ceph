@@ -1,5 +1,7 @@
 import { Component, ViewEncapsulation } from '@angular/core';
+
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 
 @Component({
   selector: 'cd-cephfs-mirroring-error',
@@ -13,13 +15,13 @@ export class CephfsMirroringErrorComponent {
 
   enableModule(): void {
     this.mgrModuleService.updateModuleState(
-      ['mirroring', 'snap_schedule'],
+      'mirroring',
       false,
       null,
-      'cephfs/mirroring',
-      $localize`CephFS Mirroring and Snapshot Schedule modules enabled`,
+      CEPHFS_MIRRORING_URL,
+      $localize`CephFS Mirroring module enabled`,
       false,
-      $localize`Enabling CephFS Mirroring and Snapshot Schedule modules. Reconnecting, please wait ...`
+      $localize`Enabling CephFS Mirroring module. Reconnecting, please wait ...`
     );
   }
 }

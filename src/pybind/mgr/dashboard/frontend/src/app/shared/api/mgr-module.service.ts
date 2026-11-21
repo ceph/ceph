@@ -124,8 +124,17 @@ export class MgrModuleService {
   ): Observable<void> {
     const moduleToggle$ = enabled ? this.disable(module) : this.enable(module, force);
 
+    // Enabling/disabling a mgr module often drops the dashboard connection. Even when
+    // the toggle HTTP call succeeds, wait until list() works (or run the reconnect
+    // UI) before navigating — otherwise ModuleStatusGuard can hit a half-ready
+    // module and cancel/bounce the destination route (seen with CephFS mirroring).
     return moduleToggle$.pipe(
-      map(() => undefined),
+      switchMap(() =>
+        this.list().pipe(
+          map(() => undefined),
+          catchError(() => this.reconnectAfterModuleToggle(reconnectingMessage))
+        )
+      ),
       catchError(() => this.reconnectAfterModuleToggle(reconnectingMessage))
     );
   }
