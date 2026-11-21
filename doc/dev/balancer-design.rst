@@ -33,10 +33,13 @@ See :ref:`upmap` for more information.
 The mgr ``upmap`` mode equalizes **PG shard counts**. When PG sizes differ
 substantially (or OSD capacities are heterogeneous), prefer the
 ``upmap-utilization`` mode, which equalizes OSD **byte fill** via the same
-``pg-upmap-items`` mechanism. Both modes skip a pool while ``pg_num`` differs
-from ``pg_num_target`` so remaps wait for the PG autoscaler (or manual
-``pg_num`` changes) to finish splitting or merging. Capacity balancing should
-still be completed before read / primary balancing.
+``pg-upmap-items`` mechanism. Its stop gate is selectable
+(``upmap_utilization_deviation_mode``): ``mean`` (default; fullest within
+slack of mean fill) or ``minmax`` (``max - min`` within slack). Both modes
+skip a pool while ``pg_num`` differs from ``pg_num_target`` so remaps wait
+for the PG autoscaler (or manual ``pg_num`` changes) to finish splitting or
+merging. Capacity balancing should still be completed before read / primary
+balancing.
 
 Read Balancing
 ==============

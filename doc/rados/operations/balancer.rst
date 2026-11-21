@@ -221,9 +221,13 @@ There are five supported balancer modes:
    with a global, multi-pool planner: it evacuates shards from fuller OSDs
    toward emptier ones when the move reduces fill-rate variance and remains
    CRUSH-legal. Tunables include
-   ``mgr/balancer/upmap_utilization_max_optimizations`` (batch size) and
-   ``mgr/balancer/upmap_utilization_max_deviation`` (absolute fill-ratio slack
-   versus the mean; default ``0.02`` = 2%).
+   ``mgr/balancer/upmap_utilization_max_optimizations`` (batch size),
+   ``mgr/balancer/upmap_utilization_max_deviation`` (absolute fill-ratio slack;
+   default ``0.02`` = 2%), and
+   ``mgr/balancer/upmap_utilization_deviation_mode`` (``mean`` or ``minmax``;
+   default ``mean``). With ``mean``, planning stops while the fullest OSD is
+   within the slack of the mean fill. With ``minmax``, planning stops while
+   ``max(fill) - min(fill)`` is within the slack.
 
    To cooperate with the PG autoscaler, ``upmap-utilization`` (and ``upmap``)
    skip a pool while ``pg_num`` has not yet reached ``pg_num_target`` (pending

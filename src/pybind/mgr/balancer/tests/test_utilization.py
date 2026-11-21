@@ -17,6 +17,9 @@ apply_move = _utilization.apply_move
 plan_utilization_upmaps = _utilization.plan_utilization_upmaps
 build_pg_shards = _utilization.build_pg_shards
 pool_pg_num_unsettled = _utilization.pool_pg_num_unsettled
+within_utilization_deviation = _utilization.within_utilization_deviation
+DEVIATION_MEAN = _utilization.DEVIATION_MEAN
+DEVIATION_MINMAX = _utilization.DEVIATION_MINMAX
 
 
 def test_pool_pg_num_unsettled():
@@ -98,6 +101,55 @@ def test_plan_rejects_when_already_balanced():
         max_deviation=0.5,
     )
     assert pending == {}
+
+
+def test_within_utilization_deviation_mean_vs_minmax():
+    # Fills ~0.2695 / 0.28 / 0.2911 → range ~0.0216, max-mean ~0.011.
+    used = {0: 26.95, 1: 28.0, 2: 29.11}
+    capacity = {0: 100.0, 1: 100.0, 2: 100.0}
+    assert within_utilization_deviation(
+        used, capacity, 0.02, DEVIATION_MEAN) is True
+    assert within_utilization_deviation(
+        used, capacity, 0.02, DEVIATION_MINMAX) is False
+    assert within_utilization_deviation(
+        used, capacity, 0.03, DEVIATION_MINMAX) is True
+
+
+def test_plan_minmax_keeps_working_when_mean_satisfied():
+    # Mean gate would stop (fullest within 2pp of mean); minmax should move.
+    used = {0: 26.95, 1: 28.0, 2: 29.11}
+    capacity = {0: 100.0, 1: 100.0, 2: 100.0}
+    pg_shards = {
+        '1.0': {'osds': [2, 1], 'bytes': 2.0, 'pool_id': 1, 'ps': 0},
+    }
+
+    def try_fn(pool_id, ps, overfull, underfull, more_underfull):
+        assert 2 in overfull
+        assert 0 in underfull
+        return {'orig': [2, 1], 'out': [0, 1]}
+
+    mean_pending = plan_utilization_upmaps(
+        used=used,
+        capacity=capacity,
+        pg_shards=pg_shards,
+        try_pg_upmap=try_fn,
+        max_optimizations=5,
+        max_deviation=0.02,
+        deviation_mode=DEVIATION_MEAN,
+    )
+    assert mean_pending == {}
+
+    minmax_pending = plan_utilization_upmaps(
+        used=used,
+        capacity=capacity,
+        pg_shards=pg_shards,
+        try_pg_upmap=try_fn,
+        max_optimizations=5,
+        max_deviation=0.02,
+        deviation_mode=DEVIATION_MINMAX,
+    )
+    assert '1.0' in minmax_pending
+    assert minmax_pending['1.0'][-1] == [2, 0]
 
 
 def test_build_pg_shards_active_clean_filter():

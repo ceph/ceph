@@ -337,7 +337,14 @@ class Module(MgrModule):
                default=0.02,
                min=0.0,
                desc='fill-ratio slack below which no utilization optimization is attempted',
-               long_desc='If every OSD fill ratio is within this absolute delta of the mean, no optimization is attempted (0.02 = 2%).',
+               long_desc='Absolute fill-ratio slack (0.02 = 2%). Interpretation depends on upmap_utilization_deviation_mode: mean stops when fullest <= mean + slack; minmax stops when (max - min) <= slack.',
+               runtime=True),
+        Option(name='upmap_utilization_deviation_mode',
+               type='str',
+               default='mean',
+               enum_allowed=['mean', 'minmax'],
+               desc='stop gate for utilization balancing: mean or minmax',
+               long_desc='mean: stop while fullest OSD fill is within upmap_utilization_max_deviation of the mean. minmax: stop while (max fill - min fill) is within that slack.',
                runtime=True),
         Option(name='pool_ids',
                type='str',
@@ -1209,6 +1216,8 @@ class Module(MgrModule):
             'upmap_utilization_max_optimizations'))
         max_deviation = cast(float, self.get_module_option(
             'upmap_utilization_max_deviation'))
+        deviation_mode = cast(str, self.get_module_option(
+            'upmap_utilization_deviation_mode'))
         ms = plan.initial
         osdmap = plan.osdmap
         osdmap_dump = plan.osdmap_dump
@@ -1307,6 +1316,7 @@ class Module(MgrModule):
             existing_items=existing,
             max_optimizations=max_optimizations,
             max_deviation=max_deviation,
+            deviation_mode=deviation_mode,
         )
         if not pending:
             self.no_optimization_needed = True

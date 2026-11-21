@@ -28,6 +28,42 @@ def pool_pg_num_unsettled(pool: Dict[str, Any]) -> bool:
     return int(pool['pg_num']) != int(pool['pg_num_target'])
 
 
+# Stop-gate modes for upmap-utilization (see plan_utilization_upmaps).
+DEVIATION_MEAN = 'mean'
+DEVIATION_MINMAX = 'minmax'
+
+
+def osd_fill_ratios(used: Dict[int, float], capacity: Dict[int, float]) -> Dict[int, float]:
+    """Per-OSD fill ratios for OSDs with capacity > 0."""
+    return {
+        osd: utilization(used.get(osd, 0.0), cap)
+        for osd, cap in capacity.items()
+        if cap > 0
+    }
+
+
+def within_utilization_deviation(
+    used: Dict[int, float],
+    capacity: Dict[int, float],
+    max_deviation: float,
+    deviation_mode: str = DEVIATION_MEAN,
+) -> bool:
+    """
+    True when fill ratios already satisfy the configured stop gate.
+
+    mean: fullest <= mean + max_deviation
+    minmax: (max - min) <= max_deviation
+    """
+    fills = list(osd_fill_ratios(used, capacity).values())
+    if not fills:
+        return True
+    mode = (deviation_mode or DEVIATION_MEAN).lower()
+    if mode == DEVIATION_MINMAX:
+        return (max(fills) - min(fills)) <= float(max_deviation)
+    mean = float(sum(fills) / len(fills))
+    return max(fills) <= mean + float(max_deviation)
+
+
 def fill_variance(used: Dict[int, float], capacity: Dict[int, float]) -> float:
     """Population variance of per-OSD utilization for OSDs with capacity > 0."""
     fills = [
@@ -114,16 +150,23 @@ def plan_utilization_upmaps(
     existing_items: Optional[Dict[str, List[List[int]]]] = None,
     max_optimizations: int = 10,
     max_deviation: float = 0.02,
+    deviation_mode: str = DEVIATION_MEAN,
 ) -> Dict[str, List[List[int]]]:
     """
     Greedy global planner: move large shards off fullest OSDs when variance drops.
 
-    max_deviation is absolute fill-ratio slack (e.g. 0.02 = 2%).  While the fullest OSD is within max_deviation of the mean fill, no work is done.
+    max_deviation is absolute fill-ratio slack (e.g. 0.02 = 2%).
+    deviation_mode 'mean': stop while fullest <= mean + max_deviation.
+    deviation_mode 'minmax': stop while (max - min) <= max_deviation.
 
     Returns pgid -> full remapping-pair list to write into OSDMapIncremental.
     """
     if max_optimizations <= 0 or not capacity:
         return {}
+
+    mode = (deviation_mode or DEVIATION_MEAN).lower()
+    if mode not in (DEVIATION_MEAN, DEVIATION_MINMAX):
+        mode = DEVIATION_MEAN
 
     working_used = dict(used)
     pending: Dict[str, List[List[int]]] = {}
@@ -131,10 +174,7 @@ def plan_utilization_upmaps(
     skipped: set = set()
 
     def mean_fill() -> float:
-        fills = [
-            utilization(working_used.get(o, 0.0), c)
-            for o, c in capacity.items() if c > 0
-        ]
+        fills = list(osd_fill_ratios(working_used, capacity).values())
         return float(sum(fills) / len(fills)) if fills else 0.0
 
     for _ in range(int(max_optimizations)):
@@ -142,16 +182,22 @@ def plan_utilization_upmaps(
         if not overfull_desc or not underfull_asc:
             break
 
-        mean = mean_fill()
-        fullest = overfull_desc[0]
-        if utilization(working_used.get(fullest, 0.0), capacity[fullest]) <= mean + max_deviation:
+        if within_utilization_deviation(
+                working_used, capacity, max_deviation, mode):
             break
 
+        mean = mean_fill()
         baseline = fill_variance(working_used, capacity)
         made_progress = False
 
         for over_osd in overfull_desc:
-            if utilization(working_used.get(over_osd, 0.0), capacity[over_osd]) <= mean + max_deviation:
+            # mean mode: only touch OSDs still above mean + slack.
+            if mode == DEVIATION_MEAN:
+                if utilization(working_used.get(over_osd, 0.0),
+                               capacity[over_osd]) <= mean + max_deviation:
+                    break
+            elif within_utilization_deviation(
+                    working_used, capacity, max_deviation, mode):
                 break
 
             # Candidate PGs on this OSD, largest shard first.
@@ -166,10 +212,17 @@ def plan_utilization_upmaps(
             candidates.sort(key=lambda t: t[0], reverse=True)
 
             # Prefer emptier destinations; exclude OSDs already in the PG.
-            under_pref = [
-                o for o in underfull_asc
-                if o != over_osd and utilization(working_used.get(o, 0.0), capacity[o]) < mean
-            ]
+            if mode == DEVIATION_MINMAX:
+                under_pref = [
+                    o for o in underfull_asc
+                    if o != over_osd
+                ]
+            else:
+                under_pref = [
+                    o for o in underfull_asc
+                    if o != over_osd and utilization(
+                        working_used.get(o, 0.0), capacity[o]) < mean
+                ]
 
             for bytes_, pgid, info in candidates:
                 if bytes_ <= 0:
