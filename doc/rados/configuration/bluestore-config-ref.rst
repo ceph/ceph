@@ -216,6 +216,29 @@ the values specified in the ``bluestore_cache_meta_ratio`` and
 .. confval:: osd_memory_cache_resize_interval
 
 
+Cache Admission
+===============
+
+A new onode or RocksDB block is held in a bounded probation part of its cache
+and moves to the main part only once it has been used again in two later
+cache age bins (see ``bluestore_cache_age_bin_interval``). One pass over many
+objects, such as a scrub, a backfill or a bulk write that is not read back,
+then cycles through the probation part instead of displacing the cached
+working set and growing the OSD's memory. The probation part's share of the
+cache is ``bluestore_onode_cache_probation_ratio`` for the onode cache and
+``rocksdb_cache_probation_ratio`` for the ``binned_lru`` block caches; 0
+admits every entry at once. The onode cache also remembers the keys of the
+onodes it last evicted from its main part, as many as its budget, and an
+onode missed while its key is remembered returns to the main part at once,
+so a working set larger than the budget keeps what the budget allows, as in
+a plain LRU. The ``onodes_probation`` perf counter reports the onodes on
+probation.
+
+.. confval:: bluestore_onode_cache_probation_ratio
+.. confval:: bluestore_onode_cache_probation_floor
+.. confval:: rocksdb_cache_probation_ratio
+
+
 Manual Cache Sizing
 ===================
 

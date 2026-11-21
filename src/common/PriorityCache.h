@@ -105,6 +105,10 @@ namespace PriorityCache {
     // Rotate the bins
     virtual void shift_bins() = 0;
 
+    // Set the share of the cache that entries used only once may hold, for
+    // caches that admit on reuse; the default admits at once.
+    virtual void set_probation_ratio(double ratio) {}
+
     // Import user bins (from PRI1 to LAST-1)
     virtual void import_bins(const std::vector<uint64_t> &bins) = 0;
 

@@ -1,4 +1,4 @@
-add_executable(ceph_perf_objectstore 
+add_executable(ceph_perf_objectstore
   ObjectStoreTransactionBenchmark.cc)
 target_link_libraries(ceph_perf_objectstore os osdc global ${UNITTEST_LIBS})
 install(TARGETS ceph_perf_objectstore
@@ -49,6 +49,16 @@ add_executable(unittest_rocksdb_option
 add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option
   global os ${BLKID_LIBRARIES}
+  RocksDB::RocksDB)
+
+# unittest_binned_lru_cache
+add_executable(unittest_binned_lru_cache
+  test_binned_lru_cache.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_binned_lru_cache)
+target_link_libraries(unittest_binned_lru_cache
+  global kv
   RocksDB::RocksDB)
 
 if(WITH_EVENTTRACE)
