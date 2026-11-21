@@ -501,6 +501,54 @@ static void list_entries(librados::IoCtx& ioctx,
   ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
 }
 
+TEST_P(TestClsRgw, link_olh_delete_marker)
+{
+  string bucket_oid = str_int("bucket", 103);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  const string olh_tag = "tag-v1";
+  const cls_rgw_obj_key v1("obj", "v1");
+  {
+    // the object exists as version v1
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, olh_tag, v1, "loc");
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = RGWObjCategory::None;
+    meta.size = 1024;
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, olh_tag, 1, v1, meta);
+  }
+
+  // a delete without a version id links a delete marker under a newly
+  // generated instance, which has no index entry yet
+  const cls_rgw_obj_key dm("obj", "v2");
+  {
+    bufferlist olh_tag_bl;
+    olh_tag_bl.append(olh_tag);
+    rgw_bucket_dir_entry_meta meta;
+    rgw_zone_set zone_set;
+    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, bucket_oid, dm, olh_tag_bl,
+                                         true, "tag-dm", &meta, 2,
+                                         ceph::real_time{}, true, true, zone_set));
+  }
+
+  // the delete marker is now the current version
+  rgw_cls_list_ret listing;
+  list_entries(ioctx, bucket_oid, 10, listing);
+  const auto& entries = listing.dir.m;
+  ASSERT_EQ(2, entries.size());
+  for (const auto& [name, entry] : entries) {
+    if (entry.key == dm) {
+      EXPECT_TRUE(entry.is_delete_marker());
+      EXPECT_TRUE(entry.is_current());
+    } else {
+      EXPECT_EQ(v1, entry.key);
+      EXPECT_FALSE(entry.is_current());
+    }
+  }
+}
+
 TEST_P(TestClsRgw, index_suggest_complete)
 {
   string bucket_oid = str_int("suggest", 2);
