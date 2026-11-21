@@ -1022,3 +1022,69 @@ class TestExportToStoppingRank(CephFSTestCase):
         self.wait_until_true(lambda: rank2['name'] in self.mds_cluster.get_standby_daemons(),
                              timeout=60)
         self.status = self.fs.wait_for_daemons()
+
+class TestAmbiguousImportSubtreeMap(CephFSTestCase):
+    MDSS_REQUIRED = 4
+    CLIENTS_REQUIRED = 1
+
+    def test_claimed_ambiguous_import_in_subtree_map(self):
+        """
+        That an ambiguous import that its exporter claims in resolve stays in
+        the subtree maps that the importer journals before logging the
+        EImportFinish that cancels it.
+
+        The importer dies once its EImportStarts are journaled, before it
+        acks, so the rank that takes over holds them as ambiguous imports and
+        the exporter claims them back in resolve. With a subtree map at every
+        few events, maps get journaled while those EImportFinishes are being
+        logged. Replaying that journal again used to find the still-open
+        imports missing from such a map, and every daemon that took the rank
+        asserted on it.
+
+        See: https://tracker.ceph.com/issues/82971
+        """
+
+        self.config_set('mds', 'mds_log_events_per_segment', 1)
+        self.config_set('mds', 'mds_log_minor_segments_per_major_segment', 4)
+        self.fs.set_max_mds(2)
+        self.fs.set_var('balance_automate', False)
+        status = self.fs.wait_for_daemons()
+
+        dirs = [f"a/d{i}" for i in range(10)]
+        for d in dirs:
+            self.mount_a.run_shell_payload(
+                f'mkdir -p {d} && for j in $(seq 1 20); do echo x > {d}/f$j; done')
+            self.mount_a.setfattr(d, "ceph.dir.pin", "1")
+        self._wait_subtrees([(f'/{d}', 1) for d in dirs], status=status, rank=1)
+        for d in dirs:
+            self.mount_a.setfattr(d, "ceph.dir.pin", "-1")
+
+        rank0 = self.fs.get_rank(rank=0, status=status)
+        self.fs.rank_asok(['config', 'set', 'mds_kill_import_at', '7'], rank=0,
+                          status=status)
+        # Hold the importer while the exports start, so that it journals the
+        # EImportStarts of all of them together before it dies at the first.
+        self.fs.rank_freeze(True, rank=0)
+        self.fs.mds_signal(rank0['name'], signal.SIGSTOP)
+        try:
+            for d in dirs:
+                self.fs.rank_asok(['export', 'dir', f'/{d}', '0'], rank=1, status=status)
+        finally:
+            self.fs.mds_signal(rank0['name'], signal.SIGCONT)
+            self.fs.rank_freeze(False, rank=0)
+
+        # the importer dies once it has journaled an EImportStart
+        self.wait_until_true(lambda: self.fs.status().hadfailover(status),
+                             timeout=self.fs.beacon_timeout)
+        self.delete_mds_coredump(rank0['name'])
+        status = self.fs.wait_for_daemons()
+
+        # replay rank 0's journal again, over the resolve of the first takeover
+        rank0 = self.fs.get_rank(rank=0, status=status)
+        self.fs.rank_fail(rank=0)
+        self.wait_until_true(lambda: self.fs.status().hadfailover(status),
+                             timeout=self.fs.beacon_timeout)
+        # failed if buggy: every daemon that takes rank 0 asserts in replay
+        status = self.fs.wait_for_daemons(timeout=120)
+
+        self.assertEqual(sorted(self.mount_a.ls("a")), sorted(d.split('/')[1] for d in dirs))
