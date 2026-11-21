@@ -1134,7 +1134,10 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     nvmeof/NVMeofGwMonitorGroupClient.cc
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})
-  add_dependencies(ceph-nvmeof-monitor-client ceph-common)
+  # Own target: Ninja runs protoc without waiting for the client's deps.
+  add_custom_target(nvmeof_protos
+    DEPENDS ${nvmeof_gateway_proto_srcs} ${nvmeof_monitor_proto_srcs})
+  add_dependencies(ceph-nvmeof-monitor-client nvmeof_protos)
   if(_HAVE_ABSEIL)
     target_compile_definitions(ceph-nvmeof-monitor-client PRIVATE HAVE_ABSEIL)
     target_compile_definitions(ceph-mon PRIVATE HAVE_ABSEIL)
