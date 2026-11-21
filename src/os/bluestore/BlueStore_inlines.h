@@ -17,6 +17,8 @@
 
 #include "BlueStore_objects.h"
 #include "bluestore_types.h"
+#include <string>
+#include "os/kv.h"
 
 inline bluestore::SharedBlobRef bluestore::SharedBlobSet::lookup(uint64_t sbid) {
   std::lock_guard l(lock);
@@ -124,4 +126,36 @@ inline std::ostream& operator<<(std::ostream& out, const volatile_statfs& s)
     << s.values[volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
 }
 
+namespace bluestore {
+  static inline void get_shared_blob_key(uint64_t sbid, std::string *key)
+  {
+    key->clear();
+    _key_encode_u64(sbid, key);
+  }
+
+  static inline int get_key_shared_blob(const std::string& key, uint64_t *sbid)
+  {
+    const char *p = key.c_str();
+    if (key.length() < sizeof(uint64_t))
+      return -1;
+    _key_decode_u64(p, sbid);
+    return 0;
+  }
+
+  static inline int get_key_extent_shard(const std::string& key, std::string *onode_key, uint32_t *offset)
+  {
+    ceph_assert(key.size() > sizeof(uint32_t) + 1);
+    ceph_assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+    int okey_len = key.size() - sizeof(uint32_t) - 1;
+    *onode_key = key.substr(0, okey_len);
+    const char *p = key.data() + okey_len;
+    _key_decode_u32(p, offset);
+    return 0;
+  }
+
+  static inline bool is_extent_shard_key(const std::string& key)
+  {
+    return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
+  }
+}
 #endif
