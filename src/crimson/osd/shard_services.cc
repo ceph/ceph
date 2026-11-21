@@ -256,6 +256,91 @@ seastar::future<bool> ShardServices::seastore_pending_merge_shards_ok(
   co_return co_await seastore_merge_shards_ok(target, merge_sources);
 }
 
+seastar::future<std::tuple<std::vector<copied_object_t>, ghobject_t>>
+ShardServices::read_collection_chunk(
+  store_index_t store_index,
+  crimson::os::CollectionRef coll,
+  ghobject_t start,
+  uint64_t num_obj_we_want)
+{
+  using crimson::os::FuturizedStore;
+  using crimson::os::with_store;
+  auto store = get_store(store_index);
+
+  // next slice of names, in sorted order: from `start`, no end limit
+  // (GHMAX), at most num_obj_we_want of them. `next` is where the following
+  // slice should start, or GHMAX if we reached the end.
+  auto [oids, next] = co_await with_store<&FuturizedStore::Shard::list_objects>(
+    store, coll, start, ghobject_t::get_max(), num_obj_we_want, 0);
+
+  // Bulk one-time read: tell the store not to keep this data in its cache
+  // (same flag backfill/recovery uses in replicated_recovery_backend.cc).
+  constexpr uint32_t flags = CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
+  // Error handling: on a read error we do NOT crash the OSD. Each
+  // handle_error below turns the store error into a normal exception, which
+  // makes this whole function fail. The caller can then cancel the merge
+  // (abort_seastore_cross_shard_merge) and leave the source PG where it is.
+
+  std::vector<copied_object_t> boxes;
+  for (auto& oid : oids) {
+    copied_object_t box;
+    box.oid = oid;
+    // first ask the size, then read that many bytes
+    // (stat already reports errors as exceptions, so it needs no handler)
+    auto st = co_await with_store<&FuturizedStore::Shard::stat>(
+      store, coll, oid, flags);
+    box.data = co_await with_store<&FuturizedStore::Shard::read>(
+      store, coll, oid, 0 , st.st_size , flags
+    ).handle_error(FuturizedStore::Shard::read_errorator::all_same_way(
+      [](const std::error_code& e) {
+        return seastar::make_exception_future<ceph::bufferlist>(
+          std::system_error(e, "read_collection_chunk: read failed"));
+      }));
+
+    // attrs: all of the object's labels (xattrs) at once
+    box.attrs = co_await with_store<&FuturizedStore::Shard::get_attrs>(
+      store, coll, oid, flags
+    ).handle_error(FuturizedStore::Shard::get_attrs_ertr::all_same_way(
+      [](const std::error_code& e) {
+        return seastar::make_exception_future<FuturizedStore::Shard::attrs_t>(
+          std::system_error(e, "read_collection_chunk: get_attrs failed"));
+      }));
+
+    // omap header: enodata means the object has none, so leave it empty;
+    // enoent (object missing) is a real error
+    box.omap_header = co_await with_store<&FuturizedStore::Shard::omap_get_header>(
+      store, coll, oid, flags
+    ).handle_error(
+      crimson::ct_error::enodata::handle([] {
+        return seastar::make_ready_future<ceph::bufferlist>();
+      }),
+      crimson::ct_error::enoent::handle([] {
+        return seastar::make_exception_future<ceph::bufferlist>(
+          std::system_error(std::make_error_code(std::errc::no_such_file_or_directory),
+                            "read_collection_chunk: omap_get_header failed"));
+      }));
+
+    // omap: walk every key/value pair from the start and copy it into the box
+    co_await with_store<&FuturizedStore::Shard::omap_iterate>(
+      store, coll, oid, ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&box](std::string_view key, std::string_view value) {
+        ceph::bufferlist bl;
+        bl.append(value);
+        box.omap.emplace(std::string{key}, std::move(bl));
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      }, flags, nullptr
+    ).handle_error(FuturizedStore::Shard::read_errorator::all_same_way(
+      [](const std::error_code& e) {
+        return seastar::make_exception_future<ObjectStore::omap_iter_ret_t>(
+          std::system_error(e, "read_collection_chunk: omap_iterate failed"));
+      }));
+
+    boxes.push_back(std::move(box));
+  }
+  co_return std::make_tuple(std::move(boxes), next);
+}
+
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
   assert_core();

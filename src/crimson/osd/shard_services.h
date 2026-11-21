@@ -396,6 +396,17 @@ private:
   void prune_sent_ready_to_merge();
 };
 
+// One object read from a merge source's collection on the source's
+// shard, carried to the target's shard so it can be written into the
+// staging collection there.
+struct copied_object_t {
+  ghobject_t oid;
+  ceph::bufferlist data;
+  std::map<std::string, ceph::bufferlist, std::less<>> attrs;
+  ceph::bufferlist omap_header;
+  std::map<std::string, ceph::bufferlist> omap;
+};
+
 /**
  * Represents services available to each PG
  */
@@ -716,6 +727,17 @@ public:
   // never commits a pg_num decrement for a cross-shard merge.
   seastar::future<bool> seastore_pending_merge_shards_ok(
     spg_t pgid, unsigned pg_num, unsigned pg_num_pending);
+
+  // Read up to `num_obj_we_want` objects of `coll` (on this shard),
+  // starting at `start`, into copied_object_t boxes. Returns the boxes and
+  // where the next slice should start (ghobject_t::get_max() once the end
+  // is reached).
+  seastar::future<std::tuple<std::vector<copied_object_t>, ghobject_t>>
+  read_collection_chunk(
+    store_index_t store_index,
+    crimson::os::CollectionRef coll,
+    ghobject_t start,
+    uint64_t num_obj_we_want);
 
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
