@@ -1,6 +1,6 @@
 # radosgw-admin command-line tests
 
-Three suites that run `radosgw-admin` and check the exit code of each command
+Four suites that run `radosgw-admin` and check the exit code of each command
 (error output is not checked because its wording can change).
 They cover how the tool reads its command line: which flags each command takes,
 where those flags can appear, and which inputs it rejects.
@@ -8,6 +8,7 @@ where those flags can appear, and which inputs it rejects.
 | file | what it covers |
 | --- | --- |
 | `test-bucket-exit-codes.sh` | the `bucket` commands |
+| `test-zone-sync-exit-codes.sh` | zone `metadata sync` and `data sync` commands |
 | `test-script-exit-codes.sh` | the `script` and `script-package` commands |
 | `test-globals.sh` | the ceph global flags, which are stripped before radosgw-admin reads its own |
 
@@ -59,7 +60,7 @@ zonegroup when the cluster uses another one.
 
 ## Running them in teuthology
 
-The `rgw/tools` suite runs all three through the
+The `rgw/tools` suite runs all four through the
 `qa/workunits/rgw/run-radosgw-admin-exit-codes.sh` workunit. It points the
 suites at the installed `radosgw-admin`, the cluster in `/etc/ceph/ceph.conf`
 and the radosgw the `rgw` task started. The suite's `install` task adds the
