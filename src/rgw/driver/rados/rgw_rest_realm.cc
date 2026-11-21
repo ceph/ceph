@@ -154,6 +154,17 @@ void RGWOp_Period_Post::execute(optional_yield y)
     return;
   }
 
+  // a staging period was never committed, it must not become anyone's
+  // current period
+  if (period.get_id() == RGWPeriod::get_staging_id(period.get_realm())) {
+    ldpp_dout(this, 0) << "rejecting uncommitted staging period id="
+        << period.get_id() << dendl;
+    error_stream << "period " << period.get_id()
+        << " is an uncommitted staging period" << std::endl;
+    op_ret = -EINVAL;
+    return;
+  }
+
   // if it's not period commit, nobody is allowed to push to the master zone
   if (period.get_master_zone() == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_params().get_id()) {
     ldpp_dout(this, 10) << "master zone rejecting period id="
