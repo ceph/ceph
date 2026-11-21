@@ -357,6 +357,77 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self._wait_for_clone_to_complete(c)
 
+    def test_clone_status_progress_does_not_exceed_100_percent(self):
+        '''
+        Clone progress must stay within 100% for a tiny source snapshot.
+
+        Progress compares the source snapshot data path to the clone's data
+        directory (path). Measuring against base_path instead also counts
+        .meta and other non-cloned entries, which inflates "percentage
+        cloned", "amount cloned" and "files cloned" well above 100% when the
+        snapshot is small (as seen with CSI clones of nearly-empty PVCs).
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        # "clone" must be part of clone name for sake of tearDown()
+        c = 'ss1clone1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        # Enough files that in-progress lasts long enough to sample; tiny
+        # total size so a base_path bug (.meta included) would exceed 100%.
+        nfiles = 128
+        subvolpath = self._get_subvolume_path(v, sv)
+        self.mount_a.run_shell_payload(
+            f'cd {subvolpath} && for i in $(seq 1 {nfiles}); do printf x > f$i; done')
+        self.wait_till_rbytes_is_right(v, sv, nfiles)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+
+        saw_progress_report = False
+        with safe_while(tries=120, sleep=0.5) as proceed:
+            while proceed():
+                o = json.loads(self.get_ceph_cmd_stdout(f'fs clone status {v} {c}'))
+                state = o['status']['state']
+                if state == 'complete':
+                    break
+                if state != 'in-progress':
+                    continue
+
+                report = o['status'].get('progress_report')
+                if not report:
+                    continue
+
+                saw_progress_report = True
+                percent_str = report['percentage cloned']
+                percent = float(percent_str.rstrip('%'))
+                log.debug(f'clone progress report = {report}')
+                self.assertLessEqual(
+                    percent, 100.0,
+                    f'percentage cloned must not exceed 100%, got {percent_str} '
+                    f'(report={report})')
+
+                # Human-readable ratios are emitted without a unit suffix for
+                # values that fit in a few digits (e.g. "307/47", "3/2").
+                amt_cloned, amt_total = report['amount cloned'].split('/')
+                self.assertLessEqual(
+                    float(amt_cloned), float(amt_total),
+                    f'amount cloned must not exceed source size, got '
+                    f'{report["amount cloned"]} (report={report})')
+
+                files_cloned, files_total = report['files cloned'].split('/')
+                self.assertLessEqual(
+                    float(files_cloned), float(files_total),
+                    f'files cloned must not exceed source file count, got '
+                    f'{report["files cloned"]} (report={report})')
+
+        self.assertTrue(
+            saw_progress_report,
+            'expected to observe progress_report while clone was in-progress')
+        self._wait_for_clone_to_complete(c)
+
     def test_clones_less_than_cloner_threads(self):
         '''
         Test that one progress bar is printed in output of "ceph status" output
