@@ -41,6 +41,22 @@ def test_podman():
         assert str(pm) == "podman (/usr/bin/podman) version 4.9.9"
 
 
+def test_podman_version_ignores_boltdb_migration_notice():
+    notice = (
+        "Old database has been renamed to "
+        "/var/lib/containers/storage/libpod/bolt_state.db-old "
+        "and will no longer be used\n4.9.9\n"
+    )
+    with mock.patch(_find_program_loc) as find_program:
+        find_program.return_value = "/usr/bin/podman"
+        pm = container_engines.Podman()
+        with mock.patch(_call_throws_loc) as call_throws:
+            call_throws.return_value = (notice, None, None)
+            with with_cephadm_ctx([]) as ctx:
+                pm.get_version(ctx)
+        assert pm.version == (4, 9, 9)
+
+
 def test_podman_badversion():
     with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/podman"
@@ -49,7 +65,7 @@ def test_podman_badversion():
         with mock.patch(_call_throws_loc) as call_throws:
             call_throws.return_value = ("4.10.beta2", None, None)
             with with_cephadm_ctx([]) as ctx:
-                with pytest.raises(ValueError):
+                with pytest.raises(container_engines.Error):
                     pm.get_version(ctx)
 
 
