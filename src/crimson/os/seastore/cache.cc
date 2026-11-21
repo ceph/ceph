@@ -2472,28 +2472,24 @@ void Cache::complete_commit(
     }
   };
   if (t.lognode_deltas.size() && t.get_src() != Transaction::src_t::TRIM_LOG) {
-    auto oid = t.lognode_deltas.begin()->oid;
     for (auto &p : t.lognode_deltas) {
-      ceph_assert(p.oid == oid);
       p.committed_seq = start_seq;
-      pending_lognode_deltas_by_seq[start_seq].push_back(oid);
+      pending_lognode_deltas_by_seq[start_seq].push_back(p.oid);
+      // clear reserved
+      clear_lognode_reservation(p.oid);
+      auto& seqs_by_oid = pending_lognode_deltas_by_oid[p.oid];
+      seqs_by_oid.push_back(p);
+      DEBUGT("lognode deltas start_seq:{}, oid:{}, oid queue length:{}, \
+	seq queue length {}", t, start_seq, p.oid, 
+	seqs_by_oid.size(),
+	pending_lognode_deltas_by_seq.size());
     }
-    // clear reserved
-    clear_lognode_reservation(oid);
-    auto &seqs_by_oid = pending_lognode_deltas_by_oid[oid];
-    seqs_by_oid.insert(
-      seqs_by_oid.end(),
-      t.lognode_deltas.begin(),
-      t.lognode_deltas.end());   // copy
-    DEBUGT("lognode deltas start_seq:{}, oid:{}, oid queue length:{}, \
-      seq queue length {}", t, start_seq, t.lognode_deltas.begin()->oid, 
-      seqs_by_oid.size(),
-      pending_lognode_deltas_by_seq.size());
   } else if (t.get_src() == Transaction::src_t::TRIM_LOG) {
     assert(t.lognode_deltas.size() > 0);
-    auto oid = t.lognode_deltas.begin()->oid;
-    // clear reserved
-    clear_lognode_reservation(oid);
+    for (const auto& p : t.lognode_deltas) {
+      // clear reserved
+      clear_lognode_reservation(p.oid);
+    }
   }
 
   if (!can_drop_backref()) {
