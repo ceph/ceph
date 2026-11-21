@@ -45,8 +45,8 @@ int RGWLoadGenRequestEnv::sign(const DoutPrefixProvider *dpp, RGWAccessKey& acce
                                       access_key.key));
     headers["HTTP_AUTHORIZATION"] = \
       std::string("AWS ") + access_key.id + ":" + signature;
-  } catch (int ret) {
-    return ret;
+  } catch (const boost::system::system_error& e) {
+    return ceph::from_error_code(e.code());
   }
 
   return 0;

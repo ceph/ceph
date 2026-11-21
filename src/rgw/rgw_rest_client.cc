@@ -216,8 +216,8 @@ static int sign_request_v2(const DoutPrefixProvider *dpp, const RGWAccessKey& ke
   string digest;
   try {
     digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
-  } catch (int ret) {
-    return ret;
+  } catch (const boost::system::system_error& e) {
+    return ceph::from_error_code(e.code());
   }
 
   string auth_hdr = "AWS " + key.id + ":" + digest;
