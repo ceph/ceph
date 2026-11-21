@@ -100,6 +100,7 @@ Administration
     CephFS Snapshot Mirroring <cephfs-mirroring>
     CephFS Snapshot Mirroring Checkpoints <cephfs-mirroring-checkpoints>
     Purge Queue <purge-queue>
+    Erasure-coded metadata and default data pools (Tech Preview) <ec-metadata-pools>
 
 .. raw:: html
 

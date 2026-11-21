@@ -1,8 +1,5 @@
 overrides:
   ceph:
-    cephfs:
-      ec_profile:
-        - disabled
     conf:
       client:
         client_fscrypt_dummy_encryption: true

@@ -1,8 +1,5 @@
 overrides:
   ceph:
-    cephfs:
-      ec_profile:
-        - disabled
     log-ignorelist:
       - OSD full dropping all updates
       - OSD near full
