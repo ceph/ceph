@@ -807,6 +807,7 @@ public:
 
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
+  int ll_append(Fh *fh, loff_t len, const char *data);
   int64_t ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
   int64_t ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
   int64_t ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov, int iovcnt,
@@ -923,7 +924,13 @@ public:
   void kick_flushing_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
-  int get_caps(Fh *fh, int need, int want, int *have, loff_t endoff);
+  int get_caps(Fh *fh, int need, int want, int *have, loff_t endoff,
+               int allow_implemented = 0);
+  bool append_excl_unsupported(Inode *in);
+  int get_append_caps(Fh *fh, uint64_t size, int want, int *have,
+                      int64_t *offset, int *extra_refs, bool append = true);
+  void _append_done(Inode *in, int extra_refs);
+  void _append_hold_release(Inode *in);
   int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
@@ -1193,6 +1200,7 @@ protected:
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
+  static const unsigned CHECK_CAPS_APPEND = 0x4;  // ask for the append turn
 
   void check_caps(const InodeRef& in, unsigned flags);
 
@@ -1855,6 +1863,7 @@ private:
   };
 
   struct CWF_iofinish;
+  class C_Write_Finisher;
 
   class WriteEncMgr : public RefCountedObject {
   protected:
@@ -1871,6 +1880,8 @@ private:
     Inode *in;
 
     Context *iofinish{nullptr};
+    // an async write's finisher, told the range that was really written
+    C_Write_Finisher *cwf{nullptr};
 
     int64_t offset;
     uint64_t size;
@@ -1927,7 +1938,7 @@ private:
 
   protected:
     virtual int do_write() = 0;
-    virtual void update_write_params() = 0;
+    void update_write_params();
 
   public:
     WriteEncMgr(Client *clnt,
@@ -1937,6 +1948,10 @@ private:
     virtual ~WriteEncMgr();
 
     int init();
+
+    void set_write_finisher(C_Write_Finisher *_cwf) {
+      cwf = _cwf;
+    }
 
     void get_write_params(int64_t *poffset, uint64_t *psize, bufferlist **ppbl) const {
       *poffset = offset;
@@ -1978,7 +1993,6 @@ private:
                          bufferlist& bl,
                          bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
 
-    void update_write_params() override;
     int do_write() override;
   };
 
@@ -1989,7 +2003,6 @@ private:
                          bufferlist& bl,
                          bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
 
-    void update_write_params() override {}
     int do_write() override;
   };
 
@@ -2027,6 +2040,17 @@ private:
       size = _size;
     }
 
+    // an O_APPEND write: end its reservation when the write completes
+    void set_append(int extra_refs) {
+      append = true;
+      append_extra_refs = extra_refs;
+    }
+
+    ~C_Write_Finisher() override {
+      if (append)  // never completed, e.g. _write() failed
+        clnt->_append_done(in, append_extra_refs);
+    }
+
   private:
     Client *clnt;
     Context *onfinish;
@@ -2047,6 +2071,8 @@ private:
     bool iofinished;
     bool onuninlinefinished;
     bool fsync_finished;
+    bool append = false;
+    int append_extra_refs = 0;
     bool try_complete();
   };
 
