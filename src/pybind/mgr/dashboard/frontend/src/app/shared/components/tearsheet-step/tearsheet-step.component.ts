@@ -7,6 +7,7 @@ import {
   TemplateRef,
   ViewChild
 } from '@angular/core';
+import { FormGroupDirective } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { TearsheetStep } from '../../models/tearsheet-step';
 
@@ -23,18 +24,36 @@ export class TearsheetStepComponent implements OnChanges {
   @ContentChild('tearsheetStep')
   stepComponent!: TearsheetStep;
 
+  /**
+   * Optional fallback when the step uses an inline `<form [formGroup]>` without
+   * `#tearsheetStep`. Off by default so existing steps (e.g. OSD form) keep
+   * previous canProceed behavior.
+   */
+  @ContentChild(FormGroupDirective)
+  formGroupDirective?: FormGroupDirective;
+
   @Input() stepValid: boolean | null = null;
+
+  /** Opt in to using an inline FormGroupDirective for Next/Submit validity. */
+  @Input() autoDetectFormGroup = false;
 
   readonly validityChange$ = new Subject<boolean>();
 
   ngOnChanges(changes: SimpleChanges): void {
-    if ('stepValid' in changes) {
+    if ('stepValid' in changes || 'autoDetectFormGroup' in changes) {
       this.validityChange$.next(this.canProceed);
     }
   }
 
   get resolvedFormGroup() {
-    return this.stepComponent?.formGroup ?? null;
+    const projectedFormGroup = this.stepComponent?.formGroup ?? null;
+    if (projectedFormGroup) {
+      return projectedFormGroup;
+    }
+    if (this.autoDetectFormGroup) {
+      return this.formGroupDirective?.form ?? null;
+    }
+    return null;
   }
 
   get canProceed(): boolean {
