@@ -1785,7 +1785,7 @@ public:
       });
   }
 
-#define PENDING_MAX_NODE_DELTAS 18
+  static constexpr size_t PENDING_MAX_NODE_DELTAS = 18;
   // Get pending deltas for this OID and the number of entries to remove.
   // Normally require PENDING_MAX_NODE_DELTAS entries unless forced.
   std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
