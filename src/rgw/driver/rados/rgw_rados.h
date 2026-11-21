@@ -1455,6 +1455,17 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 		    const rgw_obj& obj_instance,
 		    RGWBucketInfo& bucket_info,
 		    std::function<int(BucketShard *)> call, optional_yield y);
+  // Calls call() on the bucket index shard of obj_instance, and retries
+  // while the bucket index is being resharded. get_bs() provides the shard
+  // before each attempt; invalidate_bs() is called when the shard may refer
+  // to a stale index layout, so the next get_bs() must reinitialize it.
+  int guard_reshard(const DoutPrefixProvider *dpp,
+                    const rgw_obj& obj_instance,
+                    RGWBucketInfo& bucket_info,
+                    std::function<int(BucketShard **)> get_bs,
+                    std::function<void()> invalidate_bs,
+                    std::function<int(BucketShard *)> call,
+                    BucketShard **pbs, optional_yield y);
   /* clear the progress flag when reshard failed */
   int check_reshard_logrecord_status(RGWBucketInfo& bucket_info, optional_yield y,
                                      const DoutPrefixProvider *dpp);
