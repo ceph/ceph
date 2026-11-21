@@ -122,7 +122,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   createOsdsLabel = $localize`Create OSDs`;
   isSubmitLoading = false;
 
-  deploymentOptions!: DeploymentOptions;
+  deploymentOptions?: DeploymentOptions;
   optionNames = Object.values(OsdDeploymentOptions);
 
   steps: Array<Step> = this.getStepsForMode('automatic');
@@ -143,7 +143,6 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private hostService: HostService,
     private router: Router,
     private formatterService: FormatterService,
-    // private modalService: ModalService,
     private osdService: OsdService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -298,13 +297,10 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
     // restoring form value on back/next
     if (this.osdService.selectedFormValues) {
-      this.form = _.cloneDeep(this.osdService.selectedFormValues);
       if (!this.form.get('deploymentMode')) {
         this.form.addControl('deploymentMode', new UntypedFormControl('automatic'));
       }
-      this.form
-        .get('deploymentOption')
-        .setValue(this.osdService.selectedFormValues.value?.deploymentOption);
+      this.form.patchValue(this.osdService.selectedFormValues);
     }
     this.simpleDeployment = this.osdService.isDeployementModeSimple;
     this.form
@@ -519,11 +515,14 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   submit() {
     if (this.simpleDeployment) {
-      this.isSubmitLoading = true;
       const option = this.form.get('deploymentOption').value;
+      const title = this.deploymentOptions?.options?.[option]?.title;
+      if (!title) {
+        return;
+      }
+      this.isSubmitLoading = true;
       const encrypted = this.getEncryptedFeatureValue();
       const deploymentSpec = { option: option, encrypted: encrypted };
-      const title = this.deploymentOptions.options[deploymentSpec.option].title;
       const trackingId = `${title} deployment`;
       this.taskWrapper
         .wrapTaskAroundCall({
@@ -579,7 +578,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.osdService.selectedFormValues = _.cloneDeep(this.form);
+    this.osdService.selectedFormValues = this.form.getRawValue();
     this.osdService.isDeployementModeSimple = this.simpleDeployment;
   }
 }
