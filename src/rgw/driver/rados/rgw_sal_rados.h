@@ -1144,6 +1144,7 @@ public:
 			processor(&*aio, store->getRados(), bucket_info,
 				  ptail_placement_rule, owner, obj_ctx,
 				  obj, olh_epoch, unique_tag,
+				  true /* apply_default_retention */,
 				  dpp, y, trace)
   {}
   ~RadosAtomicWriter() = default;

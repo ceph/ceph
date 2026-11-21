@@ -412,6 +412,7 @@ int AtomicObjectProcessor::complete(
   obj_op.meta.owner = owner;
   obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.apply_default_retention = apply_default_retention;
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.user_data = user_data;
