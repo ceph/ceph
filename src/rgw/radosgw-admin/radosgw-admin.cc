@@ -321,10 +321,6 @@ void usage()
   cout << "  datalog type                     change datalog type to --log_type=fifo\n";
   cout << "  datalog semaphore list           List recovery semaphores\n";
   cout << "  datalog semaphore reset          Reset recovery semaphore (use marker)\n";
-  cout << "  orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
-  cout << "  orphans finish                   deprecated -- clean up search for leaked rados objects\n";
-  cout << "  orphans list-jobs                deprecated -- list the current job-ids for orphans search\n";
-  cout << "    * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool\n";
   cout << "  role create                      create a AWS role for use with STS\n";
   cout << "  role delete                      remove a role\n";
   cout << "  role get                         get a role\n";
@@ -537,13 +533,6 @@ void usage()
   cout << "   --max-delete-ops              specify max requests per accumulation interval for DELETE ops per RGW (DELETE request methods), 0 means unlimited\n";
   cout << "   --ratelimit-scope             scope of rate limiting: bucket, user, anonymous\n";
   cout << "                                 anonymous can be configured only with global rate limit\n";
-  cout << "\nOrphans search options:\n";
-  cout << "   --num-shards                  num of shards to use for keeping the temporary scan info\n";
-  cout << "   --orphan-stale-secs           num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
-  cout << "   --job-id                      set the job id (for orphans find)\n";
-  cout << "   --detail                      detailed mode, log and stat head objects as well\n";
-  cout << "\nOrphans list-jobs options:\n";
-  cout << "   --extra-info                  provide extra info in job list\n";
   cout << "\nRole options:\n";
   cout << "   --role-name                   name of the role to create\n";
   cout << "   --path                        path to the role\n";
@@ -710,12 +699,6 @@ static SimpleCmd::Commands all_cmds = {
   { "lc process", OPT::LC_PROCESS },
 #endif
   { "lc reshard fix", OPT::LC_RESHARD_FIX },
-#ifdef WITH_RADOSGW_RADOS
-  { "orphans find", OPT::ORPHANS_FIND },
-  { "orphans finish", OPT::ORPHANS_FINISH },
-  { "orphans list jobs", OPT::ORPHANS_LIST_JOBS },
-  { "orphans list-jobs", OPT::ORPHANS_LIST_JOBS },
-#endif
   { "zonegroup add", OPT::ZONEGROUP_ADD },
   { "zonegroup create", OPT::ZONEGROUP_CREATE },
   { "zonegroup default", OPT::ZONEGROUP_DEFAULT },
@@ -3614,7 +3597,6 @@ int main(int argc, const char **argv)
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
 
-  string job_id;
   int num_shards = 0;
   bool num_shards_specified = false;
   std::optional<int> bucket_index_max_shards;
@@ -3626,7 +3608,6 @@ int main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_RADOS
   uint64_t orphan_stale_secs = (24 * 3600);
 #endif
-  int detail = false;
 
   std::string val;
   string err;
@@ -3818,8 +3799,6 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &key_active, NULL, "--key-active", (char*)NULL)) {
       key_active_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
-      job_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
@@ -4327,8 +4306,6 @@ int main(int argc, const char **argv)
       inject_delay_at = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject-delay-ms", (char*)NULL)) {
       inject_delay = std::chrono::milliseconds(atoi(val.c_str()));
-    } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
-      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
       str_script_ctx = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--package", (char*)NULL)) {
@@ -4493,9 +4470,6 @@ int main(int argc, const char **argv)
 			 OPT::GC_LIST,
 #endif
 			 OPT::LC_LIST,
-#ifdef WITH_RADOSGW_RADOS
-			 OPT::ORPHANS_LIST_JOBS,
-#endif
 			 OPT::ZONEGROUP_GET,
 			 OPT::ZONEGROUP_LIST,
 			 OPT::ZONEGROUP_PLACEMENT_LIST,
@@ -9795,115 +9769,6 @@ next:
     }
 
   }
-
-#ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::ORPHANS_FIND) {
-    if (!yes_i_really_mean_it) {
-      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
-	   << "accidental removal of active objects cannot be reversed; "
-	   << "do you really mean it? (requires --yes-i-really-mean-it)"
-	   << std::endl;
-      return EINVAL;
-    } else {
-      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
-	   << std::endl;
-    }
-
-    RGWOrphanSearch search(static_cast<rgw::sal::RadosStore*>(driver), max_concurrent_ios, orphan_stale_secs);
-
-    if (job_id.empty()) {
-      cerr << "ERROR: --job-id not specified" << std::endl;
-      return EINVAL;
-    }
-    if (pool_name.empty()) {
-      cerr << "ERROR: --pool not specified" << std::endl;
-      return EINVAL;
-    }
-
-    RGWOrphanSearchInfo info;
-
-    info.pool = pool;
-    info.job_name = job_id;
-    info.num_shards = num_shards;
-
-    int ret = search.init(dpp(), job_id, &info, detail);
-    if (ret < 0) {
-      cerr << "could not init search, ret=" << ret << std::endl;
-      return -ret;
-    }
-    ret = search.run(dpp());
-    if (ret < 0) {
-      return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT::ORPHANS_FINISH) {
-    if (!yes_i_really_mean_it) {
-      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
-	   << "accidental removal of active objects cannot be reversed; "
-	   << "do you really mean it? (requires --yes-i-really-mean-it)"
-	   << std::endl;
-      return EINVAL;
-    } else {
-      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
-	   << std::endl;
-    }
-
-    RGWOrphanSearch search(static_cast<rgw::sal::RadosStore*>(driver), max_concurrent_ios, orphan_stale_secs);
-
-    if (job_id.empty()) {
-      cerr << "ERROR: --job-id not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = search.init(dpp(), job_id, NULL);
-    if (ret < 0) {
-      if (ret == -ENOENT) {
-        cerr << "job not found" << std::endl;
-      }
-      return -ret;
-    }
-    ret = search.finish();
-    if (ret < 0) {
-      return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT::ORPHANS_LIST_JOBS){
-    if (!yes_i_really_mean_it) {
-      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
-	   << "do you really mean it? (requires --yes-i-really-mean-it)"
-	   << std::endl;
-      return EINVAL;
-    } else {
-      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
-	   << std::endl;
-    }
-
-    RGWOrphanStore orphan_store(static_cast<rgw::sal::RadosStore*>(driver));
-    int ret = orphan_store.init(dpp());
-    if (ret < 0){
-      cerr << "connection to cluster failed!" << std::endl;
-      return -ret;
-    }
-
-    map <string,RGWOrphanSearchState> m;
-    ret = orphan_store.list_jobs(m);
-    if (ret < 0) {
-      cerr << "job list failed" << std::endl;
-      return -ret;
-    }
-    formatter->open_array_section("entries");
-    for (const auto &it: m){
-      if (!extra_info){
-	formatter->dump_string("job-id",it.first);
-      } else {
-	encode_json("orphan_search_state", it.second, formatter.get());
-      }
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-#endif
 
   if (opt_cmd == OPT::USER_CHECK) {
     check_bad_owner_bucket_mapping(driver, user->get_id(),

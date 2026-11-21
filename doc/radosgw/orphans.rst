@@ -16,13 +16,10 @@ objects "orphans".
 Orphan List
 -----------
 
-The supported tool for identifying orphans is ``rgw-orphan-list``. It
-replaces the deprecated ``radosgw-admin orphans find`` subcommands.
-The two are separate implementations, not aliases: the deprecated
-subcommands compute their results on the cluster itself and are no
-longer maintained, and they should not be used. They are described in
-`Orphans Find -- DEPRECATED`_ below only so that operators who
-encounter them know their status. When run, ``rgw-orphan-list`` will list the
+The tool for identifying orphans is ``rgw-orphan-list``. It replaces
+the ``radosgw-admin orphans find``, ``orphans finish``, and ``orphans
+list-jobs`` subcommands, which were deprecated in Octopus and have been
+removed. When run, ``rgw-orphan-list`` will list the
 available pools and prompt the user to enter the name of the data
 pool. At that point the tool will, perhaps after an extended period of
 time, produce a local file containing the RADOS objects from the
@@ -88,31 +85,3 @@ RGW. When larger objects are copied from bucket to bucket, only the
 "head" objects are actually copied, and the tail objects are
 shared. Those shared objects will contain the marker of the original
 bucket.
-
-
-Orphans Find -- DEPRECATED
---------------------------
-
-The ``radosgw-admin`` tool has three subcommands that were previously
-used to manage orphans. These subcommands are deprecated; use
-``rgw-orphan-list`` instead. The deprecated subcommands are:
-
-.. prompt:: bash #
-
-   radosgw-admin orphans find ...
-   radosgw-admin orphans finish ...
-   radosgw-admin orphans list-jobs ...
-
-There are two key problems with these subcommands. First, they have
-not been actively maintained and therefore have not tracked RGW as it
-has evolved in terms of features and updates. As a result the
-confidence that these subcommands can accurately identify true
-orphans is presently low.
-
-Second, these subcommands store intermediate results on the cluster
-itself. This can be problematic when cluster administrators are
-confronting insufficient storage space and want to remove orphans as
-a means of addressing the issue. The intermediate results could
-strain the existing cluster storage capacity even further.
-
-For these reasons "orphans find" has been deprecated.
