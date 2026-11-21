@@ -184,7 +184,6 @@ public:
 
   int get_params(optional_yield y) override;
   void send_response() override;
-  void send_versioned_response();
 };
 
 class RGWGetBucketLocation_ObjStore_S3 : public RGWGetBucketLocation {
