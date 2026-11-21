@@ -59,9 +59,15 @@ void RGWOp_User_List::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(driver);
 
-  uint32_t max_entries;
+  uint32_t max_entries = 1000;
   std::string marker;
-  RESTArgs::get_uint32(s, "max-entries", 1000, &max_entries);
+  // get_uint32() leaves the output unset when the value doesn't parse, so
+  // refuse the request instead of listing with an uninitialized page size
+  op_ret = RESTArgs::get_uint32(s, "max-entries", 1000, &max_entries);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "failed to parse max-entries" << dendl;
+    return;
+  }
   RESTArgs::get_string(s, "marker", marker, &marker);
 
   op_state.max_entries = max_entries;
