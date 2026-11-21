@@ -1910,6 +1910,13 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
       (void) s->object->load_obj_state(s, s->yield, true /* follow_olh */);
       auto tf = s->object->is_delete_marker() ? "true" : "false";
       dump_header(s, "x-amz-delete-marker", tf);
+      /* for a specific version delete marker, return 405 MethodNotAllowed
+       * as required by the S3 API */
+      if (s->object->is_delete_marker() &&
+          !s->object_key.instance.empty()) {
+        dump_header(s, "x-amz-version-id", s->object_key.instance);
+        ret = -ERR_METHOD_NOT_ALLOWED;
+      }
     }
   default:
     break;
