@@ -54,17 +54,27 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
          RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache* cache_svc,
          const RGWZoneParams& zone, const std::string& topic_key,
          rgw_pubsub_topic& info, RGWChainedCacheImpl<cache_entry>& cache,
-         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv)
+         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv,
+         boost::optional<obj_version> expected_version)
 {
   if (auto e = cache.find(topic_key)) {
-    if (pmtime) {
-      *pmtime = e->mtime;
+    /* cached copy is not the version the caller expects: it missed an
+     * update, so drop it and re-read */
+    if (expected_version &&
+        !e->objv.read_version.compare(&(*expected_version))) {
+      ldpp_dout(dpp, 4) << "topic cache entry " << topic_key
+                        << " is stale, re-reading" << dendl;
+      cache.invalidate(topic_key);
+    } else {
+      if (pmtime) {
+        *pmtime = e->mtime;
+      }
+      if (pobjv) {
+        *pobjv = std::move(e->objv);
+      }
+      info = std::move(e->info);
+      return 0;
     }
-    if (pobjv) {
-      *pobjv = std::move(e->objv);
-    }
-    info = std::move(e->info);
-    return 0;
   }
 
   const rgw_raw_obj obj = get_topic_obj(zone, topic_key);
@@ -73,7 +83,8 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
   cache_entry entry;
   rgw_cache_entry_info cache_info;
   int r = rgw_get_system_obj(&sysobj, obj.pool, obj.oid, bl, &entry.objv,
-                             &entry.mtime, y, dpp, nullptr, &cache_info);
+                             &entry.mtime, y, dpp, nullptr, &cache_info,
+                             boost::none, false, expected_version);
   if (r < 0) {
     return r;
   }
@@ -324,11 +335,12 @@ class MetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj,
-          optional_yield y, const DoutPrefixProvider* dpp) override
+          optional_yield y, const DoutPrefixProvider* dpp,
+          boost::optional<obj_version> expected_version = boost::none) override
   {
     cache_entry e;
     int ret = read(dpp, y, sysobj, cache_svc, zone, entry,
-                   e.info, cache, &e.mtime, &e.objv);
+                   e.info, cache, &e.mtime, &e.objv, expected_version);
     if (ret < 0) {
       return ret;
     }

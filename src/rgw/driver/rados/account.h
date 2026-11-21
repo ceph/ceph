@@ -19,9 +19,11 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <boost/optional.hpp>
 #include "include/encoding.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
+#include "cls/version/cls_version_types.h"
 
 namespace ceph { class Formatter; }
 class DoutPrefixProvider;
@@ -87,7 +89,8 @@ int read(const DoutPrefixProvider* dpp,
          RGWAccountInfo& info,
          std::map<std::string, ceph::buffer::list>& attrs,
          ceph::real_time& mtime,
-         RGWObjVersionTracker& objv);
+         RGWObjVersionTracker& objv,
+         boost::optional<obj_version> expected_version = boost::none);
 
 /// Read account info by name
 int read_by_name(const DoutPrefixProvider* dpp,

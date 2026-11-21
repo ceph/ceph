@@ -47,7 +47,8 @@ protected:
                    std::map<std::string, bufferlist> *attrs,
 		   bool raw_attrs,
                    rgw_cache_entry_info *cache_info,
-                   boost::optional<obj_version>,
+                   boost::optional<obj_version> refresh_version,
+                   boost::optional<obj_version> expected_version,
                    optional_yield y);
 
   virtual int remove(const DoutPrefixProvider *dpp, 

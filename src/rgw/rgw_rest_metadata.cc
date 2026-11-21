@@ -61,8 +61,32 @@ void RGWOp_Metadata_Get::execute(optional_yield y) {
 #ifdef WITH_RADOSGW_RADOS
   auto meta_mgr = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr;
 
-  /* Get keys */
-  op_ret = meta_mgr->get(metadata_key, s->formatter, s->yield, s);
+  /* a syncing peer may pass the version from its mdlog entry, so that a
+   * stale cache entry here is re-read from rados instead of replicated */
+  boost::optional<obj_version> expected_version;
+  if (s->system_request) {
+    bool ver_exists = false, tag_exists = false;
+    string ver_str = s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "expected-version-ver", &ver_exists);
+    string tag_str = s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "expected-version-tag", &tag_exists);
+    if (ver_exists && tag_exists && !tag_str.empty()) {
+      string err;
+      const uint64_t ver = strict_strtoll(ver_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldpp_dout(s, 5) << "ERROR: invalid " << RGW_SYS_PARAM_PREFIX
+            << "expected-version-ver=" << ver_str << ": " << err << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+      obj_version rv;
+      rv.ver = ver;
+      rv.tag = std::move(tag_str);
+      expected_version = rv;
+      ldpp_dout(s, 20) << "metadata get: key=" << metadata_key
+          << " expected_version=" << rv.tag << ":" << rv.ver << dendl;
+    }
+  }
+
+  op_ret = meta_mgr->get(metadata_key, s->formatter, s->yield, s, expected_version);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;

@@ -18,8 +18,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <boost/optional.hpp>
 #include "include/rados/librados_fwd.hpp"
 #include "common/ceph_time.h"
+#include "cls/version/cls_version_types.h"
 
 class DoutPrefixProvider;
 class optional_yield;
@@ -42,7 +44,8 @@ int read(
     std::string_view url,
     RGWOIDCProviderInfo& info,
     ceph::real_time* pmtime = nullptr,
-    RGWObjVersionTracker* pobjv = nullptr);
+    RGWObjVersionTracker* pobjv = nullptr,
+    boost::optional<obj_version> expected_version = boost::none);
 
 /// Write or overwrite OIDC provider info.
 int write(
