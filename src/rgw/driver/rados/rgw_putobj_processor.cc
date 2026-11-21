@@ -204,6 +204,27 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   return process_completed(c, &written);
 }
 
+int RadosWriter::set_attrs(const rgw_raw_obj& obj,
+                           const std::map<std::string, bufferlist>& attrs)
+{
+  rgw_rados_ref ref;
+  int r = store->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectWriteOperation op;
+  op.create(false);
+  for (const auto& [name, bl] : attrs) {
+    op.setxattr(name.c_str(), bl);
+  }
+  constexpr uint64_t cost = 0; // no data
+  constexpr uint64_t id = 0; // unused
+  auto c = aio->get(ref.obj, Aio::librados_op(std::move(ref.ioctx),
+                                              std::move(op), y, &trace),
+                    cost, id);
+  return process_completed(c, &written);
+}
+
 int RadosWriter::drain()
 {
   return process_completed(aio->drain(), &written);
@@ -388,10 +409,16 @@ int AtomicObjectProcessor::complete(
   if (r < 0) {
     return r;
   }
-  const uint64_t actual_size = get_actual_size();
-  r = manifest_gen.create_next(actual_size);
-  if (r < 0) {
-    return r;
+  uint64_t actual_size;
+  if (written_manifest) {
+    manifest = std::move(*written_manifest);
+    actual_size = manifest.get_obj_size();
+  } else {
+    actual_size = get_actual_size();
+    r = manifest_gen.create_next(actual_size);
+    if (r < 0) {
+      return r;
+    }
   }
 
   obj_ctx.set_atomic(head_obj, true);
@@ -656,6 +683,71 @@ int MultipartObjectProcessor::complete(
     *pcanceled = obj_op.meta.canceled;
   }
   return 0;
+}
+
+int MultipartCopyPartProcessor::process_first_chunk(bufferlist&& data,
+                                                    DataProcessor **processor)
+{
+  // the prefix is new, so the part head can't exist. write it without
+  // waiting, complete_part() creates it if the part is empty
+  int r = writer.process(std::move(data), 0);
+  if (r < 0) {
+    return r;
+  }
+  *processor = &stripe;
+  return 0;
+}
+
+int MultipartCopyPartProcessor::prepare(optional_yield y)
+{
+  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  uint64_t chunk_size;
+  uint64_t stripe_size;
+  uint64_t alignment;
+
+  int r = store->get_max_chunk_size(tail_placement_rule, head_obj, &chunk_size,
+                                    dpp, &alignment);
+  if (r < 0) {
+    return r;
+  }
+  store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+
+  manifest.set_prefix(prefix);
+  manifest.set_multipart_part_rule(stripe_size, part_num);
+
+  r = manifest_gen.create_begin(store->ctx(), &manifest,
+                                bucket_info.placement_rule,
+                                &tail_placement_rule,
+                                head_obj.bucket, head_obj);
+  if (r < 0) {
+    return r;
+  }
+
+  part_head = manifest_gen.get_cur_obj(store);
+  r = writer.set_stripe_obj(part_head);
+  if (r < 0) {
+    return r;
+  }
+  stripe_size = manifest_gen.cur_stripe_max_size();
+  set_head_chunk_size(stripe_size);
+
+  chunk = ChunkProcessor(&writer, chunk_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
+  return 0;
+}
+
+int MultipartCopyPartProcessor::complete_part(
+    const std::map<std::string, bufferlist>& attrs, optional_yield y)
+{
+  int r = manifest_gen.create_next(get_actual_size());
+  if (r < 0) {
+    return r;
+  }
+
+  // reads of the part (GET ?partNumber, GetObjectAttributes) take its etag,
+  // checksum and compression info from the attrs of its head object. rados
+  // applies them after the head's data, which this client wrote first
+  return writer.set_attrs(part_head, attrs);
 }
 
 int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::sal::DataProcessor **processor)
