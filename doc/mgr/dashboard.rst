@@ -16,7 +16,7 @@ clusters. It had a simple architecture. However, demand grew for richer,
 web-based management capabilities for users who prefer a WebUI over the CLI.
 
 The :term:`Ceph Dashboard` module adds web-based monitoring and administration
-to the Ceph Manager. The architecture and functionality of this new module are
+to the Ceph Manager. The architecture and functionality of this module are
 derived from the `openATTIC Ceph management and monitoring tool
 <https://openattic.org/>`_. Development was originally driven by the openATTIC
 team at `SUSE <https://www.suse.com/>`_, with support from members of the Ceph
@@ -43,14 +43,16 @@ The dashboard provides the following features:
   after the first login or after a configurable time period. See
   :ref:`dashboard-user-role-management` for details.
 * **Single Sign-On (SSO)**: The dashboard supports authentication
-   via an external identity provider using the SAML 2.0 protocol or thse OAuth2 protocol. See
-   :ref:dashboard-saml2-sso-support and :ref:dashboard-oauth2-sso-support for details.
+  via an external identity provider using the SAML 2.0 protocol or the
+  OAuth2 protocol (Tentacle 20.2 and later). See
+  :ref:`dashboard-saml2-sso-support` and :ref:`dashboard-oauth2-sso-support`
+  for details.
 * **SSL/TLS support**: All HTTP communication between the web browser and the
   dashboard is secured via SSL. A self-signed certificate can be created with
   a built-in command, but it's also possible to import custom certificates
   signed and issued by a CA. See :ref:`dashboard-ssl-tls-support` for details.
-* **Auditing**: The dashboard backend can be configured to log all ``PUT``, ``POST``
-  and ``DELETE`` API requests in the Ceph audit log. See :ref:`dashboard-auditing`
+* **Auditing**: The dashboard backend can be configured to log all ``PUT``, ``POST``,
+  ``PATCH`` and ``DELETE`` API requests in the Ceph audit log. See :ref:`dashboard-auditing`
   for instructions on how to enable this feature.
 * **Internationalization (I18N)**: The language used for dashboard text can be
   selected at run-time.
@@ -59,11 +61,11 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
 
 * **Overall cluster health**: Display performance and capacity metrics as well
   as cluster status.
-* **Embedded Grafana Dashboards**: Ceph Dashboard
-  `Grafana`_ dashboards may be embedded in external applications and web pages
-  to surface information and performance metrics gathered by
-  the :ref:`mgr-prometheus` module. See
-  :ref:`dashboard-grafana` for details on how to configure this functionality.
+* **Embedded Grafana Dashboards**: The Ceph Dashboard embeds `Grafana`_
+  dashboards that show information and performance metrics that Prometheus
+  collects from the :ref:`mgr-prometheus`, the ``ceph-exporter`` daemons and
+  the Node exporter. See :ref:`dashboard-grafana` for details on how to
+  configure this functionality.
 * **Cluster logs**: Display the latest updates to the cluster's event and
   audit log files. Log entries can be filtered by priority, date or keyword.
 * **Hosts**: Display a list of all cluster hosts along with their
@@ -83,7 +85,7 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
 * **OSDs**: List OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance
   counters and usage histograms for read/write operations. Mark OSDs
-  up/down/out, purge and reweight OSDs, perform scrub operations, modify
+  in, out, down or lost, purge and reweight OSDs, perform scrub operations, modify
   various scrub-related configuration options, select profiles to
   adjust the level of backfilling activity. List all drives associated with an
   OSD. Set and change the device class of an OSD, display and sort OSDs by
@@ -127,6 +129,12 @@ The landing page of Ceph Dashboard serves as the home page and features metrics
 such as the overall cluster status, performance, and capacity. It provides real-time
 updates on any changes in the cluster and allows quick access to other sections of the dashboard.
 
+.. note::
+
+   This section describes the landing page of Squid 19.2 and Tentacle 20.2.
+   In Umbrella 21 and later releases, the landing page is the *Overview*
+   page, with health, alerts, storage and performance cards.
+
 .. image:: dashboard-landing-page.png
 
 Details
@@ -148,8 +156,8 @@ Provides a visual indication of cluster health, and displays cluster alerts grou
 Capacity
 """"""""
 * **Used**: Displays the used capacity out of the total physical capacity provided by storage nodes (OSDs)
-* **Warning**: Displays the `nearfull` threshold of the OSDs
-* **Danger**: Displays the `full` threshold of the OSDs
+* **Warning**: Displays the ``nearfull`` threshold of the OSDs
+* **Danger**: Displays the ``full`` threshold of the OSDs
 
 .. image:: capacity-card.png
 
@@ -170,7 +178,7 @@ Cluster Utilization
 * **IOPS (Input/Output Operations Per Second)**: Number of read and write operations.
 * **Latency**: Amount of time that it takes to process a read or a write request.
 * **Client Throughput**: Amount of data that clients read or write to the cluster.
-* **Recovery Throughput**: Amount of recovery data that clients read or write to the cluster.
+* **Recovery Throughput**: Amount of data per second that the OSDs move during recovery.
 
 
 .. image:: cluster-utilization-card.png
@@ -187,9 +195,9 @@ browsers:
 | `Chrome <https://www.google.com/chrome/>`_ and                | latest 2 major versions               |
 | `Chromium <https://www.chromium.org/>`_ based browsers        |                                       |
 +---------------------------------------------------------------+---------------------------------------+
-| `Firefox <https://www.mozilla.org/firefox/>`_                 | latest 2 major versions               |
+| `Firefox <https://www.firefox.com/>`_                         | latest 2 major versions               |
 +---------------------------------------------------------------+---------------------------------------+
-| `Firefox ESR <https://www.mozilla.org/firefox/enterprise/>`_  | latest major version                  |
+| `Firefox ESR <https://www.firefox.com/en-US/enterprise/>`_    | latest major version                  |
 +---------------------------------------------------------------+---------------------------------------+
 
 While Ceph Dashboard might work in older browsers, we cannot guarantee compatibility and
@@ -236,7 +244,18 @@ dashboard.
 To properly secure a deployment and to remove the warning, a
 certificate that is issued by a certificate authority (CA) should be used.
 
-For example, a key pair can be generated with a command similar to:
+For example, create a private key and a certificate signing request (CSR)
+with a command similar to the following, and send ``dashboard.csr`` to the
+CA:
+
+.. prompt:: bash #
+
+   openssl req -new -nodes -newkey rsa:2048 \
+   -subj "/O=IT/CN=ceph-mgr-dashboard" \
+   -keyout dashboard.key -out dashboard.csr
+
+A self-signed key pair can instead be generated with a command similar
+to:
 
 .. prompt:: bash #
 
@@ -246,19 +265,22 @@ For example, a key pair can be generated with a command similar to:
 
 .. note::
 
-   Currently, the Ceph Dashboard supports only RSA private keys for SSL/TLS
-   certificates. If you attempt to configure the dashboard with an ECDSA/EC
-   key, the module will fail to start with an error similar to:
+   In Squid 19.2 and Tentacle 20.2, the Ceph Dashboard supports only RSA
+   private keys for SSL/TLS certificates, because the Manager checks the key
+   with pyOpenSSL's ``PKey.check()`` method, which supports only RSA keys.
+   With an ECDSA or EC key, the dashboard does not start. In Squid 19.2 the
+   module fails with an error similar to:
 
    ``MGR_MODULE_ERROR: Module 'dashboard' has failed: key type unsupported``
 
-   This limitation exists because the verification routine in the Ceph Manager
-   uses pyOpenSSL, which supports only RSA keys in its
-   ``PKey.check()`` method. Until this restriction is lifted, generate or
-   request certificates with RSA keys.
+   In Tentacle 20.2 the module does not fail; the Manager log repeats
+   ``Config not ready to serve, waiting`` with the key error. In these
+   releases, generate or request certificates with RSA keys. Umbrella 21
+   and later releases check the key with the ``cryptography`` library, and
+   this check no longer rejects EC keys.
 
-The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
-can enable it for Ceph manager instances by running the following commands:
+When you have the certificate (``dashboard.crt``), enable it for Ceph
+Manager instances by running the following commands:
 
 .. prompt:: bash #
 
@@ -266,8 +288,10 @@ can enable it for Ceph manager instances by running the following commands:
    ceph dashboard set-ssl-certificate-key -i dashboard.key
 
 If unique certificates are desired for each manager instance,
-the name of the instance can be included as follows (where ``$name`` is the name
-of the ``ceph-mgr`` instance, usually the hostname):
+the name of the instance can be included as follows (where ``$name`` is the ID
+of the ``ceph-mgr`` instance; on clusters deployed by cephadm the ID is the
+short host name followed by a dot and six random letters, for example
+``host1.abcdef``):
 
 .. prompt:: bash #
 
@@ -294,7 +318,7 @@ wanted or required. See :ref:`dashboard-proxy-configuration` for more details.
 
   You must restart Ceph manager processes after changing the SSL
   certificate and key. This can be accomplished by either running ``ceph mgr
-  fail mgr`` or by disabling and re-enabling the dashboard module (which also
+  fail`` or by disabling and re-enabling the dashboard module (which also
   triggers the manager to respawn itself):
   
   .. prompt:: bash #
@@ -312,11 +336,12 @@ Like most web applications, the dashboard binds to a TCP/IP address and TCP port
 By default, the ``ceph-mgr`` daemon hosting the dashboard (i.e., the currently
 active manager) will bind to TCP port 8443 or 8080 when SSL is disabled.
 
-If no specific address has been configured, the web app will bind to ``::``,
-which corresponds to all available IPv4 and IPv6 addresses.
+If no specific address has been configured, the web app binds to ``::``,
+which corresponds to all available IPv4 and IPv6 addresses. On a host without
+IPv6 support, it binds to ``0.0.0.0`` (all IPv4 addresses).
 
-These defaults can be changed via the configuration key facility on a
-cluster-wide level (so they apply to all manager instances) as follows:
+These defaults can be changed in the central configuration database, for all
+manager instances at once, as follows:
 
 .. prompt:: bash #
 
@@ -345,10 +370,10 @@ Replace ``$name`` with the ID of the ceph-mgr instance hosting the dashboard.
 Username and Password
 ^^^^^^^^^^^^^^^^^^^^^
 
-In order to be able to log in, you need to create a user account and associate
-it with at least one role. We provide a set of predefined *system roles* that
-you can use. For more details please refer to the `User and Role Management`_
-section.
+To use the dashboard, you need a user account with at least one role: a user
+without a role can log in but has no permissions. We provide a set of
+predefined *system roles* that you can use. For more details please refer to
+the `User and Role Management`_ section.
 
 To create a user with the administrator role you can use the following
 commands:
@@ -474,7 +499,7 @@ installed and enabled on the iSCSI gateways.
   Make sure that your operating system provides the correct version, otherwise
   the dashboard will not enable the management features.
 
-If the ``ceph-iscsi`` REST API is configured in HTTPS mode and its using a self-signed
+If the ``ceph-iscsi`` REST API is configured in HTTPS mode and it is using a self-signed
 certificate, you need to configure the dashboard to avoid SSL certificate
 verification when accessing ceph-iscsi API.
 
@@ -484,12 +509,14 @@ To disable API SSL verification run the following command:
 
    ceph dashboard set-iscsi-api-ssl-verification false
 
-The available iSCSI gateways must be defined using the following commands:
+When cephadm deploys the iSCSI gateways, it adds them to the dashboard and
+sets the SSL verification option. Gateways that cephadm does not manage
+must be defined with the following commands. The gateway URL has the form
+``<scheme>://<username>:<password>@<host>[:port]``.
 
 .. prompt:: bash #
 
    ceph dashboard iscsi-gateway-list
-   # Gateway URL format for a new gateway: <scheme>://<username>:<password>@<host>[:port]
    ceph dashboard iscsi-gateway-add -i <file-containing-gateway-url> [<gateway_name>]
    ceph dashboard iscsi-gateway-rm <gateway_name>
 
@@ -502,11 +529,13 @@ Enabling the Embedding of Grafana Dashboards
 `Grafana`_ pulls data from `Prometheus <https://prometheus.io/>`_. Although
 Grafana can use other data sources, the Grafana dashboards we provide contain
 queries that are specific to Prometheus. Our Grafana dashboards therefore
-require Prometheus as the data source. The Ceph :ref:`mgr-prometheus`
-module exports its data in the Prometheus exposition format. These Grafana
-dashboards rely on metric names from the Prometheus module and `Node exporter
-<https://prometheus.io/docs/guides/node-exporter/>`_. The Node exporter is a
-separate application that provides machine metrics.
+require Prometheus as the data source. The Ceph Manager :ref:`mgr-prometheus`
+exports its data in the Prometheus exposition format. These Grafana
+dashboards rely on metric names from the Prometheus module, from the
+``ceph-exporter`` daemon, which exports the performance counters of the Ceph
+daemons on each host, and from the `Node exporter
+<https://prometheus.io/docs/guides/node-exporter/>`_, a separate application
+that provides machine metrics.
 
 .. note::
 
@@ -521,7 +550,7 @@ separate application that provides machine metrics.
   impact of denial of service attacks.
 
   Please see `Prometheus' Security model
-  <https://prometheus.io/docs/operating/security/>` for more detailed
+  <https://prometheus.io/docs/operating/security/>`_ for more detailed
   information.
 
 Installation and Configuration using cephadm
@@ -539,7 +568,7 @@ The following process describes how to configure Grafana and Prometheus
 manually. After you have installed Prometheus, Grafana, and the Node exporter
 on appropriate hosts, proceed with the following steps.
 
-#.  Enable the Ceph Exporter which comes as Ceph Manager module by running:
+#.  Enable the Ceph Manager ``prometheus`` module by running:
 
     .. prompt:: bash #
 
@@ -551,15 +580,19 @@ on appropriate hosts, proceed with the following steps.
     like::
 
       global:
-        scrape_interval: 5s
+        scrape_interval: 15s
 
       scrape_configs:
         - job_name: 'prometheus'
           static_configs:
             - targets: ['localhost:9090']
         - job_name: 'ceph'
+          honor_labels: true
           static_configs:
             - targets: ['localhost:9283']
+        - job_name: 'ceph-exporter'
+          static_configs:
+            - targets: ['localhost:9926']
         - job_name: 'node-exporter'
           static_configs:
             - targets: ['localhost:9100']
@@ -568,31 +601,32 @@ on appropriate hosts, proceed with the following steps.
 
       Please note that in the above example, Prometheus is configured
       to scrape data from itself (port 9090), the Ceph manager module
-      `prometheus` (port 9283), which exports Ceph internal data, and the Node
-      Exporter (port 9100), which provides OS and hardware metrics for each host.
+      ``prometheus`` (port 9283), which exports Ceph internal data, the
+      ``ceph-exporter`` daemon (port 9926), which exports the performance
+      counters of the Ceph daemons on its host, and the Node Exporter (port
+      9100), which provides OS and hardware metrics for each host. Add a
+      ``ceph-exporter`` and a Node Exporter target for every host.
 
       Depending on your configuration, you may need to change the hostname in
       or add additional configuration entries for the Node
       Exporter. It is unlikely that you will need to change the default TCP ports.
 
-      Moreover, you don't *need* to have more than one target for Ceph specific
-      data, provided by the `prometheus` mgr module. But it is recommended to
-      configure Prometheus to scrape Ceph specific data from all existing Ceph
-      managers. This enables a built-in high availability mechanism, so that
-      services run on a manager host will be restarted automatically on a different
-      manager host if one Ceph Manager goes down.
+      By default the ``prometheus`` module does not export Ceph daemon
+      performance counters (``mgr/prometheus/exclude_perf_counters`` is
+      ``true``). If no ``ceph-exporter`` daemons run in your cluster, set it
+      to ``false``.
 
-#. Add Prometheus as data source to Grafana `using the Grafana Web UI <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
+      Moreover, you don't *need* to have more than one target for Ceph specific
+      data, provided by the ``prometheus`` mgr module. But it is recommended to
+      configure Prometheus to scrape Ceph specific data from all existing Ceph
+      managers. Only the active Ceph Manager serves metrics; a standby Manager
+      returns an empty response. Scraping every Manager host means that
+      Prometheus keeps receiving metrics after a Manager failover.
+
+#. Add Prometheus as data source to Grafana `using the Grafana Web UI <https://grafana.com/docs/grafana/latest/administration/data-source-management/>`_.
 
    .. IMPORTANT:: 
       The data source must be named "Dashboard1".
-
-#.  Install the `vonage-status-panel and grafana-piechart-panel` plugins using:
-
-    .. prompt:: bash #
-
-      grafana-cli plugins install vonage-status-panel
-      grafana-cli plugins install grafana-piechart-panel
 
 #.  Add Dashboards to Grafana:
 
@@ -606,7 +640,7 @@ on appropriate hosts, proceed with the following steps.
     You can find various dashboard JSON files `here <https://github.com/ceph/ceph/tree/
     main/monitoring/ceph-mixin/dashboards_out>`_.
 
-    For Example, for ceph-cluster overview you can use:
+    For example, for ceph-cluster overview you can use:
 
     .. prompt:: bash #
 
@@ -621,10 +655,9 @@ on appropriate hosts, proceed with the following steps.
       org_name = Main Org.
       org_role = Viewer
 
-    In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
-    ``allow_embedding`` has been introduced. This setting must be explicitly
-    set to ``true`` for the Grafana integration in Ceph Dashboard to work, as the
-    default is ``false``.
+    Grafana does not allow embedding by default (``allow_embedding`` is
+    ``false``). Set it to ``true`` for the Grafana integration in the Ceph
+    Dashboard to work:
 
     ::
 
@@ -652,7 +685,7 @@ running/deployed:
 
    ceph dashboard set-grafana-api-url <grafana-server-url>  # default: ''
 
-The format of url is : `<protocol>:<IP-address>:<port>`
+The format of the URL is ``<protocol>://<IP-address>:<port>``.
 
 .. note::
 
@@ -731,10 +764,10 @@ process can be performed by an existing Identity Provider (IdP).
 
 .. note::
 
-  Ceph Dashboard SSO support relies on onelogin's
-  `python-saml <https://pypi.org/project/python-saml/>`_ library.
-  Please ensure that this library is installed on your system, either by using
-  your distribution's package management or via Python's `pip` installer.
+  Ceph Dashboard SSO support relies on OneLogin's
+  `python3-saml <https://pypi.org/project/python3-saml/>`_ library. Please
+  ensure that this library is installed on your system, either by using your
+  distribution's package management or via Python's ``pip`` installer.
 
 To configure SSO on Ceph Dashboard, you should use the following command:
 
@@ -744,15 +777,18 @@ To configure SSO on Ceph Dashboard, you should use the following command:
 
 Parameters:
 
-* **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
-* **<idp_metadata>**: URL to remote (`http://`, `https://`) or local (`file://`) path or content of the IdP metadata XML (e.g., `https://myidp/metadata`, `file:///home/myuser/metadata.xml`).
-* **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
+* **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., ``https://cephdashboard.local``)
+* **<idp_metadata>**: URL to remote (``http://``, ``https://``) or local (``file://``) path or content of the IdP metadata XML (e.g., ``https://myidp/metadata``, ``file:///home/myuser/metadata.xml``).
+* **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to ``uid``.
 * **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
 * **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption (these file paths should be accessible from the active ceph-mgr instance).
 
 .. note::
 
-  The issuer value of SAML requests will follow this pattern:  **<ceph_dashboard_base_url>**/auth/saml2/metadata
+  The issuer value of SAML requests follows this pattern:
+  **<ceph_dashboard_base_url>**/auth/saml2/metadata. If
+  ``mgr/dashboard/url_prefix`` is set, the prefix comes before ``/auth``:
+  **<ceph_dashboard_base_url>**/**<url_prefix>**/auth/saml2/metadata.
 
 To display the current SAML 2.0 configuration, use the following command:
 
@@ -762,7 +798,7 @@ To display the current SAML 2.0 configuration, use the following command:
 
 .. note::
 
-  For more information about `onelogin_settings`, please check the `onelogin documentation <https://github.com/onelogin/python-saml>`_.
+  For more information about ``onelogin_settings``, please check the `python3-saml documentation <https://github.com/SAML-Toolkits/python3-saml>`_.
 
 To disable SSO:
 
@@ -792,13 +828,20 @@ The Ceph Dashboard supports external authentication of users via the
 have :ref:`cephadm` enabled as your orchestrator with an active
 :ref:`deploy-cephadm-mgmt-gateway` and :ref:`deploy-cephadm-oauth2-proxy` services.
 
-From the IDP of choice, Keycloak is the current recomendation and tested solution,
-configure the IDP's client used in the `oauth2-proxy` service configuration to validate the following redirect URLs
-for login_url: `https://<host_name>|<IP_address>/oauth2/callback` and
-the following logout_url: `https://<host_name>|<IP_address>/ /oauth2/sign_out`
+From the IDP of choice, Keycloak is the current recommendation and tested solution,
+configure the IDP's client used in the ``oauth2-proxy`` service configuration to validate the following redirect URLs
+for login_url: ``https://<host_name>|<IP_address>[:<port>]/oauth2/callback`` and
+the following logout_url: ``https://<host_name>|<IP_address>[:<port>]/oauth2/sign_out``.
+Here ``<host_name>`` or ``<IP_address>`` and ``<port>`` are those of the
+``mgmt-gateway`` service.
 
-Again, from the IDP, we will need a user with a valid role, this user will be the one to perform
-authorization against, we can create a role like: 'administator' to give admin level access to the user.
+In the IdP, give each user a role whose name matches a dashboard system
+role, for example ``administrator`` (or ``admin``) for full access. By
+default the dashboard reads the roles from the ``resource_access`` and
+``realm_access`` claims of the token, the format that Keycloak uses, or from
+a ``roles`` claim. To read the roles from another claim, give a JMESPath
+expression when you enable SSO:
+``ceph dashboard sso enable oauth2 <roles_path>``.
 
 Make certain that the ``enable_auth`` flag has been included in the ``ceph orch
 apply mgmt-gateway`` command and that it has been set to ``true`` by running a
@@ -829,14 +872,23 @@ To enable SSO:
 Automatic SSO Disable on Service Failure
 """""""""""""""""""""""""""""""""""""""""
 
-OAuth2 SSO depends on ``oauth2-proxy`` service being active.
-Cephadm continuously monitors this service and will **automatically disable OAuth2 SSO**
-in the Dashboard if the service goes down or is removed.
-A warning is recorded in the Ceph log when this happens:
+OAuth2 SSO depends on the ``oauth2-proxy`` service. When cephadm removes an
+``oauth2-proxy`` daemon, or fails to deploy one, and no other
+``oauth2-proxy`` daemon is running, it automatically disables OAuth2 SSO in
+the Dashboard. Cephadm records this in the ``cephadm`` cluster log channel:
+
+.. code-block:: text
+
+   Last oauth2-proxy daemon removed, disabling Dashboard OAuth2 SSO
+
+The Dashboard module writes this warning to the Ceph Manager log:
 
 .. code-block:: text
 
    OAuth2 SSO has been automatically disabled because oauth2-proxy is no longer running.
+
+Up to Tentacle 20.2.4, the Dashboard neither disables OAuth2 SSO
+automatically nor blocks enabling it when ``oauth2-proxy`` is not running.
 
 Once the required services are back up and running, SSO must be **re-enabled manually**:
 
@@ -854,13 +906,13 @@ Once the required services are back up and running, SSO must be **re-enabled man
 Enabling Prometheus Alerting
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To use Prometheus for alerting you must define `alerting rules
-<https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules>`_.
-These are managed by the `Alertmanager
-<https://prometheus.io/docs/alerting/alertmanager>`_.
-If you are not yet using the Alertmanager, `install it
-<https://github.com/prometheus/alertmanager#install>`_ as it receives
-and manages alerts from Prometheus.
+To use Prometheus for alerting, define `alerting rules
+<https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/>`_
+in Prometheus. Prometheus evaluates the rules and sends firing alerts to the
+`Alertmanager <https://prometheus.io/docs/alerting/latest/alertmanager/>`_,
+which deduplicates, groups and routes them, and handles silences. If you are
+not yet using the Alertmanager, `install it
+<https://github.com/prometheus/alertmanager#install>`_.
 
 Alertmanager capabilities can be consumed by the dashboard in three different
 ways:
@@ -871,91 +923,87 @@ ways:
 
 #. Use both sources simultaneously.
 
-All three methods notify you about alerts. You won't be notified
-twice if you use both sources, but you need to consume at least the Alertmanager API
-in order to manage silences.
+All three methods notify you about alerts. To manage silences, you need at
+least the Alertmanager API.
 
-1. Use the notification receiver of the dashboard
+#. Use the notification receiver of the dashboard
 
-  This allows you to get notifications as `configured
-  <https://prometheus.io/docs/alerting/configuration/>`_ from the Alertmanager.
-  You will get notified inside the dashboard once a notification is send out,
-  but you are not able to manage alerts.
+   This allows you to get notifications as `configured
+   <https://prometheus.io/docs/alerting/latest/configuration/>`_ from the
+   Alertmanager. You will get notified inside the dashboard once a
+   notification is sent, but you are not able to manage alerts.
 
-  Add the dashboard receiver and the new route to your Alertmanager
-  configuration. This should look like::
+   Add the dashboard receiver and the new route to your Alertmanager
+   configuration. This should look like::
 
-    route:
-      receiver: 'ceph-dashboard'
-    ...
-    receivers:
-      - name: 'ceph-dashboard'
-        webhook_configs:
-        - url: '<url-to-dashboard>/api/prometheus_receiver'
+     route:
+       receiver: 'ceph-dashboard'
+     ...
+     receivers:
+       - name: 'ceph-dashboard'
+         webhook_configs:
+         - url: '<url-to-dashboard>/api/prometheus_receiver'
 
+   Ensure that the Alertmanager considers your SSL certificate in terms
+   of the dashboard as valid. For more information about the correct
+   configuration check out the `<http_config> documentation
+   <https://prometheus.io/docs/alerting/latest/configuration/#http_config>`_.
 
-  Ensure that the Alertmanager considers your SSL certificate in terms
-  of the dashboard as valid. For more information about the correct
-  configuration checkout the `<http_config> documentation
-  <https://prometheus.io/docs/alerting/configuration/#%3Chttp_config%3E>`_.
+#. Use the API of Prometheus and the Alertmanager
 
-2. Use the API of Prometheus and the Alertmanager
+   This allows you to manage alerts and silences. It enables the **Active
+   Alerts**, **Silences** and **Alert Rules** tabs (in Squid 19.2: **Active
+   Alerts**, **Alerts** and **Silences**) under **Observability** >
+   **Alerts**.
 
-  This allows you to manage alerts and silences and will enable the "Active
-  Alerts", "All Alerts" as well as the "Silences" tabs in the "Monitoring"
-  section of the "Cluster" menu entry.
+   Alerts can be sorted by name, severity, state and start time.
+   Unfortunately it's not possible to know when an alert was sent out through a
+   notification by the Alertmanager based on your configuration, that's why the
+   dashboard will notify the user on any visible change to an alert and will
+   notify the changed alert.
 
-  Alerts can be sorted by name, job, severity, state and start time.
-  Unfortunately it's not possible to know when an alert was sent out through a
-  notification by the Alertmanager based on your configuration, that's why the
-  dashboard will notify the user on any visible change to an alert and will
-  notify the changed alert.
+   Silences can be sorted by id, creator, status, start, updated and end time.
+   Silences can be created in various ways, it's also possible to expire them.
 
-  Silences can be sorted by id, creator, status, start, updated and end time.
-  Silences can be created in various ways, it's also possible to expire them.
+   * Create from scratch
+   * Based on a selected alert
+   * Recreate from expired silence
+   * Update a silence (which will recreate and expire it (default Alertmanager
+     behavior))
 
-  #. Create from scratch
+   To use it, specify the host and port of the Alertmanager server:
 
-  #. Based on a selected alert
+   .. prompt:: bash #
 
-  #. Recreate from expired silence
+      ceph dashboard set-alertmanager-api-host <protocol>://<alertmanager-host>:<port>  # default: ''
 
-  #. Update a silence (which will recreate and expire it (default Alertmanager behaviour))
+   For example:
 
-  To use it, specify the host and port of the Alertmanager server:
-  
-  .. prompt:: bash #
+   .. prompt:: bash #
 
-     ceph dashboard set-alertmanager-api-host <alertmanager-host:port>  # default: ''
+      ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
 
-  For example:
-  
-  .. prompt:: bash #
+   To be able to see all configured alerts, you will need to configure the URL
+   to the Prometheus API. Using this API, the UI will also help you in
+   verifying that a new silence will match a corresponding alert.
 
-     ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
+   .. prompt:: bash #
 
-  To be able to see all configured alerts, you will need to configure the URL to
-  the Prometheus API. Using this API, the UI will also help you in verifying
-  that a new silence will match a corresponding alert.
+      ceph dashboard set-prometheus-api-host <protocol>://<prometheus-host>:<port>  # default: ''
 
-  
-  .. prompt:: bash #
+   For example:
 
-     ceph dashboard set-prometheus-api-host <prometheus-host:port>  # default: ''
+   .. prompt:: bash #
 
-  For example:
+      ceph dashboard set-prometheus-api-host 'http://localhost:9090'
 
-  .. prompt:: bash #
+   After setting up the hosts, refresh your browser's dashboard window or tab.
 
-     ceph dashboard set-prometheus-api-host 'http://localhost:9090'
+#. Use both methods
 
-  After setting up the hosts, refresh your browser's dashboard window or tab.
-
-3. Use both methods
-
-  The behaviors of both methods are configured in a way that they
-  should not disturb each other, through annoying duplicated notifications
-  may pop up.
+   The behaviors of both methods are configured in a way that they
+   should not disturb each other, though annoying duplicated notifications
+   may pop up.
 
 If you are using a self-signed certificate in your Prometheus or your
 Alertmanager setup, you should disable certificate verification in the
