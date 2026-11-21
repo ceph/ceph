@@ -47,6 +47,7 @@
 
 #include "common/config.h"
 #include "include/ceph_assert.h"
+#include "include/cephfs/encoding.h"
 #include "include/compat.h"
 
 #include "messages/MClientReply.h" // for struct DirStat

@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include "HitSet.h"
+#include "include/encoding_unordered_set.h"
 
 /**
  * explicitly enumerate objects in the set
