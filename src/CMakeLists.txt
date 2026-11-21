@@ -153,7 +153,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   else()
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -rdynamic")
   endif()
-  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-Og ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wstrict-null-sentinel>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
   # cmake does not add '-pie' for executables even if
@@ -229,6 +228,15 @@ CHECK_C_COMPILER_FLAG("-D_GLIBCXX_ASSERTIONS" HAS_GLIBCXX_ASSERTIONS)
 if(HAS_GLIBCXX_ASSERTIONS AND CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-D_GLIBCXX_ASSERTIONS>)
 endif()
+
+foreach(lang C CXX)
+  # Before Clang 21, -Og was a bare alias for -O1: no debuggability gain to
+  # justify the build time. AppleClang 21 (Xcode 26.4) is LLVM 21 based too.
+  if(CMAKE_${lang}_COMPILER_ID STREQUAL GNU OR
+     (CMAKE_${lang}_COMPILER_ID MATCHES "Clang" AND CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 21))
+    string(PREPEND CMAKE_${lang}_FLAGS_DEBUG "-Og ")
+  endif()
+endforeach()
 
 # add BLAKE3 before we clobber CMAKE_ASM_COMPILER
 add_subdirectory(BLAKE3/c EXCLUDE_FROM_ALL)
@@ -549,7 +557,6 @@ set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   global/global_context.cc
-  xxHash/xxhash.c
   include/invoke_date.cc
   include/object.cc
   include/client_t.cc
@@ -603,6 +610,11 @@ if(WITH_JAEGER)
   target_link_libraries(common-objs jaeger_base)
 endif()
 
+# GCC can't honor xxHash's always_inline hints at -Og (xxHash issue 943).
+add_library(xxhash_objs OBJECT xxHash/xxhash.c)
+target_compile_definitions(xxhash_objs PRIVATE
+  $<$<CONFIG:Debug>:XXH_NO_INLINE_HINTS=1>)
+
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
@@ -621,6 +633,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
+  $<TARGET_OBJECTS:xxhash_objs>
   $<TARGET_OBJECTS:crush_objs>
   $<TARGET_OBJECTS:json_spirit>
   $<TARGET_OBJECTS:erasure_code>)
