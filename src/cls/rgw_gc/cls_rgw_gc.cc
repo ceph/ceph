@@ -129,6 +129,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   cls_rgw_gc_list_ret list_ret;
   uint32_t num_entries = 0; //Entries excluding the deferred ones
   bool is_truncated = true;
+  bool reached_unexpired = false;
   string next_marker;
   do {
     cls_queue_list_ret op_ret;
@@ -185,16 +186,20 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
             }
           } // end - ret != ENOENT && ENODATA
         } // end - if not found
-        if (op.expired_only) {
-          real_time now = ceph::real_clock::now();
-          if (info.time <= now) {
-            list_ret.entries.emplace_back(info);
-          }
-          //Can break out here if info.time > now, since all subsequent entries won't have expired
-        } else {
-          list_ret.entries.emplace_back(info);
+        if (op.expired_only && info.time > ceph::real_clock::now()) {
+          // Stop here: cls_rgw_gc_queue_remove_entries() removes entries from
+          // the head by count, so the result must be a contiguous prefix of
+          // the queue. Skipping an unexpired entry would get it removed
+          // without its objects being deleted.
+          reached_unexpired = true;
+          break;
         }
+        list_ret.entries.emplace_back(info);
         num_entries++;
+      }
+      if (reached_unexpired) {
+        is_truncated = false;
+        break;
       }
       CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): num_entries: %u and op.max: %u\n", num_entries, op.max);
       if (num_entries < op.max) {
