@@ -6,7 +6,6 @@
 #include <random>
 
 using ObjectModel = ceph::io_exerciser::ObjectModel;
-using SingleSparseReadOp = ceph::io_exerciser::SingleSparseReadOp;
 
 ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
                          uint64_t block_size, int seed, bool delete_objects)
@@ -14,6 +13,10 @@ ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& seco
       primary_created(false), secondary_created(false), rng(seed) {}
 
 int ObjectModel::get_seed(uint64_t offset) const {
+  auto it = write_seeds.find(offset);
+  if (it != write_seeds.end()) {
+    return it->second;
+  }
   ceph_assert(offset < primary_contents.size());
   return primary_contents[offset];
 }
@@ -73,6 +76,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
 
   auto verify_write_and_record_and_generate_seed =
       [&generate_random, &primary_contents = primary_contents,
+       &write_seeds = write_seeds,
        &primary_created = primary_created,
        &num_io = num_io,
        &reads = reads,
@@ -86,10 +90,12 @@ void ObjectModel::applyIoOp(IoOp& op) {
           if (writeOp.offset[i] + writeOp.length[i] > primary_contents.size()) {
             primary_contents.resize(writeOp.offset[i] + writeOp.length[i]);
           }
-          std::generate(std::next(primary_contents.begin(), writeOp.offset[i]),
-                        std::next(primary_contents.begin(),
-                                  writeOp.offset[i] + writeOp.length[i]),
-                        generate_random);
+          for (uint64_t b = writeOp.offset[i];
+               b < writeOp.offset[i] + writeOp.length[i]; b++) {
+            int s = generate_random();
+            primary_contents[b] = s;
+            write_seeds[b] = s;
+          }
         }
         num_io++;
       };
@@ -117,6 +123,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
     case OpType::Barrier:
       reads.clear();
       writes.clear();
+      write_seeds.clear();
       break;
 
     case OpType::Swap: {
@@ -126,12 +133,14 @@ void ObjectModel::applyIoOp(IoOp& op) {
       primary_contents.swap(secondary_contents);
       reads.clear();
       writes.clear();
+      write_seeds.clear();
     } break;
 
     case OpType::Copy:
       ceph_assert(primary_created && secondary_created);
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
+      write_seeds.clear();
       // The target object may be larger than the source - however, it will be replaced by a new object rather than overwriting
       // and padding the old object. Therefore, the target object should now be the same size as the source object.
       secondary_contents.resize(primary_contents.size());
@@ -142,6 +151,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
       ceph_assert(!primary_created);
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
+      write_seeds.clear();
       primary_created = true;
       primary_contents.resize(static_cast<CreateOp&>(op).size);
       std::generate(primary_contents.begin(), primary_contents.end(),
@@ -152,21 +162,17 @@ void ObjectModel::applyIoOp(IoOp& op) {
       ceph_assert(primary_created);
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
+      write_seeds.clear();
       auto new_size = static_cast<TruncateOp&>(op).size;
-      auto old_size = primary_contents.size();
-      bool expand = new_size > old_size;
       primary_contents.resize(new_size);
-      // Yes, truncate CAN be used to make an object bigger!
-      if (expand) {
-        std::generate(primary_contents.begin() + new_size, primary_contents.end(),
-                      generate_random);
-      }
+      // Expanding via truncate leaves newly added blocks as 0 (zeroed).
     } break;
 
     case OpType::Remove: {
       ceph_assert(primary_created);
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
+      write_seeds.clear();
       if (!delete_objects) {
         const std::string new_primary_oid = primary_oid_base + "_" + std::to_string(++num_objects);
         set_primary_oid(new_primary_oid);
@@ -176,6 +182,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
     } break;
       
     case OpType::Read: {
+      write_seeds.clear();
       SingleReadOp& readOp = static_cast<SingleReadOp&>(op);
       verify_and_record_read_op(readOp);
     } break;
@@ -183,16 +190,19 @@ void ObjectModel::applyIoOp(IoOp& op) {
       // SparseRead skips primary_created/size assertions because it may target
       // a pre-existing object of unknown size (e.g. interactive mode).
       // Still track ranges for concurrent-io conflict detection.
+      write_seeds.clear();
       SingleSparseReadOp& readOp = static_cast<SingleSparseReadOp&>(op);
       ceph_assert(!writes.intersects(readOp.offset[0], readOp.length[0]));
       reads.union_insert(readOp.offset[0], readOp.length[0]);
       num_io++;
     } break;
     case OpType::Read2: {
+      write_seeds.clear();
       DoubleReadOp& readOp = static_cast<DoubleReadOp&>(op);
       verify_and_record_read_op(readOp);
     } break;
     case OpType::Read3: {
+      write_seeds.clear();
       TripleReadOp& readOp = static_cast<TripleReadOp&>(op);
       verify_and_record_read_op(readOp);
     } break;
@@ -235,10 +245,12 @@ void ObjectModel::applyIoOp(IoOp& op) {
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
         }
-        std::generate(std::next(primary_contents.begin(), truncWriteOp.offset[i]),
-                      std::next(primary_contents.begin(),
-                                truncWriteOp.offset[i] + truncWriteOp.length[i]),
-                      generate_random);
+        for (uint64_t b = truncWriteOp.offset[i];
+             b < truncWriteOp.offset[i] + truncWriteOp.length[i]; b++) {
+          int s = generate_random();
+          primary_contents[b] = s;
+          write_seeds[b] = s;
+        }
       }
       num_io++;
     } break;
@@ -257,10 +269,12 @@ void ObjectModel::applyIoOp(IoOp& op) {
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
         }
-        std::generate(std::next(primary_contents.begin(), truncWriteOp.offset[i]),
-                      std::next(primary_contents.begin(),
-                                truncWriteOp.offset[i] + truncWriteOp.length[i]),
-                      generate_random);
+        for (uint64_t b = truncWriteOp.offset[i];
+             b < truncWriteOp.offset[i] + truncWriteOp.length[i]; b++) {
+          int s = generate_random();
+          primary_contents[b] = s;
+          write_seeds[b] = s;
+        }
       }
       num_io++;
     } break;
@@ -279,28 +293,95 @@ void ObjectModel::applyIoOp(IoOp& op) {
         if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
           primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
         }
-        std::generate(std::next(primary_contents.begin(), truncWriteOp.offset[i]),
-                      std::next(primary_contents.begin(),
-                                truncWriteOp.offset[i] + truncWriteOp.length[i]),
-                      generate_random);
+        for (uint64_t b = truncWriteOp.offset[i];
+             b < truncWriteOp.offset[i] + truncWriteOp.length[i]; b++) {
+          int s = generate_random();
+          primary_contents[b] = s;
+          write_seeds[b] = s;
+        }
       }
       num_io++;
     } break;
 
     case OpType::FailedWrite: {
       ceph_assert(primary_created);
+      write_seeds.clear();
       SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
       verify_failed_write_and_record(writeOp);
     } break;
     case OpType::FailedWrite2: {
       ceph_assert(primary_created);
+      write_seeds.clear();
       DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
       verify_failed_write_and_record(writeOp);
     } break;
     case OpType::FailedWrite3: {
       ceph_assert(primary_created);
+      write_seeds.clear();
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
       verify_failed_write_and_record(writeOp);
+    } break;
+    case OpType::WriteTruncate: {
+      ceph_assert(primary_created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      SingleWriteTruncateOp& writeTruncOp = static_cast<SingleWriteTruncateOp&>(op);
+      ceph_assert(!reads.intersects(writeTruncOp.offset, writeTruncOp.length));
+      ceph_assert(!writes.intersects(writeTruncOp.offset, writeTruncOp.length));
+      writes.union_insert(writeTruncOp.offset, writeTruncOp.length);
+      if (writeTruncOp.offset + writeTruncOp.length > primary_contents.size()) {
+        primary_contents.resize(writeTruncOp.offset + writeTruncOp.length);
+      }
+      for (uint64_t b = writeTruncOp.offset;
+           b < writeTruncOp.offset + writeTruncOp.length; b++) {
+        int s = generate_random();
+        primary_contents[b] = s;
+        write_seeds[b] = s;
+      }
+      primary_contents.resize(writeTruncOp.size[0]);
+      num_io++;
+    } break;
+    case OpType::WriteTruncate2: {
+      ceph_assert(primary_created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      DoubleWriteTruncateOp& writeTruncOp = static_cast<DoubleWriteTruncateOp&>(op);
+      ceph_assert(!reads.intersects(writeTruncOp.offset, writeTruncOp.length));
+      ceph_assert(!writes.intersects(writeTruncOp.offset, writeTruncOp.length));
+      writes.union_insert(writeTruncOp.offset, writeTruncOp.length);
+      if (writeTruncOp.offset + writeTruncOp.length > primary_contents.size()) {
+        primary_contents.resize(writeTruncOp.offset + writeTruncOp.length);
+      }
+      for (uint64_t b = writeTruncOp.offset;
+           b < writeTruncOp.offset + writeTruncOp.length; b++) {
+        int s = generate_random();
+        primary_contents[b] = s;
+        write_seeds[b] = s;
+      }
+      for (int i = 0; i < 2; i++) {
+        primary_contents.resize(writeTruncOp.size[i]);
+      }
+      num_io++;
+    } break;
+    case OpType::FailedWriteTruncate: {
+      ceph_assert(primary_created);
+      write_seeds.clear();
+      SingleFailedWriteTruncateOp& writeTruncOp = static_cast<SingleFailedWriteTruncateOp&>(op);
+      ceph_assert(!reads.intersects(writeTruncOp.offset, writeTruncOp.length));
+      ceph_assert(!writes.intersects(writeTruncOp.offset, writeTruncOp.length));
+      writes.union_insert(writeTruncOp.offset, writeTruncOp.length);
+      ceph_assert(writeTruncOp.offset + writeTruncOp.length <= primary_contents.size());
+      num_io++;
+    } break;
+    case OpType::FailedWriteTruncate2: {
+      ceph_assert(primary_created);
+      write_seeds.clear();
+      DoubleFailedWriteTruncateOp& writeTruncOp = static_cast<DoubleFailedWriteTruncateOp&>(op);
+      ceph_assert(!reads.intersects(writeTruncOp.offset, writeTruncOp.length));
+      ceph_assert(!writes.intersects(writeTruncOp.offset, writeTruncOp.length));
+      writes.union_insert(writeTruncOp.offset, writeTruncOp.length);
+      ceph_assert(writeTruncOp.offset + writeTruncOp.length <= primary_contents.size());
+      num_io++;
     } break;
     default:
       break;

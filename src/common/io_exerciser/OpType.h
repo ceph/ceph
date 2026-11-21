@@ -34,6 +34,10 @@ enum class OpType {
   FailedWrite,           // A write which should fail
   FailedWrite2,          // Two writes in one op which should fail
   FailedWrite3,          // Three writes in one op which should fail
+  WriteTruncate,         // Write + truncate in a single op
+  WriteTruncate2,        // Write + two truncates in a single op
+  FailedWriteTruncate,   // Write + truncate in a single op which should fail
+  FailedWriteTruncate2,  // Write + two truncates in a single op which should fail
   Copy,                  // Copy from primary to secondary object
   InjectReadError,       // Op to tell OSD to inject read errors
   InjectWriteError,      // Op to tell OSD to inject write errors
@@ -102,6 +106,14 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "FailedWrite2");
       case ceph::io_exerciser::OpType::FailedWrite3:
         return fmt::format_to(ctx.out(), "FailedWrite3");
+      case ceph::io_exerciser::OpType::WriteTruncate:
+        return fmt::format_to(ctx.out(), "WriteTruncate");
+      case ceph::io_exerciser::OpType::WriteTruncate2:
+        return fmt::format_to(ctx.out(), "WriteTruncate2");
+      case ceph::io_exerciser::OpType::FailedWriteTruncate:
+        return fmt::format_to(ctx.out(), "FailedWriteTruncate");
+      case ceph::io_exerciser::OpType::FailedWriteTruncate2:
+        return fmt::format_to(ctx.out(), "FailedWriteTruncate2");
       case ceph::io_exerciser::OpType::InjectReadError:
         return fmt::format_to(ctx.out(), "InjectReadError");
       case ceph::io_exerciser::OpType::InjectWriteError:
