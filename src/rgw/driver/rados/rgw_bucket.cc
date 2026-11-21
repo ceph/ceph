@@ -1504,7 +1504,8 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver,
 int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                                     RGWBucketAdminOpState& op_state,
 				    optional_yield y, const DoutPrefixProvider *dpp, 
-                                    bool bypass_gc, bool keep_index_consistent, bool forwarded_request)
+                                    bool bypass_gc, bool keep_index_consistent, bool forwarded_request,
+                                    const rgw_owner* forward_as)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
@@ -1539,7 +1540,10 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
   }
   rgw_err err; // unused
 
-  ret = rgw_forward_request_to_master(dpp, site, bucket->get_owner(), nullptr, nullptr, req, err, y);
+  // forward as the requester (no user for radosgw-admin). forwarding as the
+  // bucket owner would make the master check the owner against an admin lock.
+  const rgw_owner as = forward_as ? *forward_as : rgw_owner{rgw_user{}};
+  ret = rgw_forward_request_to_master(dpp, site, as, nullptr, nullptr, req, err, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to forward request to master zonegroup: "
                       << ret << dendl;
@@ -1694,6 +1698,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   formatter->dump_bool("suspended", bucket_info.bucket_suspended());
+  formatter->dump_bool("admin_locked", bucket_info.admin_locked());
   ::encode_json("owner", bucket_info.owner, formatter);
 
   if (has_index) {

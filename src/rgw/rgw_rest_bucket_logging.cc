@@ -225,8 +225,17 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
 
   void execute(optional_yield y) override {
 
+    // test hook: s->bucket was loaded before the permission check, so a lock
+    // set here isn't in it. the cleanup's write collides and is checked again
+    rgw_inject_delay(this, "delay_bucket_logging_load", y);
+
     if (!configuration.enabled) {
-      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, s->bucket.get(), true, y, &old_obj);
+      // turning logging off changes this bucket: check the admin lock against
+      // the version the write is conditional on
+      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, s->bucket.get(), true, y, &old_obj,
+          [this] {
+            return rgw_verify_bucket_admin_lock(this, s, get_type(), s->bucket.get());
+          });
       return;
     }
 
