@@ -425,3 +425,36 @@ class NFSGaneshaClusterTest(ControllerTestCase):
         self._get('/api/nfs-ganesha/cluster/nonexistent', version=APIVersion.EXPERIMENTAL)
         self.assertStatus(200)
         self.assertJsonBody(None)
+
+    def test_get_cluster_qos(self):
+        mgr.remote = Mock(return_value={
+            'enable_qos': False,
+            'enable_bw_control': False,
+            'enable_iops_control': False,
+            'combined_rw_bw_control': False,
+        })
+
+        self._get('/api/nfs-ganesha/cluster/qos/test1')
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'get_cluster_qos', 'test1', True)
+
+    def test_apply_cluster_qos(self):
+        mgr.remote = Mock(return_value=None)
+
+        self._request('/api/nfs-ganesha/cluster/qos', 'PATCH', {
+            'cluster_id': 'test1',
+            'qos_type': 'PerShare',
+            'enable_bw': True,
+            'enable_ops': True,
+            'max_export_write_bw': 1024,
+            'max_export_read_bw': 2048,
+            'max_export_iops': 100,
+        })
+        self.assertStatus(200)
+        mgr.remote.assert_called_with(
+            'nfs', 'apply_cluster_qos', 'test1', 'PerShare',
+            True, True, False, False, False,
+            max_export_write_bw='1024',
+            max_export_read_bw='2048',
+            max_export_iops=100,
+        )
