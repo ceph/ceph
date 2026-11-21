@@ -128,15 +128,38 @@ class Osd(RESTController):
              search: str = '', sort: str = ''):
         all_osds = self.get_osd_map()
 
+        # Attach everything the OSD list columns show *before* paginating, so the
+        # search box and column sorting work server-side on host, device class,
+        # status and flags, and sorting also on PGs and size -- not only on the OSD id.
+        nodes = mgr.get('osd_map_tree')['nodes']
+        for node in nodes:
+            if node['type'] == 'osd' and node['id'] in all_osds:
+                all_osds[node['id']]['tree'] = node
+        self._set_osd_hosts(all_osds, nodes)
+        for stat in mgr.get('osd_stats')['osd_stats']:
+            if stat['osd'] in all_osds:
+                all_osds[stat['osd']]['osd_stats'] = stat
+        for osd in all_osds.values():
+            # same values as the frontend's OsdListComponent.collectStates()
+            osd['collectedStates'] = self._collect_states(osd)
+            # cheap stand-ins for sorting; replaced by gauge_stats() for the page shown
+            stat = osd.get('osd_stats', {})
+            osd['stats'] = {
+                'numpg': stat.get('num_pgs', 0),
+                'stat_bytes': stat.get('statfs', {}).get('total', stat.get('kb', 0) * 1024),
+            }
+
+        searchable = ['id', 'host.name', 'tree.device_class', 'collectedStates', 'state']
         paginator = ListPaginator(int(offset), int(limit), sort, search,
                                   input_list=all_osds.values(),
-                                  searchable_params=['id'],
-                                  sortable_params=['id'],
+                                  searchable_params=searchable,
+                                  sortable_params=searchable + ['stats.numpg',
+                                                                'stats.stat_bytes'],
                                   default_sort='+id')
 
-        cherrypy.response.headers['X-Total-Count'] = paginator.get_count()
-
         paginated_osds_list = list(paginator.list())
+        # after list(): the count of the *filtered* list, so paging matches the search
+        cherrypy.response.headers['X-Total-Count'] = paginator.get_count()
         # creating a dictionary to have faster lookups
         paginated_osds_by_id = {osd['id']: osd for osd in paginated_osds_list}
         try:
@@ -147,20 +170,6 @@ class Osd(RESTController):
             }
         except ValueError as e:
             raise DashboardException(e, component='osd', http_status_code=400)
-
-        # Extending by osd stats information
-        for stat in mgr.get('osd_stats')['osd_stats']:
-            if stat['osd'] in osds:
-                osds[stat['osd']]['osd_stats'] = stat
-
-        # Extending by osd node information
-        nodes = mgr.get('osd_map_tree')['nodes']
-        for node in nodes:
-            if node['type'] == 'osd' and node['id'] in osds:
-                osds[node['id']]['tree'] = node
-
-        # Extending by osd parent node information
-        self._set_osd_hosts(osds, nodes)
 
         removing_osd_ids = self.get_removing_osds()
 
@@ -174,6 +183,17 @@ class Osd(RESTController):
             self.gauge_stats(osd, osd_spec)
             osd['operational_status'] = self._get_operational_status(osd_id, removing_osd_ids)
         return list(osds.values())
+
+    @staticmethod
+    def _collect_states(osd):
+        states = ['in' if osd.get('in') else 'out']
+        if osd.get('up'):
+            states.append('up')
+        elif 'destroyed' in osd.get('state', []):
+            states.append('destroyed')
+        else:
+            states.append('down')
+        return states
 
     @staticmethod
     def _set_osd_hosts(osds, nodes):
