@@ -20,7 +20,7 @@ Rgw manual and dynamic resharding  testing against a running instance
 """ Constants """
 USER = 'tester'
 DISPLAY_NAME = 'Testing'
-ACCESS_KEY = 'NX5QOQKC6BH2IDN8HC7A'
+ACCESS_KEY = 'RESHARDTESTER0KEY001'
 SECRET_KEY = 'LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn'
 BUCKET_NAME = 'a-bucket'
 VER_BUCKET_NAME = 'myver'
