@@ -883,13 +883,13 @@ public:
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool keep_tail;
-        bool completeMultipart;
+        std::string multipart_upload_id;
         bool appendable;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false), keep_tail(false), completeMultipart(false), appendable(false) {}
+                 modify_tail(false), keep_tail(false), appendable(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
