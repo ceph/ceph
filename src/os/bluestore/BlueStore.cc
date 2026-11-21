@@ -4104,13 +4104,9 @@ free_bluefs:
   return r;
 }
 
-int BlueStore::_open_bluefs(bool create, bool read_only)
+int BlueStore::_create_bluefs_vselector(BlueFSVolumeSelector* &vselector)
 {
-  int r = _minimal_open_bluefs(create);
-  if (r < 0) {
-    return r;
-  }
-  BlueFSVolumeSelector* vselector = nullptr;
+  int r = 0;
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ||
       cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced" ||
       cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
@@ -4151,11 +4147,27 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     }    
     vselector->update_from_config(cct);
   }
+  return r;
+}
+
+int BlueStore::_open_bluefs(bool create, bool read_only)
+{
+  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
+  int r = _minimal_open_bluefs(create);
+  if (r < 0) {
+    return r;
+  }
   if (create) {
     bluefs->mkfs(fsid, bluefs_layout);
   }
+  BlueFSVolumeSelector* vselector = nullptr;
+  r = _create_bluefs_vselector(vselector);
+  if (r < 0) {
+    derr << __func__ << " failed to create vselector: " << cpp_strerror(r) << dendl;
+    return r;
+  }
   bluefs->set_volume_selector(vselector);
-  r = bluefs->mount();
+  r = bluefs->mount(read_only);
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
@@ -4165,7 +4177,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
 
 void BlueStore::_close_bluefs()
 {
-  bluefs->umount(db_was_opened_read_only);
+  bluefs->umount();
   _minimal_close_bluefs();
 }
 
@@ -4365,28 +4377,6 @@ void BlueStore::_close_around_db()
   _close_path();
 }
 
-int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair)
-{
-  _kv_only = true;
-  int r = _open_db_and_around(read_only, to_repair);
-  if (r == 0) {
-    *pdb = db;
-  } else {
-    *pdb = nullptr;
-  }
-  return r;
-}
-
-int BlueStore::close_db_environment()
-{
-  if (db) {
-    delete db;
-    db = nullptr;
-  }
-  _close_around_db();
-  return 0;
-}
-
 /* gets access to bluefs supporting RocksDB */
 BlueFS* BlueStore::get_bluefs() {
   return bluefs;
@@ -4399,8 +4389,8 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   ceph_assert(!db);
   std::string& fn=*_fn;
   std::string& kv_backend=*_kv_backend;
-  fn = path + "/db";
-  std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
+  // simplify the dir names, to ones as "seen" by rocksdb
+  fn = "db";
 
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
@@ -4420,9 +4410,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
-  map<string,string> kv_options;
   // force separate wal dir for all new deployments.
-  kv_options["separate_wal_dir"] = 1;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -4438,24 +4426,31 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env* a = new BlueRocksEnv(bluefs);
-      rocksdb::Env* b = rocksdb::Env::Default();
+      rocksdb::Env* b = new NoRocksEnv(path + "/mirror");
       if (create) {
-        string cmd = "rm -rf " + path + "/db " +
-          path + "/db.slow " +
-          path + "/db.wal";
+        string cmd = "rm -rf " + path + "/mirror";
         int r = system(cmd.c_str());
         (void)r;
+	cmd = "mkdir -p " + path + "/mirror";
+        r = system(cmd.c_str());
+        (void)r;
       }
-      env = new rocksdb::EnvMirror(b, a, false, true);
+      env = new rocksdb::EnvMirror(b, a, true, true);
     } else {
       env = new BlueRocksEnv(bluefs);
-
-      // simplify the dir names, too, as "seen" by rocksdb
-      fn = "db";
     }
-    BlueFSVolumeSelector::paths paths;
-    bluefs->get_vselector_paths(fn, paths);
+  } else {
+    // In this case env is ersatz to unify file operations
+    // We need env that is contained to specific dir,
+    // i.e. "db/00038.sst" must be equally accessible for
+    // both BlueRocksEnv and our ersatz env
+    env = new NoRocksEnv(path);
+  }
 
+  map<string,string> kv_options;
+  BlueFSVolumeSelector::paths paths;
+  if (do_bluefs) {
+    bluefs->get_vselector_paths(fn, paths);
     {
       ostringstream db_paths;
       bool first = true;
@@ -4470,53 +4465,23 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
       kv_options["db_paths"] = db_paths.str();
       dout(1) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
-
-    if (create) {
-      for (auto& p : paths) {
-        env->CreateDir(p.first);
-      }
-      // Selectors don't provide wal path so far hence create explicitly
-      env->CreateDir(fn + ".wal");
-    } else {
-      std::vector<std::string> res;
-      // check for dir presence
-      auto r = env->GetChildren(fn+".wal", &res);
-      if (r.IsNotFound()) {
-	kv_options.erase("separate_wal_dir");
-      }
-    }
   } else {
-    string walfn = path + "/db.wal";
-
-    if (create) {
-      int r = ::mkdir(fn.c_str(), 0755);
-      if (r < 0)
-	r = -errno;
-      if (r < 0 && r != -EEXIST) {
-	derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
-	     << dendl;
-	return r;
-      }
-
-      // wal_dir, too!
-      r = ::mkdir(walfn.c_str(), 0755);
-      if (r < 0)
-	r = -errno;
-      if (r < 0 && r != -EEXIST) {
-	derr << __func__ << " failed to create " << walfn
-	  << ": " << cpp_strerror(r)
-	  << dendl;
-	return r;
-      }
-    } else {
-      struct stat st;
-      r = ::stat(walfn.c_str(), &st);
-      if (r < 0 && errno == ENOENT) {
-	kv_options.erase("separate_wal_dir");
-      }
+    paths.emplace_back(fn, 0);
+  }
+  if (create) {
+    for (auto& p : paths) {
+      env->CreateDir(p.first);
     }
+    // Selectors don't provide wal path so far hence create explicitly
+    env->CreateDir(fn + ".wal");
   }
 
+  std::vector<std::string> res;
+  // check for dir presence
+  auto rr = env->GetChildren(fn+".wal", &res);
+  if (!rr.IsNotFound()) {
+    kv_options["separate_wal_dir"] = 1;
+  }
 
   db = KeyValueDB::create(cct,
 			  kv_backend,
@@ -4535,6 +4500,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
     return -EIO;
   }
 
+  std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
   FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
@@ -4543,6 +4509,9 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
 int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 {
+  dout(10) << __func__ << " create=" << create
+	   << " to_repair_db=" << to_repair_db
+	   << " read_only=" << read_only << dendl;
   int r;
   ceph_assert(!(create && read_only));
   string options;
@@ -4693,6 +4662,54 @@ void BlueStore::_close_db()
   if (bluefs) {
     _close_bluefs();
   }
+}
+
+int BlueStore::create_db()
+{
+  dout(5) << __func__ << dendl;
+  int r = _open_db(true/*create*/, false/*to_repair*/, false/*read_only*/);
+  return r;
+}
+
+int BlueStore::open_db(bool read_only, bool to_repair)
+{
+  dout(5) << __func__ << " " << (read_only ? "RO" : "RW")
+	  << " mode:" << (to_repair ? "repair" : "normal") << dendl;
+  int r = _open_db_and_around(read_only, to_repair);
+  return r;
+}
+
+// A pair to open_db()/close_db() call.
+// This function should not be mistaken with _close_db(),
+// The _close_db() is doing extra actions.
+int BlueStore::close_db()
+{
+  dout(5) << __func__ << dendl;
+    if (db) {
+    delete db;
+    db = nullptr;
+  }
+  _close_around_db();
+  return 0;
+}
+
+KeyValueDB* BlueStore::get_db()
+{
+  return db;
+}
+
+int BlueStore::open_bluefs(bool read_only)
+{
+  dout(5) << __func__ << " mode=" << (read_only ? "RO" : "RW") << dendl;
+  int r = _open_bluefs(false, read_only);
+  return r;
+}
+
+int BlueStore::close_bluefs()
+{
+  dout(5) << __func__ << dendl;
+  _close_bluefs();
+  return 0;
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -6024,17 +6041,6 @@ int BlueStore::umount()
       return -EIO;
     }
   }
-  return 0;
-}
-
-int BlueStore::cold_open()
-{
-  return _open_db_and_around(true);
-}
-
-int BlueStore::cold_close()
-{
-  _close_db_and_around();
   return 0;
 }
 
@@ -7386,13 +7392,13 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t 
 }
 
 int BlueStore::revert_wal_to_plain() {
-  int r = cold_open();
+  int r = open_db(true);
   if (r != 0) {
     dout(1) << __func__ << "failed to open db / allocator" << dendl;
     goto out;
   }
   bluefs->revert_wal_to_plain();
-  cold_close();
+  close_db();
   out:
   return r;
 }
@@ -8770,7 +8776,7 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 
   if (bluefs) {
     buf->internally_reserved = 0;
-    // include dedicated db, too, if that isn't the shared device.
+    // include dedicated db too, if that isn't the shared device.
     if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
       buf->total += bluefs->get_block_device_size(BlueFS::BDEV_DB);
     }
@@ -16277,7 +16283,9 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     }
   }
   bdev->collect_alerts(alerts, "BLOCK");
-  bluefs->collect_alerts(alerts);
+  if (bluefs) {
+    bluefs->collect_alerts(alerts);
+  }
   if (!spurious_read_errors_alert.empty() &&
       cct->_conf->bluestore_warn_on_spurious_read_errors) {
     alerts.emplace(
