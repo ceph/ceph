@@ -25,7 +25,6 @@ bool v2_addrs = true;
 bool no_fallback = false;
 bool ms_mode_specified = false;
 bool mon_addr_specified = false;
-static const char * const EMPTY_STRING = "";
 
 /* TODO duplicates logic from kernel */
 #define CEPH_AUTH_NAME_DEFAULT "guest"
@@ -191,7 +190,7 @@ static int parse_old_dev(const char *dev_str, struct ceph_mount_info *cmi,
 			 int *opt_pos)
 {
 	size_t len;
-	char *mount_path;
+	const char *mount_path;
 
 	mount_path = strstr(dev_str, ":/");
 	if (!mount_path) {
@@ -231,9 +230,9 @@ static int parse_new_dev(const char *dev_str, struct ceph_mount_info *cmi,
 {
 	size_t len;
 	char *name;
-	char *name_end;
-	char *dot;
-	char *fs_name;
+	const char *name_end;
+	const char *dot;
+	const char *fs_name;
 
 	name_end = strstr(dev_str, "@");
 	if (!name_end) {
@@ -473,13 +472,13 @@ out:
 /*
  * this one is partially based on parse_options() from cifs.mount.c
  */
-static int parse_options(const char *data, struct ceph_mount_info *cmi,
+static int parse_options(char *data, struct ceph_mount_info *cmi,
 			 int *opt_pos)
 {
 	char * next_keyword = NULL;
 	char *name = NULL;
 
-	if (data == EMPTY_STRING)
+	if (!data)
 		goto out;
 
 	mount_ceph_debug("parsing options: %s\n", data);
@@ -637,7 +636,7 @@ out:
 		mount_ceph_debug("mount.ceph: options \"%s\".\n",  cmi->cmi_opts);
 
 	if (!cmi->cmi_opts) {
-		cmi->cmi_opts = strdup(EMPTY_STRING);
+		cmi->cmi_opts = strdup("");
 		if (!cmi->cmi_opts)
 			return -ENOMEM;
 	}
@@ -646,7 +645,7 @@ out:
 
 
 static int parse_arguments(int argc, char *const *const argv,
-		const char **src, const char **node, const char **opts)
+		const char **src, const char **node, char **opts)
 {
 	int opt = 0;
 	static struct option long_options[] = {
@@ -674,7 +673,7 @@ static int parse_arguments(int argc, char *const *const argv,
 	*node = argv[2];
 
 	// Parse the remaining options
-	*opts = EMPTY_STRING;
+	*opts = NULL;
 	while ((opt = getopt_long(argc, argv, "hnvfo:",
 					long_options, NULL)) != -1) {
 		switch (opt) {
@@ -975,7 +974,8 @@ static int append_key_or_secret_option(struct ceph_mount_info *cmi)
 int main(int argc, char *argv[])
 {
 	int opt_pos = 0;
-	const char *dev, *node, *opts;
+	const char *dev, *node;
+	char *opts;
 	int retval;
 	struct ceph_mount_info cmi = { 0 };
 

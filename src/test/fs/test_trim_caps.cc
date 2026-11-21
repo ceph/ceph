@@ -16,7 +16,7 @@
 
 int main(int argc, char *argv[]) 
 {
-	char buf;
+	char buf = 0;
 	int pipefd[2];
 	int rc [[maybe_unused]] = pipe(pipefd);
         assert(rc >= 0);
