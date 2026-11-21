@@ -1122,7 +1122,7 @@ def test_versioned_object_incremental_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
-def test_null_version_id_delete():
+def _test_null_version_id_delete(delete_null_version):
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
 
@@ -1154,12 +1154,25 @@ def test_null_version_id_delete():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
     # delete null version
-    zone.s3_client.delete_object(Bucket=bucket.name, Key=obj, VersionId='null')
+    response = delete_null_version(zone.s3_client, bucket.name, obj)
+    assert not response.get('Errors'), response
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
     # delete version 2
     zone.s3_client.delete_object(Bucket=bucket.name, Key=obj, VersionId=version_id_2)
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_null_version_id_delete():
+    _test_null_version_id_delete(
+        lambda client, bucket_name, key: client.delete_object(
+            Bucket=bucket_name, Key=key, VersionId='null'))
+
+def test_null_version_id_multi_delete():
+    _test_null_version_id_delete(
+        lambda client, bucket_name, key: client.delete_objects(
+            Bucket=bucket_name,
+            Delete={'Objects': [{'Key': key, 'VersionId': 'null'}]}))
 
 def test_concurrent_versioned_object_incremental_sync():
     zonegroup = realm.master_zonegroup()
