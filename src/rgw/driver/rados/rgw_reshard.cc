@@ -497,16 +497,22 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     }
 
     if (ret == -ECANCELED) {
-      // racing write detected, read the latest bucket info and try again
+      // racing write detected, read the latest bucket info and try again.
+      // read into a copy: a failed read leaves its output half-cleared, and
+      // the cleanup below still needs the bucket id from bucket_info
+      RGWBucketInfo latest_info;
+      std::map<std::string, bufferlist> latest_attrs;
       int ret2 = store->getRados()->get_bucket_instance_info(
-          bucket_info.bucket, bucket_info,
-          nullptr, &bucket_attrs, y, dpp);
+          bucket_info.bucket, latest_info,
+          nullptr, &latest_attrs, y, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
             "bucket info: " << cpp_strerror(ret2) << dendl;
         ret = ret2;
         break;
       }
+      bucket_info = std::move(latest_info);
+      bucket_attrs = std::move(latest_attrs);
 
       // check that we're still in the reshard state we started in
       if (bucket_info.layout.resharding != rgw::BucketReshardState::None ||
@@ -840,16 +846,22 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   do {
     ret = commit_target_layout(store, bucket_info, bucket_attrs, fault, dpp, y);
     if (ret == -ECANCELED) {
-      // racing write detected, read the latest bucket info and try again
+      // racing write detected, read the latest bucket info and try again.
+      // read into a copy: a failed read leaves its output half-cleared, and
+      // the cleanup below still needs the bucket id from bucket_info
+      RGWBucketInfo latest_info;
+      std::map<std::string, bufferlist> latest_attrs;
       int ret2 = store->getRados()->get_bucket_instance_info(
-          bucket_info.bucket, bucket_info,
-          nullptr, &bucket_attrs, y, dpp);
+          bucket_info.bucket, latest_info,
+          nullptr, &latest_attrs, y, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
             "bucket info: " << cpp_strerror(ret2) << dendl;
         ret = ret2;
         break;
       }
+      bucket_info = std::move(latest_info);
+      bucket_attrs = std::move(latest_attrs);
 
       // check that we're still in the reshard state we started in
       if (bucket_info.layout.resharding != rgw::BucketReshardState::InProgress) {
@@ -874,6 +886,15 @@ static int commit_reshard(rgw::sal::RadosStore* store,
         "target index layout: " << cpp_strerror(ret) << dendl;
 
     bucket_info.layout = std::move(prev); // restore in-memory layout
+
+    if (ret == -ENOENT && bucket_info.layout.target_index) {
+      // the bucket was deleted under us. its current index shards went with
+      // it, but nothing refers to the target shards anymore, so remove them
+      // here or they're left behind in the index pool (ignore errors)
+      store->svc()->bi->clean_index(dpp, y, bucket_info,
+                                    *bucket_info.layout.target_index);
+      return ret;
+    }
 
     // unblock writes to the current index shard objects
     int ret2 = store->svc()->bi_rados->set_reshard_status(
