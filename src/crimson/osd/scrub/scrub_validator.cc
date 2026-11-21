@@ -1641,9 +1641,15 @@ scrub_stats_update_t update_stats_from_scrub(
 {
   scrub_stats_update_t ret;
 
-  // Handle invalid stats, in case of split/merge
+  // Handle invalid stats, in case of split/merge. Only the scrub_checked_stats
+  // are replaced: the other members (e.g. num_rd/num_wr) are not tracked by
+  // scrub, and the deep-only scrub_maintained_stats are handled below.
   if (pg_stats.stats_invalid) {
-    pg_stats.stats.sum = scrubbed;
+    foreach_scrub_checked_stat(
+      [&pg_stats, &scrubbed](
+	const auto &name, auto statptr, const auto &invalid_predicate) {
+	pg_stats.stats.sum.*statptr = scrubbed.*statptr;
+      });
     pg_stats.stats_invalid = false;
     ret.repaired_invalid_stats = true;
   }
