@@ -51,6 +51,12 @@ export class CrushmapComponent implements OnDestroy, OnInit {
   metadataTitle: string;
   metadataKeyMap: { [key: number]: any } = {};
   data$: Observable<object>;
+  /**
+   * IDs of nodes the user has collapsed. Kept across background refreshes so
+   * that rebuilding the tree does not reset the expanded/collapsed state.
+   * Unknown/new nodes default to expanded.
+   */
+  private collapsedNodeIds = new Set<number>();
 
   constructor(
     private crushRuleService: CrushRuleService,
@@ -111,7 +117,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       labelContext: { name, status, type: node?.type },
       value: name,
       id: cdId,
-      expanded: true,
+      expanded: !this.collapsedNodeIds.has(cdId),
       name,
       status,
       cdId,
@@ -126,6 +132,18 @@ export class CrushmapComponent implements OnDestroy, OnInit {
     }
 
     return resultNode;
+  }
+
+  onNodeToggle(event: { node: Pick<Node, 'id'> }) {
+    const id = Number(event?.node?.id);
+    if (Number.isNaN(id)) {
+      return;
+    }
+    if (this.collapsedNodeIds.has(id)) {
+      this.collapsedNodeIds.delete(id);
+    } else {
+      this.collapsedNodeIds.add(id);
+    }
   }
 
   onNodeSelected(node: Node) {
