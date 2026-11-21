@@ -610,6 +610,12 @@ void Elector::dead_ping(int peer)
 
   peer_tracker.report_dead_connection(peer, now - acked_ping);
   acked_ping = now;
+  // A session reset can discard the last ping, so probe dead peers again.
+  if (!send_peer_ping(peer, &now)) {
+    // fail to send ping, peer is probably not in monmap or incorrect rank.
+    dead_pinging.erase(peer);
+    return;
+  }
   dout(30) << "schedule " << __func__ << " against peer: " << peer << dendl;
   mon->timer.add_event_after(ping_timeout,
 			       new C_MonContext{mon, [this, peer](int) {
