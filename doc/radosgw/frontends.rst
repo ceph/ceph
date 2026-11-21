@@ -6,9 +6,14 @@ HTTP Frontends
 
 .. contents::
 
-The Ceph Object Gateway supports two embedded HTTP frontend libraries
-that can be configured with ``rgw_frontends``. See :ref:`radosgw-config-ref`
-for details about the syntax.
+The Ceph Object Gateway has one embedded HTTP frontend, ``beast``, which is
+configured with ``rgw_frontends``. See :ref:`radosgw-config-ref` for details
+about the syntax.
+
+The ``civetweb`` frontend was deprecated in Pacific and removed in Quincy. A
+gateway whose ``rgw_frontends`` still names ``civetweb`` logs
+``skipping unknown framework: civetweb`` and does not serve HTTP on that port.
+Replace ``civetweb`` with ``beast`` in that setting.
 
 Beast
 =====
