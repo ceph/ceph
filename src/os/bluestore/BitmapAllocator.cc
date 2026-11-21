@@ -79,6 +79,18 @@ uint64_t BitmapAllocator::get_free_extents(
     });
 }
 
+int64_t BitmapAllocator::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector* extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  check_claim_range_args(offset, length);
+  return claim_range_internal(offset, length, extents);
+}
+
 void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
