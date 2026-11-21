@@ -30,7 +30,7 @@ from mgr_util import (
     format_bytes,
     NvmeofMetadataPoolHelper,
 )
-from mgr_module import MgrModule, HandleCommandResult, Option
+from mgr_module import MgrModule, HandleCommandResult, Option, remote_export
 from object_format import Format
 
 from .cli import OrchestratorCLICommand
@@ -496,6 +496,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     def _select_orchestrator(self) -> str:
         return cast(str, self.get_module_option("orchestrator"))
+
+    @remote_export
+    def select_orchestrator(self) -> str:
+        return self._select_orchestrator()
 
     def _get_fail_fs_value(self) -> bool:
         return bool(self.get_module_option("fail_fs"))

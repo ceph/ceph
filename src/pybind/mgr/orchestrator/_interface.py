@@ -50,7 +50,7 @@ from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
 
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult, remote_export, _REMOTE_EXPORT_ATTR
 
 
 logger = logging.getLogger(__name__)
@@ -1880,6 +1880,14 @@ class OrchestratorEvent:
         return f'OrchestratorEvent.from_json({self.to_json()!r})'
 
 
+# The public methods of Orchestrator are what backends serve to other
+# modules through remote(), see OrchestratorClientMixin._oremote().
+for _name, _meth in Orchestrator.__dict__.items():
+    if not _name.startswith('_') and callable(_meth):
+        remote_export(_meth)
+del _name, _meth
+
+
 def _mk_orch_methods(cls: Any) -> Any:
     # Needs to be defined outside of for.
     # Otherwise meth is always bound to last key
@@ -1892,6 +1900,8 @@ def _mk_orch_methods(cls: Any) -> Any:
     for name, method in Orchestrator.__dict__.items():
         if not name.startswith('_') and name not in ['is_orchestrator_module']:
             remote_call = update_wrapper(shim(name), method)
+            # a client forwards these calls, it doesn't serve them
+            setattr(remote_call, _REMOTE_EXPORT_ATTR, False)
             setattr(cls, name, remote_call)
     return cls
 
@@ -1949,7 +1959,7 @@ class OrchestratorClientMixin(Orchestrator):
         try:
             o = mgr._select_orchestrator()
         except AttributeError:
-            o = mgr.remote('orchestrator', '_select_orchestrator')
+            o = mgr.remote('orchestrator', 'select_orchestrator')
 
         if o is None:
             raise NoOrchestrator()

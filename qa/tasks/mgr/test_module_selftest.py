@@ -225,6 +225,16 @@ class TestModuleSelftest(MgrTestCase):
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "self-test", "remote")
 
+    def test_module_remote_exports(self):
+        """
+        Check that 'mgr api ls' lists the @remote_export methods
+        """
+        self._load_module("selftest")
+        exports = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "api", "ls", "selftest"))
+        self.assertIn("remote_exported_ping", exports["selftest"])
+        self.assertNotIn("remote_unexported_ping", exports["selftest"])
+
     def test_selftest_cluster_log(self):
         """
         Use the selftest module to test the cluster/audit log interface.

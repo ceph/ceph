@@ -164,6 +164,10 @@ public:
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
+  // 0/-ENOENT/-ENODEV/-EACCES; see SharedStorePolicy for the -EACCES case.
+  int get_store_ex(const std::string &reader,
+      const std::string &owner,
+      const std::string &key, std::string *val) const;
   PyObject *get_store_prefix(const std::string &module_name,
 			      const std::string &prefix) const;
   void set_store(const std::string &module_name,

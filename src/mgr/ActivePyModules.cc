@@ -673,6 +673,40 @@ bool ActivePyModules::get_store(const std::string &module_name,
   }
 }
 
+int ActivePyModules::get_store_ex(const std::string &reader,
+    const std::string &owner, const std::string &key, std::string *val) const
+{
+  without_gil_t no_gil;
+
+  // The policy is fixed at load time; a disabled module still shares.
+  if (reader != owner) {
+    PyModuleRef module = py_module_registry.get_module(owner);
+    if (!module || !module->is_loaded()) {
+      dout(4) << __func__ << " no module '" << owner << "'" << dendl;
+      return -ENODEV;
+    }
+    if (!module->can_read_shared(reader, key)) {
+      dout(1) << __func__ << " module '" << reader << "' may not read '"
+              << key << "' of module '" << owner << "'" << dendl;
+      return -EACCES;
+    }
+  }
+
+  const std::string global_key = PyModule::mgr_store_prefix
+    + owner + "/" + key;
+
+  dout(4) << __func__ << " key: " << global_key << " reader: " << reader
+          << dendl;
+
+  std::lock_guard l(lock);
+  auto i = store_cache.find(global_key);
+  if (i == store_cache.end()) {
+    return -ENOENT;
+  }
+  *val = i->second;
+  return 0;
+}
+
 std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(
     const std::string &other_module,
     const std::string &method,
@@ -782,9 +816,13 @@ void ActivePyModules::set_store(const std::string &module_name,
                                    + module_name + "/" + key;
 
   Command set_cmd;
+  std::optional<std::string> prev;
   {
     std::lock_guard l(lock);
 
+    if (auto i = store_cache.find(global_key); i != store_cache.end()) {
+      prev = i->second;
+    }
     // NOTE: this isn't strictly necessary since we'll also get an MKVData
     // update from the mon due to our subscription *before* our command is acked.
     if (val) {
@@ -812,11 +850,26 @@ void ActivePyModules::set_store(const std::string &module_name,
 
   if (set_cmd.r != 0) {
     // config-key set will fail if mgr's auth key has insufficient
-    // permission to set config keys
+    // permission to set config keys, or if the value is too large
     // FIXME: should this somehow raise an exception back into Python land?
-    dout(0) << "`config-key set " << global_key << " " << val << "` failed: "
+    dout(0) << "`config-key " << (val ? "set " : "del ") << global_key
+      << "` (" << (val ? val->size() : 0) << " bytes) failed: "
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+
+    // Undo our cache update so this mgr (and readers of shared keys) keeps
+    // what the mon has, unless another update replaced it meanwhile.
+    std::lock_guard l(lock);
+    auto i = store_cache.find(global_key);
+    const bool still_ours = val ? (i != store_cache.end() && i->second == *val)
+                                : i == store_cache.end();
+    if (still_ours) {
+      if (prev) {
+        store_cache[global_key] = std::move(*prev);
+      } else if (i != store_cache.end()) {
+        store_cache.erase(i);
+      }
+    }
   }
 }
 
