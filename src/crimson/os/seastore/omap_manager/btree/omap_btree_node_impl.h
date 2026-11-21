@@ -16,7 +16,11 @@
 
 namespace crimson::os::seastore::omap_manager {
 
+/// The largest leaf size for this tree type. All non-root leaves have it.
 extent_len_t get_leaf_size(omap_type_t type);
+/// The leaf size of a new tree. Only a root leaf can be smaller than
+/// get_leaf_size(type).
+extent_len_t get_initial_leaf_size(omap_type_t type);
 
 /**
  * OMapInnerNode
@@ -444,7 +448,40 @@ struct OMapLeafNode
   bool exceeds_max_kv_limit(
     const std::string &key,
     const ceph::bufferlist &value) const final {
-    return (key.length() + value.length()) > (capacity() / 4);
+    // Take the limit from the largest leaf, not from this one: a root
+    // leaf that is smaller than OMAP_LEAF_BLOCK_SIZE must accept every
+    // entry that fits after it grows.
+    auto header = get_len() - capacity();
+    return (key.length() + value.length()) >
+      ((OMAP_LEAF_BLOCK_SIZE - header) / 4);
+  }
+
+  /**
+   * get_grow_len
+   *
+   * If this leaf cannot hold key and value and is smaller than max_len,
+   * return the smallest size (this size doubled one or more times, at most
+   * max_len) that holds all entries and the new one. Otherwise nullopt.
+   * Only a root leaf may grow.
+   */
+  std::optional<extent_len_t> get_grow_len(
+    size_t ksize, size_t vsize, extent_len_t max_len) const {
+    if (!is_overflow(ksize, vsize) || get_len() >= max_len) {
+      return std::nullopt;
+    }
+    extent_len_t header = get_len() - capacity();
+    size_t need = used_space() + sizeof(omap_leaf_key_le_t) + ksize + vsize;
+    extent_len_t len = get_len();
+    while (len < max_len && len - header < need) {
+      len *= 2;
+    }
+    return std::min(len, max_len);
+  }
+
+  /// Fill this new, empty leaf with the entries of a smaller root leaf.
+  void grow_from(const OMapLeafNode &src) {
+    assert(get_len() > src.get_len());
+    copy_from(src);
   }
 
   rm_key_ret rm_key(
@@ -532,11 +569,7 @@ omap_load_extent(
 {
   LOG_PREFIX(omap_load_extent);
   assert(end <= END_KEY);
-  auto size = std::is_same_v<OMapInnerNode, T>
-    ? OMAP_INNER_BLOCK_SIZE : get_leaf_size(oc.type);
-  return oc.tm.read_extent<T>(
-    oc.t, laddr, size,
-    [begin=std::move(begin), end=std::move(end), FNAME,
+  auto init = [begin=std::move(begin), end=std::move(end), FNAME,
     oc, chp=std::move(chp)](T &extent) mutable {
       assert(!extent.is_seen_by_users());
       extent.init_range(std::move(begin), std::move(end));
@@ -548,8 +581,18 @@ omap_load_extent(
       assert(chp);
       assert(!extent.T::base_child_t::is_parent_valid());
       chp->link_child(&extent);
+    };
+  auto fut = [&] {
+    if constexpr (std::is_same_v<OMapInnerNode, T>) {
+      return oc.tm.read_extent<T>(
+        oc.t, laddr, OMAP_INNER_BLOCK_SIZE, std::move(init));
+    } else {
+      // Leaves of one tree do not have to be the same size (a root
+      // leaf can be smaller), so take the length from the LBA mapping.
+      return oc.tm.read_extent<T>(oc.t, laddr, std::move(init));
     }
-  ).handle_error_interruptible(
+  }();
+  return std::move(fut).handle_error_interruptible(
     omap_load_extent_iertr::pass_further{},
     crimson::ct_error::assert_all( "Invalid error in omap_load_extent" )
   ).si_then([](auto maybe_indirect_extent) {

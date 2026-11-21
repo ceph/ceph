@@ -21,6 +21,9 @@
 //	and return errors during insert if the max is exceeded.
 #define OMAP_INNER_BLOCK_SIZE 8192
 #define OMAP_LEAF_BLOCK_SIZE 65536
+// A new XATTR tree starts with a leaf of this size. The root leaf doubles
+// when it is full, up to OMAP_LEAF_BLOCK_SIZE; only then does it split.
+#define XATTR_LEAF_INIT_BLOCK_SIZE 4096
 #define LOG_LEAF_BLOCK_SIZE 16384
 
 template <>

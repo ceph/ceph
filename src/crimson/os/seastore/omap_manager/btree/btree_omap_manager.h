@@ -63,6 +63,20 @@ class BtreeOMapManager : public OMapManager {
     omap_root_t &omap_root, 
     OMapNode:: mutation_result_t mresult);
 
+  /* grow_root_leaf
+   *
+   * The root is a leaf that is smaller than get_leaf_size() and cannot
+   * hold a new entry: copy it into a new leaf of len bytes, remove the
+   * old leaf and update omap_root_t. Returns the new root.
+   */
+  using grow_root_leaf_iertr = base_iertr;
+  using grow_root_leaf_ret = grow_root_leaf_iertr::future<OMapNodeRef>;
+  grow_root_leaf_ret grow_root_leaf(
+    omap_context_t oc,
+    omap_root_t &omap_root,
+    OMapNodeRef root,
+    extent_len_t len);
+
 public:
   explicit BtreeOMapManager(TransactionManager &tm);
 

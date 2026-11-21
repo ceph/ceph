@@ -25,7 +25,8 @@ BtreeOMapManager::initialize_omap(
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
-  return tm.alloc_non_data_extent<OMapLeafNode>(t, hint, get_leaf_size(type))
+  return tm.alloc_non_data_extent<OMapLeafNode>(
+    t, hint, get_initial_leaf_size(type))
     .si_then([hint, &t, type](auto&& root_extent) {
       root_extent->set_size(0);
       root_extent->init_range(BEGIN_KEY, END_KEY);
@@ -169,10 +170,51 @@ BtreeOMapManager::omap_set_key(
   // https://tracker.ceph.com/issues/71524
   // DEBUGT("{} -> {}", t, key, value);
   auto root = co_await get_omap_root(get_omap_context(t, omap_root), omap_root);
+  if (omap_root.get_depth() == 1) {
+    auto leaf = root->template cast<OMapLeafNode>();
+    auto len = leaf->get_grow_len(
+      key.size(), value.length(), get_leaf_size(omap_root.get_type()));
+    if (len && !leaf->exceeds_max_kv_limit(key, value)) {
+      root = co_await grow_root_leaf(
+        get_omap_context(t, omap_root), omap_root, root, *len);
+    }
+  }
   auto mresult = co_await root->insert(get_omap_context(t, omap_root), key, value);
   if (mresult.status == mutation_status_t::WAS_SPLIT) {
     co_await handle_root_split(get_omap_context(t, omap_root), omap_root, mresult);
   }
+}
+
+BtreeOMapManager::grow_root_leaf_ret
+BtreeOMapManager::grow_root_leaf(
+  omap_context_t oc,
+  omap_root_t &omap_root,
+  OMapNodeRef root,
+  extent_len_t len)
+{
+  LOG_PREFIX(BtreeOMapManager::grow_root_leaf);
+  auto leaf = root->template cast<OMapLeafNode>();
+  assert(omap_root.get_depth() == 1);
+  assert(leaf->is_btree_root());
+  assert(len > leaf->get_len());
+  assert(len <= get_leaf_size(omap_root.get_type()));
+  auto nroot = co_await oc.tm.alloc_non_data_extent<OMapLeafNode>(
+    oc.t, omap_root.hint, len
+  ).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    TransactionManager::alloc_extent_iertr::pass_further{}
+  );
+  nroot->grow_from(*leaf);
+  nroot->init_range(BEGIN_KEY, END_KEY);
+  DEBUGT("0x{:x} -> 0x{:x}, {}", oc.t, leaf->get_len(), len, *nroot);
+  co_await oc.tm.remove(oc.t, leaf->get_laddr()
+  ).handle_error_interruptible(
+    grow_root_leaf_iertr::pass_further{},
+    crimson::ct_error::assert_all("Invalid error in grow_root_leaf")
+  ).discard_result();
+  omap_root.update(
+    nroot->get_laddr(), 1, omap_root.hint, omap_root.get_type());
+  co_return nroot->template cast<OMapNode>();
 }
 
 BtreeOMapManager::omap_rm_key_ret
