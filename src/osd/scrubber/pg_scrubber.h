@@ -651,7 +651,10 @@ class PgScrubber : public ScrubPgIF,
 
   bool is_token_current(Scrub::act_token_t received_token);
 
-  void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
+  void requeue_waiting() const
+  {
+    m_pg->requeue_ops(m_pg->waiting_for_scrub, PG::OpWaitingList::SCRUB);
+  }
 
   /// Modify the token identifying the current replica scrub operation
   void advance_token();
