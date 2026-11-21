@@ -19,7 +19,7 @@ Synopsis
 | **ceph-bluestore-tool** fsck|repair --path *osd path* [ --deep ]
 | **ceph-bluestore-tool** qfsck       --path *osd path*
 | **ceph-bluestore-tool** allocmap    --path *osd path*
-| **ceph-bluestore-tool** restore_cfb --path *osd path*
+| **ceph-bluestore-tool** allocator-db|allocator-file --path *osd path*
 | **ceph-bluestore-tool** recovery-compare --path *osd path*
 | **ceph-bluestore-tool** show-label --dev *device* ...
 | **ceph-bluestore-tool** show-label-at --dev *device* --offset *lba* ...
@@ -76,9 +76,13 @@ Commands
 
    Performs the same check done by qfsck and then stores a new allocation-file (command is disabled by default and requires a special build).
 
-:command:`restore_cfb`
+:command:`allocator-db`
 
-   Reverses changes done by the new NCB code (either through ceph restart or when running allocmap command) and restores RocksDB B Column-Family (allocator-map).
+   Switches allocator storage location to db.
+
+:command:`allocator-file`
+
+   Switches allocator storage location to file.
 
 :command:`recovery-compare`
 
