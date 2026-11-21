@@ -9,8 +9,10 @@ export class TelemetryService {
 
   constructor(private http: HttpClient) {}
 
-  getReport() {
-    return this.http.get(`${this.url}/report`);
+  getReport(channels: string[]) {
+    // An empty value selects no channel, whereas an empty array would not be sent at all.
+    const params = { channels: channels.length ? channels : '' };
+    return this.http.get(`${this.url}/report`, { params });
   }
 
   enable(enable: boolean = true) {

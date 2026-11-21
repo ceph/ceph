@@ -123,6 +123,17 @@ class DocsTest(ControllerTestCase):
         # Check that a schema of type 'object' is received in the response.
         self.assertEqual(expected_response_content['202'], outcome['responses']['202']['content'])
 
+    def test_gen_params_list_type(self):
+        params = [{'name': 'channels', 'type': [str], 'required': False, 'default': None,
+                   'description': 'Channels'}]
+        self.assertEqual(Docs()._gen_params(params, 'query'), [{
+            'name': 'channels',
+            'in': 'query',
+            'schema': {'type': 'array', 'items': {'type': 'string'}},
+            'description': 'Channels',
+            'allowEmptyValue': True
+        }])
+
     def test_gen_method_paths(self):
         outcome = Docs().gen_paths(False)['/api/doctest/']['get']
 
