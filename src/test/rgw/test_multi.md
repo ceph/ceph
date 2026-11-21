@@ -44,6 +44,7 @@ This section holds the following parameters:
  - `num_zonegroups`: number of zone groups (integer, default 1)
  - `num_zones`: number of regular zones in each group (integer, default 3)
  - `num_az_zones`: number of archive zones (integer, default 0, max value 1)
+ - `num_bz_zones`: number of backup zones (integer, default 0, max value 1). The backup zone tests (`nosetests test_multi.py -a backup`) are skipped unless this is set to 1
  - `gateways_per_zone`: number of RADOS gateways per zone (integer, default 2)
  - `no_bootstrap`: whether to assume that the cluster is already up and does not need to be setup again. If set to "false", it will try to re-run the cluster, so, `mstop.sh` must be called beforehand. Should be set to false, anytime the configuration is changed. Otherwise, and assuming the cluster is already up, it should be set to "true" to save on execution time (boolean, default false)
  - `log_level`: console log level of the logs in the tests, note that any program invoked from the test my emit logs regardless of that setting (integer, default 20)

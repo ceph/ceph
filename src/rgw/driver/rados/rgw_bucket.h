@@ -200,6 +200,20 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                                      RGWDataChangesLog *svc_datalog)
     -> std::unique_ptr<RGWMetadataHandler>;
 
+// backup bucket entrypoint metadata handler factory
+auto create_backup_bucket_metadata_handler(librados::Rados& rados,
+                                            RGWSI_Bucket* svc_bucket,
+                                            RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
+
+// backup bucket instance metadata handler factory
+auto create_backup_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                                     RGWSI_Zone* svc_zone,
+                                                     RGWSI_Bucket* svc_bucket,
+                                                     RGWSI_BucketIndex* svc_bi,
+                                                     RGWDataChangesLog *svc_datalog)
+    -> std::unique_ptr<RGWMetadataHandler>;
+
 
 // vector bucket entrypoint metadata handler factory
 auto create_vector_bucket_metadata_handler(librados::Rados& rados,

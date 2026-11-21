@@ -4869,10 +4869,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   if (copy_if_newer) {
     /* need to get mtime for destination */
     ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
-    if (ret < 0)
+    /* -ENOENT means there is no current version to compare against: with stat_follow_olh the
+     * destination's current version is a delete marker (follow_olh() returns ENOENT for those).
+     * there is no live copy to protect, so fetch unconditionally rather than skipping the sync. */
+    if (ret < 0 && ret != -ENOENT)
       goto set_err_state;
 
-    if (!real_clock::is_zero(dest_state->mtime)) {
+    if (ret == 0 && !real_clock::is_zero(dest_state->mtime)) {
       dest_mtime_weight.init(dest_state);
       pmod = &dest_mtime_weight.mtime;
     }

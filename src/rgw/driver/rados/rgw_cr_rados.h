@@ -1369,6 +1369,9 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   bool del_if_older;
   ceph::real_time timestamp;
   rgw_zone_set zones_trace;
+  /* when set, versioned_epoch is decided against our own olh: the named version is promoted to
+   * head only if it currently *is* the head. used by the backup sync module. */
+  std::optional<rgw_obj_key> promote_if_head;
 
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
@@ -1386,7 +1389,8 @@ public:
                     bool _delete_marker,
                     bool _if_older,
                     real_time& _timestamp,
-                    rgw_zone_set* _zones_trace) : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), store(_store), cct(_cct),
+                    rgw_zone_set* _zones_trace,
+                    std::optional<rgw_obj_key> _promote_if_head = std::nullopt) : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), store(_store), cct(_cct),
                                                   source_zone(_source_zone),
                                                   sync_pipe(_sync_pipe),
                                                   owner(_owner),
@@ -1394,7 +1398,8 @@ public:
                                                   versioned(_versioned),
                                                   versioned_epoch(_versioned_epoch),
                                                   del_if_older(_if_older),
-                                                  timestamp(_timestamp) {
+                                                  timestamp(_timestamp),
+                                                  promote_if_head(std::move(_promote_if_head)) {
     if (_delete_marker) {
       marker_version_id = _key.instance;
     }
@@ -1427,8 +1432,9 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
   real_time timestamp;
 
   RGWAsyncRemoveObj *req;
-  
+
   rgw_zone_set *zones_trace;
+  std::optional<rgw_obj_key> promote_if_head;
 
 public:
   RGWRemoveObjCR(const DoutPrefixProvider *_dpp, RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
@@ -1441,14 +1447,16 @@ public:
                       std::string *_owner_display_name,
                       bool _delete_marker,
                       real_time *_timestamp,
-                      rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), dpp(_dpp), cct(_store->ctx()),
+                      rgw_zone_set *_zones_trace,
+                      std::optional<rgw_obj_key> _promote_if_head = std::nullopt) : RGWSimpleCoroutine(_store->ctx()), dpp(_dpp), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        sync_pipe(_sync_pipe),
                                        key(_key),
                                        versioned(_versioned),
                                        versioned_epoch(_versioned_epoch),
-                                       delete_marker(_delete_marker), req(NULL), zones_trace(_zones_trace) {
+                                       delete_marker(_delete_marker), req(NULL), zones_trace(_zones_trace),
+                                       promote_if_head(std::move(_promote_if_head)) {
     del_if_older = (_timestamp != NULL);
     if (_timestamp) {
       timestamp = *_timestamp;
@@ -1476,7 +1484,8 @@ public:
   int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncRemoveObj(dpp, this, stack->create_completion_notifier(), store, cct, source_zone, sync_pipe,
                                 key, owner, owner_display_name, versioned, versioned_epoch,
-                                delete_marker, del_if_older, timestamp, zones_trace);
+                                delete_marker, del_if_older, timestamp, zones_trace,
+                                promote_if_head);
     async_rados->queue(req);
     return 0;
   }

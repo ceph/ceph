@@ -2962,6 +2962,171 @@ class RGWVectorBucketMetadataHandler : public RGWBucketMetadataHandler {
   bool is_synced() const override { return false; }
 };
 
+class RGWBackupBucketMetadataHandler : public RGWBucketMetadataHandler {
+ public:
+  RGWBackupBucketMetadataHandler(librados::Rados& rados,
+                                  RGWSI_Bucket* svc_bucket,
+                                  RGWBucketCtl* ctl_bucket)
+    : RGWBucketMetadataHandler(rados, svc_bucket, ctl_bucket) {}
+
+  int remove(std::string& entry, RGWObjVersionTracker& objv_tracker,
+             optional_yield y, const DoutPrefixProvider *dpp) override
+  {
+    auto cct = svc_bucket->ctx();
+
+    ldpp_dout(dpp, 5) << "SKIP: bucket removal is not allowed on backup zone: bucket:" << entry << " ... proceeding to rename" << dendl;
+
+    string tenant_name, bucket_name;
+    parse_bucket(entry, &tenant_name, &bucket_name);
+    rgw_bucket entry_bucket;
+    entry_bucket.tenant = tenant_name;
+    entry_bucket.name = bucket_name;
+
+    real_time mtime;
+
+    /* read original entrypoint */
+
+    RGWBucketEntryPoint be;
+    map<string, bufferlist> attrs;
+    int ret = svc_bucket->read_bucket_entrypoint_info(entry, &be, &objv_tracker, &mtime, &attrs, y, dpp);
+    if (ret < 0) {
+        return ret;
+    }
+
+    string bi_meta_name = RGWSI_Bucket::get_bi_meta_key(be.bucket);
+
+    /* read original bucket instance info */
+
+    map<string, bufferlist> attrs_m;
+    ceph::real_time orig_mtime;
+    RGWBucketInfo old_bi;
+
+    ret = ctl_bucket->read_bucket_instance_info(be.bucket, &old_bi, y, dpp, RGWBucketCtl::BucketInstance::GetParams()
+                                                                    .set_mtime(&orig_mtime)
+                                                                    .set_attrs(&attrs_m));
+    if (ret < 0) {
+        return ret;
+    }
+
+    archive_meta_info ami;
+
+    if (!ami.from_attrs(svc_bucket->ctx(), attrs_m)) {
+      ami.orig_bucket = old_bi.bucket;
+      ami.store_in_attrs(attrs_m);
+    }
+
+    /* generate a new bucket instance. We could have avoided this if we could just point a new
+     * bucket entry point to the old bucket instance, however, due to limitation in the way
+     * we index buckets under the user, bucket entrypoint and bucket instance of the same
+     * bucket need to have the same name, so we need to copy the old bucket instance into
+     * to a new entry with the new name
+     */
+
+    string new_bucket_name;
+
+    RGWBucketInfo new_bi = old_bi;
+    RGWBucketEntryPoint new_be = be;
+
+    string md5_digest;
+
+    get_md5_digest(&new_be, md5_digest);
+    new_bucket_name = ami.orig_bucket.name + "-deleted-" + md5_digest;
+
+    new_bi.bucket.name = new_bucket_name;
+    new_bi.objv_tracker.clear();
+
+    new_be.bucket.name = new_bucket_name;
+
+    ret = ctl_bucket->store_bucket_instance_info(new_be.bucket, new_bi, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
+                                                                    .set_exclusive(false)
+                                                                    .set_mtime(orig_mtime)
+                                                                    .set_attrs(&attrs_m)
+                                                                    .set_orig_info(&old_bi));
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* store a new entrypoint */
+
+    RGWObjVersionTracker ot;
+    ot.generate_new_write_ver(cct);
+
+    ret = svc_bucket->store_bucket_entrypoint_info(RGWSI_Bucket::get_entrypoint_meta_key(new_be.bucket),
+                                                   new_be, true, mtime, &attrs, nullptr, y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* link new bucket */
+
+    ret = ctl_bucket->link_bucket(rados, new_be.owner, new_be.bucket, new_be.creation_time, y, dpp, false);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* clean up old stuff */
+
+    ret = ctl_bucket->unlink_bucket(rados, be.owner, entry_bucket, y, dpp, false);
+    if (ret < 0) {
+        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+    }
+
+    // if (ret == -ECANCELED) it means that there was a race here, and someone
+    // wrote to the bucket entrypoint just before we removed it. The question is
+    // whether it was a newly created bucket entrypoint ...  in which case we
+    // should ignore the error and move forward, or whether it is a higher version
+    // of the same bucket instance ... in which we should retry
+    ret = svc_bucket->remove_bucket_entrypoint_info(RGWSI_Bucket::get_entrypoint_meta_key(be.bucket),
+                                                    &objv_tracker,
+                                                    y,
+                                                    dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    ret = ctl_bucket->remove_bucket_instance_info(be.bucket, old_bi, y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
+    }
+
+
+    /* idempotent */
+
+    return 0;
+  }
+
+  int put(std::string& entry, RGWMetadataObject* obj,
+          RGWObjVersionTracker& objv_tracker,
+          optional_yield y, const DoutPrefixProvider* dpp,
+          RGWMDLogSyncType type, bool from_remote_zone) override
+  {
+    if (entry.find("-deleted-") != string::npos) {
+      RGWObjVersionTracker ot;
+      RGWMetadataObject *robj;
+      int ret = get(entry, &robj, y, dpp);
+      if (ret != -ENOENT) {
+        if (ret < 0) {
+          return ret;
+        }
+        ot.read_version = robj->get_version();
+        delete robj;
+
+        ret = remove(entry, ot, y, dpp);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+    }
+
+    return RGWBucketMetadataHandler::put(entry, obj, objv_tracker, y,
+                                         dpp, type, from_remote_zone);
+  }
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   rgw::sal::Driver* driver;
   RGWSI_Zone* svc_zone{nullptr};
@@ -3209,9 +3374,10 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     }
   }
 
-  //always keep bucket versioning enabled on archive zone
+  //always keep bucket versioning enabled on archive and backup zones
   if (!bci.info.is_vector() &&
-      driver->get_zone()->get_tier_type() == "archive") {
+      (driver->get_zone()->get_tier_type() == "archive" ||
+       driver->get_zone()->get_tier_type() == "backup")) {
     bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
   }
 
@@ -3375,6 +3541,19 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
   }
 };
 
+class RGWBackupBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+ public:
+  using RGWBucketInstanceMetadataHandler::RGWBucketInstanceMetadataHandler;
+
+  // N.B. replication of lifecycle policy relies on logic in RGWBucketInstanceMetadataHandler::put(...), override with caution
+
+  int remove(std::string& entry, RGWObjVersionTracker& objv_tracker,
+             optional_yield y, const DoutPrefixProvider *dpp) override
+  {
+    ldpp_dout(dpp, 0) << "SKIP: bucket instance removal is not allowed on backup zone: bucket.instance:" << entry << dendl;
+    return 0;
+  }
+};
 #endif
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -3927,6 +4106,27 @@ auto create_vector_bucket_metadata_handler(librados::Rados& rados,
 {
   return std::make_unique<RGWVectorBucketMetadataHandler>(
       rados, svc_bucket, ctl_bucket);
+}
+
+auto create_backup_bucket_metadata_handler(librados::Rados& rados,
+                                            RGWSI_Bucket* svc_bucket,
+                                            RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWBackupBucketMetadataHandler>(
+      rados, svc_bucket, ctl_bucket);
+}
+
+auto create_backup_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                                     RGWSI_Zone* svc_zone,
+                                                     RGWSI_Bucket* svc_bucket,
+                                                     RGWSI_BucketIndex* svc_bi,
+                                                     RGWDataChangesLog *svc_datalog)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWBackupBucketInstanceMetadataHandler>(driver, svc_zone,
+                                                                   svc_bucket, svc_bi,
+                                                                   svc_datalog);
 }
 
 #endif
