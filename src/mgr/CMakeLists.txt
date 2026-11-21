@@ -1,6 +1,5 @@
 add_library(mgr_cap_obj OBJECT
   MgrCap.cc)
-target_link_libraries(mgr_cap_obj legacy-option-headers)
 
 if(WITH_MGR)
   set(mgr_srcs

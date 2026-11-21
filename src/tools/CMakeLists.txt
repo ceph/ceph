@@ -70,7 +70,7 @@ add_executable(ceph-kvstore-tool
   kvstore_tool.cc
   ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool
-  legacy-option-headers kv
+  kv
   os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
@@ -82,7 +82,6 @@ install(TARGETS ceph-conf DESTINATION bin)
 set(crushtool_srcs crushtool.cc)
 add_executable(crushtool ${crushtool_srcs})
 target_link_libraries(crushtool
-  legacy-option-headers
   global)
 install(TARGETS crushtool DESTINATION bin)
 

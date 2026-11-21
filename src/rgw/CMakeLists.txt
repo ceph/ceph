@@ -382,7 +382,6 @@ endif()
 target_link_libraries(rgw_common
   PRIVATE
     ${rgw_common_libs}
-    legacy-option-headers
     global
     cls_rgw_client
     keyring
@@ -495,7 +494,6 @@ if(WITH_RADOSGW_STANDALONE)
   target_link_libraries(rgw_common_standalone
     PRIVATE
     ${rgw_common_libs}
-    legacy-option-headers
     global
     cls_rgw_client
     keyring
@@ -763,7 +761,6 @@ target_link_libraries(rgw_a
     rgw_schedulers
     kmip
     heap_profiler
-    legacy-option-headers
     common_utf8 global
     heap_profiler
     ${CRYPTO_LIBS}
@@ -803,7 +800,6 @@ if(WITH_RADOSGW_STANDALONE)
     rgw_schedulers
     kmip
     heap_profiler
-    legacy-option-headers
     common_utf8 global
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
@@ -863,7 +859,6 @@ target_include_directories(radosgw
   PRIVATE "${LUA_INCLUDE_DIR}")
 
 target_link_libraries(radosgw PRIVATE
-  legacy-option-headers
   ${rgw_libs}
   ${ALLOC_LIBS})
 
@@ -914,7 +909,6 @@ if(WITH_RADOSGW_STANDALONE)
     PRIVATE "${LUA_INCLUDE_DIR}")
 
   target_link_libraries(rgw-standalone PRIVATE
-    legacy-option-headers
     rgw_a_standalone
     ${ALLOC_LIBS})
 
@@ -937,7 +931,6 @@ if(WITH_RADOSGW_RADOS)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} ${radosgw_admin_rados_srcs})
   target_link_libraries(radosgw-admin
-    legacy-option-headers
     ${rgw_libs} librados
     cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
     cls_log_client cls_timeindex_client
@@ -966,7 +959,6 @@ if(WITH_RADOSGW_STANDALONE)
   add_executable(rgw-standalone-admin ${radosgw_admin_srcs} ${rgw_standalone_admin_srcs})
 
   target_link_libraries(rgw-standalone-admin
-    legacy-option-headers
     rgw_a_standalone
     global ${LIB_RESOLV}
     OATH::OATH
@@ -1006,7 +998,6 @@ set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
 target_link_libraries(radosgw-token
-  legacy-option-headers
   librados
   global)
 if(COMPILER_SUPPORTS_VLA_ERROR)

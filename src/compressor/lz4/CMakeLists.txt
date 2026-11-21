@@ -8,7 +8,6 @@ set(lz4_sources
 add_library(ceph_lz4 SHARED ${lz4_sources})
 target_link_libraries(ceph_lz4
   PRIVATE
-  legacy-option-headers
   LZ4::LZ4 compressor $<$<PLATFORM_ID:Windows>:ceph-common>)
 if(HAVE_QATZIP AND HAVE_QAT)
   target_link_libraries(ceph_lz4 PRIVATE qat_compressor)
