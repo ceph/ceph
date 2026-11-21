@@ -44,15 +44,21 @@ namespace rgw::cksum {
 	/* due to AWS (and other) convention, the at-rest
 	 * digest is byteswapped (on LE?);  restore the
 	 * defined byte order before combining */
-	auto cck1 =
-	  rgw::digest::byteswap(std::get<uint64_t>(*ck1.get_crc()));
-	auto cck2 =
-	  rgw::digest::byteswap(std::get<uint64_t>(*ck2.get_crc()));
+        auto cck1 = std::get<uint64_t>(*ck1.get_crc());
+        if constexpr (std::endian::native != std::endian::big) {
+          cck1 = rgw::digest::byteswap(cck1);
+        }
+        auto cck2 = std::get<uint64_t>(*ck2.get_crc());
+        if constexpr (std::endian::native != std::endian::big) {
+          cck2 = rgw::digest::byteswap(cck2);
+        }
 	/* madler crcany */
 	auto cck3 = crc64nvme_comb(cck1, cck2, len1);
 	/* and byteswap */
-	cck3 = rgw::digest::byteswap(cck3);
-	/* convert to a Cksum, no ascii armor */
+        if constexpr (std::endian::native != std::endian::big) {
+          cck3 = rgw::digest::byteswap(cck3);
+        }
+  /* convert to a Cksum, no ascii armor */
 	ck3 = Cksum(ck1.type, (char*) &cck3, Cksum::CtorStyle::raw);
       }
       break;
@@ -60,10 +66,14 @@ namespace rgw::cksum {
     case cksum::Type::crc32c:
       {
 	uint32_t cck3;
-	auto cck1 =
-	  rgw::digest::byteswap(std::get<uint32_t>(*ck1.get_crc()));
-	auto cck2 =
-	  rgw::digest::byteswap(std::get<uint32_t>(*ck2.get_crc()));
+        auto cck1 = std::get<uint32_t>(*ck1.get_crc());
+        if constexpr (std::endian::native != std::endian::big) {
+         cck1 = rgw::digest::byteswap(cck1);
+        }
+        auto cck2 = std::get<uint32_t>(*ck2.get_crc());
+        if constexpr (std::endian::native != std::endian::big) {
+          cck2 = rgw::digest::byteswap(cck2);
+        }
 	/* madler crcany */
 	switch (ck1.type) {
 	case cksum::Type::crc32:
@@ -76,7 +86,9 @@ namespace rgw::cksum {
 	  std::unreachable();
 	}
         /* and byteswap */
-	cck3 = rgw::digest::byteswap(cck3);
+        if constexpr (std::endian::native != std::endian::big) {
+          cck3 = rgw::digest::byteswap(cck3);
+        }
 	/* convert to a Cksum, no ascii armor */
 	ck3 = Cksum(ck1.type, (char*) &cck3, Cksum::CtorStyle::raw);
       }
