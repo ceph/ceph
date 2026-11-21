@@ -20,9 +20,9 @@ The GPG signing key permanently lives on a `Nitrokey Pro <https://shop.nitrokey.
 Summarized release process
 ==========================
 
-#. QE finishes testing and finds a stopping point.  That commit is pushed to the ``$release-release`` (e.g. ``squid-release``) branch on `ceph-releases.git <https://github.com/ceph/ceph-releases>`_.  This allows work to continue in the working ``$release`` branch without having to freeze it during the release process.
-#. The Release Manager approves the release and notifies the Build Lead.
-#. The Build Lead starts the `Jenkins ceph-release-pipeline <https://jenkins.ceph.com/view/all/job/ceph-release-pipeline>`_, which triggers all builds, a version commit, and a release tag (on ``ceph-releases.git``).
+#. QE finishes testing and finds a stopping point. The :doc:`Ceph Release Manager (CRM) <crm>` freezes the working ``$release`` branch (e.g., ``squid``) to ensure that upgrade tests are QA'ing the actual code planned to ship.
+#. The CRM approves the release.
+#. The CRM or deputy starts the `Jenkins ceph-release-pipeline <https://jenkins.ceph.com/view/all/job/ceph-release-pipeline>`_, which triggers all builds, a version commit, and a release tag (on ``ceph-releases.git``).
 #. Unsigned packages are pushed to chacra.ceph.com.
 #. Packages are pulled from chacra.ceph.com to the Signer VM.
 #. Packages are signed.
@@ -39,13 +39,12 @@ A hotfix release has a couple differences.
 #. Check out the most recent tag. For example, if we're releasing a hotfix on top of 19.2.1, ``git checkout -f -B squid-release tags/v19.2.1``.
 #. ``git cherry-pick -x`` the necessary hotfix commits (Note: only "cherry-pick" must be used).
 #. ``git push -f origin squid-release``.
-#. Verify the commits in the ``$release-release`` branch:
+#. Verify the commits in the hotfix branch:
 
    #. To check against the previous point release (if we are making 19.2.2, this would be 19.2.1), run ``git log --pretty=oneline --no-merges tags/v19.2.1..origin/squid-release``. Verify that the commits produced are exactly what we want in the next point release.
-   #. To check against the RC in the "ceph-ci" repo (``ceph-ci`` in this example), run ``git log --pretty=oneline --no-merges origin/squid-release...ceph-ci/squid-release``. There should be no output produced if the ``$release-release`` branch in the ceph repo is identical to the RC in ``ceph-ci``. Note the use of git `triple dot notation <https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection>`_, which shows any commit discrepancies between both references.
-#. Notify the "Build Lead" to start the build.
-#. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
-
+   #. To check against the RC in the "ceph-ci" repo (``ceph-ci`` in this example), run ``git log --pretty=oneline --no-merges origin/squid-release...ceph-ci/squid-release``. There should be no output produced if the hotfix branch in the ceph repo is identical to the RC in ``ceph-ci``. Note the use of git `triple dot notation <https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection>`_, which shows any commit discrepancies between both references.
+#. Notify the CRM to start the build.
+#. The CRM should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
 
 Security Release Process Deviation
 ----------------------------------
@@ -56,8 +55,7 @@ A security/CVE release is similar to a hotfix release with two differences:
    <https://github.com/ceph/ceph-private>`_ repo instead of ceph.git (requires
    GitHub Admin Role or membership in the `ceph/security
    <https://github.com/orgs/ceph/teams/security>`_ GitHub team).
-#. The tags (e.g., v19.2.3) must be manually pushed to ceph.git by the "Build
-   Lead."
+#. The tags (e.g., v19.2.3) must be manually pushed to ceph.git by the CRM.
 
 The release must be built from the exact commits that were built and tested in
 the advisory fork (see :ref:`build and test cve`). Do **not** cherry-pick the
@@ -87,14 +85,14 @@ no longer match what was tested.
 
       git push -f private squid-release
 
-#. Notify the "Build Lead" to start the build.
+#. Notify the CRM to start the build.
 
-#. The "Build Lead" should set ``RELEASE_TYPE=SECURITY`` instead of
+#. The CRM should set ``RELEASE_TYPE=SECURITY`` instead of
    ``STABLE``.
 
 #. Finally, the `ceph-tag
    <https://github.com/ceph/ceph-build/blob/main/ansible/roles/ceph-release/tasks/push.yml>`_
-   steps need to be manually run by the "Build Lead" as close to the
+   steps need to be manually run by the CRM as close to the
    Announcement time as possible. The `ceph-setup
    <https://jenkins.ceph.com/job/ceph-setup/>`_ job will have already created
    and pushed the tag to ceph-releases.git. Example using squid, pretending
@@ -116,9 +114,10 @@ no longer match what was tested.
 1. Preparing the release branch
 ===============================
 
-Once QE has determined a stopping point in the working (e.g., ``squid``) branch, that commit should be pushed to the corresponding ``squid-release`` branch.
-
-Notify the Build Lead that the release branch is ready.
+Once QE has determined a stopping point in the working (e.g., ``squid``)
+branch, notify the :doc:`Ceph Release Manager (CRM) <crm>` that the release
+branch is ready so the CRM can freeze the branch under release branch
+protection rules.
 
 2a. Starting the build
 ======================
