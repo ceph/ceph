@@ -78,6 +78,16 @@ public:
 	<< " " << op;
     out << ")";
   }
+
+  void clear_buffers() override {
+    // the op history keeps this message after the read is done; drop what
+    // the reply carried, which points into its receive buffers
+    op.buffers_read.clear();
+    op.attrs_read.clear();
+    op.omap_headers_read.clear();
+    op.omap_entries_read.clear();
+  }
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
