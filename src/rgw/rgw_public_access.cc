@@ -2,6 +2,20 @@
 #include "rgw_xml.h"
 
 void PublicAccessBlockConfiguration::decode_xml(XMLObj *obj) {
+  // a misspelled flag would otherwise read as false, a repeated one as its first value
+  XMLObjIter iter = obj->find_first();
+  std::string_view prev; // children are sorted by name, so a repeat follows the first
+  while (const XMLObj *child = iter.get_next()) {
+    const std::string& name = child->get_obj_type();
+    if (name != "BlockPublicAcls" && name != "IgnorePublicAcls" &&
+        name != "BlockPublicPolicy" && name != "RestrictPublicBuckets") {
+      throw RGWXMLDecoder::err("unknown element " + name);
+    }
+    if (name == prev) {
+      throw RGWXMLDecoder::err("duplicate element " + name);
+    }
+    prev = name;
+  }
   RGWXMLDecoder::decode_xml("BlockPublicAcls", BlockPublicAcls, obj);
   RGWXMLDecoder::decode_xml("IgnorePublicAcls", IgnorePublicAcls, obj);
   RGWXMLDecoder::decode_xml("BlockPublicPolicy", BlockPublicPolicy, obj);
