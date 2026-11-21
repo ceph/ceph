@@ -256,6 +256,31 @@ protected:
   ~Connection() override;
 
   virtual int send_msg(MessageRef&& m) = 0;
+
+public:
+  /**
+   * Used to judge whether this connection has been torn down for good,
+   * either by mark_down() or by the messenger itself (e.g. after it was
+   * replaced, or on shutdown).  A closed connection is never reused: nothing
+   * is sent or received on it any more, and messages queued on it are
+   * dropped.
+   *
+   * Unlike !is_connected(), this is false while the session is still being
+   * established (e.g. from ms_handle_accept()) and while a lossless
+   * connection waits in standby for its peer to reconnect.
+   *
+   * Dispatch events that were queued before the connection was closed (such
+   * as ms_handle_accept()) are still delivered; a dispatcher can use this to
+   * recognize that the connection they refer to is already gone.
+   *
+   * Note that this is the state of the Connection, not of any session a
+   * dispatcher keeps for the peer (e.g. the MDS's Session::is_closed()).
+   *
+   * @return true if the connection is closed, false otherwise
+   */
+  virtual bool is_closed() {
+    return false;
+  }
 };
 
 using ConnectionRef = ceph::ref_t<Connection>;
