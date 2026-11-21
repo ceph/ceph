@@ -64,6 +64,48 @@ TEST(Option, parse)
   }
 }
 
+TEST(Option, validator_runs_after_parsing)
+{
+  bool called = false;
+  auto opt = Option{"foo", Option::TYPE_INT, Option::LEVEL_ADVANCED}
+    .set_validator([&](const Option::value_t &value, std::string *err) {
+      called = true;
+      if (std::get<int64_t>(value) % 2 != 0) {
+        *err = "value must be even";
+        return -EDOM;
+      }
+      return 0;
+    });
+  Option::value_t parsed;
+  std::string err;
+  EXPECT_EQ(opt.parse_value("invalid", &parsed, &err), -EINVAL);
+  EXPECT_FALSE(called);
+  ASSERT_EQ(opt.parse_value("2K", &parsed, &err), 0);
+  EXPECT_TRUE(called);
+  EXPECT_EQ(std::get<int64_t>(parsed), 2000);
+  EXPECT_EQ(opt.parse_value("3", &parsed, &err), -EDOM);
+  EXPECT_EQ(err, "value must be even");
+}
+
+TEST(Option, validator_normalizes_before_enum_check)
+{
+  auto opt = Option{"foo", Option::TYPE_STR, Option::LEVEL_ADVANCED}
+    .set_enum_allowed({"blue"})
+    .set_validator([](Option::value_t &value, std::string*) {
+      auto &str = std::get<std::string>(value);
+      if (str == "BLUE") {
+        str = "blue";
+      }
+      return 0;
+    });
+  Option::value_t parsed;
+  std::string err, normalized;
+  ASSERT_EQ(opt.parse_value("BLUE", &parsed, &err, &normalized), 0);
+  EXPECT_EQ(normalized, "blue");
+  EXPECT_EQ(opt.parse_value("green", &parsed, &err), -EINVAL);
+  EXPECT_NE(err.find("permitted values"), std::string::npos);
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../../../build ;

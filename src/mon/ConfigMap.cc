@@ -276,10 +276,16 @@ int ConfigMap::add_option(
 
   string err;
   string value = orig_value;
-  int r = opt->pre_validate(&value, &err);
+  Option::value_t parsed;
+  int r = opt->parse_value(orig_value, &parsed, &err);
+  // Preserve numeric input spelling while applying string normalization,
+  // including any normalization performed before a validation failure.
+  if (auto *str = std::get_if<std::string>(&parsed)) {
+    value = std::move(*str);
+  }
   if (r < 0) {
-    ldout(cct, 10) << __func__ << " pre-validate failed on '" << name << "' = '"
-		   << value << "' for " << name << dendl;
+    ldout(cct, 10) << __func__ << " validation failed on '" << name << "' = '"
+		   << value << "': " << err << dendl;
   }
 
   int ret = 0;
