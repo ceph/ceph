@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "messages/MPing.h"
 #include "messages/MCommand.h"
+#include "msg/msg_fmt.h"
 #include "crimson/auth/DummyAuth.h"
 #include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
