@@ -254,6 +254,12 @@
   ``rgw_s3_block_sse_c_by_default`` option to block SSE-C on them instead,
   matching the AWS behavior for new buckets.
 
+* RGW: New config option ``rgw_lua_packages_reload_timeout`` (default: 120
+  seconds). It sets how long ``radosgw-admin script-package reload`` waits for
+  all RGWs to install the Lua packages from the allowlist. Previously the reload
+  used the default ``client_notify_timeout`` of 10 seconds and could fail when
+  installing the packages took longer.
+
 * RGW: New config option ``rgw_keystone_accepted_project_reader_roles``.
   A Keystone user whose only access-granting role is one of the configured project-reader
   roles is capped to read-only access within its project, mirroring the
