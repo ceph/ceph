@@ -1342,6 +1342,7 @@ protected:
   void signal_caps_inode(Inode *in);
   void wait_on_caps(Inode *in);
   int put_cap_ref_fast(Inode *in, int cap);
+  void put_fast_rd_ref(Inode *in);
   template <typename F>
   bool _getattr_fast(Inode *in, unsigned mask, F&& fill);
   void _put_cap_ref_last(Inode *in, int last);
@@ -2423,6 +2424,8 @@ private:
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
   		Context *onfinish = nullptr, bool read_for_write = false);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
+  void start_readahead(Fh *f, Inode *in,
+                       const std::pair<uint64_t, uint64_t>& readahead_extent);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
                          int64_t request_offset, uint64_t request_size,
                          int64_t offset, uint64_t size, Inode *in,

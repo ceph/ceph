@@ -4274,6 +4274,41 @@ int Client::put_cap_ref_fast(Inode *in, int cap)
   return 0;
 }
 
+/*
+ * Drop a cached reader's Fr + Fc refs (Inode::fast_rd_refs).  Under the
+ * lock shared, so that whoever looks at the refs under it exclusively
+ * (a cap revoke checking what is used, _release()) sees them before or
+ * after.  The last one does what dropping the last Fr/Fc refs does in
+ * _put_cap_ref_last() when that matters: wake the cap waiters, and
+ * check_caps() when Fr or Fc is being revoked; not the iput(), as fast
+ * refs take no inode ref.
+ */
+void Client::put_fast_rd_ref(Inode *in)
+{
+  bool wake = false, drop = false;
+  {
+    std::shared_lock il(in->lock);
+    if (in->fast_rd_refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
+      return;
+    int last = 0;
+    if (in->_cap_ref_count(CEPH_CAP_FILE_RD) == 0)
+      last |= CEPH_CAP_FILE_RD;
+    if (in->_cap_ref_count(CEPH_CAP_FILE_CACHE) == 0)
+      last |= CEPH_CAP_FILE_CACHE;
+    drop = in->snapid == CEPH_NOSNAP && (last & ~in->caps_issued());
+    wake = (last & CEPH_CAP_FILE_CACHE) &&
+           (!in->waitfor_caps.empty() || !in->waitfor_caps_pending.empty());
+  }
+  if (!wake && !drop)
+    return;
+  ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
+  std::scoped_lock cl(client_lock);
+  ldout(cct, 5) << __func__ << " dropped last fast Fr/Fc refs on " << in->vino() << dendl;
+  signal_caps_inode(in);
+  if (drop)
+    check_caps(in, 0);
+}
+
 void Client::_put_cap_ref_last(Inode *in, int last)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -5101,7 +5136,7 @@ bool Client::_release(Inode *in)
   ldout(cct, 20) << "_release " << *in << dendl;
   // no reader may take an Fc ref between the check and the invalidation
   std::scoped_lock il(in->lock);
-  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
+  if (in->_cap_ref_count(CEPH_CAP_FILE_CACHE) == 0) {
     _invalidate_inode_cache(in);
     return true;
   }
@@ -12609,32 +12644,38 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 {
   if(f->readahead.get_min_readahead_size() > 0) {
     pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->effective_size());
-    if (readahead_extent.second > 0) {
-      ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
-		     << " (caller wants " << off << "~" << len << ")" << dendl;
-      Context *onfinish2 = new C_Readahead(this, f);
-      Context *ocw = oc_ctx(onfinish2);
-      int r2 = oc_call([&] {
-        return objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-                                       readahead_extent.first,
-                                       readahead_extent.second,
-                                       NULL, 0, ocw);
-      });
-      if (r2 != 0)
-        oc_ctx_drop(ocw);
-      if (r2 > 0) {
-	logger->inc(l_c_osdc_hit);
-      } else if (r2 == 0) {
-	logger->inc(l_c_osdc_miss);
-      }
+    start_readahead(f, in, readahead_extent);
+  }
+}
 
-      if (r2 == 0) {
-	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
-	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
-      } else {
-	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
-	delete onfinish2;
-      }
+void Client::start_readahead(Fh *f, Inode *in,
+                             const std::pair<uint64_t, uint64_t>& readahead_extent)
+{
+  if (readahead_extent.second > 0) {
+    ldout(cct, 20) << "readahead " << readahead_extent.first << "~"
+                   << readahead_extent.second << dendl;
+    Context *onfinish2 = new C_Readahead(this, f);
+    Context *ocw = oc_ctx(onfinish2);
+    int r2 = oc_call([&] {
+      return objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+                                     readahead_extent.first,
+                                     readahead_extent.second,
+                                     NULL, 0, ocw);
+    });
+    if (r2 != 0)
+      oc_ctx_drop(ocw);
+    if (r2 > 0) {
+      logger->inc(l_c_osdc_hit);
+    } else if (r2 == 0) {
+      logger->inc(l_c_osdc_miss);
+    }
+
+    if (r2 == 0) {
+      ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
+      get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+    } else {
+      ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
+      delete onfinish2;
     }
   }
 }
@@ -12690,13 +12731,15 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
 
   OCFastPath fast;
   utime_t start = mono_clock_now();
-  std::unique_lock il(in->lock);
+  // Readers of a file share Inode::lock: they only look at the inode and
+  // count themselves in fast_rd_refs (see Inode.h)
+  std::shared_lock il(in->lock);
   if (in->inline_version != CEPH_INLINE_NONE ||
       in->is_fscrypt_enabled() ||
       (in->flags & (I_ERROR_FILELOCK | I_CAP_DROPPED)) ||
       (conf->client_check_pool_perm &&
        !(in->pool_perm_ok & CEPH_CAP_FILE_RD)) ||
-      !(in->caps_file_wanted() & CEPH_CAP_FILE_RD))
+      !(in->_caps_file_wanted() & CEPH_CAP_FILE_RD))
     return false;
 
   int want = CEPH_CAP_FILE_CACHE;
@@ -12715,11 +12758,10 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
   if (off + len > size)
     len = size - off;
 
-  // the refs get_caps() and _read_async() take; with them held the caps
-  // cannot be taken away while we wait for the OSDs below
-  in->get_cap_ref(CEPH_CAP_FILE_RD);
+  // the Fr and Fc refs get_caps() and _read_async() take; with them held
+  // the caps cannot be taken away while we wait for the OSDs below
+  in->fast_rd_refs.fetch_add(1, std::memory_order_relaxed);
   cap_hit();
-  get_cap_ref(in, CEPH_CAP_FILE_CACHE);
 
   ldout(cct, 10) << __func__ << " " << in->vino() << " " << off << "~" << len << dendl;
   // Read the cache without Inode::lock, so readers of one file do not queue
@@ -12760,14 +12802,7 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
   }
   if (would_wait) {
     delete rd;
-    il.lock();
-    int last = put_cap_ref_fast(in, CEPH_CAP_FILE_CACHE);
-    last |= put_cap_ref_fast(in, CEPH_CAP_FILE_RD);
-    il.unlock();
-    if (last) {
-      std::scoped_lock cl(client_lock);
-      _put_cap_ref_last(in, last);
-    }
+    put_fast_rd_ref(in);
     return false;
   }
   if (r > 0) {
@@ -12777,19 +12812,18 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
   }
   if (r == 0)
     r = cond.wait();   // a hit (or an error) leaves cond untouched
-  il.lock();
-  int last = put_cap_ref_fast(in, CEPH_CAP_FILE_CACHE);
   if (r >= 0)
     r = bl->length();
-  do_readahead(f, in, off, len);
-  last |= put_cap_ref_fast(in, CEPH_CAP_FILE_RD);
-  il.unlock();
-
-  if (last) {
-    ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
-    std::scoped_lock cl(client_lock);
-    _put_cap_ref_last(in, last);
+  // decide on readahead without Inode::lock (the Readahead has its own),
+  // start one under it; with our refs still held, as do_readahead()
+  if (f->readahead.get_min_readahead_size() > 0) {
+    auto ra = f->readahead.update(off, len, size);
+    if (ra.second > 0) {
+      std::scoped_lock il2(in->lock);
+      start_readahead(f, in, ra);
+    }
   }
+  put_fast_rd_ref(in);
   if (r >= 0) {
     update_read_io_size(r);
     utime_t lat = mono_clock_now();

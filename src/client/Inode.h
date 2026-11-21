@@ -332,6 +332,14 @@ struct Inode : RefCountedObject {
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   std::map<int,int> open_by_mode;
   std::map<int,int> cap_refs;
+  // Fr + Fc refs that cached reads (Client::_read_fast()) hold, one each
+  // per reader, counted apart from cap_refs so that the readers of a file
+  // can share Inode::lock: they change it under the lock shared, everyone
+  // else reads it under the lock (exclusive or shared).  Every use of the
+  // Fr/Fc refs counts them (caps_used(), cap_ref_count(), _release()).
+  // Unlike the first Fc ref in cap_refs they take no inode ref: the
+  // reader's Fh keeps the inode.
+  std::atomic<uint32_t> fast_rd_refs{0};
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
@@ -424,8 +432,15 @@ struct Inode : RefCountedObject {
   void get_cap_ref(int cap);
   int cap_ref_count(int c) {
     std::scoped_lock l(lock);
+    return _cap_ref_count(c);
+  }
+  // with lock held, exclusive or shared
+  int _cap_ref_count(int c) const {
     auto p = cap_refs.find(c);
-    return p == cap_refs.end() ? 0 : p->second;
+    int n = p == cap_refs.end() ? 0 : p->second;
+    if (c == CEPH_CAP_FILE_RD || c == CEPH_CAP_FILE_CACHE)
+      n += fast_rd_refs.load(std::memory_order_relaxed);
+    return n;
   }
   int put_cap_ref(int cap);
   bool is_last_cap_ref(int c);
@@ -438,6 +453,7 @@ struct Inode : RefCountedObject {
   bool caps_issued_mask(unsigned mask, bool allow_impl=false, bool touch=true);
   int caps_used();
   int caps_file_wanted();
+  int _caps_file_wanted() const;   // with lock held, exclusive or shared
   int caps_wanted();
   int caps_mds_wanted();
   int caps_dirty();

@@ -132,6 +132,7 @@ void Inode::print(std::ostream& out) const
       << " nref=" << get_nref()
       << " ll_ref=" << ll_ref
       << " cap_refs=" << cap_refs
+      << " fast_rd_refs=" << fast_rd_refs.load(std::memory_order_relaxed)
       << " open=" << open_by_mode
       << " mode=" << oct << mode << dec
       << " size=" << size << "/" << max_size
@@ -458,6 +459,8 @@ int Inode::caps_used()
   for (const auto &[cap, cnt] : cap_refs)
     if (cnt)
       w |= cap;
+  if (fast_rd_refs.load(std::memory_order_relaxed))
+    w |= CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
   return w;
 }
 
@@ -467,6 +470,11 @@ int Inode::caps_file_wanted()
   // the callers that hold client_lock (check_caps(), the cap messages, on
   // every close()) need not take lock for it
   ceph_assert(client->client_lock_held() || Lock::held_by_me());
+  return _caps_file_wanted();
+}
+
+int Inode::_caps_file_wanted() const
+{
   int want = 0;
   for (const auto &[mode, cnt] : open_by_mode)
     if (cnt) {
