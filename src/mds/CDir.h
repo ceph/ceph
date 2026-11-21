@@ -682,7 +682,7 @@ protected:
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
-  void go_bad(bool complete);
+  void go_bad();
 
   void _omap_fetched(ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
 		     bool complete, const std::set<std::string>& keys, int r);
