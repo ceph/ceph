@@ -54,8 +54,8 @@ def get_features():
     assert((features & RBD_FEATURE_FAST_DIFF) != 0)
     return features
 
-def master(ioctx):
-    print("starting master")
+def primary(ioctx):
+    print("starting primary")
     safe_delete_image(ioctx, CLONE_IMG_RENAME)
     safe_delete_image(ioctx, CLONE_IMG_NAME)
     safe_delete_image(ioctx, PARENT_IMG_NAME)
@@ -80,7 +80,7 @@ def master(ioctx):
         image.write(b'1', IMG_SIZE - 1)
         assert(image.is_exclusive_lock_owner())
 
-        print("waiting for slave to complete")
+        print("waiting for secondary to complete")
         while image.is_exclusive_lock_owner():
             time.sleep(5)
 
@@ -89,8 +89,8 @@ def master(ioctx):
     delete_image(ioctx, PARENT_IMG_NAME)
     print("finished")
 
-def slave(ioctx):
-    print("starting slave")
+def secondary(ioctx):
+    print("starting secondary")
 
     while True:
         try:
@@ -101,7 +101,7 @@ def slave(ioctx):
         except Exception:
             pass
 
-    print("detected master")
+    print("detected primary")
 
     print("rename")
     RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME);
@@ -166,17 +166,17 @@ def slave(ioctx):
     print("finished")
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ['master', 'slave']:
-        print("usage: %s: [master/slave]" % sys.argv[0])
+    if len(sys.argv) != 2 or sys.argv[1] not in ['primary', 'secondary']:
+        print("usage: %s: [primary/secondary]" % sys.argv[0])
         sys.exit(2)
 
     rados = Rados(conffile='')
     rados.connect()
     ioctx = rados.open_ioctx(POOL_NAME)
-    if sys.argv[1] == 'master':
-        master(ioctx)
+    if sys.argv[1] == 'primary':
+        primary(ioctx)
     else:
-        slave(ioctx)
+        secondary(ioctx)
     rados.shutdown()
 
 if __name__ == "__main__":
