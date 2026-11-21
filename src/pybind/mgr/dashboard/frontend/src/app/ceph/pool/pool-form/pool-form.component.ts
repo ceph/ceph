@@ -100,6 +100,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   info: PoolFormInfo;
   routeParamsSubscribe: any;
   editing = false;
+  migrating = false;
   isReplicated = false;
   isErasure = false;
   blobUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -155,11 +156,22 @@ export class PoolFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.migrating = this.router.url.startsWith(`/pool/${URLVerbs.MIGRATE}`);
+    if (this.migrating) {
+      this.action = this.actionLabels.MIGRATE;
+    } else if (this.editing) {
+      this.action = this.actionLabels.EDIT;
+    } else {
+      this.action = this.actionLabels.CREATE;
+    }
     this.resource = $localize`pool`;
-    this.submitAction = this.editing
-      ? this.actionLabels.SAVE_CHANGES
-      : `${this.action} ${_.upperFirst(this.resource)}`;
+    if (this.migrating) {
+      this.submitAction = `${this.action} ${_.upperFirst(this.resource)}`;
+    } else {
+      this.submitAction = this.editing
+        ? this.actionLabels.SAVE_CHANGES
+        : `${this.action} ${_.upperFirst(this.resource)}`;
+    }
     this.authenticate();
     this.createForm();
     const nav = this.router.currentNavigation();
@@ -169,6 +181,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   authenticate() {
     this.permissions = this.authStorageService.getPermissions();
+    // Migrate creates a new target pool, so it uses the same create permission as the list
+    // action and the POST /migrate API (RESTController maps POST → CREATE).
     if (
       !this.permissions?.pool?.read ||
       (!this.permissions?.pool?.update && this.editing) ||
@@ -264,15 +278,21 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.initInfo(info);
       if (this.editing) {
         this.initEditMode();
+      } else if (this.migrating) {
+        this.initMigrateMode();
       } else {
         this.setAvailableApps();
         this.loadingReady();
       }
       this.listenToChanges();
       this.setComplexValidators();
-      this.poolTypeChange(PoolType.REPLICATED);
+      if (!this.migrating) {
+        this.poolTypeChange(PoolType.REPLICATED);
+      }
     });
-    this.loadingReady();
+    if (!this.migrating) {
+      this.loadingReady();
+    }
   }
 
   private initInfo(info: PoolFormInfo) {
@@ -352,6 +372,53 @@ export class PoolFormComponent extends CdForm implements OnInit {
         this.loadingReady();
       })
     );
+  }
+
+  private initMigrateMode() {
+    this.routeParamsSubscribe = this.route.params.subscribe((param: { name: string }) =>
+      this.poolService.get(param.name).subscribe((pool: Pool) => {
+        this.data.pool = pool;
+        this.initMigrateFormData(pool);
+        this.loadingReady();
+      })
+    );
+  }
+
+  private initMigrateFormData(pool: Pool) {
+    this.poolTypeChange(pool.type);
+    const rules = this.info.crush_rules_replicated.concat(this.info.crush_rules_erasure);
+    const dataMap: Record<string, any> = {
+      name: pool.pool_name,
+      poolType: pool.type,
+      crushRule: rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule)?.rule_name,
+      size: pool.size,
+      erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile)?.name,
+      pgAutoscaleMode: pool.pg_autoscale_mode,
+      pgNum: pool.pg_num,
+      ecOverwrites: pool.flags_names?.includes('ec_overwrites'),
+      mode: pool.options?.compression_mode,
+      algorithm: pool.options?.compression_algorithm,
+      ratio: pool.options?.compression_required_ratio
+    };
+    Object.keys(dataMap).forEach((controlName: string) => {
+      const value = dataMap[controlName];
+      if (!_.isUndefined(value) && value !== '' && value !== null) {
+        this.form.silentSet(controlName, value);
+      }
+    });
+
+    this.selectedEcp = this.ecProfiles.find(
+      (ecp: ErasureCodeProfile) => ecp.name === pool.erasure_code_profile
+    );
+    this.selectedCrushRule = rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule);
+    if (this.selectedEcp) this.ecpIsUsedBy(this.selectedEcp?.name);
+    if (this.selectedCrushRule) this.crushRuleIsUsedBy(this.selectedCrushRule?.rule_name);
+    this.data.pgs = this.form.getValue('pgNum');
+
+    this.data.applications.selected = pool.application_metadata || [];
+    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata || []));
+
+    this.form.get('name').disable();
   }
 
   private disableForEdit() {
@@ -675,6 +742,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
                 this.info.pool_names.indexOf(this.data.pool.pool_name)
           )
         ]);
+    } else if (this.migrating) {
+      // In migrate mode, the name is pre-filled and disabled — no unique-name check needed
     } else {
       CdValidators.validateIf(this.form.get('size'), () => this.isReplicated, [
         CdValidators.number(false),
@@ -958,32 +1027,29 @@ export class PoolFormComponent extends CdForm implements OnInit {
       return;
     }
 
+    if (this.migrating) {
+      if (this.data.applications.selected.length === 0) {
+        this.form.setErrors({ cdSubmitButton: true });
+        return;
+      }
+      this.submitMigration();
+      return;
+    }
+
     const pool = { pool: this.form.getValue('name') };
 
+    this.assignSharedPoolFields(pool, { autoscaleMode: 'pg_autoscale_mode', rule: 'rule_name' });
+
+    if (this.editing) {
+      this.assignFormField(pool, {
+        externalFieldName: 'srcpool',
+        formControlName: 'name',
+        editable: true,
+        replaceFn: () => this.data.pool.pool_name
+      });
+    }
+
     this.assignFormFields(pool, [
-      { externalFieldName: 'pool_type', formControlName: 'poolType' },
-      {
-        externalFieldName: 'pg_autoscale_mode',
-        formControlName: 'pgAutoscaleMode',
-        editable: true
-      },
-      {
-        externalFieldName: 'pg_num',
-        formControlName: 'pgNum',
-        replaceFn: (value: number) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
-        editable: true
-      },
-      this.isReplicated
-        ? { externalFieldName: 'size', formControlName: 'size' }
-        : {
-            externalFieldName: 'erasure_code_profile',
-            formControlName: 'erasureProfile'
-          },
-      {
-        externalFieldName: 'rule_name',
-        formControlName: 'crushRule',
-        replaceFn: (value: string) => (this.isReplicated ? value : undefined)
-      },
       {
         externalFieldName: 'quota_max_bytes',
         formControlName: 'max_bytes',
@@ -1009,77 +1075,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
           }
     ]);
 
-    if (this.info.is_all_bluestore) {
-      this.assignFormField(pool, {
-        externalFieldName: 'flags',
-        formControlName: 'ecOverwrites',
-        replaceFn: () => (this.isErasure ? ['ec_overwrites'] : undefined)
-      });
-      if (this.editing) {
-        this.assignFormFields(pool, [
-          {
-            externalFieldName: 'srcpool',
-            formControlName: 'name',
-            editable: true,
-            replaceFn: () => this.data.pool.pool_name
-          }
-        ]);
-      }
-      if (this.form.getValue('mode') !== 'none') {
-        this.assignFormFields(pool, [
-          {
-            externalFieldName: 'compression_mode',
-            formControlName: 'mode',
-            editable: true,
-            replaceFn: (value: boolean) => this.hasCompressionEnabled() && value
-          },
-          {
-            externalFieldName: 'compression_algorithm',
-            formControlName: 'algorithm',
-            editable: true
-          },
-          {
-            externalFieldName: 'compression_min_blob_size',
-            formControlName: 'minBlobSize',
-            replaceFn: (value: string) => {
-              const unit = this.form.getValue('minBlobSizeUnit');
-              return this.formatter.toBytes(value + unit);
-            },
-            editable: true,
-            resetValue: 0
-          },
-          {
-            externalFieldName: 'compression_max_blob_size',
-            formControlName: 'maxBlobSize',
-            replaceFn: (value: string) => {
-              const unit = this.form.getValue('maxBlobSizeUnit');
-              return this.formatter.toBytes(value + unit);
-            },
-            editable: true,
-            resetValue: 0
-          },
-          {
-            externalFieldName: 'compression_required_ratio',
-            formControlName: 'ratio',
-            editable: true,
-            resetValue: 0
-          }
-        ]);
-      } else if (this.editing) {
-        this.assignFormFields(pool, [
-          {
-            externalFieldName: 'compression_mode',
-            formControlName: 'mode',
-            editable: true,
-            replaceFn: () => 'unset' // Is used if no compression is set
-          }
-        ]);
-      }
-    }
-
     const apps = this.data.applications.selected;
     if (apps.length > 0 || this.editing) {
-      pool['application_metadata'] = apps;
       if (apps.includes('rbd')) {
         pool['rbd_mirroring'] = this.form.getValue('rbdMirroring');
       }
@@ -1140,6 +1137,128 @@ export class PoolFormComponent extends CdForm implements OnInit {
       }
     }
     pool[externalFieldName] = apiValue;
+  }
+
+  /**
+   * Assigns the fields that are shared by the create, edit and migrate requests. The endpoints
+   * only differ in the name they use for the autoscale mode and for the CRUSH rule.
+   */
+  private assignSharedPoolFields(
+    target: Record<string, any>,
+    names: { autoscaleMode: string; rule: string }
+  ): void {
+    this.assignFormFields(target, [
+      { externalFieldName: 'pool_type', formControlName: 'poolType' },
+      {
+        externalFieldName: names.autoscaleMode,
+        formControlName: 'pgAutoscaleMode',
+        editable: true
+      },
+      {
+        externalFieldName: 'pg_num',
+        formControlName: 'pgNum',
+        replaceFn: (value: number) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
+        editable: true
+      },
+      this.isReplicated
+        ? { externalFieldName: 'size', formControlName: 'size' }
+        : {
+            externalFieldName: 'erasure_code_profile',
+            formControlName: 'erasureProfile'
+          },
+      {
+        externalFieldName: names.rule,
+        formControlName: 'crushRule',
+        replaceFn: (value: string) => (this.isReplicated ? value : undefined)
+      }
+    ]);
+
+    if (this.info.is_all_bluestore) {
+      this.assignFormField(target, {
+        externalFieldName: 'flags',
+        formControlName: 'ecOverwrites',
+        replaceFn: () => (this.isErasure ? ['ec_overwrites'] : undefined)
+      });
+      this.assignCompressionFields(target);
+    }
+
+    const apps = this.data.applications.selected;
+    if (apps.length > 0 || this.editing) {
+      target['application_metadata'] = apps;
+    }
+  }
+
+  private assignCompressionFields(target: Record<string, any>): void {
+    if (this.form.getValue('mode') !== 'none') {
+      this.assignFormFields(target, [
+        {
+          externalFieldName: 'compression_mode',
+          formControlName: 'mode',
+          editable: true,
+          replaceFn: (value: boolean) => this.hasCompressionEnabled() && value
+        },
+        {
+          externalFieldName: 'compression_algorithm',
+          formControlName: 'algorithm',
+          editable: true
+        },
+        {
+          externalFieldName: 'compression_min_blob_size',
+          formControlName: 'minBlobSize',
+          replaceFn: (value: string) => {
+            const unit = this.form.getValue('minBlobSizeUnit');
+            return this.formatter.toBytes(value + unit);
+          },
+          editable: true,
+          resetValue: 0
+        },
+        {
+          externalFieldName: 'compression_max_blob_size',
+          formControlName: 'maxBlobSize',
+          replaceFn: (value: string) => {
+            const unit = this.form.getValue('maxBlobSizeUnit');
+            return this.formatter.toBytes(value + unit);
+          },
+          editable: true,
+          resetValue: 0
+        },
+        {
+          externalFieldName: 'compression_required_ratio',
+          formControlName: 'ratio',
+          editable: true,
+          resetValue: 0
+        }
+      ]);
+    } else if (this.editing) {
+      this.assignFormFields(target, [
+        {
+          externalFieldName: 'compression_mode',
+          formControlName: 'mode',
+          editable: true,
+          replaceFn: () => 'unset' // Is used if no compression is set
+        }
+      ]);
+    }
+  }
+
+  private submitMigration() {
+    const poolName = this.data.pool.pool_name;
+    const params: Record<string, any> = {};
+
+    this.assignSharedPoolFields(params, { autoscaleMode: 'autoscale_mode', rule: 'rule' });
+    params['yes_i_really_mean_it'] = true;
+
+    this.taskWrapper
+      .wrapTaskAroundCall({
+        task: new FinishedTask('pool/migrate', { pool_name: poolName }),
+        call: this.poolService.migrate(poolName, params)
+      })
+      .subscribe({
+        error: () => {
+          this.form.setErrors({ cdSubmitButton: true });
+        },
+        complete: () => this.navigateAfterPoolForm()
+      });
   }
 
   private triggerApiTask(pool: Record<string, any>) {

@@ -78,4 +78,29 @@ describe('PoolResourceSidebarComponent', () => {
       expect(poolResourceSidebarComponent.poolName).toBe('micro_pool');
     });
   });
+
+  describe('pool migration state', () => {
+    const load = (poolData: object) => {
+      spyOn(TestBed.inject(PoolService), 'get').and.returnValue(
+        of({ pool_name: 'micro_pool', ...poolData })
+      );
+      spyOn(TestBed.inject(PoolService), 'getConfiguration').and.returnValue(of([]));
+      fixture.detectChanges();
+    };
+
+    it('should not flag a pool without migration peers as migrating', () => {
+      load({});
+      expect(poolResourceSidebarComponent.poolIsMigrating).toBe(false);
+    });
+
+    it('should treat pool id 0 as a valid active migration target', () => {
+      load({ migration_src: 0 });
+      expect(poolResourceSidebarComponent.poolIsMigrating).toBe(true);
+    });
+
+    it('should not flag a completed .migrate stub (migration_target only) as migrating', () => {
+      load({ migration_target: 0, pool_name: '.migrate-1' });
+      expect(poolResourceSidebarComponent.poolIsMigrating).toBe(false);
+    });
+  });
 });

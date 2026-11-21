@@ -587,6 +587,20 @@ class OsdUi(Osd):
 
         return res.as_dict()
 
+    @Endpoint(method='PUT')
+    @UpdatePermission
+    @handle_send_command_error('osd')
+    def set_min_compat_client(self, release: str,
+                              yes_i_really_mean_it: bool = False):
+        """Set require_min_compat_client to the given release.
+
+        This is an irreversible cluster-wide change that will reject
+        connections from clients older than *release*.
+        """
+        CephService.send_command('mon', 'osd set-require-min-compat-client',
+                                 version=release,
+                                 yes_i_really_mean_it=yes_i_really_mean_it)
+
 
 @APIRouter('/osd/flags', Scope.OSD)
 @APIDoc(group='OSD')

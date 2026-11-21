@@ -8,6 +8,7 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 import { FaviconService } from '~/app/shared/services/favicon.service';
+import { PoolMigrationNotificationService } from '~/app/shared/services/pool-migration-notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 import { TelemetryNotificationService } from '../../../shared/services/telemetry-notification.service';
@@ -44,6 +45,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     public router: Router,
     private summaryService: SummaryService,
     private taskManagerService: TaskManagerService,
+    private poolMigrationNotificationService: PoolMigrationNotificationService,
     private multiClusterService: MultiClusterService,
     private faviconService: FaviconService,
     private authStorageService: AuthStorageService,
@@ -62,6 +64,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     }
     this.subs.add(this.summaryService.startPolling());
     this.subs.add(this.taskManagerService.init(this.summaryService));
+    this.subs.add(this.poolMigrationNotificationService.init());
 
     this.subs.add(
       this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {

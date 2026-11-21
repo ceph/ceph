@@ -1,7 +1,8 @@
 import { Component, OnDestroy, OnInit, ViewEncapsulation } from '@angular/core';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 
-import { Subscription } from 'rxjs';
+import { of, Subscription } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 
 import _ from 'lodash';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -17,6 +18,7 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permissions } from '~/app/shared/models/permissions';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getPoolDataProtection, mapPoolApplications, Pool } from '../pool';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -37,6 +39,7 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
   poolActions: CdTableAction[] = [];
   poolSelection = new CdTableSelection();
   monAllowPoolDelete = false;
+  poolIsMigrating = false;
   sidebarItems: SidebarItem[] = [];
   permissions: Permissions;
 
@@ -48,7 +51,8 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
     private configurationService: ConfigurationService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private refreshIntervalService: RefreshIntervalService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -62,6 +66,17 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
         this.loadPoolHeaderMetadata();
       })
     );
+    // Keep the Migrating header tag in sync while staying on the page.
+    this.sub.add(
+      this.refreshIntervalService.intervalData$
+        .pipe(switchMap(() => (this.poolName ? this.poolService.get(this.poolName) : of(null))))
+        .subscribe((pool: Pool | null) => {
+          if (!pool) {
+            return;
+          }
+          this.applyPoolHeaderMetadata(pool);
+        })
+    );
 
     this.buildPoolActions();
   }
@@ -71,7 +86,11 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
   }
 
   get headerTags(): string[] {
-    return [this.poolDataProtection, ...this.poolApplications].filter((tag) => !!tag);
+    const tags = [this.poolDataProtection, ...this.poolApplications].filter((tag) => !!tag);
+    if (this.poolIsMigrating) {
+      tags.unshift($localize`Migrating`);
+    }
+    return tags;
   }
 
   get headerActions(): ResourceHeaderAction[] {
@@ -128,20 +147,26 @@ export class PoolResourceSidebarComponent implements OnInit, OnDestroy {
     if (!this.poolName) {
       this.poolDataProtection = '';
       this.poolApplications = [];
+      this.poolIsMigrating = false;
       this.poolSelection.selected = [];
       return;
     }
 
     this.sub.add(
-      this.poolService.get(this.poolName).subscribe((pool: any) => {
-        const poolData = pool as Pool;
-
-        this.poolDataProtection = getPoolDataProtection(poolData);
-        this.poolApplications = mapPoolApplications(poolData?.application_metadata || []);
-        this.poolSelection.selected = poolData ? [poolData] : [];
-        this.buildPoolActions();
+      this.poolService.get(this.poolName).subscribe((pool: Pool) => {
+        this.applyPoolHeaderMetadata(pool);
       })
     );
+  }
+
+  private applyPoolHeaderMetadata(poolData: Pool): void {
+    this.poolDataProtection = getPoolDataProtection(poolData);
+    this.poolApplications = mapPoolApplications(poolData?.application_metadata || []);
+    // Only migration_src means this pool is an active target. Completed
+    // .migrate-* stubs keep migration_target forever.
+    this.poolIsMigrating = poolData?.migration_src != null;
+    this.poolSelection.selected = poolData ? [poolData] : [];
+    this.buildPoolActions();
   }
 
   private buildPoolActions(): void {
