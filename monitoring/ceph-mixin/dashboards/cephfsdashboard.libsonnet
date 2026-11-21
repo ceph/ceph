@@ -718,7 +718,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         legendFormat='{{ ceph_daemon }}',
       )),
       $.timeSeriesPanel(
-        title='Slave requests',
+        title='Peer requests',
         datasource={ type: 'prometheus', uid: '${datasource}' },
         gridPosition={ h: 7, w: 8, x: 16, y: 10 },
         fillOpacity=10,
@@ -742,7 +742,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'green' },
       ])
       .addTarget($.addTargetSchema(
-        expr='rate(ceph_mds_server_handle_slave_request{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s})' % $.matchers(),
+        expr='rate(ceph_mds_server_handle_peer_request{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s})' % $.matchers(),
         datasource={ type: 'prometheus', uid: '${datasource}' },
         legendFormat='{{ ceph_daemon }}',
       )),

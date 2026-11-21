@@ -79,7 +79,7 @@ Following are various event types that are journaled by the MDS.
 
 #. `EVENT_SESSION`: Tracks open client sessions.
 
-#. `EVENT_SLAVEUPDATE`: Logs various stages of an operation that has been forwarded to a (slave) mds.
+#. `EVENT_PEERUPDATE`: Logs various stages of an operation that has been forwarded to a peer MDS.
 
 #. `EVENT_SUBTREEMAP`: Map of directory inodes to directory contents (subtree partition).
 

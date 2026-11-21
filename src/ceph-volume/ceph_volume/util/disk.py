@@ -233,9 +233,9 @@ def lsblk(device, columns=None, abspath=False):
 
 class BackingDeviceRotation(object):
     # Typical ceph-volume stacks are a few dm/LVM layers (eg: crypt over LV over disk).
-    # 32 leaves headroom for multipath/MD without unbounded sysfs recursion if slaves/
-    # forms a cycle or an unexpectedly deep mapper chain.
-    _SYSFS_SLAVES_WALK_MAX_DEPTH = 32
+    # 32 leaves headroom for multipath/MD without unbounded sysfs recursion if the
+    # backing-device links form a cycle or an unexpectedly deep mapper chain.
+    _SYSFS_BACKING_WALK_MAX_DEPTH = 32
 
     @staticmethod
     def _kname_from_path(device: str) -> str:
@@ -266,10 +266,10 @@ class BackingDeviceRotation(object):
         k = BackingDeviceRotation._kname_for_sysfs_walk(k)
         if not k or k in seen:
             return
-        if depth >= BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH:
+        if depth >= BackingDeviceRotation._SYSFS_BACKING_WALK_MAX_DEPTH:
             logger.warning(
-                'sysfs slaves walk exceeded max depth %s at %s',
-                BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH,
+                'sysfs backing-device walk exceeded max depth %s at %s',
+                BackingDeviceRotation._SYSFS_BACKING_WALK_MAX_DEPTH,
                 k,
             )
             return
@@ -277,21 +277,21 @@ class BackingDeviceRotation(object):
         sys_block = os.path.join('/sys/block', k)
         if not os.path.isdir(sys_block):
             return
-        slaves_dir = os.path.join(sys_block, 'slaves')
-        slave_names: List[str] = []
-        if os.path.isdir(slaves_dir):
+        backing_dir = os.path.join(sys_block, 'slaves')
+        backing_names: List[str] = []
+        if os.path.isdir(backing_dir):
             try:
-                slave_names = os.listdir(slaves_dir)
+                backing_names = os.listdir(backing_dir)
             except OSError as exc:
                 logger.debug(
-                    'failed to list sysfs slaves for %s: %s', slaves_dir, exc)
+                    'failed to list backing devices in %s: %s', backing_dir, exc)
                 return
-        if not slave_names:
+        if not backing_names:
             found.add(k)
             return
-        for sn in slave_names:
+        for bn in backing_names:
             BackingDeviceRotation._walk_sysfs_leaf_blocks(
-                sn,
+                bn,
                 depth + 1,
                 found,
                 seen,
@@ -974,14 +974,14 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             rel = nvme_sysfs.block_device_fact_sysfs_rel_path(sysdir, file_)
             metadata[key] = get_file_contents(os.path.join(sysdir, rel))
 
-        device_slaves = []
+        backing_devices = []
         if block[2] != 'part':
-            device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
+            backing_devices = os.listdir(os.path.join(sysdir, 'slaves'))
             metadata['partitions'] = get_partitions_facts(sysdir)
 
         metadata['device_nodes'] = []
-        if device_slaves:
-            metadata['device_nodes'].extend(device_slaves)
+        if backing_devices:
+            metadata['device_nodes'].extend(backing_devices)
         else:
             if block[2] == 'part':
                 metadata['device_nodes'].append(block[3])

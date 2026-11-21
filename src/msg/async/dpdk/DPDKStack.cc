@@ -259,7 +259,7 @@ void DPDKStack::spawn_worker(std::function<void ()> &&func)
   unsigned nr_worker = funcs.size();
   ceph_assert(rte_lcore_count() >= nr_worker);
   unsigned core_id;
-  RTE_LCORE_FOREACH_SLAVE(core_id) {
+  RTE_LCORE_FOREACH_WORKER(core_id) {
     if (--nr_worker == 0) {
       break;
     }
