@@ -42,3 +42,21 @@ add_executable(unittest_objecter_direct_reads
   )
 add_ceph_unittest(unittest_objecter_direct_reads)
 target_link_libraries(unittest_objecter_direct_reads osdc global ${BLKID_LIBRARIES})
+
+# unittest_objecter_core_routes
+add_executable(unittest_objecter_core_routes
+  test_objecter_core_routes.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_objecter_core_routes)
+target_link_libraries(unittest_objecter_core_routes osdc global ${BLKID_LIBRARIES})
+
+# unittest_crimson_core_route
+# SessionRoutes on its own; crimson_core_route/session_routes.cc is
+# compiled into libcommon (see src/CMakeLists.txt)
+add_executable(unittest_crimson_core_route
+  test_crimson_core_route.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_crimson_core_route)
+target_link_libraries(unittest_crimson_core_route global ${BLKID_LIBRARIES})
