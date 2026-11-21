@@ -16,6 +16,7 @@
 
 #include "include/scope_guard.h"
 #include "include/function2.hpp"
+#include "perfglue/heap_profiler.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/Formatter.h"
 #include "common/containers.h"
@@ -269,6 +270,7 @@ int Restore::choose_oid(const RestoreEntry& e) {
 }
 
 void *Restore::RestoreWorker::entry() {
+  ceph::real_time last_idle;
   do {
     ceph_timespec start = ceph::real_clock::to_ceph_timespec(real_clock::now());
     int r = 0;
@@ -286,6 +288,7 @@ void *Restore::RestoreWorker::entry() {
     if (secs < d)
       continue; // next round
 
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!restore->going_down());

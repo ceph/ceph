@@ -23,6 +23,7 @@
 #include "common/Throttle.h"
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
+#include "perfglue/heap_profiler.h"
 #include "common/async/blocked_completion.h"
 
 #include "rgw_asio_thread.h"
@@ -977,10 +978,12 @@ static void obj_complete_cb(completion_t cb, void *arg)
 void RGWIndexCompletionManager::process()
 {
   DoutPrefix dpp(store->ctx(), dout_subsys, "rgw index completion thread: ");
+  ceph::real_time last_idle;
   while(!_stop) {
     std::vector<complete_op_data*> comps;
 
     {
+      last_idle = ceph_heap_mark_thread_temporarily_idle(store->ctx(), last_idle);
       std::unique_lock l{retry_completions_lock};
       cond.wait(l, [this](){return _stop || !retry_completions.empty();});
       if (_stop) {

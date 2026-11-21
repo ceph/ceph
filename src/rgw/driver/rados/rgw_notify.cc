@@ -17,6 +17,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_zone_features.h"
 #include "rgw_perf_counters.h"
+#include "perfglue/heap_profiler.h"
 #include "services/svc_zone.h"
 #include "common/dout.h"
 #include "rgw_url.h"
@@ -402,10 +403,12 @@ private:
             });
 
     CountersManager queue_counters_container(queue_name, this->get_cct());
+    ceph::real_time last_idle;
 
     while (!shutdown) {
       // if queue was empty the last time, sleep for idle timeout
       if (is_idle) {
+        last_idle = ceph_heap_mark_thread_temporarily_idle(this->get_cct(), last_idle);
         async_sleep(yield, queue_idle_sleep);
       }
 

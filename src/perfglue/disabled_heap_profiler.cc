@@ -23,6 +23,7 @@ void ceph_heap_profiler_stats(char *buf, int length) { return; }
 void ceph_heap_release_free_memory() { return; }
 
 void ceph_heap_release_to_system(size_t bytes) { return; }
+ceph::real_time ceph_heap_mark_thread_temporarily_idle(CephContext*, ceph::real_time last) { return last; }
 
 double ceph_heap_get_release_rate() { return 0; }
 

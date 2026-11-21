@@ -384,6 +384,7 @@ target_link_libraries(rgw_common
     ${rgw_common_libs}
     legacy-option-headers
     global
+    heap_profiler
     cls_rgw_client
     keyring
     ${RT_LIBRARY}
@@ -497,6 +498,7 @@ if(WITH_RADOSGW_STANDALONE)
     ${rgw_common_libs}
     legacy-option-headers
     global
+    heap_profiler
     cls_rgw_client
     keyring
     ${RT_LIBRARY}

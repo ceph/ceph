@@ -14,6 +14,7 @@
 #include "rgw_rest.h"
 #include "rgw_zone.h"
 #include "driver/rados/rgw_rados.h"
+#include "perfglue/heap_profiler.h"
 
 #include "services/svc_zone.h"
 
@@ -431,6 +432,7 @@ void OpsLogFile::flush()
 
 void* OpsLogFile::entry() {
   std::unique_lock lock(mutex);
+  ceph::real_time last_idle;
   while (!stopped) {
     if (!log_buffer.empty()) {
       lock.unlock();
@@ -438,6 +440,7 @@ void* OpsLogFile::entry() {
       lock.lock();
       continue;
     }
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     cond.wait(lock);
   }
   lock.unlock();

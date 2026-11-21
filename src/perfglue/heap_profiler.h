@@ -17,7 +17,9 @@
 #include <string>
 #include <vector>
 #include "common/config.h"
+#include "common/ceph_time.h"
 
+#include "include/common_fwd.h"
 class LogClient;
 
 /*
@@ -37,6 +39,16 @@ void ceph_heap_profiler_stats(char *buf, int length);
 void ceph_heap_release_free_memory();
 
 void ceph_heap_release_to_system(size_t bytes);
+
+/*
+ * Tell tcmalloc that the calling thread is about to go idle, so that its
+ * thread-local cache may be reclaimed. Rate limited by rgw_heap_release_interval:
+ * if less than that has passed since 'last', nothing is released and 'last' is
+ * returned. Otherwise the cache is released and the current time is returned.
+ * An interval of 0 disables it.
+ */
+ceph::real_time ceph_heap_mark_thread_temporarily_idle(CephContext* cct,
+                                                       ceph::real_time last);
 
 double ceph_heap_get_release_rate();
 

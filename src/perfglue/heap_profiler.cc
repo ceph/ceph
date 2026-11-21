@@ -23,6 +23,7 @@
 #include <gperftools/heap-profiler.h>
 #include <gperftools/malloc_extension.h>
 
+#include "common/ceph_context.h"
 #include "common/environment.h"
 #include "common/LogClient.h"
 #include "global/global_context.h"
@@ -60,6 +61,20 @@ void ceph_heap_release_free_memory()
 void ceph_heap_release_to_system(size_t bytes)
 {
   MallocExtension::instance()->ReleaseToSystem(bytes);
+}
+
+ceph::real_time ceph_heap_mark_thread_temporarily_idle(CephContext* cct,
+                                                       ceph::real_time last)
+{
+  const auto now = ceph::real_clock::now();
+  const auto interval = cct->_conf.get_val<std::chrono::seconds>(
+      "rgw_heap_release_interval");
+  // 0 disables idle marking, same as it disables the heap release thread
+  if (interval.count() == 0 || now - last < interval) {
+    return last;
+  }
+  MallocExtension::instance()->MarkThreadTemporarilyIdle();
+  return now;
 }
 
 double ceph_heap_get_release_rate()

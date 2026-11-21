@@ -21,6 +21,7 @@
 #include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_common.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
@@ -3974,6 +3975,7 @@ namespace rgw::dedup {
     const uint64_t PER_SHARD_BUFFER_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
     ldpp_dout(dpp, 20) <<__func__ << "::dedup::main loop" << dendl;
     bool has_default_placement_pool = false;
+    ceph::real_time last_idle;
 
     while (!d_ctl.shutdown_req) {
       if (unlikely(d_ctl.should_pause())) {
@@ -4060,6 +4062,7 @@ namespace rgw::dedup {
         d_cond.notify_all();
         ldpp_dout(dpp, 5) << __func__ << "::Dedup was aborted on a remote req" << dendl;
       }
+      last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
       d_cond.wait(cond_lock, [this]{return d_ctl.remote_restart_req || d_ctl.should_stop() || d_ctl.should_pause();});
       if (!d_ctl.should_stop() && !d_ctl.should_pause()) {
         if (d_cluster.can_start_new_scan(store)) {
