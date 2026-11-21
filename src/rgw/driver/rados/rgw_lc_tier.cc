@@ -1373,7 +1373,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
         tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
         tier_ctx.target_storage_class);
 
-  uint32_t part_size{0};
+  uint64_t part_size{0};
   uint32_t num_parts{0};
 
   int cur_part{0};
@@ -1440,9 +1440,12 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
     if (min_conf_size < MULTIPART_MIN_POSSIBLE_PART_SIZE) {
       min_conf_size = MULTIPART_MIN_POSSIBLE_PART_SIZE;
     }
+    if (min_conf_size > MULTIPART_MAX_POSSIBLE_PART_SIZE) {
+      min_conf_size = MULTIPART_MAX_POSSIBLE_PART_SIZE;
+    }
 
     part_size = std::max(min_conf_size, min_part_size);
-    num_parts = (obj_size + part_size - 1) / part_size;
+    num_parts = 1 + (obj_size - 1) / part_size;
   }
   cur_part = 1;
   cur_ofs = 0;
@@ -1452,7 +1455,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
     rgw_lc_multipart_part_info& cur_part_info = parts[cur_part];
     cur_part_info.part_num = cur_part;
     cur_part_info.ofs = cur_ofs;
-    cur_part_info.size = std::min((uint64_t)part_size, obj_size - cur_ofs);
+    cur_part_info.size = std::min(part_size, obj_size - cur_ofs);
 
     cur_ofs += cur_part_info.size;
 
