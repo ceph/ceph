@@ -5951,6 +5951,114 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
   }
 }
 
+static void send_one_client_snap(MDSRank *mds,
+			  Session *session,
+			  int op,
+			  inodeno_t split,
+			  const vector<inodeno_t>& split_inos,
+			  size_t ino_off,
+			  size_t ino_count,
+			  const vector<inodeno_t>& split_realms,
+			  size_t realm_off,
+			  size_t realm_count,
+			  const bufferlist& trace)
+{
+  auto update = make_message<MClientSnap>(op);
+  update->head.split = split;
+  if (ino_count) {
+    update->split_inos.assign(split_inos.begin() + ino_off,
+			      split_inos.begin() + ino_off + ino_count);
+  }
+  if (realm_count) {
+    update->split_realms.assign(split_realms.begin() + realm_off,
+				split_realms.begin() + realm_off + realm_count);
+  }
+  update->bl = trace;
+  mds->send_message_client_counted(update, session);
+}
+
+// Deliver one snaprealm update. A SPLIT that moves millions of capped inodes
+// does not fit in one front (CEPH_MSG_MAX_FRONT_LEN); send several messages
+// that together list every inode and child realm. Clients apply each piece
+// on its own. `existing` is sent as-is when the update already fits, so the
+// common path does not rebuild the message.
+static void dispatch_client_snap(MDSRank *mds,
+			  client_t client,
+			  Session *session,
+			  int op,
+			  inodeno_t split,
+			  const vector<inodeno_t>& split_inos,
+			  const vector<inodeno_t>& split_realms,
+			  const bufferlist& trace,
+			  const ref_t<MClientSnap>& existing)
+{
+  vector<MClientSnap::chunk_t> chunks;
+  const auto plan = MClientSnap::plan_split(split_inos.size(),
+					    split_realms.size(),
+					    trace.length(),
+					    chunks);
+  if (plan != MClientSnap::split_plan_t::CHUNKED) {
+    if (plan == MClientSnap::split_plan_t::UNSPLITTABLE) {
+      dout(0) << " client." << client
+	      << " snap update front "
+	      << MClientSnap::front_len(split_inos.size(),
+					split_realms.size(),
+					trace.length())
+	      << " exceeds " << MClientSnap::MAX_FRONT_LEN
+	      << " and cannot be split (trace " << trace.length()
+	      << " inos " << split_inos.size()
+	      << " realms " << split_realms.size()
+	      << ")" << dendl;
+    } else {
+      dout(10) << " client." << client
+	       << " split " << split
+	       << " inos " << split_inos
+	       << dendl;
+    }
+    if (existing) {
+      mds->send_message_client_counted(existing, session);
+    } else {
+      send_one_client_snap(mds, session, op, split,
+			   split_inos, 0, split_inos.size(),
+			   split_realms, 0, split_realms.size(),
+			   trace);
+    }
+    return;
+  }
+
+  dout(10) << " client." << client
+	   << " split " << split
+	   << " inos " << split_inos.size()
+	   << " realms " << split_realms.size()
+	   << " trace " << trace.length()
+	   << " chunks " << chunks.size()
+	   << " (front limit " << MClientSnap::MAX_FRONT_LEN << ")"
+	   << dendl;
+  const unsigned grace = mds->heartbeat_reset_grace();
+  if (grace && split_inos.size() + split_realms.size() > grace) {
+    mds->heartbeat_reset();
+  }
+
+  unsigned n = 0;
+  for (const auto& chunk : chunks) {
+    ceph_assert(chunk.ino_count || chunk.realm_count);
+    dout(20) << " client." << client
+	     << " split " << split
+	     << " chunk " << n
+	     << "/" << chunks.size()
+	     << " inos " << chunk.ino_count
+	     << " realms " << chunk.realm_count
+	     << dendl;
+    send_one_client_snap(mds, session, op, split,
+			 split_inos, chunk.ino_off, chunk.ino_count,
+			 split_realms, chunk.realm_off, chunk.realm_count,
+			 trace);
+    if (grace && !(++n % grace)) {
+      mds->heartbeat_reset();
+    }
+  }
+}
+
 void MDCache::send_snaps(map<client_t,ref_t<MClientSnap>>& splits)
 {
   dout(10) << "send_snaps" << dendl;
@@ -5958,11 +6066,12 @@ void MDCache::send_snaps(map<client_t,ref_t<MClientSnap>>& splits)
   for (auto &p : splits) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
     if (session) {
-      dout(10) << " client." << p.first
-	       << " split " << p.second->head.split
-	       << " inos " << p.second->split_inos
-	       << dendl;
-      mds->send_message_client_counted(p.second, session);
+      const auto& snap = p.second;
+      dispatch_client_snap(mds, p.first, session,
+			   static_cast<int>(uint32_t(snap->head.op)),
+			   inodeno_t(uint64_t(snap->head.split)),
+			   snap->split_inos, snap->split_realms, snap->bl,
+			   snap);
     } else {
       dout(10) << " no session for client." << p.first << dendl;
     }
@@ -10418,18 +10527,25 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
 
-  if (notify_clients) {
-    if (snapop == CEPH_SNAP_OP_SPLIT) {
-      // notify clients of update|split
-      for (auto p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
-	split_inos.push_back((*p)->ino());
+  if (notify_clients && snapop == CEPH_SNAP_OP_SPLIT) {
+    // One list, shared by every client. dispatch_client_snap slices it into
+    // messages that fit the kernel front limit instead of copying it once
+    // per client into a single MClientSnap.
+    const unsigned grace = mds->heartbeat_reset_grace();
+    uint64_t count = 0;
+    for (auto p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p) {
+      split_inos.push_back((*p)->ino());
+      if (grace && !(++count % grace)) {
+        mds->heartbeat_reset();
+      }
+    }
 
-      for (auto& r : in->snaprealm->open_children)
-	split_realms.push_back(r->inode->ino());
+    for (auto& r : in->snaprealm->open_children) {
+      split_realms.push_back(r->inode->ino());
     }
   }
 
-  map<client_t, ref_t<MClientSnap>> updates;
+  set<client_t> clients;
   list<SnapRealm*> q;
   q.push_back(in->snaprealm);
   while (!q.empty()) {
@@ -10441,19 +10557,8 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 
     if (notify_clients) {
       for (const auto& p : realm->client_caps) {
-        const auto& client = p.first;
-        const auto& caps = p.second;
-	ceph_assert(!caps.empty());
-
-        auto em = updates.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple());
-        if (em.second) {
-          auto update = make_message<MClientSnap>(CEPH_SNAP_OP_SPLIT);
-	  update->head.split = in->ino();
-	  update->split_inos = split_inos;
-	  update->split_realms = split_realms;
-	  update->bl = mds->server->get_snap_trace(em.first->first, in->snaprealm);
-	  em.first->second = std::move(update);
-	}
+	ceph_assert(!p.second.empty());
+	clients.insert(p.first);
       }
     }
 
@@ -10463,8 +10568,25 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
       q.push_back(r);
   }
 
-  if (notify_clients)
-    send_snaps(updates);
+  if (!notify_clients) {
+    return;
+  }
+
+  dout(10) << " notifying " << clients.size() << " clients"
+	   << " inos " << split_inos.size()
+	   << " realms " << split_realms.size()
+	   << dendl;
+  for (const auto client : clients) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
+    if (!session) {
+      dout(10) << " no session for client." << client << dendl;
+      continue;
+    }
+    // Trace encoding depends on the client's snaprealm feature bit.
+    const bufferlist& trace = mds->server->get_snap_trace(session, in->snaprealm);
+    dispatch_client_snap(mds, client, session, CEPH_SNAP_OP_SPLIT, in->ino(),
+			 split_inos, split_realms, trace, {});
+  }
 }
 
 void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
