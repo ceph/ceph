@@ -242,8 +242,8 @@ class Osd(RESTController):
     def get_osd_map(svc_id=None):
         # type: (Union[int, None]) -> Dict[int, Union[dict, Any]]
         def add_id(osd):
-            osd['id'] = osd['osd']
-            return osd
+            # copy: osd_map entries are shared read-only cache objects
+            return {**osd, 'id': osd['osd']}
 
         resp = {
             osd['osd']: add_id(osd)

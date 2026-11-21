@@ -283,6 +283,17 @@ class OsdTest(ControllerTestCase):
             self.assertEqual(len(self.json_body()), 2, 'It should display two OSDs without failure')
             self.assertStatus(200)
 
+    def test_get_osd_map_does_not_mutate_mgr_data(self):
+        # mgr.get('osd_map') may return shared cached objects
+        osds = [OsdHelper._gen_osd_map_osd(i) for i in (0, 1)]
+        for osd in osds:
+            del osd['id']  # real osd_map entries have no 'id'
+        with mock.patch.object(mgr, 'get', return_value={'osds': osds}):
+            result = Osd.get_osd_map()
+        self.assertEqual(result[0]['id'], 0)
+        for osd in osds:
+            self.assertNotIn('id', osd)
+
     def test_osd_list_host_with_intermediate_crush_bucket(self):
         osd_ids = [0, 1]
         tree_nodes = OsdHelper.gen_osdmap_tree_nodes(osd_ids)
