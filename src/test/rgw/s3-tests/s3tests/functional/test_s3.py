@@ -2053,6 +2053,18 @@ def _get_post_url(bucket_name):
     endpoint = get_config_endpoint()
     return '{endpoint}/{bucket_name}'.format(endpoint=endpoint, bucket_name=bucket_name)
 
+@pytest.mark.fails_on_aws
+def test_post_action_malformed_attributes():
+    url = _get_post_url('')
+    client = get_client()
+    for body in ('Action=InvalidAction&Attributes.entry.18446744073709551616.key=x',
+                 'Action=InvalidAction&Attributes.entry.1='):
+        r = requests.post(url, data=body,
+                          headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                          verify=get_config_ssl_verify(), timeout=10)
+        assert r.status_code == 405
+        client.list_buckets()
+
 def test_post_object_anonymous_request():
     bucket_name = get_new_bucket_name()
     client = get_client()
