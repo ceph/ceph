@@ -844,7 +844,10 @@ class ArgumentSpec:
 
 
 ArgumentList = List[ArgumentSpec]
-GeneralArgList = List[Union[str, Dict[str, Any], "ArgumentSpec"]]
+# Refer to ArgumentSpec directly, not as a string: a forward reference in
+# this alias is resolved in the namespace of the module whose annotations
+# use it (e.g. drive_group), where ArgumentSpec may not be imported.
+GeneralArgList = List[Union[str, Dict[str, Any], ArgumentSpec]]
 
 
 class ServiceSpec(object):
