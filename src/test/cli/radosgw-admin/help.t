@@ -35,7 +35,7 @@
     account rm                       remove an account
     account list                     list all account ids
     bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)
-    bucket limit check               show bucket sharding stats
+    bucket limit check               show bucket sharding stats (optional --uid or --bucket)
     bucket link                      link bucket to specified user
     bucket unlink                    unlink bucket from specified user
     bucket stats                     returns bucket statistics
