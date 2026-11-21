@@ -1215,6 +1215,11 @@ class CephadmServe:
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         nvmeof_redeploy_groups: Set[Tuple[str, str]] = set()
+        # group the snapshot by service once, instead of scanning every daemon
+        # via get_daemons_by_service() for each daemon in the loop below
+        daemons_by_service: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        for d in daemons:
+            daemons_by_service[d.service_name()].append(d)
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
@@ -1256,7 +1261,7 @@ class CephadmServe:
             svc_type = daemon_type_to_service(dd.daemon_type)
             svc_obj = service_registry.get_service(svc_type)
             if svc_obj.get_active_daemon(
-               self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
+               daemons_by_service[dd.service_name()]).daemon_id == dd.daemon_id:
                 dd.is_active = True
             else:
                 dd.is_active = False
