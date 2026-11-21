@@ -2,6 +2,13 @@
 iSCSI Service
 =============
 
+.. warning::
+
+   The iSCSI gateway is deprecated. It is no longer in active development and
+   will not get new features. New deployments should access RBD images
+   directly from clients (``librbd``, QEMU, Kubernetes CSI, and similar) or use
+   the :ref:`NVMe-oF gateway <ceph-nvmeof>`. See :ref:`ceph-iscsi`.
+
 .. _cephadm-iscsi:
 
 Deploying iSCSI
