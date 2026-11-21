@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include "common/dout.h"
+#include "common/dout_fmt.h"
 #include "include/scope_guard.h"
 #include "common/XMLFormatter.h"
 #include "common/Clock.h"

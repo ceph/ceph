@@ -11,6 +11,7 @@
 #include "rgw_bucket.h"
 #include "rgw_op.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_datalog.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_bucket.h"
