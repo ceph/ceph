@@ -5508,15 +5508,6 @@ void RGWPostObj::execute(optional_yield y)
   std::string supplied_md5;
   supplied_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
 
-  // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res
-    = driver->get_notification(s->object.get(), s->src_object.get(), s,
-			       rgw::notify::ObjectCreatedPost, y);
-  op_ret = res->publish_reserve(this);
-  if (op_ret < 0) {
-    return;
-  }
-
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
@@ -5551,6 +5542,17 @@ void RGWPostObj::execute(optional_yield y)
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
     if (s->bucket->versioning_enabled()) {
       obj->gen_rand_obj_instance_name();
+    }
+
+    // make reservation for notification if needed
+    std::unique_ptr<rgw::sal::Object> notify_obj =
+		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
+    std::unique_ptr<rgw::sal::Notification> res
+      = driver->get_notification(notify_obj.get(), s->src_object.get(), s,
+                                 rgw::notify::ObjectCreatedPost, y);
+    op_ret = res->publish_reserve(this);
+    if (op_ret < 0) {
+      return;
     }
 
     std::unique_ptr<rgw::sal::Writer> processor;
@@ -5730,7 +5732,8 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     const req_context rctx{this, s->yield, s->trace.get()};
-    op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
+    real_time mtime;
+    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(),
 				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
 				 nullptr, nullptr, nullptr, nullptr, nullptr,
@@ -5739,16 +5742,16 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
+    // send request to notification manager
+    int ret = res->publish_commit(this, ofs, mtime, etag, obj->get_instance());
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+      // too late to rollback operation, hence op_ret is not set here
+    }
+
     /* XXX shouldn't we have an op-counter update here? */
 
   } while (is_next_file_to_upload());
-
-  // send request to notification manager
-  int ret = res->publish_commit(this, ofs, s->object->get_mtime(), etag, s->object->get_instance());
-  if (ret < 0) {
-    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
-    // too late to rollback operation, hence op_ret is not set here
-  }
 } /* RGWPostObj::execute() */
 
 void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
