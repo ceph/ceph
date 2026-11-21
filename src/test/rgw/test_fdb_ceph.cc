@@ -756,7 +756,7 @@ BENCHMARK_ADVANCED("write simple records-- one transaction per block")(Catch::Be
    std::for_each(std::begin(block), std::end(block), [&txn](const auto& kv) mutable {
      lfdb::set(txn, kv.first, kv.second);
    });
-   lfdb::commit(txn);
+   lfdb::commit(txn).value();
   }
  });
 };
@@ -787,7 +787,7 @@ BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")
                     lfdb::set(txn, kv.first, kv.second);
                   });
 
-                  lfdb::commit(txn);
+                  lfdb::commit(txn).value();
                 });
  });
 };

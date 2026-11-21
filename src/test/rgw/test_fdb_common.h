@@ -1,3 +1,14 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ */
+
 #ifndef TEST_FDB_COMMON_H
  #define TEST_FDB_COMMON_H
 
@@ -19,6 +30,36 @@
 #include <unistd.h>
 
 namespace lfdb = ceph::libfdb;
+
+template <typename ValueT, typename ErrorT>
+const lfdb::fdb_error& native_failure(
+ const std::expected<ValueT, lfdb::transaction_failure<ErrorT>>& result)
+{
+ REQUIRE_FALSE(result);
+ const auto *native = std::get_if<lfdb::fdb_error>(&result.error().cause);
+ REQUIRE(native);
+ return *native;
+}
+
+// Value-focused tests still assert successful completion before inspecting data:
+template <typename ValueT, typename ErrorT>
+ValueT require_committed(lfdb::transaction_result<ValueT, ErrorT> result)
+{
+ REQUIRE(result);
+ if constexpr (not std::is_void_v<ValueT>) {
+  return std::move(result->value);
+ }
+}
+
+// Tests of captured user exceptions inspect the error channel before rethrowing:
+template <typename ValueT, typename ErrorT>
+[[noreturn]] void rethrow_captured(lfdb::transaction_result<ValueT, ErrorT> result)
+{
+ REQUIRE_FALSE(result);
+ const auto *exception = std::get_if<std::exception_ptr>(&result.error().cause);
+ REQUIRE(exception);
+ std::rethrow_exception(*exception);
+}
 
 constexpr char msg[] = "Hello, World!";
 
@@ -162,7 +203,7 @@ inline void populate_monotonic(lfdb::database_handle dbh, const int N, std::stri
    lfdb::set(txn, make_key(n, prefix), make_value(n));
   }
 
-  lfdb::commit(txn);
+  require_committed(lfdb::commit(txn));
  }
 }
 

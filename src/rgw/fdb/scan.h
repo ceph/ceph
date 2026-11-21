@@ -45,6 +45,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <version>
 
 namespace ceph::libfdb {
 
@@ -70,25 +71,12 @@ concept materializable_string_pair_output_range =
 
 namespace detail {
 
-inline auto intervals(select selection)
-{
- // Raw selectors still execute in the ordinary FDB keyspace:
- boost::container::small_vector<select, 1> out;
- auto interval = query::intersection(std::move(selection), query::universal());
-
- if (not query::is_empty(interval)) {
-  out.push_back(std::move(interval));
- }
-
- return out;
-}
-
-template <query::non_interval_expression QueryT>
-inline auto intervals(const QueryT& query)
+template <query::expression QueryT>
+inline auto intervals(QueryT&& selection)
 {
  boost::container::small_vector<select, 1> out;
 
- query::for_each_interval(query, [&out](select interval) {
+ query::for_each_interval(std::forward<QueryT>(selection), [&out](select interval) {
   out.push_back(std::move(interval));
  });
 
@@ -802,18 +790,18 @@ struct page_result final
  bool has_more = false;
 
  public:
- auto begin() noexcept { return std::begin(rows); }
- auto begin() const noexcept { return std::begin(rows); }
+ constexpr auto begin() noexcept { return std::begin(rows); }
+ constexpr auto begin() const noexcept { return std::begin(rows); }
 
- auto end() noexcept { return std::end(rows); }
- auto end() const noexcept { return std::end(rows); }
+ constexpr auto end() noexcept { return std::end(rows); }
+ constexpr auto end() const noexcept { return std::end(rows); }
 
- bool empty() const noexcept
+ constexpr bool empty() const noexcept
  {
   return std::empty(rows);
  }
 
- std::size_t size() const noexcept
+ constexpr std::size_t size() const noexcept
  {
   return std::size(rows);
  }
@@ -821,6 +809,38 @@ struct page_result final
 };
 
 namespace detail {
+
+template <std::ranges::range RangeT>
+constexpr std::size_t initial_reservation(RangeT& rows, const page p,
+                                          const std::size_t max_capacity)
+{
+ const auto bounded_count = [p, max_capacity](const auto hint) -> std::size_t {
+  using count_type = std::common_type_t<decltype(hint), uint64_t>;
+  const auto limit = static_cast<count_type>(p.size);
+  const auto available = static_cast<count_type>(hint);
+  const auto count = 0 == limit || limit > available ? available : limit;
+  if (max_capacity < count) {
+   throw std::length_error("range reservation exceeds vector capacity");
+  }
+  return static_cast<std::size_t>(count);
+ };
+
+ if constexpr (std::ranges::sized_range<RangeT>) {
+  return bounded_count(std::ranges::size(rows));
+ }
+
+ // C++26 hints require library support, independently of the compiler version.
+ // The feature macro protects missing names; the concept checks the range.
+#if defined(__cpp_lib_ranges_reserve_hint) && 202502L <= __cpp_lib_ranges_reserve_hint
+ if constexpr (std::ranges::approximately_sized_range<RangeT>) {
+  // An unsized take view can advertise its cap. Unlimited pages grow from actual rows.
+  if (0 != p.size) {
+   return bounded_count(std::ranges::reserve_hint(rows));
+  }
+ }
+#endif
+ return 0;
+}
 
 constexpr int range_limit_for(page p)
 {
@@ -853,14 +873,13 @@ concept row_predicate = std::predicate<PredT&, const row_t<ValueT>&>;
 } // namespace detail
 
 template <std::ranges::input_range RangeT>
-[[nodiscard]] auto collect(RangeT&& rows, page p)
+[[nodiscard]] constexpr auto collect(RangeT&& rows, const page p)
 {
  using row_type = std::ranges::range_value_t<RangeT>;
 
  page_result<row_type> out;
- if (p.size) {
-  out.rows.reserve(p.size);
- }
+ // Input-only ranges may require querying their size or hint before begin().
+ const auto capacity = detail::initial_reservation(rows, p, out.rows.max_size());
 
  for (auto&& row : rows) {
   if (p.size && std::size(out.rows) == p.size) {
@@ -868,6 +887,10 @@ template <std::ranges::input_range RangeT>
    break;
   }
 
+  // A nonzero approximate hint need not imply that any rows exist.
+  if (out.rows.empty() && 0 != capacity) {
+   out.rows.reserve(capacity);
+  }
   out.rows.emplace_back(std::forward<decltype(row)>(row));
  }
 
@@ -889,7 +912,7 @@ template <typename ValueT = std::string>
  auto window = detail::read_query_window(*txn, selector, 1, mode);
 
  page_result<row_type> out;
- out.rows.reserve(p.size);
+ out.rows.reserve(detail::initial_reservation(window.result_pairs, p, out.rows.max_size()));
  out.has_more = p.size < std::size(window.result_pairs) ||
                 window.more_available;
 

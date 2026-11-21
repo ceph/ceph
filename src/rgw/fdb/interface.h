@@ -95,6 +95,12 @@ inline database_handle create_database(const database_options& opts)
  return create_database(opts, network_options{});
 }
 
+// Typed network options leave create_database({}) unambiguous:
+inline database_handle create_database(const std::same_as<network_options> auto& opts)
+{
+ return create_database({}, opts);
+}
+
 inline database_handle create_database(connection_source source,
                                        const database_options& dbopts)
 {
