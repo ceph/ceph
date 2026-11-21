@@ -16,6 +16,9 @@
 #include <time.h>
 #include <unistd.h>
 #include <iostream>
+
+#include <fmt/format.h>
+
 #include "gtest/gtest.h"
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster) {

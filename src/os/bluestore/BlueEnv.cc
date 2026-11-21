@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <fcntl.h>
 #include <unistd.h>
