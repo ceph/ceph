@@ -3334,6 +3334,8 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
         const pg_pool_t *spi = osdmap->get_pg_pool(root_pool);
         if (!spi) {
           t->osd = -1;
+          if (force_resend)
+            return RECALC_OP_TARGET_NEED_RESEND;
           return RECALC_OP_TARGET_POOL_DNE;
         }
         t->target_oloc.pool = root_pool;
@@ -3344,6 +3346,8 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
                                                pgid);
         if (ret == -ENOENT) {
           t->osd = -1;
+          if (force_resend)
+            return RECALC_OP_TARGET_NEED_RESEND;
           return RECALC_OP_TARGET_POOL_DNE;
         }
         actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
@@ -3355,6 +3359,8 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
       const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);
       if (!tpi) {
         t->osd = -1;
+        if (force_resend)
+          return RECALC_OP_TARGET_NEED_RESEND;
         return RECALC_OP_TARGET_POOL_DNE;
       }
       if (tpi->has_flag(pg_pool_t::FLAG_EIO)) {
@@ -3371,6 +3377,8 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
           const pg_pool_t *spi = osdmap->get_pg_pool(*tpi->migration_src);
           if (!spi) {
             t->osd = -1;
+            if (force_resend)
+              return RECALC_OP_TARGET_NEED_RESEND;
             return RECALC_OP_TARGET_POOL_DNE;
           }
           if (spi->has_flag(pg_pool_t::FLAG_EIO)) {
@@ -3385,6 +3393,8 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
                                                  pgid);
           if (ret == -ENOENT) {
             t->osd = -1;
+            if (force_resend)
+              return RECALC_OP_TARGET_NEED_RESEND;
             return RECALC_OP_TARGET_POOL_DNE;
           }
           actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
@@ -3411,6 +3421,8 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
                                                pgid);
         if (ret == -ENOENT) {
           t->osd = -1;
+          if (force_resend)
+            return RECALC_OP_TARGET_NEED_RESEND;
           return RECALC_OP_TARGET_POOL_DNE;
         }
         actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
