@@ -72,13 +72,13 @@ configurable options will be::
   rgw keystone admin domain = {keystone admin domain name}
   rgw keystone api version = {keystone api version}
   rgw keystone implicit tenants = {true for private tenant for each new user}
-  rgw keystone admin password = {keystone service tenant user name}
-  rgw keystone admin user = {keystone service tenant user password}
+  rgw keystone admin password = {keystone service tenant user password}
+  rgw keystone admin user = {keystone service tenant user name}
   rgw keystone accepted roles = {accepted user roles}
   rgw keystone token cache size = {number of tokens to cache}
   rgw s3 auth use keystone = true
 
-The details of the integrating ldap with Ceph Object Gateway can be found here:
+The details of integrating Keystone with Ceph Object Gateway can be found here:
 :doc:`keystone`
 
 The complete set of configurables to use STS Lite with LDAP are::
@@ -90,7 +90,7 @@ The complete set of configurables to use STS Lite with LDAP are::
   rgw_s3_auth_use_ldap = true
   rgw_ldap_uri = {LDAP server to use}
   rgw_ldap_binddn = {Distinguished Name (DN) of the service account}
-  rgw_ldap_secret = {password for the service account}
+  rgw_ldap_secret = {path to a file that contains the password of the service account}
   rgw_ldap_searchdn = {base in the directory information tree for searching users}
   rgw_ldap_dnattr = {attribute being used in the constructed search filter to match a username}
   rgw_ldap_searchfilter = {search filter}
