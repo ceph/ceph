@@ -5343,6 +5343,15 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   src_attrs.erase(RGW_ATTR_STORAGE_CLASS);
 
+  // the copy was never transitioned or restored
+  src_attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+  src_attrs.erase(RGW_ATTR_TRANSITION_TIME);
+  src_attrs.erase(RGW_ATTR_RESTORE_STATUS);
+  src_attrs.erase(RGW_ATTR_RESTORE_TYPE);
+  src_attrs.erase(RGW_ATTR_RESTORE_TIME);
+  src_attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
+  src_attrs.erase(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
+
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TRACE);
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_STATUS);
@@ -5432,6 +5441,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                              << " dest_rule=" << dest_placement.to_str() << " dest_pool=" << dest_pool << dendl;
 
   bool copy_data = (!amanifest) ||
+    // a temporarily restored object keeps the cloud tier in its manifest
+    amanifest->is_tier_type_s3() ||
     (*src_rule != dest_placement) ||
     (src_pool != dest_pool);
 
