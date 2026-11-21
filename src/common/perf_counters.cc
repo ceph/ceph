@@ -373,6 +373,27 @@ void PerfCounters::tinc_with_max(int idx, utime_t amt)
   }
 }
 
+void PerfCounters::tinc(int idx, ceph::timespan amt, uint64_t count)
+{
+#ifndef WITH_CRIMSON
+  if (!m_cct->_conf->perf)
+    return;
+#endif
+
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
+  perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  if (!(data.type & PERFCOUNTER_TIME))
+    return;
+  if (data.type & PERFCOUNTER_LONGRUNAVG) {
+    data.avgcount += count;
+    data.u64 += amt.count();
+    data.avgcount2 += count;
+  } else {
+    data.u64 += amt.count();
+  }
+}
+
 void PerfCounters::tinc(int idx, ceph::timespan amt)
 {
 #ifndef WITH_CRIMSON

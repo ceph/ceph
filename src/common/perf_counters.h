@@ -271,6 +271,10 @@ public:
   void tset(int idx, ceph::timespan v);
   void tinc(int idx, utime_t v);
   void tinc(int idx, ceph::timespan v);
+  /// Add @count samples that sum up to @v at once: a time average gets
+  /// them as @count tinc()s would, a plain time counter gets @v.  For
+  /// counters that are summed elsewhere and added up now and then.
+  void tinc(int idx, ceph::timespan v, uint64_t count);
   void tinc_with_max(int idx, utime_t v);
   void tinc_with_max(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
