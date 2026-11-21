@@ -286,7 +286,7 @@ def task(ctx, config):
     access_key2 = 'p5YnriCv1nAtykxBrupQ'
     secret_key2 = 'Q8Tk6Q/27hfbFSYdSkPtUqhqx1GgzvpXa4WARozh'
     swift_secret1 = 'gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
-    swift_secret2 = 'ri2VJQcKSYATOY6uaDUX7pxgkWOW1YmC6OCxPHwy'
+    swift_secret2 = 'ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
 
     bucket_name = 'myfoo'
     account_id = 'RGW00000000000000001'
