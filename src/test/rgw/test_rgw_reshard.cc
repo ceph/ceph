@@ -119,4 +119,14 @@ TEST(TestRGWReshard, calculate_preferred_shards)
   // 50000 = 13, but bucket min of 51
   ASSERT_EQ(true, needs_resharding);
   ASSERT_EQ(51, suggested_shard_count) << "shard reduction and hitting min_layout_shards";
+
+  RGWBucketReshard::calculate_preferred_shards(nullptr, 1999, 51, 100000, false, 10000, 51,
+					       needs_resharding, &suggested_shard_count, true);
+  ASSERT_EQ(false, needs_resharding) <<
+    "no need to reshard when already at min_layout_shards";
+
+  RGWBucketReshard::calculate_preferred_shards(nullptr, 1999, 1, 9, true, 28, 29,
+					       needs_resharding, &suggested_shard_count, true);
+  ASSERT_EQ(false, needs_resharding) <<
+    "no need to reshard when nearest_prime rounds back to current_num_shards";
 }
