@@ -280,20 +280,10 @@ class CephMgrCommands(Directive):
                          'jsonpatch',
                          'rook.rook_client',
                          'rook.rook_client.ceph',
-                         'rook.rook_client._helper',
-                         'cherrypy=3.2.3']
+                         'rook.rook_client._helper']
         # make diskprediction_local happy
         mock_imports += ['numpy',
                          'scipy']
-        # make cephadm happy
-        mock_imports += ['cherrypy.process',
-                         'cherrypy.process.servers',
-                         'cherrypy._cptree',
-                         'cheroot',
-                         'cheroot.wsgi',
-                         'cheroot.ssl',
-                         'cheroot.ssl.builtin']
-
         for m in mock_imports:
             args = {}
             parts = m.split('=', 1)
