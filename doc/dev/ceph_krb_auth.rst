@@ -274,7 +274,7 @@ properly:
               checking on systems names and host lookups.
 
     * Whenever possible, in order to avoid a *single point of failure*, set up
-      a *backup, secondary, or slave*, for every piece/part in the
+      a *backup or secondary*, for every piece/part in the
       infrastructure ``(ntp, dns, and kdc servers)``.
 
 
@@ -413,11 +413,11 @@ In order to configure connections (from Ceph nodes) to the KDC:
 
         /var/lib/named/master/mydomain.com
         kerberos                IN A        192.168.10.21
-        kerberos-slave          IN A        192.168.10.22
+        kerberos-replica        IN A        192.168.10.22
         _kerberos               IN TXT      "MYDOMAIN.COM"
         _kerberos._udp          IN SRV      1 0 88 kerberos
         _kerberos._tcp          IN SRV      1 0 88 kerberos
-        _kerberos._udp          IN SRV      20 0 88 kerberos-slave
+        _kerberos._udp          IN SRV      20 0 88 kerberos-replica
         _kerberos-master._udp   IN SRV      0 0 88 kerberos
         _kerberos-adm._tcp      IN SRV      0 0 749 kerberos
         _kpasswd._udp           IN SRV      0 0 464 kerberos
@@ -831,7 +831,7 @@ These are the basic steps in using the GSS-API:
 ------------------------------
 
 First and foremost, ``this is not a recommendation for a production
-environment``. We are not covering ``Master/Slave replication cluster`` or
+environment``. We are not covering ``primary/replica KDC replication`` or
 anything production environment related (*ntp/chrony, dns, pam/nss, sssd, etc*).
 
 Also, on the server side there might be different dependencies and/or
@@ -1041,11 +1041,11 @@ In order to get a new MIT KDC Server running:
 
         /var/lib/named/master/mydomain.com
         kerberos                IN A        192.168.10.21
-        kerberos-slave          IN A        192.168.10.22
+        kerberos-replica        IN A        192.168.10.22
         _kerberos               IN TXT      "MYDOMAIN.COM"
         _kerberos._udp          IN SRV      1 0 88 kerberos
         _kerberos._tcp          IN SRV      1 0 88 kerberos
-        _kerberos._udp          IN SRV      20 0 88 kerberos-slave
+        _kerberos._udp          IN SRV      20 0 88 kerberos-replica
         _kerberos-master._udp   IN SRV      0 0 88 kerberos
         _kerberos-adm._tcp      IN SRV      0 0 749 kerberos
         _kpasswd._udp           IN SRV      0 0 464 kerberos
