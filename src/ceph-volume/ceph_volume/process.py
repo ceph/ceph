@@ -199,11 +199,8 @@ def call(command, run_on_host=False, **kw):
         **kw
     )
 
-    if stdin:
-        stdout_stream, stderr_stream = process.communicate(as_bytes(stdin))
-    else:
-        stdout_stream = process.stdout.read()
-        stderr_stream = process.stderr.read()
+    stdin_payload = as_bytes(stdin) if stdin else None
+    stdout_stream, stderr_stream = process.communicate(stdin_payload)
     returncode = process.wait()
     if not isinstance(stdout_stream, str):
         stdout_stream = stdout_stream.decode('utf-8')

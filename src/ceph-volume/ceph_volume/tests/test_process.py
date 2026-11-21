@@ -1,3 +1,5 @@
+import signal
+import sys
 import pytest
 import logging
 from ceph_volume.tests.conftest import Factory
@@ -16,7 +18,7 @@ def mock_call(monkeypatch):
             stdout=stdout_stream,
             stderr=stderr_stream,
             wait=lambda: returncode,
-            communicate=lambda x: (stdout, stderr, returncode)
+            communicate=lambda x=None: (stdout, stderr)
         )
 
         monkeypatch.setattr(
@@ -94,6 +96,28 @@ class TestFunctionalCall(object):
 
     def test_unicode_encoding_stdin(self):
         process.call(['echo'], stdin=u'\xd0'.encode('utf-8'))
+
+    def test_large_stderr_does_not_deadlock(self):
+        def alarm_handler(signum, frame):
+            raise TimeoutError('process.call blocked while reading pipes')
+
+        script = (
+            'import sys; '
+            'sys.stderr.write("x" * 70000); '
+            'sys.stderr.flush(); '
+            'sys.stdout.write("ok\\n"); '
+            'sys.stdout.flush()'
+        )
+        previous = signal.signal(signal.SIGALRM, alarm_handler)
+        signal.alarm(10)
+        try:
+            stdout, stderr, code = process.call([sys.executable, '-c', script])
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
+        assert code == 0
+        assert stdout == ['ok']
+        assert ''.join(stderr) == 'x' * 70000
 
 
 class TestFunctionalRun(object):
