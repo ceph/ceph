@@ -194,7 +194,7 @@ struct AWSSyncConfig_ACLProfiles {
 
   void init(const JSONFormattable& config) {
     for (auto& c : config.array()) {
-      const string& profile_id = c["id"];
+      const string& profile_id = c["acls_id"];
 
       std::shared_ptr<ACLMappings> ap{new ACLMappings};
       ap->init(c["acls"]);
@@ -207,7 +207,7 @@ struct AWSSyncConfig_ACLProfiles {
 
     for (auto& p : acl_profiles) {
       Formatter::ObjectSection section(jf, "profile");
-      encode_json("id", p.first, &jf);
+      encode_json("acls_id", p.first, &jf);
       p.second->dump_conf(cct, jf);
     }
   }
