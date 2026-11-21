@@ -275,14 +275,21 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
 
   void maybe_unpin(bluestore::Onode* o) override
   {
-    bluestore::OnodeCacheShard* ocs = this;
+    LruOnodeCacheShard* ocs = this;
     ocs->lock.lock();
     // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
     while (ocs != o->c->get_onode_cache()) {
       ocs->lock.unlock();
-      ocs = o->c->get_onode_cache();
+      // all onode cache shards of a store are of the same type
+      ocs = static_cast<LruOnodeCacheShard*>(o->c->get_onode_cache());
       ocs->lock.lock();
     }
+    ocs->_maybe_unpin_do(o);
+    ocs->lock.unlock();
+  }
+
+  void _maybe_unpin_do(bluestore::Onode* o)
+  {
     if (o->is_cached() && o->pin_nref == 1) {
       if(!o->lru_item.is_linked()) {
         if (o->exists) {
@@ -313,7 +320,6 @@ struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
                  << dendl;
       }
     }
-    ocs->lock.unlock();
   }
 
   void _trim_to(uint64_t new_size) override
