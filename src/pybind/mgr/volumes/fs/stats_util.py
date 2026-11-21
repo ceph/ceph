@@ -29,7 +29,7 @@ log = getLogger(__name__)
 def get_size_ratio_str(size1, size2):
     size1, size2 = format_bytes(size1, 4), format_bytes(size2, 4)
 
-    size_string =  f'{size1}/{size2}'
+    size_string = f'{size1}/{size2}'
     size_string = size_string.replace(' ', '')
     return size_string
 
@@ -50,7 +50,7 @@ def get_amount_copied(src_path, dst_path, fs_handle):
         log.debug(f'rbytes on path src_path ({src_path}) = {size_t}')
     except ObjectNotFound:
         log.info(f'get_amount_copied(): source path "{src_path}" went missing, '
-                  'couldn\'t run getxattr on it')
+                 'couldn\'t run getxattr on it')
         return
 
     try:
@@ -58,14 +58,14 @@ def get_amount_copied(src_path, dst_path, fs_handle):
         log.debug(f'rbytes on path dst_path ({dst_path}) = {size_c}')
     except ObjectNotFound:
         log.info(f'get_amount_copied(): destination path "{dst_path}" went '
-                  'missing, couldn\'t run getxattr on it')
+                 'missing, couldn\'t run getxattr on it')
         return
 
     percent: Optional[float]
     if size_t == 0 or size_c == 0:
         percent = 0
     else:
-        percent = ((size_c/size_t) * 100)
+        percent = ((size_c / size_t) * 100)
         percent = round(percent, 3)
 
     return size_t, size_c, percent
@@ -90,14 +90,14 @@ def get_stats(src_path, dst_path, fs_handle):
     except ObjectNotFound:
         either_path_gone_missing = True
         log.info(f'get_stats(): source path "{src_path}" went missing, '
-                  'couldn\'t run getxattr on it')
+                 'couldn\'t run getxattr on it')
 
     try:
         rentries_c = int(fs_handle.getxattr(dst_path, rentries))
     except ObjectNotFound:
         either_path_gone_missing = True
         log.info(f'get_stats(): destination path "{dst_path}" went missing, '
-                  'couldn\'t run getxattr on it')
+                 'couldn\'t run getxattr on it')
 
     if either_path_gone_missing:
         return {}
@@ -175,7 +175,7 @@ class CloneProgressReporter:
         with open_subvol_in_vol(self.volclient, self.vol_spec, ci.volname,
                                 ci.dst_group_name, ci.dst_subvol_name,
                                 SubvolumeOpType.CLONE_INTERNAL) \
-                                as (_, _, dst_subvol):
+                as (_, _, dst_subvol):
             ci.dst_path = dst_subvol.path
             log.debug(f'destination subvolume path for clone - {ci.dst_path}')
 
@@ -192,7 +192,7 @@ class CloneProgressReporter:
         with open_clone_subvol_pair_in_vol(self.volclient, self.vol_spec,
                                            ci.volname, ci.dst_group_name,
                                            ci.dst_subvol_name) as \
-                                           (dst_subvol, src_subvol, snap_name):
+                (dst_subvol, src_subvol, snap_name):
             ci.src_group_name = src_subvol.group_name
             ci.src_subvol_name = src_subvol.subvolname
             ci.src_path = src_subvol.snapshot_data_path(snap_name)
@@ -201,7 +201,7 @@ class CloneProgressReporter:
         log.debug('finished collecting info for cloning source')
 
     def _get_info_for_all_clones(self):
-        clones:list[CloneInfo] = []
+        clones: list[CloneInfo] = []
 
         log.debug('collecting all entries in clone index...')
         volnames = list_volumes(self.volclient.mgr)
@@ -213,14 +213,14 @@ class CloneProgressReporter:
                     # should be same as the ctime on clone entry.
                     clone_index_entries = clone_index.list_entries_by_ctime_order()
                     log.debug(f'found {len(clone_index_entries)} clone index '
-                               'entries')
+                              'entries')
 
                 # reset ongoing clone counter before iterating over all clone
                 # entries
                 self.ongoing_clones_count = 0
 
                 log.debug('collecting info for clones found through clone index '
-                         'entries...')
+                          'entries...')
                 for ce in clone_index_entries:
                     ci = CloneInfo(volname)
 
@@ -323,7 +323,7 @@ class CloneProgressReporter:
         msg = (f'{total_ongoing_clones} ongoing clones - average progress is '
                f'{avg_percent_ongoing}%')
         self._update_progress_bar_event(ev_id=self.on_pev_id, ev_msg=msg,
-            ev_progress_fraction=avg_progress_fraction)
+                                        ev_progress_fraction=avg_progress_fraction)
         log.debug('finished updating progress bar for ongoing clones with '
                   f'following message - {msg}')
 
@@ -334,7 +334,7 @@ class CloneProgressReporter:
             msg = (f'Total {total_onpen_clones} clones - average progress is '
                    f'{avg_percent_onpen}%')
             self._update_progress_bar_event(ev_id=self.onpen_pev_id, ev_msg=msg,
-                                        ev_progress_fraction=avg_progress_fraction)
+                                            ev_progress_fraction=avg_progress_fraction)
             log.debug('finished updating progress bar for ongoing+pending '
                       f'clones with following message - {msg}')
 

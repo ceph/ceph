@@ -55,9 +55,9 @@ class AuthMetadataManager(object):
         # -tion of group and subvolname should be shorter than 248 chars.
         if len(metadata_filename) > FILE_NAME_MAX:
             raise VolumeException(-errno.ENAMETOOLONG,
-                                 'use shorter group or subvol name, '
-                                 'combination of both should be less '
-                                 'than 249 characters')
+                                  'use shorter group or subvol name, '
+                                  'combination of both should be less '
+                                  'than 249 characters')
         return os.path.join(self.volume_prefix, metadata_filename)
 
     def _check_compat_version(self, compat_version):
@@ -94,7 +94,7 @@ class AuthMetadataManager(object):
     def _lock(self, path):
         @contextmanager
         def fn():
-            while(1):
+            while (1):
                 fd = self.fs.open(path, os.O_CREAT, 0o755)
                 self.fs.flock(fd, fcntl.LOCK_EX, self._id)
 

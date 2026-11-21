@@ -53,12 +53,12 @@ class _ConfigWriter:
 
 class MetadataManager(object):
     GLOBAL_SECTION = "GLOBAL"
-    USER_METADATA_SECTION   = "USER_METADATA"
+    USER_METADATA_SECTION = "USER_METADATA"
     GLOBAL_META_KEY_VERSION = "version"
-    GLOBAL_META_KEY_TYPE    = "type"
-    GLOBAL_META_KEY_PATH    = "path"
-    GLOBAL_META_KEY_STATE   = "state"
-    GLOBAL_META_KEY_ALLOW_SUBVOLUME_UPGRADE   = "allow_subvolume_upgrade"
+    GLOBAL_META_KEY_TYPE = "type"
+    GLOBAL_META_KEY_PATH = "path"
+    GLOBAL_META_KEY_STATE = "state"
+    GLOBAL_META_KEY_ALLOW_SUBVOLUME_UPGRADE = "allow_subvolume_upgrade"
 
     CLONE_FAILURE_SECTION = "CLONE_FAILURE"
     CLONE_FAILURE_META_KEY_ERRNO = "errno"
@@ -80,14 +80,14 @@ class MetadataManager(object):
             self.config.read_string(cfg, source=self.config_path)
         except UnicodeDecodeError:
             raise MetadataMgrException(-errno.EINVAL,
-                    "failed to decode, erroneous metadata config '{0}'".format(self.config_path))
+                                       "failed to decode, erroneous metadata config '{0}'".format(self.config_path))
         except cephfs.ObjectNotFound:
             raise MetadataMgrException(-errno.ENOENT, "metadata config '{0}' not found".format(self.config_path))
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
         except configparser.Error:
             raise MetadataMgrException(-errno.EINVAL, "failed to parse, erroneous metadata config "
-                    "'{0}'".format(self.config_path))
+                                       "'{0}'".format(self.config_path))
         finally:
             if fd is not None:
                 self.fs.close(fd)
@@ -118,18 +118,18 @@ class MetadataManager(object):
 
         self.add_section(MetadataManager.GLOBAL_SECTION)
         self.update_section_multi(
-            MetadataManager.GLOBAL_SECTION, {MetadataManager.GLOBAL_META_KEY_VERSION : str(version),
-                                             MetadataManager.GLOBAL_META_KEY_TYPE    : str(typ),
-                                             MetadataManager.GLOBAL_META_KEY_PATH    : str(path),
-                                             MetadataManager.GLOBAL_META_KEY_STATE   : str(state)
-            })
+            MetadataManager.GLOBAL_SECTION, {MetadataManager.GLOBAL_META_KEY_VERSION: str(version),
+                                             MetadataManager.GLOBAL_META_KEY_TYPE: str(typ),
+                                             MetadataManager.GLOBAL_META_KEY_PATH: str(path),
+                                             MetadataManager.GLOBAL_META_KEY_STATE: str(state)
+                                             })
 
     def add_section(self, section):
         try:
             self.config.add_section(section)
         except configparser.DuplicateSectionError:
             return
-        except:
+        except Exception:
             raise MetadataMgrException(-errno.EINVAL, "error adding section to config")
 
     def remove_option(self, section, key):
@@ -148,7 +148,7 @@ class MetadataManager(object):
     def update_section_multi(self, section, dct):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        for key,value in dct.items():
+        for key, value in dct.items():
             self.config.set(section, key, str(value))
 
     def update_global_section(self, key, value):
@@ -169,7 +169,7 @@ class MetadataManager(object):
         if self.config.has_section(section):
             options = self.config.options(section)
             for option in options:
-                metadata_dict[option] = self.config.get(section,option)
+                metadata_dict[option] = self.config.get(section, option)
         return metadata_dict
 
     def filter_keys(self, section, value):
@@ -177,7 +177,7 @@ class MetadataManager(object):
         if self.config.has_section(section):
             options = self.config.options(section)
             for option in options:
-                if (value == self.config.get(section, option)) :
+                if (value == self.config.get(section, option)):
                     keys.append(option)
         return keys
 
