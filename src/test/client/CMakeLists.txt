@@ -1,10 +1,26 @@
 if(${WITH_CEPHFS})
+  add_executable(ceph_test_zerocopy_client_buffer
+    main.cc
+    zerocopy_client_buffer.cc
+    )
+  target_link_libraries(ceph_test_zerocopy_client_buffer
+    client
+    global
+    ceph-common
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_zerocopy_client_buffer
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   add_executable(ceph_test_client
     main.cc
     alternate_name.cc
     ll_api.cc
     ops.cc
     nonblocking.cc
+    zerocopy_io.cc
     commands.cc
     syncio.cc
     fscrypt_conf.cc
