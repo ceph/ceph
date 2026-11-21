@@ -626,21 +626,35 @@ class ObjectCacher {
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	    ZTracer::Trace *parent_trace = nullptr,
             std::vector<ObjHole> *holes = nullptr);
+  /**
+   * With block_writes_upfront and a non-null @defer_wait, writex() does
+   * not sleep for writeback itself: it sets *defer_wait when a blocking
+   * writer would, and the caller then calls wait_for_writeback_space()
+   * after dropping locks of its own that writeback completions take.
+   * @onfreespace must be null then.
+   */
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 	     ZTracer::Trace *parent_trace,
-	     bool block_writes_upfront);
+	     bool block_writes_upfront, bool *defer_wait = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 	     ZTracer::Trace *parent_trace = nullptr) {
     return writex(wr, oset, onfreespace, parent_trace, cfg_block_writes_upfront);
   }
   bool is_cached(ObjectSet *oset, std::vector<ObjectExtent>& extents,
 		 snapid_t snapid);
+  /**
+   * Wait, like a writex() with block_writes_upfront, until there is room
+   * for @len more dirty bytes: the wait a writex() with @defer_wait left to
+   * its caller.
+   */
+  void wait_for_writeback_space(uint64_t len);
 
 private:
   // write blocking
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
                       ZTracer::Trace *trace, Context *onfreespace,
-                      bool block_writes_upfront);
+                      bool block_writes_upfront, bool *defer_wait);
+  bool _writeback_wait_needed();
   void _maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
@@ -680,6 +694,9 @@ public:
   // cache sizes
   void set_max_dirty(uint64_t v) {
     max_dirty = v;
+  }
+  uint64_t get_max_dirty() const {
+    return max_dirty;
   }
   void set_target_dirty(int64_t v) {
     target_dirty = v;
@@ -728,11 +745,13 @@ public:
   int file_write(ObjectSet *oset, file_layout_t *layout,
 		 const SnapContext& snapc, loff_t offset, uint64_t len,
 		 ceph::buffer::list& bl, ceph::real_time mtime, int flags,
-		 Context *onfreespace, bool block_writes_upfront) {
+		 Context *onfreespace, bool block_writes_upfront,
+		 bool *defer_wait = nullptr) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);
-    return writex(wr, oset, onfreespace, nullptr, block_writes_upfront);
+    return writex(wr, oset, onfreespace, nullptr, block_writes_upfront,
+                  defer_wait);
   }
 
   bool file_flush(ObjectSet *oset, file_layout_t *layout,

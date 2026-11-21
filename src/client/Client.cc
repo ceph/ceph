@@ -406,6 +406,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     remount_finisher(m->cct),
     async_ino_releasor(m->cct),
     objecter_finisher(m->cct),
+    oc_finisher(m->cct, "client_oc_finisher", "client-occb"),
     m_command_hook(this),
     fscid(0),
     subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
@@ -466,8 +467,10 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   // osd interfaces
   writeback_handler.reset(new ObjecterWriteback(objecter, &objecter_finisher,
-					    &client_lock));
-  objectcacher.reset(new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
+                                                [this](Context *c) {
+                                                  return new C_OCAsync(this, c);
+                                                }));
+  objectcacher.reset(new ObjectCacher(cct, "libcephfs", *writeback_handler, oc_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
 				  cct->_conf->client_oc_size,
@@ -658,6 +661,7 @@ void Client::_pre_init()
   timer.init();
 
   objecter_finisher.start();
+  oc_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
 #if defined(__linux__)
   fscrypt.reset(new FSCrypt(cct));
@@ -910,7 +914,9 @@ void Client::shutdown()
     timer.shutdown();
   }
 
+  oc_finisher.wait_for_empty();
   objecter_finisher.wait_for_empty();
+  oc_finisher.stop();
   objecter_finisher.stop();
 
   if (logger) {
@@ -1125,7 +1131,7 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
       ldout(cct, 10) << "truncate_seq " << in->truncate_seq << " -> "
 	       << truncate_seq << dendl;
       in->truncate_seq = truncate_seq;
-      in->oset.truncate_seq = truncate_seq;
+      oc_call([&] { in->oset.truncate_seq = truncate_seq; });
 
       // truncate cached file data
       if (prior_size > size) {
@@ -1154,7 +1160,7 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
       ldout(cct, 10) << "truncate_size " << in->truncate_size << " -> "
 	       << truncate_size << dendl;
       in->truncate_size = truncate_size;
-      in->oset.truncate_size = truncate_size;
+      oc_call([&] { in->oset.truncate_size = truncate_size; });
     } else {
       ldout(cct, 0) << "Hmmm, truncate_seq && truncate_size changed on non-file inode!" << dendl;
     }
@@ -3380,11 +3386,17 @@ void Client::_handle_full_flag(int64_t pool)
   // in this pool.
   for (auto i = inode_map.begin(); i != inode_map.end(); ++i) {
     Inode *inode = i->second;
-    if (inode->oset.dirty_or_tx
-        && (pool == -1 || inode->layout.pool_id == pool)) {
-      ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
-        << " has dirty objects, purging and setting ENOSPC" << dendl;
+    if (pool != -1 && inode->layout.pool_id != pool)
+      continue;
+    bool purged = oc_call([&] {
+      if (!inode->oset.dirty_or_tx)
+        return false;
       objectcacher->purge_set(&inode->oset);
+      return true;
+    });
+    if (purged) {
+      ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
+        << " had dirty objects, purged and setting ENOSPC" << dendl;
       inode->set_async_err(-ENOSPC);
     }
   }
@@ -3960,7 +3972,7 @@ void Client::_put_inode(Inode *in, int n)
     remove_all_caps(in);
 
     ldout(cct, 10) << __func__ << " deleting " << *in << dendl;
-    bool unclean = objectcacher->release_set(&in->oset);
+    loff_t unclean = oc_call([&] { return objectcacher->release_set(&in->oset); });
     ceph_assert(!unclean);
     inode_map.erase(in->vino());
     if (use_faked_inos())
@@ -4346,7 +4358,7 @@ int Client::get_caps_used(Inode *in)
 {
   unsigned used = in->caps_used();
   if (!(used & CEPH_CAP_FILE_CACHE) &&
-      !objectcacher->set_is_empty(&in->oset))
+      !oc_call([&] { return objectcacher->set_is_empty(&in->oset); }))
     used |= CEPH_CAP_FILE_CACHE;
   return used;
 }
@@ -4936,8 +4948,11 @@ void Client::_invalidate_inode_cache(Inode *in)
 
   // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
-    objectcacher->release_set(&in->oset);
-    if (!objectcacher->set_is_empty(&in->oset))
+    bool empty = oc_call([&] {
+      objectcacher->release_set(&in->oset);
+      return objectcacher->set_is_empty(&in->oset);
+    });
+    if (!empty)
       lderr(cct) << "failed to invalidate cache for " << *in << dendl;
   }
 
@@ -4952,7 +4967,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
     Striper::file_to_extents(cct, in->ino, &in->layout, off, len, in->truncate_size, ls);
-    objectcacher->discard_writeback(&in->oset, ls, nullptr);
+    oc_call([&] { objectcacher->discard_writeback(&in->oset, ls, nullptr); });
   }
 
   _schedule_invalidate_callback(in, off, len);
@@ -4972,7 +4987,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
-  if (!in->oset.dirty_or_tx) {
+  if (!oc_call([&] { return in->oset.dirty_or_tx != 0; })) {
     ldout(cct, 10) << " nothing to flush" << dendl;
     onfinish->complete(0);
     return true;
@@ -4980,20 +4995,22 @@ bool Client::_flush(Inode *in, Context *onfinish)
 
   if (objecter->osdmap_pool_full(in->layout.pool_id)) {
     ldout(cct, 8) << __func__ << ": FULL, purging for ENOSPC" << dendl;
-    objectcacher->purge_set(&in->oset);
+    oc_call([&] { objectcacher->purge_set(&in->oset); });
     if (onfinish) {
       onfinish->complete(-ENOSPC);
     }
     return true;
   }
 
-  return objectcacher->flush_set(&in->oset, onfinish);
+  return oc_call([&] {
+    return objectcacher->flush_set(&in->oset, oc_ctx(onfinish));
+  });
 }
 
 void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
-  if (!in->oset.dirty_or_tx) {
+  if (!oc_call([&] { return in->oset.dirty_or_tx != 0; })) {
     ldout(cct, 10) << " nothing to flush" << dendl;
     return;
   }
@@ -5004,8 +5021,11 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
   }
 
   C_SaferCond onflush("Client::_flush_range flock");
-  bool ret = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-				      offset, size, &onflush);
+  bool ret = oc_call([&] {
+    return objectcacher->file_flush(&in->oset, &in->layout,
+                                    in->snaprealm->get_snap_context(),
+                                    offset, size, oc_ctx(&onflush));
+  });
   if (!ret) {
     // wait for flush
     client_lock.unlock();
@@ -5016,11 +5036,73 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
-  //  std::scoped_lock l(client_lock);
-  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));   // will be called via dispatch() -> objecter -> ...
+  // called by the ObjectCacher under oc_lock, see oc_lock in Client.h
+  ceph_assert(ceph_mutex_is_locked_by_me(oc_lock));
   Inode *in = static_cast<Inode *>(oset->parent);
   ceph_assert(in);
-  _flushed(in);
+  oc_defer(new LambdaContext([this, ref = InodeRef(in)](int) {
+             _flushed(ref.get());
+           }), 0);
+}
+
+thread_local Client::OCScope *Client::oc_scope = nullptr;
+
+Client::OCScope::OCScope(Client *c) : client(c)
+{
+  // oc_lock is not recursive: no Client code runs under it, so no OCScope
+  // may be opened from within another one
+  ceph_assert(oc_scope == nullptr);
+  client->oc_lock.lock();
+  oc_scope = this;
+}
+
+Client::OCScope::~OCScope()
+{
+  oc_scope = nullptr;
+  client->oc_lock.unlock();
+  for (auto& [c, r] : pending) {
+    c->complete(r);
+  }
+}
+
+std::vector<std::pair<Context*, int>> Client::OCScope::detach()
+{
+  return std::move(pending);
+}
+
+void Client::C_OCDefer::finish(int r)
+{
+  client->oc_defer(fin, r);
+}
+
+void Client::oc_defer(Context *c, int r)
+{
+  if (oc_scope) {
+    // completed during an oc_call(): run when that call returns
+    oc_scope->defer(c, r);
+  } else {
+    // completed from the ObjectCacher's own threads under oc_lock alone
+    oc_finisher.queue(new C_Lock(&client_lock, c), r);
+  }
+}
+
+void Client::C_OCAsync::finish(int r)
+{
+  // An OSD reply or writeback commit for the ObjectCacher, on
+  // objecter_finisher: run it under oc_lock, then the Client callbacks it
+  // completed under client_lock, in this thread.
+  std::vector<std::pair<Context*, int>> pending;
+  {
+    OCScope s(client);
+    fin->complete(r);
+    pending = s.detach();
+  }
+  if (!pending.empty()) {
+    std::scoped_lock l(client->client_lock);
+    for (auto& [c, cr] : pending) {
+      c->complete(cr);
+    }
+  }
 }
 
 void Client::_flushed(Inode *in)
@@ -5242,13 +5324,17 @@ void Client::remove_session_caps(MetaSession *s, int err)
     caps &= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER;
     if (caps && !in->caps_issued_mask(caps, true)) {
       if (err == -EBLOCKLISTED) {
-	if (in->oset.dirty_or_tx) {
-	  lderr(cct) << __func__ << " still has dirty data on " << *in << dendl;
+	bool dirty = oc_call([&] {
+	  bool d = in->oset.dirty_or_tx != 0;
+	  objectcacher->purge_set(&in->oset);
+	  return d;
+	});
+	if (dirty) {
+	  lderr(cct) << __func__ << " still had dirty data on " << *in << dendl;
 	  in->set_async_err(err);
 	}
-	objectcacher->purge_set(&in->oset);
       } else {
-	objectcacher->release_set(&in->oset);
+	oc_call([&] { objectcacher->release_set(&in->oset); });
       }
       _schedule_invalidate_callback(in.get(), 0, 0);
     }
@@ -7634,7 +7720,7 @@ void Client::_unmount(bool abort)
       anchor.emplace_back(in);
 
       if (abort || blocklisted) {
-        objectcacher->purge_set(&in->oset);
+        oc_call([&] { objectcacher->purge_set(&in->oset); });
       } else if (!in->caps.empty()) {
 	_release(in);
 	_flush(in, new C_Client_FlushComplete(this, in));
@@ -7859,7 +7945,8 @@ void Client::tick()
     collect_and_send_metrics();
 
   if (objectcacher) {
-    logger->set(l_c_osdc_dirty, objectcacher->get_stat_dirty());
+    logger->set(l_c_osdc_dirty,
+                oc_call([this] { return objectcacher->get_stat_dirty(); }));
   }
 
   if (logger) {
@@ -9058,8 +9145,14 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       get_cap_ref(in, CEPH_CAP_FILE_CACHE);
       std::vector<ObjectCacher::ObjHole> holes;
       auto target_len = std::min(read_len, stx->stx_size - offset);
-      r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
-                                     read_start, target_len, &bl, 0, &holes, io_finish.get());
+      Context *ocw = oc_ctx(io_finish.get());
+      r = oc_call([&] {
+        return objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
+                                          read_start, target_len, &bl, 0,
+                                          &holes, ocw);
+      });
+      if (r != 0)
+        oc_ctx_drop(ocw);   // a hit (or an error) leaves ocw untouched
 
       if (r > 0) {
         logger->inc(l_c_osdc_hit);
@@ -12267,9 +12360,15 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
       ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
 		     << " (caller wants " << off << "~" << len << ")" << dendl;
       Context *onfinish2 = new C_Readahead(this, f);
-      int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				       readahead_extent.first, readahead_extent.second,
-				       NULL, 0, onfinish2);
+      Context *ocw = oc_ctx(onfinish2);
+      int r2 = oc_call([&] {
+        return objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+                                       readahead_extent.first,
+                                       readahead_extent.second,
+                                       NULL, 0, ocw);
+      });
+      if (r2 != 0)
+        oc_ctx_drop(ocw);
       if (r2 > 0) {
 	logger->inc(l_c_osdc_hit);
       } else if (r2 == 0) {
@@ -12400,8 +12499,14 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   auto start_time = mono_clock_now();
 
   std::vector<ObjectCacher::ObjHole> holes;
-  r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
-                                 read_start, read_len, bl, 0, &holes, io_finish.get());
+  Context *ocw = oc_ctx(io_finish.get());
+  r = oc_call([&] {
+    return objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
+                                      read_start, read_len, bl, 0, &holes,
+                                      ocw);
+  });
+  if (r != 0)
+    oc_ctx_drop(ocw);   // a hit (or an error) leaves ocw untouched
   if (r > 0) {
     logger->inc(l_c_osdc_hit);
   } else if (r == 0) {
@@ -13172,7 +13277,9 @@ void Client::WriteEncMgr::finish_read_start(int r)
     bl.swap(newbl);
   }
 
-  try_finish(r);
+  // a blocking write finishes in its caller, see finish_read_end()
+  if (async)
+    try_finish(r);
 }
 
 void Client::WriteEncMgr::finish_read_end(int r)
@@ -13190,7 +13297,11 @@ void Client::WriteEncMgr::finish_read_end(int r)
     }
   }
 
-  try_finish(r);
+  // A blocking write finishes in its caller, which waits for both reads:
+  // do_write() may wait there for writeback space, and here we run on the
+  // finisher that completes the writeback, which would then never come.
+  if (async)
+    try_finish(r);
 }
 
 bool Client::WriteEncMgr::do_try_finish(int r)
@@ -13238,19 +13349,54 @@ int Client::WriteEncMgr_Buffered::do_write()
   int r =  0;
 
   // do buffered write
-  if (!in->oset.dirty_or_tx)
-    clnt->get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
+  //
+  // A blocking writer must not sleep in the ObjectCacher while it holds
+  // client_lock: the cache's waits drop oc_lock only, and the writeback
+  // completions that end them take client_lock.  So the cache leaves the
+  // wait for writeback to us (defer_wait), and we wait with client_lock
+  // dropped, as the cache used to do for us when it shared client_lock;
+  // then complete iofinish as the cache would have.  In write-through
+  // mode (client_oc_max_dirty = 0) the write waits for its own flush:
+  // hand the cache a Context for that and wait for it unlocked.
+  bool block = !async && clnt->objectcacher->CFG_block_writes_upfront();
+  bool write_thru = false;
+  bool defer_wait = false;
+  C_SaferCond thru("Client::WriteEncMgr_Buffered::do_write");
+  r = clnt->oc_call([&] {
+    if (!in->oset.dirty_or_tx)
+      clnt->get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
 
-  clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-  // async, caching, non-blocking.
-  r = clnt->objectcacher->file_write(&in->oset, &in->layout,
-                                     in->snaprealm->get_snap_context(),
-                                     offset, size, *pbl, ceph::real_clock::now(),
-                                     0, iofinish,
-                                     !async
-                                     ? clnt->objectcacher->CFG_block_writes_upfront()
-                                     : false);
+    // async, caching, non-blocking.
+    write_thru = block && clnt->objectcacher->get_max_dirty() == 0;
+    bool defer = block && !write_thru;
+    return clnt->objectcacher->file_write(&in->oset, &in->layout,
+                                          in->snaprealm->get_snap_context(),
+                                          offset, size, *pbl,
+                                          ceph::real_clock::now(), 0,
+                                          write_thru ? clnt->oc_ctx(&thru) :
+                                          defer ? nullptr :
+                                          clnt->oc_ctx(iofinish),
+                                          defer, defer ? &defer_wait : nullptr);
+  });
+  if (block && !write_thru) {
+    if (defer_wait) {
+      clnt->client_lock.unlock();
+      clnt->oc_call([&] {
+        clnt->objectcacher->wait_for_writeback_space(size);
+      });
+      clnt->client_lock.lock();
+    }
+    if (iofinish)
+      iofinish->complete(0);
+  } else if (write_thru) {
+    clnt->client_lock.unlock();
+    int r2 = thru.wait();
+    clnt->client_lock.lock();
+    if (iofinish)
+      iofinish->complete(r2);
+  }
 
   return r;
 }
@@ -14677,7 +14823,7 @@ int Client::_sync_fs()
   std::unique_ptr<C_SaferCond> cond = nullptr; 
   if (cct->_conf->client_oc) {
     cond.reset(new C_SaferCond("Client::_sync_fs:lock"));
-    objectcacher->flush_all(cond.get());
+    oc_call([&] { objectcacher->flush_all(oc_ctx(cond.get())); });
   }
 
   // flush caps
@@ -14719,7 +14865,7 @@ int Client::sync_fs()
 int64_t Client::drop_caches()
 {
   std::scoped_lock l(client_lock);
-  return objectcacher->release_all();
+  return oc_call([this] { return objectcacher->release_all(); });
 }
 
 int Client::_lazyio(Fh *fh, int enable)
@@ -19705,19 +19851,19 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     alternate_name_visible = cct->_conf.get_val<bool>("client_alternate_name_visible");
   }
   if (changed.count("client_oc_size")) {
-    objectcacher->set_max_size(cct->_conf->client_oc_size);
+    oc_call([&] { objectcacher->set_max_size(cct->_conf->client_oc_size); });
   }
   if (changed.count("client_oc_max_objects")) {
-    objectcacher->set_max_objects(cct->_conf->client_oc_max_objects);
+    oc_call([&] { objectcacher->set_max_objects(cct->_conf->client_oc_max_objects); });
   }
   if (changed.count("client_oc_max_dirty")) {
-    objectcacher->set_max_dirty(cct->_conf->client_oc_max_dirty);
+    oc_call([&] { objectcacher->set_max_dirty(cct->_conf->client_oc_max_dirty); });
   }
   if (changed.count("client_oc_target_dirty")) {
-    objectcacher->set_target_dirty(cct->_conf->client_oc_target_dirty);
+    oc_call([&] { objectcacher->set_target_dirty(cct->_conf->client_oc_target_dirty); });
   }
   if (changed.count("client_oc_max_dirty_age")) {
-    objectcacher->set_max_dirty_age(cct->_conf->client_oc_max_dirty_age);
+    oc_call([&] { objectcacher->set_max_dirty_age(cct->_conf->client_oc_max_dirty_age); });
   }
   if (changed.count("client_collect_and_send_global_metrics")) {
     _collect_and_send_global_metrics = cct->_conf.get_val<bool>(

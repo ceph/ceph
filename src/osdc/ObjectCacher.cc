@@ -1748,7 +1748,7 @@ void ObjectCacher::retry_waiting_reads()
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 			 ZTracer::Trace *parent_trace,
-			 bool block_writes_upfront)
+			 bool block_writes_upfront, bool *defer_wait)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph::real_time now = ceph::real_clock::now();
@@ -1840,7 +1840,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
   }
 
   int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace,
-                          block_writes_upfront);
+                          block_writes_upfront, defer_wait);
   delete wr;
 
   finish_contexts(cct, wait_for_reads, 0);
@@ -1870,6 +1870,28 @@ void ObjectCacher::C_WaitForWrite::finish(int r)
   m_onfinish->complete(r);
 }
 
+void ObjectCacher::wait_for_writeback_space(uint64_t len)
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  ZTracer::Trace trace;
+  _maybe_wait_for_writeback(len, &trace);
+}
+
+bool ObjectCacher::_writeback_wait_needed()
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
+  //  - do not wait for bytes other waiters are waiting on.  this means that
+  //    threads do not wait for each other.  this effectively allows the cache
+  //    size to balloon proportional to the data that is in flight.
+  uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
+  return get_stat_dirty() + get_stat_tx() > 0 &&
+         (((uint64_t)(get_stat_dirty() + get_stat_tx()) >=
+           max_dirty + get_stat_dirty_waiting()) ||
+          (dirty_or_tx_bh.size() >=
+           max_dirty_bh + get_stat_nr_dirty_waiters()));
+}
+
 void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 					     ZTracer::Trace *trace)
 {
@@ -1877,17 +1899,7 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
   ceph::mono_time start = ceph::mono_clock::now();
   int blocked = 0;
   // wait for writeback?
-  //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
-  //  - do not wait for bytes other waiters are waiting on.  this means that
-  //    threads do not wait for each other.  this effectively allows the cache
-  //    size to balloon proportional to the data that is in flight.
-
-  uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
-  while (get_stat_dirty() + get_stat_tx() > 0 &&
-	 (((uint64_t)(get_stat_dirty() + get_stat_tx()) >=
-	  max_dirty + get_stat_dirty_waiting()) ||
-	 (dirty_or_tx_bh.size() >=
-	  max_dirty_bh + get_stat_nr_dirty_waiters()))) {
+  while (_writeback_wait_needed()) {
 
     if (blocked == 0) {
       trace->event("start wait for writeback");
@@ -1921,14 +1933,19 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 // blocking wait for write.
 int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 				  ZTracer::Trace *trace, Context *onfreespace,
-                                  bool block_writes_upfront)
+                                  bool block_writes_upfront, bool *defer_wait)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph_assert(trace != nullptr);
   int ret = 0;
 
   if (max_dirty > 0 && !(wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_FUA)) {
-    if (block_writes_upfront) {
+    if (block_writes_upfront && defer_wait) {
+      // the caller waits, with wait_for_writeback_space(), once it has
+      // dropped locks of its own that writeback completions need
+      ceph_assert(!onfreespace);
+      *defer_wait = _writeback_wait_needed();
+    } else if (block_writes_upfront) {
       _maybe_wait_for_writeback(len, trace);
       if (onfreespace)
 	onfreespace->complete(0);

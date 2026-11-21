@@ -1441,8 +1441,83 @@ protected:
 
 
   // global client lock
-  //  - protects Client and buffer cache both!
+  //  - protects Client state
   ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
+
+  /*
+   * oc_lock protects the buffer cache: the ObjectCacher and every Inode's
+   * oset.  Lock order: client_lock -> oc_lock.
+   *
+   * Client code calls into the ObjectCacher only through oc_call() (an
+   * OCScope).  Every Client Context handed to the ObjectCacher is wrapped by
+   * oc_ctx(), and flush_set_callback() runs the same way, so no Client code
+   * ever runs under oc_lock:
+   *  - a callback the ObjectCacher completes during an oc_call() is run when
+   *    that call returns, after oc_lock is dropped, in the calling thread
+   *    and under the caller's locks;
+   *  - a callback completed from an OSD reply or writeback is run by
+   *    C_OCAsync after the cache's part, under client_lock, in the same
+   *    objecter_finisher thread;
+   *  - one completed from the cache's own finisher (oc_lock held, no
+   *    OCScope) is queued on oc_finisher and run there under client_lock.
+   */
+  ceph::mutex oc_lock = ceph::make_mutex("Client::oc_lock");
+
+  class OCScope {
+  public:
+    explicit OCScope(Client *c);
+    ~OCScope();
+    OCScope(const OCScope&) = delete;
+    OCScope& operator=(const OCScope&) = delete;
+    // queue a callback to run when this scope ends
+    void defer(Context *c, int r) {
+      pending.emplace_back(c, r);
+    }
+    // take the queued callbacks, to run them elsewhere
+    std::vector<std::pair<Context*, int>> detach();
+  private:
+    Client *client;
+    std::vector<std::pair<Context*, int>> pending;
+  };
+  // the OCScope this thread is in, if any
+  static thread_local OCScope *oc_scope;
+
+  template <typename F>
+  auto oc_call(F&& f) {
+    OCScope s(this);
+    return f();
+  }
+
+  class C_OCDefer : public Context {
+  public:
+    // does not own fin: the ObjectCacher completes every Context it keeps,
+    // and callers may pass Contexts they own (e.g. a C_SaferCond)
+    C_OCDefer(Client *c, Context *fin) : client(c), fin(fin) {}
+    void finish(int r) override;
+  private:
+    Client *client;
+    Context *fin;
+  };
+  // wrap a Context before handing it to the ObjectCacher
+  Context *oc_ctx(Context *c) {
+    return c ? new C_OCDefer(this, c) : nullptr;
+  }
+  // the ObjectCacher left the wrapper untouched (e.g. readx() hit): free it;
+  // the wrapped Context still belongs to the caller
+  static void oc_ctx_drop(Context *w) {
+    delete w;
+  }
+  // run a callback the ObjectCacher completed, see oc_lock above
+  void oc_defer(Context *c, int r);
+  // wraps the ObjectCacher's OSD read/write completions (ObjecterWriteback)
+  class C_OCAsync : public Context {
+  public:
+    C_OCAsync(Client *c, Context *fin) : client(c), fin(fin) {}
+    void finish(int r) override;
+  private:
+    Client *client;
+    Context *fin;
+  };
 
   std::map<snapid_t, int> ll_snap_ref;
 
@@ -2440,6 +2515,10 @@ private:
   Finisher remount_finisher;
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
+  // runs the Client callbacks the ObjectCacher completes outside of an
+  // OCScope (see oc_lock), under client_lock; not objecter_finisher, as
+  // such a callback may wait for an OSD completion (e.g. an fsync write)
+  Finisher oc_finisher;
 
   ceph::coarse_mono_time last_cap_renew;
 
