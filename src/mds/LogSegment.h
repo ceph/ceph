@@ -77,6 +77,7 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_dirfragtree;
 
   std::set<CInode*> truncating_inodes;
+  std::set<CInode*> migrating_inodes;
   interval_set<inodeno_t> purging_inodes;
   MDSContext* purged_cb = nullptr;
 

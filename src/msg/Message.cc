@@ -154,6 +154,7 @@
 #include "messages/MMDSSnapUpdate.h"
 #include "messages/MMDSScrub.h"
 #include "messages/MMDSScrubStats.h"
+#include "messages/MMDSMigrate.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -812,6 +813,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_SCRUB_STATS:
     m = make_message<MMDSScrubStats>();
+    break;
+
+  case MSG_MDS_MIGRATE:
+    m = make_message<MMDSMigrate>();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:

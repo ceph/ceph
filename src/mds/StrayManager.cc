@@ -150,6 +150,9 @@ void StrayManager::purge(CDentry *dn)
 	item.old_pools.push_back(p);
     }
     item.snapc = *snapc;
+
+    if (pi->get_has_redirects() && to > 0)
+      mds->mdcache->purge_redirects(in, to);
   }
 
   purge_queue.push(item, new C_IO_PurgeStrayPurged(

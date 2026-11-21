@@ -1635,6 +1635,27 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       return -EINVAL;
     }
 
+    // The mon cannot see inodes, but objects left in a data pool are what
+    // something still needs: file data, snapshot clones, or the redirects of
+    // files migrated away, which stale clients read through.  Those objects
+    // are unreachable once the pool is deleted, and a client reads them as
+    // holes, so refuse to take the first step without being told.  The stats
+    // are a few seconds old at best, so this catches a mistake, not a race.
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(poolid);
+    if (!sure && stat && stat->stats.sum.num_objects > 0 &&
+        fsp->get_mds_map().is_data_pool(poolid)) {
+      const auto& sum = stat->stats.sum;
+      ss << "pool '" << poolname << "' still holds " << sum.num_objects
+         << " objects, of which " << sum.num_object_clones
+         << " are snapshot clones and " << sum.num_objects_manifest
+         << " are redirects of migrated files. Files, snapshots and clients "
+         << "may still need them, and they are lost if the pool is deleted. "
+         << "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -ENOTEMPTY;
+    }
+
     int r = 0;
     fsmap.modify_filesystem(fsp->get_fscid(),
         [&r, poolid](auto&& fs)

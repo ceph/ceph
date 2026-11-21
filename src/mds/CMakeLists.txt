@@ -40,6 +40,7 @@ set(mds_srcs
   Mantle.cc
   Anchor.cc
   OpenFileTable.cc
+  MigrateQueue.cc
   MDSPhaseTracker.cc
   MDSPinger.cc
   MetricAggregator.cc

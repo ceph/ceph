@@ -362,6 +362,11 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
+  // migrating
+  for (CInode *in : migrating_inodes) {
+    dout(10) << "try_to_expire waiting for migration of " << *in << dendl;
+    in->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
+  }
   // purge inodes
   if (purging_inodes.size()) {
     dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
@@ -1441,6 +1446,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 	in->state_set(CInode::STATE_AUTH);
       else
 	in->state_clear(CInode::STATE_AUTH);
+      mds->mdcache->note_replayed_migrate(in, logseg);
       ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
 
       {
