@@ -63,6 +63,9 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#ifdef __linux__
+#include <sched.h>
+#endif
 #include <shared_mutex>
 
 using std::set;
@@ -366,6 +369,9 @@ protected:
     std::vector<AggregatedIOMetrics> last_subvolume_metrics;
     std::unordered_map<inodeno_t, SubvolumeEntry> subvolume_metrics;
     std::unordered_map<inodeno_t, inodeno_t> inode_subvolume;
+    // inode_subvolume.size(), for add_metric() to skip the lock when no
+    // inode is tracked at all
+    std::atomic<size_t> n_tracked = 0;
     CephContext *cct = nullptr;
     client_t whoami;
     std::shared_mutex metrics_lock;
@@ -1048,13 +1054,13 @@ public:
   }
 
   void cap_hit() {
-    ++cap_hits;
+    cap_hits.inc();
   }
   void cap_miss() {
-    ++cap_misses;
+    cap_misses.inc();
   }
   std::pair<uint64_t, uint64_t> get_cap_hit_rates() {
-    return std::make_pair(cap_hits, cap_misses);
+    return std::make_pair(cap_hits.get(), cap_misses.get());
   }
 
   void inc_caps() {
@@ -2613,25 +2619,94 @@ private:
   uint64_t dlease_hits = 0;
   uint64_t dlease_misses = 0;
 
-  uint64_t cap_hits = 0;
-  uint64_t cap_misses = 0;
+  // A counter that threads bump without client_lock, many times a second
+  // (every cached getattr and read counts a cap hit): one cache line per
+  // slot, picked by CPU, so they do not bounce one line; summed on read.
+  class ShardedCounter {
+  public:
+    void inc() {
+      slots[slot()].v.fetch_add(1, std::memory_order_relaxed);
+    }
+    uint64_t get() const {
+      uint64_t n = 0;
+      for (const auto& s : slots)
+        n += s.v.load(std::memory_order_relaxed);
+      return n;
+    }
+  private:
+    static constexpr unsigned NSLOTS = 64;
+    struct alignas(64) Slot {
+      std::atomic<uint64_t> v{0};
+    };
+    Slot slots[NSLOTS];
+  public:
+    // a slot for this thread: by CPU, so concurrent threads rarely share
+    static unsigned slot() {
+#ifdef __linux__
+      int cpu = sched_getcpu();
+      if (cpu >= 0)
+        return (unsigned)cpu % NSLOTS;
+#endif
+      return std::hash<std::thread::id>{}(std::this_thread::get_id()) % NSLOTS;
+    }
+  };
+  ShardedCounter cap_hits;
+  ShardedCounter cap_misses;
 
   uint64_t opened_files = 0;
   uint64_t pinned_icaps = 0;
   uint64_t opened_inodes = 0;
 
-  uint64_t total_read_ops = 0;
-  uint64_t total_read_size = 0;
-
-  uint64_t total_write_ops = 0;
-  uint64_t total_write_size = 0;
+  // The read/write I/O statistics (latency, size): every I/O adds to
+  // them, with or without client_lock.  Each adds to the slot of its CPU
+  // (a running count, mean and sum of squared deviations, under the
+  // slot's spinlock, a leaf lock), so I/O threads do not share one cache
+  // line; they are summed for the metrics and, on tick(), for the perf
+  // counters.
+  struct RunStat {
+    uint64_t n = 0;
+    double mean = 0, m2 = 0;
+    void add(double x) {   // Welford, as calc_average()/calc_sq_sum()
+      ++n;
+      double d = x - mean;
+      mean += d / n;
+      m2 += d * (x - mean);
+    }
+    void merge(const RunStat& o) {   // Chan et al.
+      if (!o.n)
+        return;
+      if (!n) {
+        *this = o;
+        return;
+      }
+      uint64_t t = n + o.n;
+      double d = o.mean - mean;
+      mean += d * o.n / t;
+      m2 += o.m2 + d * d * ((double)n * o.n / t);
+      n = t;
+    }
+  };
+  struct IoStats {
+    RunStat rd_lat, wr_lat;   // ns
+    RunStat rd_sz, wr_sz;     // bytes
+    uint64_t rd_bytes = 0, wr_bytes = 0;
+  };
+  struct alignas(64) IoStatSlot {
+    ceph::spinlock lock;
+    IoStats s;
+  };
+  static constexpr unsigned IO_STAT_SLOTS = 64;
+  IoStatSlot io_stat_slots[IO_STAT_SLOTS];
+  IoStatSlot& io_stat_slot() {
+    return io_stat_slots[ShardedCounter::slot() % IO_STAT_SLOTS];
+  }
+  IoStats get_io_stats();
+  void update_io_stat_logger();
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
 
   uint64_t nr_metadata_request = 0;
-  uint64_t nr_read_request = 0;
-  uint64_t nr_write_request = 0;
 
   std::vector<MDSCapAuth> cap_auths;
 

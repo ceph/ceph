@@ -950,41 +950,57 @@ void Client::update_io_stat_metadata(utime_t latency) {
 }
 
 void Client::update_io_stat_read(utime_t latency) {
-  auto lat_nsec = latency.to_nsec();
-  // old values are used to compute new ones
-  auto o_avg = logger->tget(l_c_rd_avg).to_nsec();
-  auto o_sqsum = logger->get(l_c_rd_sqsum);
-
-  auto n_avg = calc_average(o_avg, lat_nsec, nr_read_request);
-  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
-                              nr_read_request);
-
+  auto& slot = io_stat_slot();
+  {
+    std::scoped_lock l(slot.lock);
+    slot.s.rd_lat.add(latency.to_nsec());
+  }
   logger->tinc(l_c_read, latency);
-
-  utime_t avg;
-  avg.set_from_double(n_avg / 1000000000);
-  logger->tset(l_c_rd_avg, avg);
-  logger->set(l_c_rd_sqsum, n_sqsum);
-  logger->set(l_c_rd_ops, nr_read_request);
 }
 
 void Client::update_io_stat_write(utime_t latency) {
-  auto lat_nsec = latency.to_nsec();
-  // old values are used to compute new ones
-  auto o_avg = logger->tget(l_c_wr_avg).to_nsec();
-  auto o_sqsum = logger->get(l_c_wr_sqsum);
-
-  auto n_avg = calc_average(o_avg, lat_nsec, nr_write_request);
-  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
-                              nr_write_request);
-
+  auto& slot = io_stat_slot();
+  {
+    std::scoped_lock l(slot.lock);
+    slot.s.wr_lat.add(latency.to_nsec());
+  }
   logger->tinc(l_c_wrlat, latency);
+}
 
+Client::IoStats Client::get_io_stats()
+{
+  IoStats t;
+  for (auto& slot : io_stat_slots) {
+    std::scoped_lock l(slot.lock);
+    t.rd_lat.merge(slot.s.rd_lat);
+    t.wr_lat.merge(slot.s.wr_lat);
+    t.rd_sz.merge(slot.s.rd_sz);
+    t.wr_sz.merge(slot.s.wr_sz);
+    t.rd_bytes += slot.s.rd_bytes;
+    t.wr_bytes += slot.s.wr_bytes;
+  }
+  return t;
+}
+
+// the running averages of the I/O statistics in the perf counters
+void Client::update_io_stat_logger()
+{
+  if (!logger)
+    return;
+  auto t = get_io_stats();
   utime_t avg;
-  avg.set_from_double(n_avg / 1000000000);
+  avg.set_from_double(t.rd_lat.mean / 1000000000);
+  logger->tset(l_c_rd_avg, avg);
+  logger->set(l_c_rd_sqsum, t.rd_lat.m2);
+  logger->set(l_c_rd_ops, t.rd_lat.n);
+  avg.set_from_double(t.wr_lat.mean / 1000000000);
   logger->tset(l_c_wr_avg, avg);
-  logger->set(l_c_wr_sqsum, n_sqsum);
-  logger->set(l_c_wr_ops, nr_write_request);
+  logger->set(l_c_wr_sqsum, t.wr_lat.m2);
+  logger->set(l_c_wr_ops, t.wr_lat.n);
+  logger->set(l_c_rd_sz_avg, (uint64_t)t.rd_sz.mean);
+  logger->set(l_c_rd_sz_sqsum, (uint64_t)t.rd_sz.m2);
+  logger->set(l_c_wr_sz_avg, (uint64_t)t.wr_sz.mean);
+  logger->set(l_c_wr_sz_sqsum, (uint64_t)t.wr_sz.m2);
 }
 // ===================
 // metadata cache stuff
@@ -1075,35 +1091,17 @@ void Client::trim_dentry(Dentry *dn)
 
 
 void Client::update_read_io_size(size_t size) {
-  total_read_ops++;
-  total_read_size += size;
-
-  if (logger) {
-    auto o_avg = logger->get(l_c_rd_sz_avg);
-    auto o_sqsum = logger->get(l_c_rd_sz_sqsum);
-
-    auto n_avg = calc_average(o_avg, size, total_read_ops);
-    auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, size, total_read_ops);
-
-    logger->set(l_c_rd_sz_avg, (uint64_t)n_avg);
-    logger->set(l_c_rd_sz_sqsum, (uint64_t)n_sqsum);
-  }
+  auto& slot = io_stat_slot();
+  std::scoped_lock l(slot.lock);
+  slot.s.rd_sz.add(size);
+  slot.s.rd_bytes += size;
 }
 
 void Client::update_write_io_size(size_t size) {
-  total_write_ops++;
-  total_write_size += size;
-
-  if (logger) {
-    auto o_avg = logger->get(l_c_wr_sz_avg);
-    auto o_sqsum = logger->get(l_c_wr_sz_sqsum);
-
-    auto n_avg = calc_average(o_avg, size, total_write_ops);
-    auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, size, total_write_ops);
-
-    logger->set(l_c_wr_sz_avg, (uint64_t)n_avg);
-    logger->set(l_c_wr_sz_sqsum, (uint64_t)n_sqsum);
-  }
+  auto& slot = io_stat_slot();
+  std::scoped_lock l(slot.lock);
+  slot.s.wr_sz.add(size);
+  slot.s.wr_bytes += size;
 }
 
 void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
@@ -7956,6 +7954,7 @@ void Client::tick()
     }
     logger->set(l_c_caps_dirty, caps_dirty);
   }
+  update_io_stat_logger();
 
   delay_put_inodes(is_unmounting());
   trim_cache(true);
@@ -8035,24 +8034,29 @@ void Client::collect_and_send_global_metrics() {
 
   ClientMetricMessage metric;
   std::vector<ClientMetricMessage> message;
+  auto io_stats = get_io_stats();
 
   // read latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_READ_LATENCY)) {
+    utime_t avg;
+    avg.set_from_double(io_stats.rd_lat.mean / 1000000000);
     metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read),
-                                                    logger->tget(l_c_rd_avg),
-                                                    logger->get(l_c_rd_sqsum),
-                                                    nr_read_request));
+                                                    avg,
+                                                    io_stats.rd_lat.m2,
+                                                    io_stats.rd_lat.n));
     message.push_back(metric);
   }
 
   // write latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_WRITE_LATENCY)) {
+    utime_t avg;
+    avg.set_from_double(io_stats.wr_lat.mean / 1000000000);
     metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat),
-                                                     logger->tget(l_c_wr_avg),
-                                                     logger->get(l_c_wr_sqsum),
-                                                     nr_write_request));
+                                                     avg,
+                                                     io_stats.wr_lat.m2,
+                                                     io_stats.wr_lat.n));
     message.push_back(metric);
   }
 
@@ -8109,16 +8113,16 @@ void Client::collect_and_send_global_metrics() {
   // read io sizes
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_READ_IO_SIZES)) {
-    metric = ClientMetricMessage(ReadIoSizesPayload(total_read_ops,
-                                                    total_read_size));
+    metric = ClientMetricMessage(ReadIoSizesPayload(io_stats.rd_sz.n,
+                                                    io_stats.rd_bytes));
     message.push_back(metric);
   }
 
   // write io sizes
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_WRITE_IO_SIZES)) {
-    metric = ClientMetricMessage(WriteIoSizesPayload(total_write_ops,
-                                                     total_write_size));
+    metric = ClientMetricMessage(WriteIoSizesPayload(io_stats.wr_sz.n,
+                                                     io_stats.wr_bytes));
     message.push_back(metric);
   }
 
@@ -11961,7 +11965,6 @@ void Client::C_Read_Finisher::finish_io(int r)
     lat = mono_clock_now();
     lat -= start;
     clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, static_cast<uint32_t>(r)});
-    ++clnt->nr_read_request;
     clnt->update_io_stat_read(lat);
   }
 
@@ -12318,7 +12321,6 @@ success:
   lat = mono_clock_now();
   lat -= start;
   subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, bl->length()});
-  ++nr_read_request;
   update_io_stat_read(lat);
 
 done:
@@ -12929,7 +12931,6 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
   lat -= start;
 
   subvolume_tracker->add_metric(in->ino, SimpleIOMetric{true, lat, static_cast<uint32_t>(size)});
-  ++nr_write_request;
   update_io_stat_write(lat);
 
   if (fpos) {
@@ -19952,6 +19953,7 @@ void SubvolumeMetricTracker::add_inode(inodeno_t inode, inodeno_t subvol) {
     ldout(cct, 10) << __func__ << " inserted " << inode << "-" << subvol << dendl;
   }
   inode_subvolume[inode] = subvol;
+  n_tracked = inode_subvolume.size();
   ldout(cct, 10) << __func__ << " add " << inode << "-" << subvol << dendl;
 }
 
@@ -19965,6 +19967,7 @@ void SubvolumeMetricTracker::remove_inode(inodeno_t inode) {
 
   inodeno_t subvol = it->second;
   inode_subvolume.erase(it);
+  n_tracked = inode_subvolume.size();
 
   auto se = subvolume_metrics.find(subvol);
   if (se == subvolume_metrics.end()) {
@@ -19976,6 +19979,15 @@ void SubvolumeMetricTracker::remove_inode(inodeno_t inode) {
 
 void SubvolumeMetricTracker::add_metric(inodeno_t inode, SimpleIOMetric&& metric) {
   ldout(cct, 10) << __func__ << " " << inode << dendl;
+  if (n_tracked.load(std::memory_order_relaxed) == 0)
+    return;
+  {
+    // most inodes are in no tracked subvolume: check under the shared lock,
+    // so I/O to them does not serialize on metrics_lock
+    std::shared_lock l(metrics_lock);
+    if (inode_subvolume.find(inode) == inode_subvolume.end())
+      return;
+  }
   std::unique_lock l(metrics_lock);
 
   auto it = inode_subvolume.find(inode);
