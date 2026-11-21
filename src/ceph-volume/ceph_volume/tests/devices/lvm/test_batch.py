@@ -454,6 +454,121 @@ class TestBatch(object):
                                            20, 1, args)
         assert err.value.code == 1
 
+    def test_get_physical_fast_allocs_nearly_full_vg_does_not_abort(self, factory,
+                                                                    conf_ceph_stub,
+                                                                    mock_device_generator):
+        # Reproducer for https://tracker.ceph.com/issues/81097
+        #
+        # A service spec deployed 22 HDDs with two NVMe db devices and
+        # --block-db-size 260000000000 (~242.14 GB). One NVMe already hosts
+        # 11 db LVs and is nearly full, the other one is empty. The
+        # nearly-full device must be skipped (it cannot fit a single
+        # requested allocation in its free space) instead of aborting the
+        # whole batch with:
+        #
+        #   242.14 GB was requested for block_db_size, but only
+        #   86.55 MB can be fulfilled
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        # nvme0n1: existing ceph VG with 11 db LVs, ~952 MiB free (238
+        # extents: still above the 10-extent availability threshold)
+        full_dev = mock_device_generator(path='nvme0n1',
+                                         vg_name='ceph-63a82b01',
+                                         vg_size=[3200000000000],
+                                         vg_free=[998296780],
+                                         number_lvs=11)
+        # nvme1n1: completely empty, no VG
+        empty_dev = mock_device_generator(path='nvme1n1')
+        empty_dev.vgs = []
+        empty_dev.lvs = []
+        empty_dev.vg_size = [2980000000000]
+        empty_dev.vg_free = [2980000000000]
+        data_devices = ['/dev/sd%s' % c for c in 'bcdefghiklmnopqrstuvwx']
+        assert len(data_devices) == 22
+        args = factory(block_db_slots=None,
+                       block_db_size=disk.Size(b=260000000000),
+                       devices=data_devices)
+        # 22 requested osds over 2 fast devices -> 11 slots per device,
+        # 11 new osds to be deployed by this batch
+        fast = batch.get_physical_fast_allocs([full_dev, empty_dev],
+                                              'block_db', 11, 11, args)
+        assert len(fast) == 11
+        assert all(f[0] == empty_dev.path for f in fast)
+        assert all(f[2] == disk.Size(b=260000000000) for f in fast)
+
+    def test_get_physical_fast_allocs_at_slot_capacity_skips_size_check(self, factory,
+                                                                        conf_ceph_stub,
+                                                                        mock_device_generator):
+        # A fast device that already carries its full share of slots
+        # (len(lvs) >= requested_slots) cannot receive any new allocation,
+        # so its (possibly small) remaining capacity must not be validated
+        # against the requested size, let alone abort the batch.  This is
+        # the 81097 scenario on a smaller fast device: vg_size/slots_for_vg
+        # is below the requested size, but the device is already full of
+        # db LVs and must simply be skipped.
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        # 2.5 TB device, 11 slots -> ~232 GB per slot over the total
+        # capacity, less than the requested 242.14 GB: without the skip
+        # this would hit the "can be fulfilled" error even though the
+        # device is already at capacity
+        full_dev = mock_device_generator(path='nvme0n1',
+                                         vg_name='ceph-63a82b01',
+                                         vg_size=[2500000000000],
+                                         vg_free=[998296780],
+                                         number_lvs=11)
+        empty_dev = mock_device_generator(path='nvme1n1')
+        empty_dev.vgs = []
+        empty_dev.lvs = []
+        empty_dev.vg_size = [2980000000000]
+        empty_dev.vg_free = [2980000000000]
+        args = factory(block_db_slots=None,
+                       block_db_size=disk.Size(b=260000000000),
+                       devices=['/dev/sd%s' % c for c in 'bcdefghiklmnopqrstuvwx'])
+        fast = batch.get_physical_fast_allocs([full_dev, empty_dev],
+                                              'block_db', 11, 11, args)
+        assert len(fast) == 11
+        assert all(f[0] == empty_dev.path for f in fast)
+
+    def test_get_physical_fast_allocs_requested_size_on_partial_vg(self, factory,
+                                                                   conf_ceph_stub,
+                                                                   mock_device_generator):
+        # Regression guard for https://tracker.ceph.com/issues/76522 with
+        # an explicit size: redeploying a single OSD onto a partially used
+        # fast-device VG whose *free* space still fits the requested size
+        # must produce an allocation of exactly that size.  (db_slots=6,
+        # 5 LVs already present, one new OSD in this batch.)
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        vg_size = 6000000000
+        fast_dev = mock_device_generator(number_lvs=5)
+        fast_dev.vg_size = [vg_size]
+        fast_dev.vg_free = [4000000000]
+        args = factory(block_db_slots=6,
+                       block_db_size=disk.Size(b=490000000),
+                       devices=['/dev/data'])
+        fast = batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                              1, 1, args)
+        assert len(fast) == 1
+        assert fast[0][0] == fast_dev.path
+        assert fast[0][2] == disk.Size(b=490000000)
+
+    def test_get_physical_fast_allocs_proportional_partial_vg_uses_free_space(self, factory,
+                                                                              conf_ceph_stub,
+                                                                              mock_device_generator):
+        # Without a requested size, slots on a partially used VG are sized
+        # from the free space (fallback kept from the 76522 fix):
+        # free_size/fast_slots_per_device, not vg_size/slots_for_vg.
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        vg_size = 6000000000
+        free_size = 1000000000
+        fast_dev = mock_device_generator(number_lvs=5)
+        fast_dev.vg_size = [vg_size]
+        fast_dev.vg_free = [free_size]
+        args = factory(block_db_slots=6, block_db_size=None,
+                       devices=['/dev/data'])
+        fast = batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                              1, 1, args)
+        assert len(fast) == 1
+        assert fast[0][2] == disk.Size(b=int(free_size / 1))
+
     def test_get_lvm_osds_return_len(self, factory,
                                      mock_lv_device_generator,
                                      conf_ceph_stub,
@@ -464,6 +579,60 @@ class TestBatch(object):
         mock_lvs = [mock_lv_device_generator()]
         osds = batch.get_lvm_osds(mock_lvs, args)
         assert len(osds) == 1
+
+    def test_batch_nearly_full_db_device_full_layout(self, factory, conf_ceph_stub,
+                                                     mock_device_generator):
+        # End-to-end reproducer for
+        # https://tracker.ceph.com/issues/81097 at the
+        # Batch.get_deployment_layout() level: 22 HDD data devices are
+        # passed (11 of them already deployed and unavailable), together
+        # with a nearly-full NVMe db device and an empty one.  The layout
+        # must plan the 11 new OSDs, each with a 242.14 GB db volume on
+        # the empty NVMe, instead of exiting with "242.14 GB was
+        # requested for block_db_size, but only 86.55 MB can be
+        # fulfilled".
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        data_devs = []
+        for n, c in enumerate('bcdefghiklmnopqrstuvwx'):
+            dev = mock_device_generator(path='sd%s' % c)
+            # the first 11 disks are already deployed OSDs: cephadm still
+            # passes them to ceph-volume, but they are unavailable
+            dev.available_lvm = n >= 11
+            dev.vg_size = [16000000000000]
+            dev.vg_free = [16000000000000]
+            data_devs.append(dev)
+        full_dev = mock_device_generator(path='nvme0n1',
+                                         vg_name='ceph-63a82b01',
+                                         vg_size=[3200000000000],
+                                         vg_free=[998296780],
+                                         number_lvs=11)
+        empty_dev = mock_device_generator(path='nvme1n1')
+        empty_dev.vgs = []
+        empty_dev.lvs = []
+        empty_dev.vg_size = [2980000000000]
+        empty_dev.vg_free = [2980000000000]
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       devices=data_devs,
+                       db_devices=[full_dev, empty_dev],
+                       wal_devices=[],
+                       objectstore='bluestore',
+                       block_db_size=disk.Size(b=260000000000),
+                       block_db_slots=None,
+                       block_wal_size=None,
+                       block_wal_slots=None,
+                       dmcrypt=False,
+                       data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=False)
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        assert len(plan) == 11
+        for osd in plan:
+            assert osd.fast is not None
+            assert osd.fast.path == empty_dev.path
+            assert osd.fast.abs_size == disk.Size(b=260000000000)
 
     def test_multiple_osds_get_wal_devices(self, factory, conf_ceph_stub, mock_device_generator):
         """
