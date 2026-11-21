@@ -328,6 +328,9 @@ int CrushCompiler::decompile(ostream &out)
 	<< crush.get_msr_collision_tries()
 	<< "\n";
   }
+  // not a tunable, but the text format has nowhere else to put it
+  if (crush.get_weight_shift() != 0)
+    out << "tunable weight_shift " << crush.get_weight_shift() << "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -565,6 +568,14 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_msr_descents(val);
   else if (name == "msr_collision_tries")
     crush.set_msr_collision_tries(val);
+  else if (name == "weight_shift") {
+    if (val < 0 || (unsigned)val > CRUSH_MAX_WEIGHT_SHIFT) {
+      err << "weight_shift must be between 0 and " << CRUSH_MAX_WEIGHT_SHIFT
+	  << std::endl;
+      return -1;
+    }
+    crush.set_weight_shift(val);
+  }
   else {
     err << "tunable " << name << " not recognized" << std::endl;
     return -1;
@@ -713,12 +724,21 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	string tag = string_node(sub->children[q++]);
 	if (tag == "weight") {
 	  weight = float_node(sub->children[q]) * (float)0x10000;
+	  // a limit on the raw weight, so the largest device grows with the
+	  // shift.  tunables come before buckets, so the shift is known here.
 	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
-	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
+	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000;
+	    if (crush.get_weight_shift())
+	      err << " (" << ((uint64_t)(CRUSH_MAX_DEVICE_WEIGHT / 0x10000)
+			     << crush.get_weight_shift())
+		  << " TiB at weight_shift " << crush.get_weight_shift() << ")";
+	    err << std::endl;
 	    return -ERANGE;
 	  }
-	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
-	    err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT / 0x10000
+	  else if (weight > CRUSH_MAX_ITEM_WEIGHT && itemid < 0) {
+	    // read as a signed int by the draw; use weight_shift to go bigger
+	    err << "nested bucket weight limited to "
+		<< CRUSH_MAX_ITEM_WEIGHT / 0x10000
 	        << " to prevent overflow" << std::endl;
 	    return -ERANGE;
 	  }

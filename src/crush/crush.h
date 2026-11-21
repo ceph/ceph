@@ -26,8 +26,23 @@
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
 #define CRUSH_MAX_RULES (1<<8)  /* max crush rule id */
 
-#define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
+#define CRUSH_MAX_DEVICE_WEIGHT (1000u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
+
+/*
+ * straw and straw2 (here and in the kernel) read an item weight as a signed
+ * int, so a bucket that another bucket references must stay below this.
+ * Only a root may go up to CRUSH_MAX_BUCKET_WEIGHT.
+ */
+#define CRUSH_MAX_ITEM_WEIGHT 0x7fffffffu
+
+/*
+ * A weight of 1.0 stands for 2^(40 + crush_map.weight_shift) bytes: 1 TiB at
+ * the default shift of 0.  Raising the shift and scaling every weight down to
+ * match lets one root describe more than ~65 PiB.  Placement depends only on
+ * weight ratios, so it does not change.
+ */
+#define CRUSH_MAX_WEIGHT_SHIFT 16u
 
 #define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
 /** @ingroup API
@@ -461,6 +476,9 @@ struct crush_map {
 	 * minimize confusion (bucket type values start at 1).
 	 */
 	__u32 allowed_bucket_algs;
+
+	/*! see CRUSH_MAX_WEIGHT_SHIFT; not used by crush_do_rule() */
+	__u32 weight_shift;
 
 	__u32 *choose_tries;
 #endif
