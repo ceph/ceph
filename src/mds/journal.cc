@@ -100,6 +100,41 @@ struct BatchStoredBacktrace : public MDSIOContext {
   }
 };
 
+/*
+ * The backtrace writes of one expiring segment.  MDLog issues them, with
+ * those of the other expiring segments, at most
+ * mds_log_expire_backtrace_max_inflight at a time.
+ */
+struct BacktraceBatch {
+  MDSRank *mds;
+  MDSContext *fin;
+  std::vector<CInodeCommitOperations> ops_vec;
+  size_t next = 0;     // next entry of ops_vec to issue
+  size_t pending;      // entries not completed yet
+  int ret = 0;
+
+  BacktraceBatch(MDSRank *m, MDSContext *f,
+		 std::vector<CInodeCommitOperations>&& ops) :
+    mds(m), fin(f), ops_vec(std::move(ops)), pending(ops_vec.size()) {}
+};
+
+// Back to the finisher thread, where MDLog keeps its count.
+struct C_BacktraceOpDone : public Context {
+  std::shared_ptr<BacktraceBatch> batch;
+  explicit C_BacktraceOpDone(std::shared_ptr<BacktraceBatch> b) : batch(std::move(b)) {}
+  void finish(int r) override {
+    batch->mds->mdlog->backtrace_op_done(batch, r);
+  }
+};
+
+struct C_BacktraceOpCommitted : public Context {
+  std::shared_ptr<BacktraceBatch> batch;
+  explicit C_BacktraceOpCommitted(std::shared_ptr<BacktraceBatch> b) : batch(std::move(b)) {}
+  void finish(int r) override {
+    batch->mds->finisher->queue(new C_BacktraceOpDone(std::move(batch)), r);
+  }
+};
+
 struct BatchCommitBacktrace : public Context {
   MDSRank *mds;
   MDSContext *fin;
@@ -109,20 +144,56 @@ struct BatchCommitBacktrace : public Context {
 		       std::vector<CInodeCommitOperations>&& ops) :
     mds(m), fin(f), ops_vec(std::move(ops)) {}
   void finish(int r) override {
-    C_GatherBuilder gather(g_ceph_context);
-
-    for (auto &op : ops_vec) {
-      op.in->_commit_ops(r, gather, op.ops_vec, op.bt);
-      op.ops_vec.clear();
-      op.bt.clear();
+    if (r < 0) {
+      mds->handle_write_error_with_lock(r);
+      return;
     }
-    ceph_assert(gather.has_subs());
-    gather.set_finisher(new C_OnFinisher(
-			  new BatchStoredBacktrace(mds, fin, std::move(ops_vec)),
-			  mds->finisher));
-    gather.activate();
+    ceph_assert(!ops_vec.empty());
+    mds->mdlog->queue_backtrace_batch(
+      std::make_shared<BacktraceBatch>(mds, fin, std::move(ops_vec)));
   }
 };
+
+void MDLog::queue_backtrace_batch(std::shared_ptr<BacktraceBatch> batch)
+{
+  backtrace_batches.push_back(std::move(batch));
+  issue_backtraces();
+}
+
+void MDLog::issue_backtraces()
+{
+  const uint64_t max = g_conf().get_val<uint64_t>(
+    "mds_log_expire_backtrace_max_inflight");
+  while (!backtrace_batches.empty() &&
+	 (max == 0 || backtrace_inflight < max)) {
+    auto batch = backtrace_batches.front();
+    auto &op = batch->ops_vec[batch->next++];
+    if (batch->next == batch->ops_vec.size())
+      backtrace_batches.pop_front();
+    ++backtrace_inflight;
+    C_GatherBuilder gather(g_ceph_context, new C_BacktraceOpCommitted(batch));
+    op.in->_commit_ops(0, gather, op.ops_vec, op.bt);
+    op.ops_vec.clear();
+    op.bt.clear();
+    ceph_assert(gather.has_subs());
+    gather.activate();
+  }
+}
+
+void MDLog::backtrace_op_done(std::shared_ptr<BacktraceBatch> batch, int r)
+{
+  ceph_assert(backtrace_inflight > 0);
+  --backtrace_inflight;
+  if (r < 0 && batch->ret == 0)
+    batch->ret = r;
+  if (--batch->pending == 0) {
+    auto mds = batch->mds;
+    mds->finisher->queue(
+      new BatchStoredBacktrace(mds, batch->fin, std::move(batch->ops_vec)),
+      batch->ret);
+  }
+  issue_backtraces();
+}
 
 void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio)
 {

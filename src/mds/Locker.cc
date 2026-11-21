@@ -5170,6 +5170,14 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
   }
+
+  // The gather also waits for the locks held here, often by requests that
+  // were early-replied and drop them only once journaled.  The requests
+  // that wait for this lock may all be on the replicas, where nudge_log()
+  // cannot reach our log: flush it rather than wait for the next tick, as
+  // the replicas do when they get LOCK_AC_LOCK.
+  if (lock->is_unstable_and_locked())
+    mds->mdlog->flush();
 }
 
 
