@@ -583,7 +583,7 @@ Prefer an owning return value when the transaction body produces one new value.
 Staging is useful for output parameters or several existing local values.
 
 ```cpp
-// Recompute a D4N bucket's cached-byte count without counting a replay twice.
+// Recompute a bucket's cached-byte count without counting a replay twice:
 std::uint64_t cached_bytes = 0;
 auto txr = lfdb::make_transactor(dbh);
 
@@ -591,7 +591,7 @@ txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
   bytes = 0;
 
   for (const auto& block :
-       lfdb::scan<CacheBlock>(txn, object_range(bucket_id)) |
+       lfdb::scan<block_info>(txn, object_range(bucket_id)) |
          std::views::values) {
     bytes += block.size;
   }
@@ -602,8 +602,8 @@ If you declare a proxy ahead of time, move it into the transactor because it
 represents exactly one invocation's staging state:
 
 ```cpp
-// Rebuild a D4N block listing without copying its previous contents.
-std::vector<CacheBlock> blocks;
+// Rebuild a block listing without copying its previous contents:
+std::vector<block_info> blocks;
 auto blocks_prx = lfdb::staged(std::in_place, blocks);
 auto txr = lfdb::make_transactor(dbh);
 
@@ -1580,7 +1580,7 @@ need delimiter escaping by hand; the Content layer treats bucket, object, block
 id, and size as separate key segments.
 
 ```cpp
-fdbc::compiled_key block_index_key(const CacheBlock *block)
+fdbc::compiled_key block_index_key(const block_info *block)
 {
   return fdbc::keyspace("object-cache") / "block" / block->bucket_name /
          block->object_name / fmt::format("{:020}", block->block_id) /
@@ -1594,7 +1594,7 @@ Scan all cached blocks for one object by selecting the object-block prefix:
 const auto object_blocks =
   fdbc::keyspace("object-cache") / "block" / bucket_id / object_name;
 
-for (const auto& [key, block] : lfdb::scan<CacheBlock>(dbh, fdbc::prefix(object_blocks))) {
+for (const auto& [key, block] : lfdb::scan<block_info>(dbh, fdbc::prefix(object_blocks))) {
   consume_block(key, block);
 }
 ```
@@ -2077,7 +2077,7 @@ struct object_block
 };
 
 auto object_root = [](std::string_view bucket_id, std::string_view object_name) {
-  return fdbc::keyspace("d4n") / "object" / bucket_id / object_name;
+  return fdbc::keyspace("example") / "object" / bucket_id / object_name;
 };
 
 const auto object = object_root(bucket_id, object_name);
@@ -2100,11 +2100,11 @@ const auto object = object_root(bucket_id, object_name);
 lfdb::set(txn, object / "head", metadata);
 lfdb::set(txn, object / "block" / fmt::format("{:020}", block.offset), block);
 lfdb::set(txn,
-          lfdb::versioned("d4n/event/" + std::string(bucket_id) + "/",
+          lfdb::versioned("example/event/" + std::string(bucket_id) + "/",
                           "/" + std::string(object_name) + "/put",
                           event_version),
           "put");
-lfdb::atomic::add(txn, "d4n/stats/object-writes", std::uint64_t{1});
+lfdb::atomic::add(txn, "example/stats/object-writes", std::uint64_t{1});
 
 lfdb::commit(txn).value();
 publish_ordered_event(event_version.resolved_bytes());
@@ -2123,10 +2123,10 @@ the counter again. Use a durable operation marker when automatic replay is neede
 
 ```cpp
 auto listing_key = [](std::string_view bucket_id, std::string_view object_name) {
-  return fdbc::keyspace("d4n") / "listing" / bucket_id / object_name;
+  return fdbc::keyspace("example") / "listing" / bucket_id / object_name;
 };
 
-const auto listing = fdbc::keyspace("d4n") / "listing" / bucket_id;
+const auto listing = fdbc::keyspace("example") / "listing" / bucket_id;
 
 auto read_page = [&](auto&& selection) {
   auto rows = lfdb::scan<object_summary>(
@@ -2155,7 +2155,7 @@ helper keeps the continuation check out of the application loop.
 ### Snapshot Audit Read
 
 ```cpp
-const auto objects = fdbc::keyspace("d4n") / "object" / bucket_id;
+const auto objects = fdbc::keyspace("example") / "object" / bucket_id;
 
 auto txn = lfdb::make_transaction(dbh);
 
@@ -2197,7 +2197,7 @@ read those records serializably or mark their range as a conflict dependency.
 ### Maintenance Pass
 
 ```cpp
-const auto cache = fdbc::keyspace("d4n") / "cache" / bucket_id;
+const auto cache = fdbc::keyspace("example") / "cache" / bucket_id;
 const auto reserved = cache / ".internal";
 const auto tombstones = cache / ".tombstone";
 
@@ -2215,7 +2215,7 @@ auto txr = lfdb::make_transactor(dbh);
 for (const auto& block : lfdb::blocks<cache_metadata>(dbh, old_visible_cache)) {
   txr([&](auto& txn) {
     for (const auto& [key, metadata] : block) {
-      lfdb::set(txn, "d4n/archive/" + key, metadata);
+      lfdb::set(txn, "example/archive/" + key, metadata);
       lfdb::erase(txn, key);
     }
   }).value();
