@@ -494,6 +494,11 @@ as follows:
   fully replaces the existing list for that field; unspecified fields are left
   unchanged.
 
+:command:`oidc-provider invalidate-jwks-cache`
+  Invalidate cached JSON Web Key Sets for an OIDC provider. Each radosgw
+  refetches the keys on its next request using the updated provider metadata.
+  Specify ``--provider-url`` and, for an account-scoped provider, ``--account-id``.
+
 :command:`oidc-provider get`
   Get information about an OIDC provider.
 

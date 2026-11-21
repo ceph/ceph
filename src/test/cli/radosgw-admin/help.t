@@ -194,6 +194,7 @@
     role update                      update max_session_duration of a role
     oidc-provider create             create an OIDC provider (global if no --account-id)
     oidc-provider modify             update thumbprints and/or client-ids of an OIDC provider
+    oidc-provider invalidate-jwks-cache  invalidate cached JWKS for an OIDC provider
     oidc-provider get                get an OIDC provider
     oidc-provider delete             delete an OIDC provider
     oidc-provider list               list OIDC providers
