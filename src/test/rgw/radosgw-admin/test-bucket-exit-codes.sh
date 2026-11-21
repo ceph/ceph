@@ -1512,6 +1512,10 @@ check_cluster "list: --access-key twice" 22 -- bucket --access-key foo list --ac
 check "list: unknown flag after --access-key" 22 bucket --access-key foo --backet name list
 check_cluster "list: --access-key with misplaced --bucket" 22 -- bucket --access-key foo --bucket name list
 
+# The Swift lookup path must preserve the initialization error too (tracker #83001).
+check_cluster "list: unknown Swift access key" 22 -- \
+  bucket list --key-type swift --access-key no-such-swift-user
+
 # eaten command word: whatever survives is parsed as the command
 check_cluster "stats: eaten 'list', sibling command survives" 22 -- bucket --access-key list stats
 check_cluster "stats: eaten 'list', underscore spelling" 22 -- bucket --access_key list stats
