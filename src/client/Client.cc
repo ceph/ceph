@@ -479,6 +479,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age,
 				  true));
+  // cached reads take the read gate, not oc_lock (see _read_fast())
+  objectcacher->enable_read_gate();
 }
 
 
@@ -4446,7 +4448,7 @@ int Client::get_caps_used(Inode *in)
 {
   unsigned used = in->caps_used();
   if (!(used & CEPH_CAP_FILE_CACHE) &&
-      !oc_call([&] { return objectcacher->set_is_empty(&in->oset); }))
+      !oc_peek([&] { return objectcacher->set_is_empty(&in->oset); }))
     used |= CEPH_CAP_FILE_CACHE;
   return used;
 }
@@ -5110,7 +5112,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
-  if (!oc_call([&] { return in->oset.dirty_or_tx != 0; })) {
+  if (!oc_peek([&] { return in->oset.dirty_or_tx != 0; })) {
     ldout(cct, 10) << " nothing to flush" << dendl;
     onfinish->complete(0);
     return true;
@@ -5133,7 +5135,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
 void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
-  if (!oc_call([&] { return in->oset.dirty_or_tx != 0; })) {
+  if (!oc_peek([&] { return in->oset.dirty_or_tx != 0; })) {
     ldout(cct, 10) << " nothing to flush" << dendl;
     return;
   }
@@ -5177,12 +5179,16 @@ Client::OCScope::OCScope(Client *c) : client(c)
   // may be opened from within another one
   ceph_assert(oc_scope == nullptr);
   client->oc_lock.lock();
+  // whatever we do under oc_lock may change the cache: keep the readers
+  // of the read gate out
+  client->objectcacher->gate_shut();
   oc_scope = this;
 }
 
 Client::OCScope::~OCScope()
 {
   oc_scope = nullptr;
+  client->objectcacher->gate_open();
   client->oc_lock.unlock();
   for (auto& [c, r] : pending) {
     if (oc_fast_path) {
@@ -8160,7 +8166,7 @@ void Client::tick()
 
   if (objectcacher) {
     logger->set(l_c_osdc_dirty,
-                oc_call([this] { return objectcacher->get_stat_dirty(); }));
+                oc_peek([this] { return objectcacher->get_stat_dirty(); }));
   }
 
   if (logger) {
@@ -12733,13 +12739,25 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
   // it needs no oc_ctx() wrapper (and allocation).
   C_SaferCond cond("Client::_read_fast");
   bool would_wait = false;
-  int r = oc_call([&] {
-    if (nowait && !objectcacher->is_readable(&in->oset, rd->extents, in->snapid)) {
-      would_wait = true;   // a non-blocking caller must not wait here
-      return 0;
-    }
-    return objectcacher->readx(rd, &in->oset, &cond);
-  });
+  // A plain hit through the read gate, without oc_lock; else under it.
+  // When the gate is shut, wait for whoever shut it on oc_lock, but do
+  // not take oc_lock to read (which shuts the gate): each reader that did
+  // would keep the others out in turn, and under load the gate would stay
+  // shut for good.
+  int r = objectcacher->read_hit(rd, &in->oset);
+  for (int tries = 0; r == -EBUSY && tries < 4; ++tries) {
+    { std::lock_guard l(oc_lock); }
+    r = objectcacher->read_hit(rd, &in->oset);
+  }
+  if (r == -EAGAIN || r == -EBUSY) {
+    r = oc_call([&] {
+      if (nowait && !objectcacher->is_readable(&in->oset, rd->extents, in->snapid)) {
+        would_wait = true;   // a non-blocking caller must not wait here
+        return 0;
+      }
+      return objectcacher->readx(rd, &in->oset, &cond);
+    });
+  }
   if (would_wait) {
     delete rd;
     il.lock();

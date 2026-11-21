@@ -1534,6 +1534,16 @@ protected:
     OCScope s(this);
     return f();
   }
+  // oc_call() for an @f that only looks at the cache (no Contexts, no
+  // changes): through the ObjectCacher read gate when it is open, so the
+  // close() and check_caps() of a clean file do not take oc_lock
+  template <typename F>
+  auto oc_peek(F&& f) {
+    decltype(f()) r{};
+    if (objectcacher->gate_peek([&] { r = f(); }))
+      return r;
+    return oc_call(std::forward<F>(f));
+  }
 
   class C_OCDefer : public Context {
   public:
