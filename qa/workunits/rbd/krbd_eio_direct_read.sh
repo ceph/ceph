@@ -65,7 +65,12 @@ ceph osd pool ls detail | grep "'$EC_POOL'" | grep -q split_reads
 rbd create --size $(((OBJ_INDEX + 2) * OBJECT_SIZE)) \
     --data-pool "$EC_POOL" "$POOL/$IMAGE"
 DEV=$(sudo rbd device map "$POOL/$IMAGE")
-OPTIONS=$(ceph-conf --name client.${CEPH_ID:-admin} \
+# The options the image was really mapped with: krbd's config_info, the "rbd
+# add" string (root only).  rbd_default_map_options can come from ceph.conf
+# (teuthology's map-options facet) or from CEPH_ARGS, and ceph-conf --lookup
+# sees only the first, so it is the fallback for a kernel without the file.
+OPTIONS=$(sudo cat "/sys/bus/rbd/devices/${DEV#/dev/rbd}/config_info" 2>/dev/null || true)
+[ -n "$OPTIONS" ] || OPTIONS=$(ceph-conf --name client.${CEPH_ID:-admin} \
     --lookup rbd_default_map_options 2>/dev/null || true)
 if ! [[ $OPTIONS =~ read_from_replica=(balance|localize) ]]; then
     echo "SKIP: image not mapped balance/localize (map options: '$OPTIONS')"
