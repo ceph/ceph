@@ -1072,15 +1072,6 @@ int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uin
 					  quota, obj_size, y, check_size_only);
 }
 
-int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
-{
-  for(auto& it : new_attrs) {
-	  attrs[it.first] = it.second;
-  }
-  return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				attrs, &get_info().objv_tracker, y, dpp);
-}
-
 int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
   return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs, store->ctl()->bucket);
