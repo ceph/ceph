@@ -65,7 +65,7 @@ void ReplicaReservations::release_all()
 
   // send 'release' messages to all replicas we have managed to reserve
   for (const auto& peer : replicas) {
-    auto m = make_message<MOSDScrubReserve>(
+    auto m = crimson::make_message<MOSDScrubReserve>(
       spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::RELEASE,
       m_pg->get_pg_whoami(), 0);
     std::ignore = m_pg->get_shard_services().send_to_osd(peer.osd, std::move(m), epoch);
@@ -190,7 +190,7 @@ bool ReplicaReservations::send_next_reservation_or_complete()
   const auto peer = *m_next_to_request;
   const auto epoch = m_pg->get_osdmap_epoch();
   m_last_request_sent_nonce++;
-  auto m = make_message<MOSDScrubReserve>(
+  auto m = crimson::make_message<MOSDScrubReserve>(
       spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST, m_pg->get_pg_whoami(),
       m_last_request_sent_nonce);
   std::ignore = m_pg->get_shard_services().send_to_osd(peer.osd, std::move(m), epoch);
