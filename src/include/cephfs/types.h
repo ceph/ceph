@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "include/client_t.h"
+#include "include/ceph_features.h"
 #include "include/compact_set.h"
 #include "include/encoding.h"
 #include "include/fs_types.h"
@@ -929,6 +930,8 @@ struct inode_t {
   }
 
   void encode(ceph::buffer::list &bl, uint64_t features) const;
+  // used to dodge encoding when counting dentry length
+  uint64_t get_variable_encoded_len(uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static void client_ranges_cb(client_range_map& c, JSONObj *obj);
@@ -1115,6 +1118,30 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(optmetadata, bl, features);
 
   ENCODE_FINISH(bl);
+}
+
+template<template<typename> class Allocator>
+uint64_t inode_t<Allocator>::get_variable_encoded_len(uint64_t features) const
+{
+  constexpr uint64_t struct_header_len = sizeof(__u8) + sizeof(__u8) + sizeof(__u32);
+  uint64_t len = 0;
+  if (features & CEPH_FEATURE_FS_FILE_LAYOUT_V2) {
+    len += layout.pool_ns.length(); // the legacy layout has no namespace
+  }
+  len += old_pools.size() * sizeof(int64_t);
+  len += client_ranges.size() *
+    // client_writeable_range_t::encode's range.first|last and follows adds three uint64_t's
+    (sizeof(int64_t) + struct_header_len + 3 * sizeof(uint64_t));
+  len += inline_data.length();
+  len += stray_prior_path.length();
+  len += fscrypt_auth.size() + fscrypt_file.size() + fscrypt_last_block.size();
+  if (optmetadata.size()) {
+    // its entries are variants so encode it
+    ceph::buffer::list bl;
+    optmetadata.encode(bl, features);
+    len += bl.length() - struct_header_len - sizeof(__u32);
+  }
+  return len;
 }
 
 template<template<typename> class Allocator>

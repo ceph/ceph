@@ -92,6 +92,14 @@ public:
   int64_t get_bal_split_size() const {
     return bal_split_size;
   }
+  uint64_t get_bal_split_bytes() const {
+    return bal_split_bytes;
+  }
+  // a split by bytes leaves each new fragment about bal_split_bytes /
+  // 2 ^ bal_split_bits, so merging only below that doesn't undo it
+  uint64_t get_bal_merge_bytes() const {
+    return bal_split_bytes >> bal_split_bits;
+  }
   double get_bal_fragment_fast_factor() const {
     return bal_fragment_fast_factor;
   }
@@ -155,6 +163,7 @@ private:
   double bal_fragment_fast_factor;
   int64_t bal_split_bits;
   int64_t bal_split_size;
+  uint64_t bal_split_bytes;
   int64_t bal_merge_size;
   int64_t num_bal_times;
 
