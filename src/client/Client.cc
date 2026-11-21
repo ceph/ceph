@@ -7824,6 +7824,7 @@ void Client::tick()
   }
 
   renew_and_flush_cap_releases();
+  _ll_expire_unprotected_pages();
 
   // delayed caps
   xlist<Inode*>::iterator p = delayed_list.begin();
@@ -8325,6 +8326,23 @@ bool Client::_ll_lookup_revalidates(Inode *parent, const char *name)
   bool r = !dn->ll_expires.is_zero() && ceph_clock_now() < dn->ll_expires;
   dn->ll_expires = utime_t();
   return r;
+}
+
+// bound how long a FUSE kernel serves pages it cached from reads without Fc
+void Client::_ll_expire_unprotected_pages()
+{
+  auto now = ceph::coarse_mono_clock::now();
+  for (auto p = ll_unprotected_pages.begin();
+       p != ll_unprotected_pages.end(); ) {
+    if (now <= p->second + close_to_open_timeout) {
+      ++p;
+      continue;
+    }
+    auto q = inode_map.find(p->first);
+    if (q != inode_map.end())
+      _schedule_invalidate_callback(q->second, 0, 0);
+    p = ll_unprotected_pages.erase(p);
+  }
 }
 
 bool Client::_dentry_valid(const Dentry *dn)
@@ -12487,6 +12505,14 @@ retry:
   if (f->flags & O_DIRECT)
     have &= ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO);
 
+  // a FUSE kernel caches what this read returns, and without Fc nothing
+  // will invalidate it: tick() does when the timeout has passed
+  if (ino_invalidate_cb && f->close_to_open &&
+      !(have & CEPH_CAP_FILE_CACHE) &&
+      close_to_open_timeout > std::chrono::seconds::zero())
+    ll_unprotected_pages.try_emplace(in->vino(),
+				     ceph::coarse_mono_clock::now());
+
   if (in->inline_version < CEPH_INLINE_NONE) {
     uint32_t len = in->inline_data.length();
     uint64_t endoff = offset + size;
@@ -15194,6 +15220,10 @@ void Client::_mark_lazyio_cache_stale(Inode *in)
 
   in->lazyio_cache_stale = true;
   in->lazyio_validated_at = ceph::coarse_mono_clock::now();
+  // a FUSE kernel keeps the pages it has: see _ll_expire_unprotected_pages()
+  if (ino_invalidate_cb &&
+      close_to_open_timeout > std::chrono::seconds::zero())
+    ll_unprotected_pages.try_emplace(in->vino(), in->lazyio_validated_at);
 }
 
 /*

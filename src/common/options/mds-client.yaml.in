@@ -367,7 +367,9 @@ options:
   long_desc: Upper bound on how long a client with client_close_to_open enabled
     keeps serving reads from a cache that is no longer protected by the MDS,
     comparable to the acregmax mount option of NFS.  The cache is revalidated
-    on the first read after the interval has expired.  Setting this to zero
+    on the first read after the interval has expired; ceph-fuse has the kernel
+    drop its pages of such a file once it has, on the client's next tick.
+    Setting this to zero
     disables the timer, which leaves open() and locking as the only points
     where a cache is revalidated.
   fmt_desc: Set how long a client may serve cached file data of a shared file

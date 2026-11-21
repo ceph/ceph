@@ -121,9 +121,8 @@ regular files, without any application changes:
   ``client_close_to_open_timeout`` (one minute by default, comparable to the
   ``acregmax`` mount option of NFS).  Setting it to zero leaves ``open()`` and
   locking as the only points where a cache is revalidated.  Through
-  ``ceph-fuse``, reads the kernel answers out of its page cache never reach
-  the client, so for them only ``open()`` and locking revalidate: the kernel
-  page cache is dropped on an open that found the cache unprotected.
+  ``ceph-fuse`` the kernel's page cache is held to the same limit, which
+  needs ``fuse_use_invalidate_cb`` (the default) or libfuse 3.
 
 Only file data consistency changes.  Directory listings, dentries, inode
 attributes, permissions and quota remain as consistent as they always were.

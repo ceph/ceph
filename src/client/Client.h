@@ -2288,6 +2288,9 @@ private:
   }
   bool _attr_cache_valid(const Inode *in, int mask) const;
   void _ll_attrs_changed(Inode *in);
+  void _ll_expire_unprotected_pages();
+  // inodes whose pages a FUSE kernel caches from reads without Fc, and since when
+  std::map<vinodeno_t, ceph::coarse_mono_time> ll_unprotected_pages;
   void _forget_cached_attrs(Inode *in);
   bool _dentry_cache_valid(const Dentry *dn) const;
   bool _ll_lookup_revalidates(Inode *parent, const char *name);
