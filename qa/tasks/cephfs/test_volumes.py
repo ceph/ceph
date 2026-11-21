@@ -3099,6 +3099,19 @@ class TestSubvolumes(TestVolumesHelper):
         get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
         self.assertEqual(get_earmark.rstrip('\n'), earmark)
     
+    def test_subvolume_set_earmark_with_positional_argument(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # set earmark
+        earmark = "smb"
+        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, earmark)
+
+        # get earmark
+        get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
+        self.assertEqual(get_earmark.rstrip('\n'), earmark)
+    
     def test_subvolume_clear_earmark(self):
         # create subvolume
         subvolume = self._gen_subvol_name()
@@ -3285,6 +3298,19 @@ class TestSubvolumes(TestVolumesHelper):
 
         enctag = "tag2"
         self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag)
+
+        # get enctag
+        get_enctag = self._fs_cmd("subvolume", "enctag", "get", self.volname, subvolume)
+        self.assertEqual(get_enctag.rstrip('\n'), enctag)
+
+    def test_subvolume_set_enctag_with_positional_argument(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # set enctag
+        enctag = "enc_tag"
+        self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, enctag)
 
         # get enctag
         get_enctag = self._fs_cmd("subvolume", "enctag", "get", self.volname, subvolume)

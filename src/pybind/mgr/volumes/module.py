@@ -301,7 +301,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume earmark set '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false '
+                   'name=group_name,type=CephString,req=false,positional=false '
                    'name=earmark,type=CephString ',
             'desc': "Set earmark for a subvolume",
             'perm': 'rw'
@@ -326,7 +326,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume enctag set '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false '
+                   'name=group_name,type=CephString,req=false,positional=false '
                    'name=enctag,type=CephString ',
             'desc': "Set encryption tag for a subvolume",
             'perm': 'rw'
