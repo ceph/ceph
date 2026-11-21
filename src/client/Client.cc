@@ -7789,12 +7789,19 @@ void Client::_unmount(bool abort)
     _release_fh(fh);
   }
 
-  while (!ll_unclosed_fh_set.empty()) {
-    set<Fh*>::iterator it = ll_unclosed_fh_set.begin();
-    Fh *fh = *it;
-    ll_unclosed_fh_set.erase(fh);
-    ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *(fh->inode) << dendl;
-    _release_fh(fh);
+  for (auto& st : fh_stripes) {
+    while (true) {
+      Fh *fh;
+      {
+        std::scoped_lock l(st.lock);
+        if (st.fhs.empty())
+          break;
+        fh = *st.fhs.begin();
+        st.fhs.erase(fh);
+      }
+      ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *(fh->inode) << dendl;
+      _release_fh(fh);
+    }
   }
 
   while (!opened_dirs.empty()) {
@@ -11599,6 +11606,16 @@ int Client::_release_fh(Fh *f)
   _put_fh(f);
 
   return err;
+}
+
+bool Client::_ll_get_fh(Fh *f)
+{
+  auto& st = fh_stripe(f);
+  std::shared_lock l(st.lock);
+  if (!st.fhs.count(f))
+    return false;
+  f->get();
+  return true;
 }
 
 void Client::_put_fh(Fh *f)
@@ -17924,7 +17941,7 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
  out:
   Fh *fhptr = fhp ? *fhp : NULL;
   if (fhptr) {
-    ll_unclosed_fh_set.insert(fhptr);
+    ll_fh_add(fhptr);
   }
   tout(cct) << (uintptr_t)fhptr << std::endl;
   ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) <<
@@ -17997,7 +18014,7 @@ int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
 
 out:
   if (*fhp) {
-    ll_unclosed_fh_set.insert(*fhp);
+    ll_fh_add(*fhp);
   }
 
   #ifdef _WIN32
@@ -18720,7 +18737,7 @@ int Client::ll_release(Fh *fh)
 
   std::scoped_lock lock(client_lock);
 
-  ll_unclosed_fh_set.erase(fh);
+  ll_fh_remove(fh);
   return _release_fh(fh);
 }
 

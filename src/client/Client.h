@@ -1324,8 +1324,13 @@ protected:
   }
   int get_fd_inode(int fd, InodeRef *in);
   bool _ll_fh_exists(Fh *f) {
-    return ll_unclosed_fh_set.count(f);
+    auto& st = fh_stripe(f);
+    std::shared_lock l(st.lock);
+    return st.fhs.count(f);
   }
+  // check an Fh handed in by the user without client_lock and take a ref on
+  // it for the duration of the call; drop it with _put_fh()
+  bool _ll_get_fh(Fh *f);
 
   // helpers
   void wake_up_session_caps(MetaSession *s, bool reconnect);
@@ -2577,7 +2582,30 @@ private:
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   std::unordered_map<int, Fh*> fd_map;
-  set<Fh*> ll_unclosed_fh_set;
+  // The Fhs handed out by the ll_ API and not closed yet (changed under
+  // client_lock too), in stripes by address, each under its own lock, a
+  // leaf lock, so the data path can check an Fh without client_lock, and
+  // threads checking different Fhs do not share one lock's cache line.
+  // A stripe changes on open/close only; the checks take it shared.
+  struct alignas(64) FhStripe {
+    ceph::shared_mutex lock = ceph::make_shared_mutex("Client::fh_lock");
+    std::set<Fh*> fhs;
+  };
+  static constexpr unsigned FH_STRIPES = 64;
+  FhStripe fh_stripes[FH_STRIPES];
+  FhStripe& fh_stripe(Fh *f) {
+    return fh_stripes[(reinterpret_cast<uintptr_t>(f) >> 6) % FH_STRIPES];
+  }
+  void ll_fh_add(Fh *f) {
+    auto& st = fh_stripe(f);
+    std::scoped_lock l(st.lock);
+    st.fhs.insert(f);
+  }
+  void ll_fh_remove(Fh *f) {
+    auto& st = fh_stripe(f);
+    std::scoped_lock l(st.lock);
+    st.fhs.erase(f);
+  }
   std::unordered_set<dir_result_t*> opened_dirs;
   uint64_t fd_gen = 1;
 
