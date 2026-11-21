@@ -265,6 +265,15 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
                  << " r = " << r << dendl;
 
   if (!active) {
+    if (error) {
+      // The handshake failed before the QP became active (e.g. the peer
+      // closed the TCP side channel before sending its cm meta). Report
+      // the fault so the owning connection is torn down; otherwise the
+      // QP and the TCP fd are never released.
+      ldout(cct, 1) << __func__ << " handshake failed before ib became active: "
+                    << cpp_strerror(error) << dendl;
+      return -error;
+    }
     ldout(cct, 1) << __func__ << " when ib not active. len: " << len << dendl;
     return -EAGAIN;
   }
