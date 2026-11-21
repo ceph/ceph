@@ -29,6 +29,7 @@ from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
+
 class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     Version 1 subvolumes creates a subvolume with path as follows,
@@ -46,9 +47,34 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     VERSION = 1
 
-    @staticmethod
-    def version():
-        return SubvolumeV1.VERSION
+    def __init__(self, mgr, fs, spec, group, name, legacy=False):
+        super().__init__(mgr, fs, spec, group, name, legacy)
+        if self.legacy:
+            self._create_legacy_meta_file()
+
+    def _create_legacy_meta_file(self):
+        assert self.legacy_mode
+
+        try:
+            self.fs.mkdirs(self.legacy_dir, 0o700)
+        except cephfs.Error as e:
+            raise VolumeException(exception=e)
+
+        subvol_type = SubvolumeTypes.TYPE_NORMAL
+        try:
+            init_state = SubvolumeOpSm.get_init_state(subvol_type)
+        except OpSmException as e:
+            raise VolumeException(-errno.EINVAL,
+                                  'subvolume init state could not be fetched.'
+                                  f'exception: {e}')
+
+        # XXX: v0/legacy is only upgradable to v1
+        self.init_config(self.VERSION, subvol_type, self.base_path, init_state)
+
+    # TODO: probably redundant now
+    # for compatibility with v3
+    def has_snap(self):
+        return self.list_snapshots()
 
     @property
     def path(self):
@@ -116,7 +142,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
-            self.init_config(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
+            self.init_config(self.VERSION, subvolume_type, qpath, initial_state)
             self.mark_subvolume()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
@@ -186,7 +212,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
-            self.metadata_mgr.init(SubvolumeV1.VERSION, subvolume_type.value, qpath, initial_state.value)
+            self.metadata_mgr.init(self.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
@@ -706,8 +732,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def create_snapshot(self, snapname):
         try:
             group_snapshot_path = os.path.join(self.group.path,
-                                               self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                                               snapname.encode('utf-8'))
+                                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
+                                            snapname.encode('utf-8'))
             self.fs.stat(group_snapshot_path)
         except cephfs.Error as e:
             if e.args[0] == errno.ENOENT:
@@ -849,7 +875,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return listsnaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
@@ -886,7 +912,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             create_clone_index(self.fs, self.vol_spec)
             with open_clone_index(self.fs, self.vol_spec) as index:
-                track_idx = index.track(tgt_subvolume.base_path)
+                track_idx = index.track(tgt_subvolume.gen_mnt_path())
                 self._add_snap_clone(track_idx, snapname)
         except (IndexException, MetadataMgrException) as e:
             log.warning("error creating clone index: {0}".format(e))
