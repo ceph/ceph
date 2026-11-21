@@ -11,6 +11,7 @@ void cls_refcount_get_op::dump(ceph::Formatter *f) const
 {
   f->dump_string("tag", tag);
   f->dump_int("implicit_ref", (int)implicit_ref);
+  f->dump_string("src_tag", src_tag);
 }
 
 list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
@@ -20,6 +21,7 @@ list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
   ls.emplace_back();
   ls.back().tag = "foo";
   ls.back().implicit_ref = true;
+  ls.back().src_tag = "bar";
   return ls;
 }
 
@@ -105,6 +107,7 @@ void obj_refcount::dump(ceph::Formatter *f) const
   for (const auto& it: retired_refs)
     f->dump_string("ref", it.c_str());
   f->close_section();
+  f->dump_string("wildcard_owner", wildcard_owner);
 }
 
 list<obj_refcount> obj_refcount::generate_test_instances()
@@ -113,5 +116,9 @@ list<obj_refcount> obj_refcount::generate_test_instances()
   ls.emplace_back();
   ls.back().refs.emplace("foo",true);
   ls.back().retired_refs.emplace("bar");
+  ls.emplace_back();
+  ls.back().refs.emplace("",true);
+  ls.back().refs.emplace("copy",true);
+  ls.back().wildcard_owner = "source";
   return ls;
 }

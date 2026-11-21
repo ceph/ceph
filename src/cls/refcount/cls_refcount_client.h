@@ -30,9 +30,15 @@
  * we don't have a tag for this refcount, we consider this tag as a wildcard. So if the refcount
  * is being decreased by an unknown tag and we still have one wildcard tag, we'll accept it
  * as the relevant tag, and the refcount will be decreased.
+ *
+ * A get may pass src_tag, the tag the source object's delete will put. If the wildcard has no
+ * owner and src_tag has no ref of its own, live or retired, src_tag becomes the owner and only
+ * a put with that tag may drop the wildcard. Retired tags are dropped once the wildcard has
+ * an owner or is gone, since a replayed put can no longer drop it.
  */
 
-void cls_refcount_get(librados::ObjectWriteOperation& op, const std::string& tag, bool implicit_ref = false);
+void cls_refcount_get(librados::ObjectWriteOperation& op, const std::string& tag, bool implicit_ref = false,
+                      const std::string& src_tag = {});
 void cls_refcount_put(librados::ObjectWriteOperation& op, const std::string& tag, bool implicit_ref = false);
 void cls_refcount_set(librados::ObjectWriteOperation& op, std::list<std::string>& refs);
 // these overloads which call io_ctx.operate() or io_ctx.exec() should not be called in the rgw.
