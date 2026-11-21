@@ -4,6 +4,7 @@
 #pragma once
 
 #include <seastar/core/future.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/sleep.hh>
 
 #include <boost/intrusive/list.hpp>
@@ -17,6 +18,7 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
+#include "crimson/osd/request_orderer.h"
 #include "crimson/osd/scrub/pg_scrubber.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/utility.h"
@@ -93,6 +95,14 @@ public:
     using ref_t = boost::intrusive_ptr<instance_handle_t>;
     std::optional<ObjectContextLoader::Orderer> obc_orderer;
     PipelineHandle handle;
+    seastar::abort_source admission_abort;
+    std::optional<RequestOrderer<hobject_t>::Turn> admission_turn;
+    seastar::shared_future<> admission_ready;
+
+    void cancel_admission(std::exception_ptr error) {
+      admission_abort.request_abort_ex(error);
+      admission_turn.reset();
+    }
 
     std::tuple<
       CommonPGPipeline::WaitPGReady::BlockingEvent,
@@ -192,6 +202,7 @@ public:
     list_t list;
 
   public:
+    RequestOrderer<hobject_t> admission_orderer;
     void add_request(ClientRequest &request) {
       assert(!request.ordering_hook.is_linked());
       intrusive_ptr_add_ref(&request);
@@ -203,7 +214,7 @@ public:
       intrusive_ptr_release(&request);
     }
     void requeue(Ref<PG> pg);
-    void clear_and_cancel(PG &pg);
+    void clear_and_cancel(PG &pg, std::exception_ptr error);
   };
   void complete_request(PG &pg);
 
