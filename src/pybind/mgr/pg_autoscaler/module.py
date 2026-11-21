@@ -320,8 +320,14 @@ class PgAutoscaler(MgrModule):
         if num < 1.0:
             return 22, "", "threshold cannot be set less than 1.0"
         self.set_module_option("threshold", num)
-        return 0, "threshold updated", ""
-
+        
+        self.log.warning(f"'ceph osd pool set threshold {num}' is deprecated, "
+                         f"use 'ceph config set mgr mgr/pg_autoscaler/threshold {num}' instead")
+        return 0, "threshold updated", (
+                  f"Deprecation warning: 'ceph osd pool set threshold {num}' is deprecated "
+                  "and will be removed in a future release. "
+                  f"Use 'ceph config set mgr mgr/pg_autoscaler/threshold {num}' instead."
+        ) 
     @PGAutoscalerCLICommand.Read("osd pool get threshold")
     def get_scaling_threshold(self) -> Tuple[int, str, str]:
         """
