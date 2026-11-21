@@ -1,0 +1,196 @@
+# Nextest profiles for running test categories.
+# Usage: cargo nextest run -P <profile-name> --features fails_on_nsfs
+#
+# Parallelism model:
+#   S3 data-path tests use unique per-process bucket names and run in
+#   parallel by default.  IAM tests share a fixed entity namespace and
+#   must be serialized (test-group serial-iam).  Quota tests mutate a
+#   shared user and are also serialized (test-group serial-quota).  The
+#   nsfs identity tests write the main and alt users' POSIX identity
+#   rows, which every request from those users resolves, so they are
+#   serialized too (test-group serial-nsfs-identity).  A test that
+#   switches the gateway's access model through the driver hint changes
+#   it for the whole daemon, and every cross-identity test reads it, so
+#   it never runs beside another:  it is out of baseline, runs alone in
+#   all, and has its own profile, access-model-switch, which takes about
+#   a second and runs after baseline.
+#
+# To force serial execution: add --test-threads=1
+#
+# To skip per-test bucket cleanup (inspect disk/cache state after failure):
+#   S3TEST_NO_CLEANUP=1 cargo nextest run -E 'test(foo)' --test-threads=1
+
+# --- Test groups (serialization constraints) ---
+
+[test-groups.serial-iam]
+max-threads = 1
+
+[test-groups.serial-quota]
+max-threads = 1
+
+[test-groups.serial-bench]
+max-threads = 1
+
+[test-groups.serial-nsfs-identity]
+max-threads = 1
+
+# --- Per-module profiles ---
+
+[profile.bucket-list]
+default-filter = 'test(bucket_list::)'
+
+[profile.object-ops]
+default-filter = 'test(object_ops::)'
+
+[profile.multipart]
+default-filter = 'test(multipart::)'
+
+[profile.versioning]
+default-filter = 'test(versioning::)'
+
+[profile.copy]
+default-filter = 'test(copy::)'
+
+[profile.acl]
+default-filter = 'test(acl::)'
+
+[profile.tagging]
+default-filter = 'test(tagging::)'
+
+[profile.conditional]
+default-filter = 'test(conditional::)'
+
+[profile.encryption]
+default-filter = 'test(encryption::)'
+
+[profile.bucket-policy]
+default-filter = 'test(bucket_policy::)'
+
+[profile.object-lock]
+default-filter = 'test(object_lock::)'
+
+[profile.cors]
+default-filter = 'test(cors::)'
+
+[profile.lifecycle]
+default-filter = 'test(lifecycle::)'
+
+[profile.post-object]
+default-filter = 'test(post_object::)'
+
+[profile.bucket-logging]
+default-filter = 'test(bucket_logging::)'
+
+[profile.headers]
+default-filter = 'test(headers::)'
+
+[profile.signing]
+default-filter = 'test(signing::)'
+
+[profile.stress]
+default-filter = 'test(stress::)'
+
+[profile.iam]
+default-filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+
+[[profile.iam.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[profile.role]
+default-filter = 'test(role::)'
+
+[profile.oidc]
+default-filter = 'test(oidc::)'
+
+[profile.sts]
+default-filter = 'test(sts::)'
+
+# --- Composite profiles ---
+
+# Fast pre-commit gate: everything except lifecycle (slow), bucket_logging
+# (not implemented on posix/nsfs), stress (ignored), and the test that
+# switches the access model (profile access-model-switch, run after),
+# and the tests that switch dynamic supplementary groups (profile
+# dynamic-groups, run after).
+#
+[profile.baseline]
+test-threads = 8
+default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::) & !test(=impersonation::test_data_follows_the_access_model) & !test(dynamic_groups::) & !test(role_identity::)'
+
+[[profile.baseline.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[[profile.baseline.overrides]]
+filter = 'test(quota::)'
+test-group = 'serial-quota'
+
+[[profile.baseline.overrides]]
+filter = 'test(identity::) | test(impersonation::) | test(custom_bucket_path::) | test(nsfs_place_bucket::)'
+test-group = 'serial-nsfs-identity'
+
+# The test that switches the gateway's access model, alone:  run it
+# after baseline, against the same gateway.
+[profile.access-model-switch]
+default-filter = 'test(=impersonation::test_data_follows_the_access_model)'
+test-threads = 1
+
+# The tests that switch rgw_nsfs_dynamic_supplemental_groups, alone:  the
+# switch changes what every list-less identity row means.  After
+# baseline, against the same gateway.
+[profile.dynamic-groups]
+default-filter = 'test(dynamic_groups::)'
+test-threads = 1
+
+# The role identity override's test (I9), alone:  the override is
+# daemon-global and the test switches it.  After baseline, against the
+# same gateway.
+[profile.role-identity]
+default-filter = 'test(role_identity::)'
+test-threads = 1
+
+# The membership test alone, run by validate.rs again after
+# `gpasswd -d rgwalice rgwfix`.
+[profile.dynamic-groups-membership]
+default-filter = 'test(=dynamic_groups::test_dynamic_groups_follow_the_membership)'
+test-threads = 1
+
+[profile.basic]
+default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'
+
+# Full suite with parallelism and serialization constraints.
+[profile.all]
+default-filter = 'all()'
+
+[[profile.all.overrides]]
+filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
+test-group = 'serial-iam'
+
+[[profile.all.overrides]]
+filter = 'test(quota::)'
+test-group = 'serial-quota'
+
+[[profile.all.overrides]]
+filter = 'test(identity::) | test(impersonation::) | test(custom_bucket_path::) | test(nsfs_place_bucket::)'
+test-group = 'serial-nsfs-identity'
+
+[[profile.all.overrides]]
+filter = 'test(=impersonation::test_data_follows_the_access_model)'
+threads-required = "num-test-threads"
+
+# The other daemon-wide switches, by hint, as the access model is
+[[profile.all.overrides]]
+filter = 'test(dynamic_groups::) | test(role_identity::)'
+threads-required = "num-test-threads"
+
+# Bench profiles — elbencho workloads, run with --run-ignored=all
+# Smoke: quick sanity check under moderate load
+# Soak: sustained high-thread-count stress test
+[profile.bench-smoke]
+default-filter = 'test(bench_smoke)'
+test-threads = 1
+
+[profile.bench-soak]
+default-filter = 'test(bench_soak)'
+test-threads = 1
