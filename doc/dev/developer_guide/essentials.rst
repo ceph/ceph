@@ -81,9 +81,9 @@ click on `New issue`_.
 Slack
 -----
 
-Ceph developers and users chat on `Ceph's Slack`_.
-
-.. _`Ceph's Slack`: https://join.slack.com/t/ceph-storage/shared_invite/zt-32hkefbs5-f6qZDZLd5U8CYj7drBTHFw
+Ceph developers and users chat on the ``ceph-storage`` Slack workspace. Slack
+invite links expire, so the current invite link is kept in one place: see
+:ref:`Ceph Community Channels <get-involved>`.
 
 .. _mailing-list:
 
