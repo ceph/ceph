@@ -8475,6 +8475,55 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   return 0;
 }
 
+string OSDMonitor::clients_lacking_features(uint64_t features) const
+{
+  // every mon's sessions, as the peons report them with their lease acks
+  FeatureMap m;
+  mon.get_combined_feature_map(&m);
+  ostringstream ss;
+  bool first = true;
+  for (int type : {
+        CEPH_ENTITY_TYPE_CLIENT,
+        CEPH_ENTITY_TYPE_MDS,
+        CEPH_ENTITY_TYPE_MGR }) {
+    auto p = m.m.find(type);
+    if (p == m.m.end()) {
+      continue;
+    }
+    for (auto& [have, count] : p->second) {
+      if ((have & features) != features) {
+        ss << (first ? "" : ", ") << count << " connected "
+           << ceph_entity_type_name(type) << "(s) with features 0x"
+           << std::hex << have << std::dec;
+        first = false;
+      }
+    }
+  }
+  if (first) {
+    return "";
+  }
+  // this mon's own, by name
+  const size_t max = 10;
+  size_t named = 0;
+  std::lock_guard l(mon.session_map_lock);
+  for (auto s : mon.session_map.sessions) {
+    if ((s->con_type != CEPH_ENTITY_TYPE_CLIENT &&
+         s->con_type != CEPH_ENTITY_TYPE_MDS &&
+         s->con_type != CEPH_ENTITY_TYPE_MGR) ||
+        !s->con_features ||
+        (s->con_features & features) == features) {
+      continue;
+    }
+    if (++named <= max) {
+      ss << (named == 1 ? ": " : ", ") << s->entity_name << " at " << s->addrs;
+    }
+  }
+  if (named > max) {
+    ss << " and " << (named - max) << " more";
+  }
+  return ss.str();
+}
+
 bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
                                                  ostream &ss)
 {
@@ -14640,6 +14689,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply_no_propose;
       }
     }
+    if (vno >= OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT &&
+        !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)) {
+      // the flag outlives a backport's release name across an upgrade
+      if (pending_inc.new_flags < 0) {
+        pending_inc.new_flags = osdmap.get_flags();
+      }
+      pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_POOL_MIGRATION;
+    }
     ss << "set require_min_compat_client to " << vno;
     pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
@@ -16428,12 +16485,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
-      if (osdmap.require_min_compat_client < ceph_release_t::vampire) {
-        ss << "require_min_compat_client "
-           << osdmap.require_min_compat_client
-           << " < vampire, which is required for pool migration. "
-           << "Try 'ceph osd set-require-min-compat-client vampire' "
-           << "before using the new feature";
+      if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)) {
+        ss << "clients that can't follow a pool migration are still admitted. "
+           << "Run 'ceph osd set-require-min-compat-client "
+           << OSDMap::POOL_MIGRATION_MIN_COMPAT_CLIENT
+           << "' before migrating a pool";
         err = -EPERM;
         goto reply_no_propose;
       }
@@ -16504,6 +16560,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       migrating_to = src->is_migration_target();
 
       if (!migrating_to) {
+        if (string lacking = clients_lacking_features(CEPH_FEATUREMASK_POOL_MIGRATION);
+            !lacking.empty()) {
+          ss << "pool migration is not supported by " << lacking;
+          err = -EPERM;
+          goto reply_no_propose;
+        }
         int ret = _prepare_rename_pool(pool_id, old_pool_name);
         if (ret < 0) {
           ss << "failed to rename pool '" << poolstr << "' to '" << old_pool_name << "': " << cpp_strerror(ret);
