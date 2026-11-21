@@ -76,9 +76,8 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
         rbd pool init <pool-name>
 
-#. :ref:`Create a Ceph User <rados_ops_adding_a_user>` (or use ``client.admin`` for version 0.9.7 and
-   earlier). The following example uses the Ceph user name ``client.libvirt``
-   and references ``libvirt-pool``. ::
+#. :ref:`Create a Ceph User <rados_ops_adding_a_user>`. The following example
+   uses the Ceph user name ``client.libvirt`` and references ``libvirt-pool``. ::
 
 	ceph auth get-or-create client.libvirt mon 'profile rbd' osd 'profile rbd pool=libvirt-pool'
 
@@ -197,8 +196,7 @@ commands, refer to `Virsh Command Reference`_.
 
 
    Replace ``/path/to/image/recent-linux.img`` with the path to the OS image.
-   The minimum kernel for using the faster ``virtio`` bus is 2.6.25. See
-   `Virtio`_ for details.
+   For the faster ``virtio`` bus, see `Virtio`_.
 
    **IMPORTANT:** Use ``sudo virsh edit`` instead of a text editor. If you edit
    the configuration file under ``/etc/libvirt/qemu`` with a text editor,
@@ -271,7 +269,7 @@ commands, refer to `Virsh Command Reference`_.
 
 
    **NOTE:** The exemplary ID is ``libvirt``, not the Ceph name
-   ``client.libvirt`` as generated at step 2 of `Configuring Ceph`_. Ensure
+   ``client.libvirt`` as generated at step 3 of `Configuring Ceph`_. Ensure
    you use the ID component of the Ceph name you generated. If for some reason
    you need to regenerate the secret, you will have to execute
    ``sudo virsh secret-undefine {uuid}`` before executing
