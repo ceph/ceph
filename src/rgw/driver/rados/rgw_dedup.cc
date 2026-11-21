@@ -1043,6 +1043,19 @@ namespace rgw::dedup {
       p_op->cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, ref_tag_bl);
     }
 
+    // Guard against any write that landed on this object since it was scanned,
+    // even one that doesn't rotate ID_TAG/TAIL_TAG (e.g. a zero-copy self-copy
+    // with modify_tail=false). write_meta() always re-stamps mtime via
+    // op.mtime2(), so an exact-match check here catches races the tag
+    // comparisons above can miss.
+    struct timespec mtime_ts = {
+      .tv_sec  = static_cast<time_t>(p_rec->s.mtime_sec),
+      .tv_nsec = static_cast<long>(p_rec->s.mtime_nsec),
+    };
+    cls_rgw_obj_check_mtime(*p_op, ceph::real_clock::from_timespec(mtime_ts),
+                            true /* high_precision_time */,
+                            CLS_RGW_CHECK_TIME_MTIME_EQ);
+
     // BLAKE3 hash has 256 bit splitted into multiple 64bit units
     for (unsigned i = 0; i < HASH_UNITS; i++) {
       ceph::encode(p_rec->s.hash[i], hash_bl);
