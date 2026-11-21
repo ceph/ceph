@@ -344,6 +344,14 @@ public:
     return initiated_at;
   }
 
+  /// time since the op was initiated, as seen at @now.  A caller that
+  /// samples @now once and then walks the in-flight lists can meet ops
+  /// registered after that sample; give them an age of 0 instead of
+  /// letting the unsigned utime_t subtraction wrap around.
+  utime_t get_age(utime_t now) const {
+    return now > initiated_at ? now - initiated_at : utime_t();
+  }
+
   double get_duration() const {
     std::lock_guard l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
