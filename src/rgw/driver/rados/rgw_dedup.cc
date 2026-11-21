@@ -2886,7 +2886,7 @@ namespace rgw::dedup {
       for (auto& entry : result.dir.m) {
         const rgw_bucket_dir_entry& dirent = entry.second;
         // make sure to advance marker in all cases!
-        marker = dirent.key;
+        marker = rgw_list_resume_marker(dirent, list_versions);
         ldpp_dout(dpp, 20) << __func__ << "::dirent = " << bucket->get_name() << "/"
                            << marker.name << "::instance=" << marker.instance << dendl;
         if (unlikely((!dirent.exists && !dirent.is_delete_marker()) || !dirent.pending_map.empty())) {

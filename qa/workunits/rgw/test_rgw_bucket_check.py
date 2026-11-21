@@ -3,6 +3,7 @@
 import logging as log
 import json
 import botocore
+import subprocess
 from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects
 from botocore.config import Config
 
@@ -185,6 +186,51 @@ def main():
     assert json_out['usage']['rgw.main']['size_kb'] == 0
     assert json_out['usage']['rgw.main']['size_kb_actual'] == 0
     assert json_out['usage']['rgw.main']['size_kb_utilized'] == 0
+
+    # TESTCASE 'bucket check unlinked resumes past null versions and null delete markers'
+    null_bucket_name = BUCKET_NAME + '-null-resume'
+    null_bucket = connection.create_bucket(Bucket=null_bucket_name)
+    unlinked = []
+    try:
+        connection.BucketVersioning(null_bucket_name).enable()
+        for key in ['null-version', 'null-delete-marker']:
+            null_bucket.Object(key).put(Body=b'old')
+        exec_cmd(f'radosgw-admin bucket reshard --bucket {null_bucket_name} '
+                 '--num-shards 1 --yes-i-really-mean-it')
+        unlinked = create_unlinked_objects(
+            connection, null_bucket, ['null-version', 'null-delete-marker'])
+        expected = set(unlinked)
+        command = ['radosgw-admin', 'bucket', 'check', 'unlinked',
+                   '--bucket', null_bucket_name, '--min-age-hours', '0',
+                   '--dump-keys']
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE,
+                                timeout=60)
+        found = {(o['name'], o['instance']) for o in json.loads(result.stdout)}
+        assert found == expected, f'found {found}, expected {expected}'
+
+        # The 1000-entry CLS page ends on the null version, with an older
+        # version still to scan before declaring the failed PUT unlistable.
+        for key in ['null-version', 'null-delete-marker']:
+            connection.BucketVersioning(null_bucket_name).suspend()
+            if key == 'null-version':
+                null_bucket.Object(key).put(Body=b'null')
+            else:
+                null_bucket.Object(key).delete()
+            connection.BucketVersioning(null_bucket_name).enable()
+            for _ in range(999):
+                null_bucket.Object(key).put(Body=b'new')
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE,
+                                timeout=60)
+        found = {(o['name'], o['instance']) for o in json.loads(result.stdout)}
+        assert found == expected, f'found {found}, expected {expected}'
+    finally:
+        for key, version in unlinked:
+            connection.ObjectVersion(null_bucket_name, key, version).delete()
+        # Restart after each batch: its last version may have been deleted.
+        while list(null_bucket.object_versions.limit(1)):
+            for response in null_bucket.object_versions.limit(1000).delete():
+                assert not response.get('Errors'), response
+        null_bucket.delete()
 
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))

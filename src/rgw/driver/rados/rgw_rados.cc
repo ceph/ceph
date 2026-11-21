@@ -2188,8 +2188,9 @@ int RGWRados::Bucket::List::list_objects_ordered(
       }
 
       if (count < max) {
-	params.marker = index_key;
-	next_marker = index_key;
+        const auto marker = rgw_list_resume_marker(entry, params.list_versions);
+        params.marker = marker;
+        next_marker = marker;
       }
 
       if (params.access_list_filter &&
@@ -2446,8 +2447,9 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
       rgw_obj_key obj(index_key);
 
       if (count < max) {
-	params.marker.set(index_key);
-	next_marker.set(index_key);
+        const auto marker = rgw_list_resume_marker(entry, params.list_versions);
+        params.marker.set(marker);
+        next_marker.set(marker);
       }
 
       /* note that parse_raw_oid() here will not set the correct
@@ -11617,6 +11619,19 @@ uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 }
 
 
+rgw_obj_index_key rgw_list_resume_marker(const rgw_bucket_dir_entry& dirent,
+                                         bool list_versions)
+{
+  rgw_obj_index_key marker = dirent.key;
+  if (list_versions && marker.instance.empty() &&
+      (dirent.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+    // name the null version explicitly so CLS resumes after it, not before its versions.
+    marker.instance = "null";
+  }
+  return marker;
+}
+
+
 int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
                                       RGWBucketInfo& bucket_info,
                                       const rgw::bucket_index_layout_generation& idx_layout,
@@ -11939,7 +11954,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   }
 
   if (last_entry_visited != nullptr && last_entry) {
-    *last_entry = last_entry_visited->key;
+    *last_entry = rgw_list_resume_marker(*last_entry_visited, list_versions);
     ldpp_dout(dpp, 20) << __func__ <<
       ": returning, last_entry=" << *last_entry << dendl;
   } else {
@@ -12146,7 +12161,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	  dirent.key << dendl;
 
 	if (count < num_entries) {
-	  marker = last_added_entry = dirent.key; // double assign
+	  marker = last_added_entry = rgw_list_resume_marker(dirent, list_versions);
 	  ent_list.emplace_back(std::move(dirent));
 	  ++count;
 	} else {
@@ -12159,7 +12174,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
       } else { // r == -ENOENT
 	// in the case of -ENOENT, make sure we're advancing marker
 	// for possible next call to CLSRGWIssueBucketList
-	marker = dirent.key;
+	marker = rgw_list_resume_marker(dirent, list_versions);
       }
     } // entry for loop
 

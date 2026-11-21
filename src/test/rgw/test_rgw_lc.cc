@@ -5,6 +5,9 @@
 #include "rgw_lc.h"
 #include "rgw_lc_s3.h"
 #include "rgw_common.h"
+#ifdef WITH_RADOSGW_RADOS
+#include "driver/rados/rgw_rados.h"
+#endif
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include <gtest/gtest.h>
@@ -529,3 +532,39 @@ TEST(LCListResumeMarker, EntryKinds)
         << " list_versions=" << c.list_versions;
   }
 }
+
+#ifdef WITH_RADOSGW_RADOS
+TEST(RGWListResumeMarker, EntryKinds)
+{
+  using Entry = rgw_bucket_dir_entry;
+
+  const struct {
+    const char* instance;  // instance/version of the object
+    uint16_t flags;        // its versioning flags
+    bool list_versions;    // true: list all versions, false: only current visible objects
+    const char* marker_instance;  // expected marker given above 3 inputs
+  } cases[] = {
+    // 3 cases: all 3 null versions => current, current DM, non-current
+    // when listing all versions, the marker for null versions should be "null"
+    // i.e., "" --> "null"
+    {"", Entry::FLAG_VER | Entry::FLAG_CURRENT, true, "null"},
+    {"", Entry::FLAG_VER | Entry::FLAG_CURRENT | Entry::FLAG_DELETE_MARKER, true, "null"},
+    {"", Entry::FLAG_VER, true, "null"},
+    // if we are not listing all versions or object is not versioned or instance is non-null
+    // marker's instance should be the same as the object's instance (i.e., unchanged)
+    {"v1", Entry::FLAG_VER, true, "v1"},
+    {"", 0, true, ""},
+    {"", Entry::FLAG_VER, false, ""},
+  };
+
+  for (const auto& c : cases) {
+    Entry entry;
+    entry.key = cls_rgw_obj_key("obj", c.instance);
+    entry.flags = c.flags;
+    EXPECT_EQ(rgw_obj_index_key("obj", c.marker_instance),
+              rgw_list_resume_marker(entry, c.list_versions))
+        << "instance='" << c.instance << "' flags=" << c.flags
+        << " list_versions=" << c.list_versions;
+  }
+}
+#endif // WITH_RADOSGW_RADOS
