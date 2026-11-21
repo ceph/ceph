@@ -1106,6 +1106,22 @@ uint64_t get_rbd_default_features(CephContext* cct) {
   return boost::lexical_cast<uint64_t>(features);
 }
 
+std::string get_snap_namespace_name(librbd::snap_namespace_type_t type)
+{
+  switch (type) {
+  case RBD_SNAP_NAMESPACE_TYPE_USER:
+    return "user";
+  case RBD_SNAP_NAMESPACE_TYPE_GROUP:
+    return "group";
+  case RBD_SNAP_NAMESPACE_TYPE_TRASH:
+    return "trash";
+  case RBD_SNAP_NAMESPACE_TYPE_MIRROR:
+    return "mirror";
+  default:
+    return "unknown (" + stringify(type) + ")";
+  }
+}
+
 bool is_not_user_snap_namespace(librbd::Image* image,
                                 const librbd::snap_info_t &snap_info)
 {
