@@ -739,3 +739,47 @@ def test_drive_group_osd_type_crimson_roundtrip():
     assert spec2.osd_type == 'crimson'
     j2 = spec2.to_json()
     assert j2['spec']['osd_type'] == 'crimson'
+
+
+def test_drive_group_allow_collocated_fallback_roundtrip():
+    spec = DriveGroupSpec.from_json(yaml.safe_load("""service_type: osd
+service_id: foobar
+placement:
+  host_pattern: '*'
+spec:
+  data_devices:
+    rotational: true
+  db_devices:
+    rotational: false
+  allow_collocated_fallback: true
+"""))
+    spec.validate()
+    assert spec.allow_collocated_fallback is True
+
+    j = spec.to_json()
+    assert j['spec']['allow_collocated_fallback'] is True
+    assert ServiceSpec.from_json(j).allow_collocated_fallback is True
+
+
+def test_drive_group_allow_collocated_fallback_default():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+    )
+    spec.validate()
+    assert spec.allow_collocated_fallback is False
+    # default value is not exported
+    assert 'allow_collocated_fallback' not in spec.to_json()['spec']
+
+
+def test_drive_group_allow_collocated_fallback_invalid():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        allow_collocated_fallback='yes',
+    )
+    with pytest.raises(DriveGroupValidationError,
+                       match='allow_collocated_fallback must be either true or false'):
+        spec.validate()

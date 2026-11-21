@@ -53,6 +53,29 @@ class DriveSelection(object):
         # type: () -> List[Device]
         return self._journal
 
+    def unsatisfied_roles(self) -> List[str]:
+        """ Return the dedicated device roles (``db_devices``,
+        ``wal_devices``) that are defined in the spec but for which no
+        device was selected, while new data devices were selected.
+
+        Deploying OSDs in that situation would silently create them
+        without the dedicated DB/WAL the spec asks for.
+
+        Data devices that already back an OSD (``ceph_device_lvm``) are
+        not considered new: they are passed to ``ceph-volume lvm batch``
+        for idempotency only and do not lead to new OSDs.
+
+        ``journal_devices`` is not checked as it is not passed to
+        ceph-volume for the supported objectstores.
+        """
+        if not any(not d.ceph_device_lvm for d in self._data):
+            return []
+        roles = [
+            ('wal_devices', self.spec.wal_devices, self._wal),
+            ('db_devices', self.spec.db_devices, self._db),
+        ]
+        return [name for name, ds, selected in roles if ds is not None and not selected]
+
     def _limit_reached(
         self,
         device_filter: DeviceSelection,

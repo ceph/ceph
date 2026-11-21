@@ -24,6 +24,14 @@
   with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
   when running custom-built images targeting an older CPU generation.
 
+* Cephadm: When an OSD spec defines ``db_devices`` or ``wal_devices`` but the
+  filter selects no device on a host, cephadm no longer deploys new OSDs from
+  this spec on that host. Previously, these OSDs were silently created without
+  the dedicated DB/WAL, with DB/WAL collocated on the data devices. The
+  condition is reported as a service event, in the cephadm log and by
+  ``ceph orch apply --dry-run``. Set ``allow_collocated_fallback: true`` in the
+  OSD spec to restore the previous behaviour.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the

@@ -185,7 +185,7 @@ class DriveGroupSpec(ServiceSpec):
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
         "extra_entrypoint_args", "data_allocate_fraction", "method",
         "termination_grace_period_seconds", "crush_device_class", "config",
-        "osd_type",
+        "osd_type", "allow_collocated_fallback",
     ]
 
     def __init__(self,
@@ -219,6 +219,7 @@ class DriveGroupSpec(ServiceSpec):
                  crush_device_class=None,  # type: Optional[str]
                  osd_type=None,  # type: Optional[OSDType]
                  termination_grace_period_seconds: Optional[int] = 30,
+                 allow_collocated_fallback=False,  # type: bool
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -297,6 +298,13 @@ class DriveGroupSpec(ServiceSpec):
 
         #: OSD type to install, defaults to classic OSDs if not specified
         self.osd_type = osd_type if osd_type is not None else "classic"
+
+        #: If ``db_devices`` or ``wal_devices`` is defined but selects no
+        #: device on a host, OSDs are not deployed on that host, as they
+        #: would be created without the dedicated DB/WAL the spec asks
+        #: for. Set to ``true`` to deploy them anyway, with DB/WAL
+        #: collocated on the data device.
+        self.allow_collocated_fallback = allow_collocated_fallback
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):
@@ -416,6 +424,10 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'objectstore seastore only supports osd type crimson')
+        if not isinstance(self.allow_collocated_fallback, bool):
+            raise DriveGroupValidationError(
+                self.service_id,
+                'allow_collocated_fallback must be either true or false')
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)
