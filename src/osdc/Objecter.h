@@ -2628,6 +2628,8 @@ public:
 
     int incarnation;
     ConnectionRef con;
+    // MonClient::get_auth_generation() when con was opened
+    uint64_t auth_generation = 0;
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
@@ -2802,6 +2804,7 @@ private:
   void put_session(OSDSession *s);
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
+  void reconnect_for_new_caps(OSDSession *session, const ConnectionRef& con);
   void close_session(OSDSession *session);
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
