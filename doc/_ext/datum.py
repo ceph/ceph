@@ -53,6 +53,7 @@ def guide():
         '05-labeled-slices', 'select-from-a-packed-sparse-payload')
     links['transfer-between-fragmented-buffers'] = (
         '01-hello-fragments', 'transfer-between-fragmented-buffers')
+    links['observe-algebra-as-a-range'] = ('03-normalize-ranges', 'observe-algebra-as-a-range')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
         links[slug(title)] = ('build-and-run', nodes.make_id(title))
     return text, sections, chapters, links
@@ -160,6 +161,9 @@ def source_read(app, docname, source):
                     'selection into independently segmented writable storage. Its '
                     '[expected output](expected/fragment_transfer.txt) is checked by '
                     'the `fragment_transfer` target.\n')
+        content += ('\nThe [lazy-read program](examples/lazy_reads.cpp) observes missing coverage '
+                    'through a standard range pipeline and stops after two planned reads. Its '
+                    '[expected output](expected/lazy_reads.txt) is checked by the `lazy_reads` target.\n')
     elif key == 'tutorial':
         content = text[:sections[0].start()].replace('# Datum tutorials', '# Tutorial', 1)
     else:

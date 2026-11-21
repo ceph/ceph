@@ -403,6 +403,39 @@ included endpoints, so the normalized coverage becomes a single interval:
 [1, 10]
 ```
 
+### Observe algebra as a range
+
+Prepared coverage can feed another selection without collecting its result first.
+Include `<datum/interval/range.h>` and call `observe_intervals`:
+
+```cpp
+auto missing = iv::observe_intervals(iv::difference(requested, cached));
+for (const auto& interval : missing) {
+    // Use this interval's bounds while its source remains alive:
+    plan_read(interval);
+}
+```
+
+The [lazy-read program](examples/lazy_reads.cpp) adapts missing coverage to ordinary byte
+extents with `views::transform`, then uses `visit_range` to stop after two planned reads.
+Use `visit_intervals` when the callback should receive scoped canonical interval values.
+Both visitation functions support their existing acceptance, progress, and expected-error
+contracts. A stop or failure performs no further iterator increment. Preparing a canonical
+result can inspect later input bounds, so offered output counts are not leaf-read counts.
+Keep native fetching and I/O in the caller.
+
+An observation borrows a named expression and retains a temporary expression. Retaining an
+expression preserves the ownership choices of its leaves: borrowed prepared coverage still
+needs its owner. The observation is a move-only range; standard adaptors supply ref/owning
+views for pipelines. Compound output supports input iteration. Construction does not traverse
+the expression, and observation does not introduce an interval vector or workspace.
+
+Keep the observation, its dependencies, and endpoint backing alive and unchanged while
+iterating. Moving or assigning it invalidates active iterators. A copied compound result descriptor
+still borrows endpoints; use `copy_interval` to retain point values. Foreign interval providers
+must first prepare their geometry with `compile_intervals` or `evaluate`. The
+[bibliography](#bibliography) records the stream research and C++23 ownership contracts.
+
 ## 4 Put 2 before 10
 
 *Encode integer keys so byte order matches numeric order.*
@@ -2410,3 +2443,12 @@ identify sources in the separate local RGW integration snapshot described in the
   C++23, 2023; [copy](https://timsong-cpp.github.io/cppwp/n4950/alg.copy) and
   [join views](https://timsong-cpp.github.io/cppwp/n4950/range.join). These define ordinary
   element traversal; Datum's fragment transfer adds byte conversion and capacity admission.
+- Oleg Kiselyov, Aggelos Biboudis, Nick Palladinos, and Yannis Smaragdakis.
+  [*Stream Fusion, to Completeness*](https://okmij.org/ftp/meta-programming/strymonas.pdf).
+  POPL, 2017; sections 5–6. Separating cursor state and input advancement from emitted results
+  informs algebra observation and controlled consumption. Datum does not adopt staging or
+  claim the paper's fusion/performance theorem.
+- WG21 N4950, [all views](https://timsong-cpp.github.io/cppwp/n4950/range.all) and
+  [view requirements](https://timsong-cpp.github.io/cppwp/n4950/range.view). These specify
+  ref/owning adaptation and copying-cost contracts for standard pipelines. The expression
+  observation remains a move-only range.

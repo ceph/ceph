@@ -165,6 +165,10 @@ add_executable(unittest_rgw_datum_transfer "${CMAKE_CURRENT_LIST_DIR}/datum_tran
 target_link_libraries(unittest_rgw_datum_transfer PRIVATE datum::core)
 list(APPEND datum_tests unittest_rgw_datum_transfer)
 
+add_executable(unittest_rgw_datum_observation "${CMAKE_CURRENT_LIST_DIR}/datum_observation.cc")
+target_link_libraries(unittest_rgw_datum_observation PRIVATE datum::core)
+list(APPEND datum_tests unittest_rgw_datum_observation)
+
 add_executable(unittest_rgw_datum_ownership "${CMAKE_CURRENT_LIST_DIR}/datum_ownership.cc")
 target_link_libraries(unittest_rgw_datum_ownership PRIVATE datum::core)
 list(APPEND datum_tests unittest_rgw_datum_ownership)
@@ -285,6 +289,7 @@ set_tests_properties(unittest_rgw_datum_ownership PROPERTIES LABELS "datum;owner
 set_tests_properties(unittest_rgw_datum_ranges PROPERTIES LABELS "datum;range;scan")
 set_tests_properties(unittest_rgw_datum_overlap PROPERTIES LABELS "datum;range;overlap")
 set_tests_properties(unittest_rgw_datum_transfer PROPERTIES LABELS "datum;bytes;transfer")
+set_tests_properties(unittest_rgw_datum_observation PROPERTIES LABELS "datum;range;observation")
 set_tests_properties(unittest_rgw_datum_vocabulary PROPERTIES LABELS "datum;vocabulary;range")
 
 set_tests_properties(unittest_rgw_datum_definitions PROPERTIES LABELS "datum;record-definition")

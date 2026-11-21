@@ -17,6 +17,8 @@
 #include "datum/range.h"
 
 #include <concepts>
+#include <memory>
+#include <optional>
 #include <type_traits>
 
 #include <utility>
@@ -169,6 +171,109 @@ using interval_batch = static_interval_set<DomainT, Capacity>;
 
 using ceph::salad::datum::acceptance;
 using ceph::salad::datum::visit_result;
+
+// Keep expression storage separate from its pull cursors. The distinction between input
+// advancement and emitted results follows Kiselyov et al., Stream Fusion, to Completeness
+// (POPL 2017), sections 5–6: https://okmij.org/ftp/meta-programming/strymonas.pdf
+// Construction retains a temporary expression or borrows an lvalue. Iterator descriptors
+// borrow leaf endpoints; moving/assigning the observation invalidates active iterators.
+// This is a range, not a view: owned expression storage need not have constant-time copying:
+template <expression ExprT>
+requires (detail::streamable_expression<ExprT>()) and
+         (std::is_lvalue_reference_v<ExprT> || std::move_constructible<std::remove_cvref_t<ExprT>>)
+class interval_observation final
+{
+    static constexpr bool borrows = std::is_lvalue_reference_v<ExprT>;
+    using expression_type = std::remove_cvref_t<ExprT>;
+    using storage_type = std::conditional_t<borrows, const expression_type*,
+                                            std::optional<expression_type>>;
+
+    storage_type source;
+
+private:
+    static constexpr storage_type retain(ExprT&& value)
+    {
+        if constexpr (borrows) {
+            return std::addressof(value);
+        }
+
+        if constexpr (!borrows) {
+            return storage_type {std::in_place, std::forward<ExprT>(value)};
+        }
+    }
+
+    constexpr const expression_type& expression() const
+    {
+        if constexpr (borrows) {
+            return *source;
+        }
+
+        if constexpr (!borrows) {
+            return source.value();
+        }
+    }
+
+public:
+    constexpr explicit interval_observation(ExprT&& value)
+    requires borrows || std::constructible_from<expression_type, ExprT&&>
+        : source(retain(std::forward<ExprT>(value)))
+    {}
+
+    interval_observation(const interval_observation&) = delete;
+    constexpr interval_observation(interval_observation&&) = default;
+
+public:
+    interval_observation& operator=(const interval_observation&) = delete;
+
+    constexpr interval_observation& operator=(interval_observation&& other)
+        noexcept(borrows || std::is_nothrow_move_constructible_v<expression_type>)
+    {
+        if (this == std::addressof(other)) {
+            return *this;
+        }
+
+        if constexpr (borrows) {
+            source = other.source;
+        }
+
+        if constexpr (!borrows) {
+            source.reset();
+            if (other.source) {
+                source.emplace(std::move(*other.source));
+            }
+        }
+
+        return *this;
+    }
+
+public:
+    constexpr auto begin() const&
+    {
+        const auto stream = detail::canonical_stream(expression());
+
+        return stream.begin();
+    }
+
+    constexpr auto end() const&
+    {
+        const auto stream = detail::canonical_stream(expression());
+
+        return stream.end();
+    }
+
+    void begin() const&& = delete;
+    void end() const&& = delete;
+
+};
+
+template <expression ExprT>
+requires requires (ExprT&& source) {
+    interval_observation<ExprT&&> {std::forward<ExprT>(source)};
+}
+constexpr auto observe_intervals(ExprT&& source)
+{
+    return interval_observation<ExprT&&> {std::forward<ExprT>(source)};
+}
 
 // Canonical values are scoped to each call; borrowed point domains remain
 // usable with lvalue elements. The standard views handle projection, while

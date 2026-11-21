@@ -76,6 +76,14 @@ in the payload. `byte_cursor::take(byte_extent)` selects the absolute packed reg
 admitting its skip and length. The [packed-payload program](examples/packed_payload.cpp) shows
 this composition; native framing, payload validation, and publication remain caller decisions.
 
+For native/admitted algebra, `interval::observe_intervals(expression)` supplies a lazy standard
+range. It borrows named expressions and retains temporaries without changing their leaf ownership.
+Compose ordinary range adaptors, `visit_range`, or `visit_intervals` rather than collecting just
+to consume the result once. Controlled stopping prevents further increments; preparing output
+can require lookahead through input bounds. Compound output descriptors borrow leaf endpoints, while
+`copy_interval` retains point values. See [algebra observation](../tutorial.md#observe-algebra-as-a-range)
+and the [lazy-read program](../examples/lazy_reads.cpp).
+
 ## Own what must survive
 
 Borrow for synchronous calls whose references do not escape. Retain an owner when a callback,

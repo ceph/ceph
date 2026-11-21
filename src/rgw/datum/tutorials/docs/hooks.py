@@ -199,6 +199,9 @@ def on_files(files, config):
         "", "The [fragment-transfer program](examples/fragment_transfer.cpp) copies a payload "
         "selection into independently segmented writable storage. Its "
         "[expected output](expected/fragment_transfer.txt) is checked by the `fragment_transfer` target.",
+        "", "The [lazy-read program](examples/lazy_reads.cpp) observes missing coverage "
+        "through a standard range pipeline and stops after two planned reads. Its "
+        "[expected output](expected/lazy_reads.txt) is checked by the `lazy_reads` target.",
     ]) + "\n")
 
     archive = io.BytesIO()

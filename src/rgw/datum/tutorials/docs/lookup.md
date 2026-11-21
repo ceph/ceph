@@ -18,6 +18,7 @@ gives the setup commands.
 | Compose a path supplied as a range of segments | [Key composition variation](../tutorial.md#4-put-2-before-10) |
 | Read data split across buffers | [hello, world! — in pieces](../tutorial.md#1-hello-world--in-pieces) |
 | Combine or subtract ranges | [Seat selection](../tutorial.md#2-seat-3-is-reserved) and [interval algebra](../tutorial.md#2½-an-interval-interlude) |
+| Filter or visit algebra without collecting its output | [Algebra observation](../tutorial.md#observe-algebra-as-a-range) and the [lazy-read program](../examples/lazy_reads.cpp) |
 | Align independent layouts and selections | [Overlap traversal](../tutorial.md#align-two-independently-segmented-sources) and the [mapped-read program](../examples/overlap_reads.cpp) |
 | Select bytes from a packed sparse payload | [Packed mapping](../tutorial.md#select-from-a-packed-sparse-payload) and the [complete program](../examples/packed_payload.cpp) |
 | Put overlapping ranges in order | [Untangle the ranges](../tutorial.md#3-untangle-the-ranges) |
@@ -111,6 +112,10 @@ touching bounds merged. A canonical set can also be empty.
 [Normalization](../tutorial.md#3-untangle-the-ranges),
 [clipping](../tutorial.md#5-keep-the-label-on-the-slice), and
 [measurement](../tutorial.md#6-five-bytes-please).
+
+**`observe_intervals`.** Expose native/admitted algebra as a read-only standard range,
+borrowing a named expression or retaining a temporary. Compose with `visit_intervals`
+for controlled fallible consumption. [Algebra observation](../tutorial.md#observe-algebra-as-a-range).
 
 **`canonical_range`; `compile_intervals`.** Compile expressions or normalize raw
 interval ranges into certified coverage. Dynamic and bounded results own interval

@@ -60,6 +60,7 @@ Other core operations already accept standard ranges under their established nam
 | Compose a dynamic sequence of key segments | `key::compose_range(segments)` |
 | Append interval entries to bounded storage | `static_interval_set::append_range`, also through `interval_batch` |
 | Normalize, query, or clip intervals | `compile_intervals`, `canonical_range`, and `clip_view` |
+| Observe algebra through standard range pipelines | `interval::observe_intervals(expression)` |
 | Align independently segmented sources | `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` |
 | Map logical cuts into a packed payload | `interval::visit_packed_overlaps(source, selection, consumer)` |
 | Convert finite half-open byte bounds | `interval::bounds(byte_extent)`, `interval::extent_of(interval)` |
@@ -474,6 +475,36 @@ accessors keep their observation and materialization path. Explicit `evaluate()`
 with a workspace retains intermediate values and enforces its work and entry
 limits before publication. Default streaming traversal has no workspace or
 work-budget bookkeeping.
+
+Include `<datum/interval/range.h>` and use `observe_intervals(expression)` to expose those
+cursors as a read-only standard range. An lvalue expression is borrowed; a temporary expression
+is retained, including any leaves it owns. Leaves that the expression already borrows remain
+borrowed. The observation is move-only, is not a view or `borrowed_range`, and works with
+standard filter/transform adaptors through `views::all`. Compound output supports input
+iteration; native/admitted leaf ranges retain their underlying capabilities. Construction
+does not traverse geometry. No interval vector or workspace is introduced by observation.
+
+```cpp
+auto missing = iv::observe_intervals(iv::difference(requested, cached));
+const auto progress = iv::visit_intervals(missing, [](const auto& value) {
+    consume(value);
+    return ceph::salad::datum::acceptance::accept_and_stop;
+});
+```
+
+`visit_intervals` supplies its existing scoped values, stop/error and progress contract.
+`visit_range` can instead consume the range's endpoint-borrowing descriptors directly.
+No increment occurs after a consumer stops or fails. Preparing each canonical result can
+inspect later input bounds, and composed cursors can advance children before yielding it.
+This preparation is distinct from offered/accepted output counts. Performed observation
+exceptions propagate, and consumer effects are not rolled back.
+
+Keep the observation, borrowed expression dependencies, and endpoint backing alive and
+unchanged during iteration. Moving or assigning an active observation invalidates its
+iterators. Copying a compound result descriptor retains borrowed endpoints; use `copy_interval`
+to retain point values. Foreign geometry must first use `compile_intervals` or `evaluate`.
+The [lazy-read example](tutorials/examples/lazy_reads.cpp) composes algebra, a standard transform,
+and controlled planning without first collecting the missing intervals.
 
 `interval_count()` observes emitted bounds without retaining endpoint values.
 Admitted canonical ranges count their elements without reading endpoint geometry;
@@ -1253,3 +1284,12 @@ describe local machinery, not backend throughput.
   C++23, 2023; [copy](https://timsong-cpp.github.io/cppwp/n4950/alg.copy) and
   [join views](https://timsong-cpp.github.io/cppwp/n4950/range.join). Standard element copying
   remains appropriate for ordinary ranges; Datum adds checked byte transfer across blocks.
+- Oleg Kiselyov, Aggelos Biboudis, Nick Palladinos, and Yannis Smaragdakis.
+  [*Stream Fusion, to Completeness*](https://okmij.org/ftp/meta-programming/strymonas.pdf).
+  POPL, 2017; sections 5–6. Separating cursor state, input advancement, and emitted results
+  informs the public observation bridge. Datum reuses typed C++ cursors; it does not adopt
+  the paper's staging implementation or claim its fusion/performance theorem.
+- WG21 N4950, [all views](https://timsong-cpp.github.io/cppwp/n4950/range.all) and
+  [view requirements](https://timsong-cpp.github.io/cppwp/n4950/range.view).
+  These specify standard pipeline ownership and copying-cost contracts. An owned expression
+  observation is a move-only range, leaving ref/owning adaptation to standard ranges.
