@@ -4104,13 +4104,9 @@ free_bluefs:
   return r;
 }
 
-int BlueStore::_open_bluefs(bool create, bool read_only)
+int BlueStore::_create_bluefs_vselector(BlueFSVolumeSelector* &vselector)
 {
-  int r = _minimal_open_bluefs(create);
-  if (r < 0) {
-    return r;
-  }
-  BlueFSVolumeSelector* vselector = nullptr;
+  int r = 0;
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ||
       cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced" ||
       cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
@@ -4151,11 +4147,27 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     }    
     vselector->update_from_config(cct);
   }
+  return r;
+}
+
+int BlueStore::_open_bluefs(bool create, bool read_only)
+{
+  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
+  int r = _minimal_open_bluefs(create);
+  if (r < 0) {
+    return r;
+  }
   if (create) {
     bluefs->mkfs(fsid, bluefs_layout);
   }
+  BlueFSVolumeSelector* vselector = nullptr;
+  r = _create_bluefs_vselector(vselector);
+  if (r < 0) {
+    derr << __func__ << " failed to create vselector: " << cpp_strerror(r) << dendl;
+    return r;
+  }
   bluefs->set_volume_selector(vselector);
-  r = bluefs->mount();
+  r = bluefs->mount(read_only);
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
@@ -4165,7 +4177,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
 
 void BlueStore::_close_bluefs()
 {
-  bluefs->umount(db_was_opened_read_only);
+  bluefs->umount();
   _minimal_close_bluefs();
 }
 
@@ -4365,28 +4377,6 @@ void BlueStore::_close_around_db()
   _close_path();
 }
 
-int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair)
-{
-  _kv_only = true;
-  int r = _open_db_and_around(read_only, to_repair);
-  if (r == 0) {
-    *pdb = db;
-  } else {
-    *pdb = nullptr;
-  }
-  return r;
-}
-
-int BlueStore::close_db_environment()
-{
-  if (db) {
-    delete db;
-    db = nullptr;
-  }
-  _close_around_db();
-  return 0;
-}
-
 /* gets access to bluefs supporting RocksDB */
 BlueFS* BlueStore::get_bluefs() {
   return bluefs;
@@ -4543,6 +4533,9 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
 int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 {
+  dout(10) << __func__ << " create=" << create
+	   << " to_repair_db=" << to_repair_db
+	   << " read_only=" << read_only << dendl;
   int r;
   ceph_assert(!(create && read_only));
   string options;
@@ -4693,6 +4686,54 @@ void BlueStore::_close_db()
   if (bluefs) {
     _close_bluefs();
   }
+}
+
+int BlueStore::create_db()
+{
+  dout(5) << __func__ << dendl;
+  int r = _open_db(true/*create*/, false/*to_repair*/, false/*read_only*/);
+  return r;
+}
+
+int BlueStore::open_db(bool read_only, bool to_repair)
+{
+  dout(5) << __func__ << " " << (read_only ? "RO" : "RW")
+	  << " mode:" << (to_repair ? "repair" : "normal") << dendl;
+  int r = _open_db_and_around(read_only, to_repair);
+  return r;
+}
+
+// A pair to open_db()/close_db() call.
+// This function should not be mistaken with _close_db(),
+// The _close_db() is doing extra actions.
+int BlueStore::close_db()
+{
+  dout(5) << __func__ << dendl;
+    if (db) {
+    delete db;
+    db = nullptr;
+  }
+  _close_around_db();
+  return 0;
+}
+
+KeyValueDB* BlueStore::get_db()
+{
+  return db;
+}
+
+int BlueStore::open_bluefs(bool read_only)
+{
+  dout(5) << __func__ << " mode=" << (read_only ? "RO" : "RW") << dendl;
+  int r = _open_bluefs(false, read_only);
+  return r;
+}
+
+int BlueStore::close_bluefs()
+{
+  dout(5) << __func__ << dendl;
+  _close_bluefs();
+  return 0;
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -6024,17 +6065,6 @@ int BlueStore::umount()
       return -EIO;
     }
   }
-  return 0;
-}
-
-int BlueStore::cold_open()
-{
-  return _open_db_and_around(true);
-}
-
-int BlueStore::cold_close()
-{
-  _close_db_and_around();
   return 0;
 }
 
@@ -7386,13 +7416,13 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t 
 }
 
 int BlueStore::revert_wal_to_plain() {
-  int r = cold_open();
+  int r = open_db(true);
   if (r != 0) {
     dout(1) << __func__ << "failed to open db / allocator" << dendl;
     goto out;
   }
   bluefs->revert_wal_to_plain();
-  cold_close();
+  close_db();
   out:
   return r;
 }

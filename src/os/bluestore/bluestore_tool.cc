@@ -263,10 +263,11 @@ static void bluefs_import(
     exit(EXIT_FAILURE);
   }
   BlueStore bluestore(cct, path);
-  KeyValueDB *db_ptr;
-  r = bluestore.open_db_environment(&db_ptr, false, false);
+  // fixme: DB is read-only
+  // fixme: in fact, we only need BS allocator
+  r = bluestore.open_db(true, false);
   if (r < 0) {
-    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    cerr << "error accessing bluefs: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
   BlueFS* bs = bluestore.get_bluefs();
@@ -289,7 +290,7 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bluestore.close_db_environment();
+  bluestore.close_db();
   return;
 }
 
@@ -1270,9 +1271,9 @@ int main(int argc, char **argv)
                               action == "free-score" ? "score" : "fragmentation";
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    int r = bluestore.open_db(true/*read_only*/);
     if (r < 0) {
-      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      cerr << "error from open_db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
     
@@ -1306,7 +1307,7 @@ int main(int argc, char **argv)
       }
     }
 
-    bluestore.cold_close();
+    bluestore.close_db();
   } else  if (action == "bluefs-stats") {
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
@@ -1317,9 +1318,9 @@ int main(int argc, char **argv)
     g_conf().set_val_or_die("bluestore_volume_selection_policy",
                             "use_some_extra_enforced");
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    int r = bluestore.open_db(true/*read_only*/);
     if (r < 0) {
-      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      cerr << "error from open_db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -1333,13 +1334,13 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;
-    bluestore.cold_close();
+    bluestore.close_db();
   } else  if (action == "bluefs-files") {
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    int r = bluestore.open_db(true/*read_only*/);
     if (r < 0) {
       cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1354,7 +1355,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;
-    bluestore.cold_close();
+    bluestore.close_db();
   } else if (action == "reshard") {
     auto get_ctrl = [&](size_t& val) {
       if (!resharding_ctrl.empty()) {
@@ -1387,11 +1388,12 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, false, true);
+    int r = bluestore.open_db(false, true);
     if (r < 0) {
-      cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+      cerr << "error opening db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    db_ptr = bluestore.get_db();
     ceph_assert(db_ptr);
     RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
     ceph_assert(rocks_db);
@@ -1401,21 +1403,26 @@ int main(int argc, char **argv)
     } else {
       cout << "reshard success" << std::endl;
     }
-    bluestore.close_db_environment();
+    bluestore.close_db();
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false, false);
+    //fixme: we are opening DB in read-only mode; it means we will not save file allocator state
+    //       if we needed to recover it. We could open DB in read-write but it takes longer.
+    //       The fact is that we do not even need to access DB. For DB/BlueFS case we can read
+    //       directly from ALLOCATOR_NCB_DIR/ALLOCATOR_NCB_FILE.
+    int r = bluestore.open_db(true, false);
     if (r < 0) {
-      cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+      cerr << "error opening db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    db_ptr = bluestore.get_db();
     ceph_assert(db_ptr);
     RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
     ceph_assert(rocks_db);
     std::string sharding;
     bool res = rocks_db->get_sharding(sharding);
-    bluestore.close_db_environment();
+    bluestore.close_db();
     if (!res) {
       cerr << "failed to retrieve sharding def" << std::endl;
       exit(EXIT_FAILURE);
@@ -1423,7 +1430,7 @@ int main(int argc, char **argv)
     cout << sharding << std::endl;
   } else if (action == "trim") {
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    int r = bluestore.open_db(true);
     if (r < 0) {
       cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1434,7 +1441,7 @@ int main(int argc, char **argv)
       bluestore.trim_free_space(type, outss);
       cout << "status: " << outss.str() << std::endl;
     }
-    bluestore.cold_close();
+    bluestore.close_db();
   } else if (action == "zap-device") {
     for(auto& dev : devs) {
       int r = BlueStore::zap_device(cct.get(), dev);
