@@ -1147,6 +1147,7 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
     dout(4) << __func__ << ": No daemon state found for "
               << svc_type << "." << svc_id << ")" << dendl;
   }
+  no_gil.acquire_gil();
   return f.get();
 }
 
@@ -1314,6 +1315,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
 		   svc_id)
 	    << dendl;
   }
+  no_gil.acquire_gil();
   return f.get();
 }
 
@@ -1816,6 +1818,7 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
       }
     }
   });
+  no_gil.acquire_gil();
   return f.get();
 }
 
