@@ -13,6 +13,7 @@
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonState.h"
+#include "mgr/MgrClient.h"
 #include "mon/MgrMap.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -54,6 +55,112 @@ public:
   test_get_objecter() const
   {
     return objecter;
+  }
+};
+
+// A Connection test double that records every message MgrClient emits instead
+// of putting it on the wire.  Connection::send_message()/send_message2() all
+// funnel through the protected send_msg(), so this single override captures
+// every send path MgrClient can take.
+class RecordingConnection : public Connection {
+public:
+  std::vector<MessageRef> sent;
+
+  explicit RecordingConnection(CephContext* cct_)
+    : Connection(cct_, nullptr)
+  {
+    set_features(CEPH_FEATURES_ALL);
+  }
+
+  bool is_connected() override { return true; }
+  void send_keepalive() override {}
+  void mark_down() override {}
+  void mark_disposable() override {}
+  void shutdown() override {}
+  entity_addr_t get_peer_socket_addr() const override { return entity_addr_t(); }
+
+protected:
+  int send_msg(MessageRef&& m) override {
+    sent.push_back(std::move(m));
+    return 0;
+  }
+};
+
+// Exposes MgrClient's protected session/map internals so tests can drive the
+// live-session code paths without a running mgr daemon.  Mirrors the
+// ClusterStateTestHelper pattern above.
+class MgrClientTestHelper : public MgrClient {
+public:
+  MgrClientTestHelper(CephContext* cct_, Messenger* msgr_, MonMap* monmap_)
+    : MgrClient(cct_, msgr_, monmap_)
+  {}
+
+  // Establish a live session backed by a recording connection, bypassing the
+  // messenger / MgrMap-availability path that reconnect() needs in production.
+  RecordingConnection*
+  inject_session()
+  {
+    std::lock_guard l(lock);
+    session.reset(new MgrSessionState());
+    session->con = ceph::make_ref<RecordingConnection>(cct);
+    return static_cast<RecordingConnection*>(session->con.get());
+  }
+
+  void
+  test_set_map(const MgrMap& m)
+  {
+    std::lock_guard l(lock);
+    map = m;
+  }
+
+  bool
+  test_has_session()
+  {
+    std::lock_guard l(lock);
+    return static_cast<bool>(session);
+  }
+
+  RecordingConnection*
+  test_recording_con()
+  {
+    std::lock_guard l(lock);
+    return session ? static_cast<RecordingConnection*>(session->con.get())
+                   : nullptr;
+  }
+
+  uint32_t
+  test_stats_period()
+  {
+    std::lock_guard l(lock);
+    return stats_period;
+  }
+
+  uint32_t
+  test_stats_threshold()
+  {
+    std::lock_guard l(lock);
+    return stats_threshold;
+  }
+
+  size_t
+  test_command_table_size()
+  {
+    std::lock_guard l(lock);
+    return command_table.get_commands().size();
+  }
+
+  Context*
+  test_report_callback()
+  {
+    std::lock_guard l(lock);
+    return report_callback;
+  }
+
+  bool
+  test_timer_cancel_event(Context* c)
+  {
+    std::lock_guard l(lock);
+    return timer.cancel_event(c);
   }
 };
 
