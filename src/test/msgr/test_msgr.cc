@@ -1597,6 +1597,53 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   client_msgr->wait();
 }
 
+TEST_P(MessengerTest, ClientRestartSameAddrTest) {
+  FakeDispatcher srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT,
+                          Messenger::Policy::lossless_peer_reuse(0));
+  ASSERT_EQ(0, server_msgr->bind(bind_addr));
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  // Restart at the same address and nonce, with a lower global_seq.
+  for (auto seq : {1000, 0}) {
+    delete client_msgr;
+    client_msgr = Messenger::create(g_ceph_context, GetParam(),
+                                    entity_name_t::CLIENT(-1), "client", getpid());
+    client_msgr->set_policy(entity_name_t::TYPE_OSD,
+                            Messenger::Policy::lossless_peer(0));
+    client_msgr->set_auth_client(&dummy_auth);
+    client_msgr->set_auth_server(&dummy_auth);
+    EXPECT_EQ(0, client_msgr->bind(bind_addr));
+    bind_addr = client_msgr->get_myaddrs().msgr2_addr();
+    static_cast<AsyncMessenger*>(client_msgr)->get_global_seq(seq);
+
+    FakeDispatcher cli_dispatcher(false);
+    client_msgr->add_dispatcher_head(&cli_dispatcher);
+    client_msgr->start();
+    auto conn = client_msgr->connect_to(server_msgr->get_mytype(),
+                                       server_msgr->get_myaddrs());
+    EXPECT_EQ(0, conn->send_message(new MPing()));
+    bool got_reply;
+    {
+      std::unique_lock l{cli_dispatcher.lock};
+      got_reply = cli_dispatcher.cond.wait_for(
+        l, 10s, [&] { return cli_dispatcher.got_new; });
+    }
+    conn->mark_down();
+    client_msgr->shutdown();
+    client_msgr->wait();
+    EXPECT_TRUE(got_reply) << "client global_seq started at " << seq;
+
+    // Let the server move the old connection to standby before restarting.
+    usleep(300*1000);
+  }
+  server_msgr->shutdown();
+  server_msgr->wait();
+}
+
 TEST_P(MessengerTest, AuthTest) {
   g_ceph_context->_conf.set_val("auth_cluster_required", "cephx");
   g_ceph_context->_conf.set_val("auth_service_required", "cephx");
