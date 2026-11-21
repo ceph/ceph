@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "include/rbd/asio/ContextWQ.hpp"
 #include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
@@ -154,6 +155,13 @@ public:
 
   C_Dispatcher dispatcher_ctx;
 
+  // Submit-thread channel captured from on_finish. Survives dispatcher
+  // wrappers and a QoS deferral onto another thread.
+  asio::ContextWQ::Channel completion_channel = nullptr;
+
+  // Channel stored for this dispatcher context, or nullptr if @p ctx is not one.
+  static asio::ContextWQ::Channel saved_completion_channel(Context* ctx);
+
   ObjectDispatcherInterface* object_dispatcher;
   ObjectDispatchLayer dispatch_layer;
   int object_dispatch_flags = 0;
@@ -278,11 +286,15 @@ public:
 private:
   template <typename> friend class ObjectDispatcher;
 
+  static asio::ContextWQ::Channel channel_from_on_finish(Context* on_finish);
+
   ObjectDispatchSpec(ObjectDispatcherInterface* object_dispatcher,
                      ObjectDispatchLayer object_dispatch_layer,
                      Request&& request, IOContext io_context, int op_flags,
                      const ZTracer::Trace& parent_trace, Context* on_finish)
-    : dispatcher_ctx(this, on_finish), object_dispatcher(object_dispatcher),
+    : dispatcher_ctx(this, on_finish),
+      completion_channel(channel_from_on_finish(on_finish)),
+      object_dispatcher(object_dispatcher),
       dispatch_layer(object_dispatch_layer), request(std::move(request)),
       io_context(io_context), op_flags(op_flags), parent_trace(parent_trace) {
   }
