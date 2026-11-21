@@ -60,38 +60,38 @@ describe('CephfsService', () => {
     service.lsDir(1).subscribe();
     const req = httpTesting.expectOne('ui-api/cephfs/1/ls_dir?depth=2');
     expect(req.request.method).toBe('GET');
-    service.lsDir(2, '/some/path').subscribe();
-    httpTesting.expectOne('ui-api/cephfs/2/ls_dir?depth=2&path=%252Fsome%252Fpath');
+    service.lsDir(2, '/some/%2F &+').subscribe();
+    httpTesting.expectOne('ui-api/cephfs/2/ls_dir?depth=2&path=/some/%252F%20%26%2B');
   });
 
   it('should call mkSnapshot', () => {
     service.mkSnapshot(3, '/some/path').subscribe();
-    const req = httpTesting.expectOne('api/cephfs/3/snapshot?path=%252Fsome%252Fpath');
+    const req = httpTesting.expectOne('api/cephfs/3/snapshot?path=/some/path');
     expect(req.request.method).toBe('POST');
 
-    service.mkSnapshot(4, '/some/other/path', 'snap').subscribe();
-    httpTesting.expectOne('api/cephfs/4/snapshot?path=%252Fsome%252Fother%252Fpath&name=snap');
+    service.mkSnapshot(4, '/some/other/path', 'snap%2F').subscribe();
+    httpTesting.expectOne('api/cephfs/4/snapshot?path=/some/other/path&name=snap%252F');
   });
 
   it('should call rmSnapshot', () => {
     service.rmSnapshot(1, '/some/path', 'snap').subscribe();
-    const req = httpTesting.expectOne('api/cephfs/1/snapshot?path=%252Fsome%252Fpath&name=snap');
+    const req = httpTesting.expectOne('api/cephfs/1/snapshot?path=/some/path&name=snap');
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call updateQuota', () => {
     service.quota(1, '/some/path', { max_bytes: 1024 }).subscribe();
-    let req = httpTesting.expectOne('api/cephfs/1/quota?path=%252Fsome%252Fpath');
+    let req = httpTesting.expectOne('api/cephfs/1/quota?path=/some/path');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ max_bytes: 1024 });
 
     service.quota(1, '/some/path', { max_files: 10 }).subscribe();
-    req = httpTesting.expectOne('api/cephfs/1/quota?path=%252Fsome%252Fpath');
+    req = httpTesting.expectOne('api/cephfs/1/quota?path=/some/path');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ max_files: 10 });
 
     service.quota(1, '/some/path', { max_bytes: 1024, max_files: 10 }).subscribe();
-    req = httpTesting.expectOne('api/cephfs/1/quota?path=%252Fsome%252Fpath');
+    req = httpTesting.expectOne('api/cephfs/1/quota?path=/some/path');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ max_bytes: 1024, max_files: 10 });
   });
@@ -154,6 +154,11 @@ describe('CephfsService', () => {
     );
     expect(req.request.method).toBe('DELETE');
     expect(req.request.body).toBeNull();
+  });
+
+  it('should encode the mirror filesystem and query values once', () => {
+    service.getMirrorStatus('my fs', '/data/%2F', 'a+b').subscribe();
+    httpTesting.expectOne('api/cephfs/mirror/my%20fs/status?path=/data/%252F&peer_id=a%2Bb');
   });
 
   it('should list mirror checkpoints for a path', () => {
