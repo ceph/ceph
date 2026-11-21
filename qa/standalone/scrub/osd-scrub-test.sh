@@ -1007,6 +1007,190 @@ function TEST_abort_periodic_for_operator() {
     echo "Done"
 }
 
+function get_pg_stat() {
+    local pgid=$1
+    local field=$2
+    ceph pg $pgid query -f json | jq ".info.stats.$field"
+}
+
+# Split the single PG of a pool into two. The stats of both resulting PGs
+# are invalid until they are scrubbed.
+function split_pool_pg() {
+    local poolname=$1
+
+    ceph osd pool set $poolname pg_num 2 || return 1
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if test "$(ceph osd pool get $poolname pgp_num -f json | jq .pgp_num)" = 2 ; then
+            break
+        fi
+        sleep 1
+    done
+    test "$(ceph osd pool get $poolname pgp_num -f json | jq .pgp_num)" = 2 || return 1
+    wait_for_clean || return 1
+}
+
+# When a scrub fixes the stats of a PG whose stats are invalid (here:
+# after a split), it must only replace the stats it computes. The
+# cumulative I/O counters must not go backwards, and a shallow scrub must
+# keep the stats only a deep scrub computes (e.g. the omap stats).
+# https://tracker.ceph.com/issues/83304
+function TEST_scrub_invalid_stats_keeps_counters() {
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local objects=40
+
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+    # do not scrub automatically because of the invalid stats: we want
+    # to see them before scrubbing
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_scrub_invalid_stats=false"
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd $ceph_osd_args || return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    ceph osd pool set $poolname pg_autoscale_mode off || return 1
+    wait_for_clean || return 1
+    local poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    local testdata_file=$(file_with_random_data 1032)
+    for i in $(seq 1 $objects)
+    do
+        rados -p $poolname put obj${i} $testdata_file || return 1
+        rados -p $poolname setomapval obj${i} key${i} val${i} || return 1
+        rados -p $poolname get obj${i} $dir/obj.out || return 1
+    done
+    rm -f $testdata_file $dir/obj.out
+
+    # a deep scrub computes the omap stats
+    pg_deep_scrub ${poolid}.0 || return 1
+    test "$(get_pg_stat ${poolid}.0 stat_sum.num_omap_keys)" = $objects || return 1
+
+    split_pool_pg $poolname || return 1
+
+    # The omap stats are only known to the primary that did the deep scrub,
+    # so a PG whose primary changed with the split may not have them.
+    local pgs_with_omap_stats=0
+    for pgid in ${poolid}.0 ${poolid}.1
+    do
+        test "$(get_pg_stat $pgid stats_invalid)" = true || return 1
+        local rd_before=$(get_pg_stat $pgid stat_sum.num_read)
+        local wr_before=$(get_pg_stat $pgid stat_sum.num_write)
+        local omap_keys_before=$(get_pg_stat $pgid stat_sum.num_omap_keys)
+        echo "$pgid before scrub: num_read=$rd_before num_write=$wr_before num_omap_keys=$omap_keys_before"
+        test $rd_before -gt 0 || return 1
+        test $wr_before -gt 0 || return 1
+        if test $omap_keys_before -gt 0 ; then
+            pgs_with_omap_stats=$((pgs_with_omap_stats + 1))
+        fi
+
+        pg_scrub $pgid || return 1
+
+        test "$(get_pg_stat $pgid stats_invalid)" = false || return 1
+        local rd_after=$(get_pg_stat $pgid stat_sum.num_read)
+        local wr_after=$(get_pg_stat $pgid stat_sum.num_write)
+        local omap_keys_after=$(get_pg_stat $pgid stat_sum.num_omap_keys)
+        echo "$pgid after scrub: num_read=$rd_after num_write=$wr_after num_omap_keys=$omap_keys_after"
+        test $rd_after -ge $rd_before || return 1
+        test $wr_after -ge $wr_before || return 1
+        test $omap_keys_after = $omap_keys_before || return 1
+    done
+    test $pgs_with_omap_stats -gt 0 || return 1
+}
+
+# A shallow scrub that fixes the invalid stats of a PG must not drop the
+# errors found by an earlier deep scrub: the PG has to stay inconsistent
+# until a deep scrub (or a repair) shows that the damage is gone.
+# https://tracker.ceph.com/issues/83304
+function TEST_scrub_invalid_stats_keeps_deep_errors() {
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local objects=10
+
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+    # set in the mon config db, so that the OSD restarted by
+    # objectstore_tool keeps them
+    ceph config set osd osd_scrub_invalid_stats false || return 1
+    ceph config set osd osd_deep_scrub_update_digest_min_age 0 || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0"
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd $ceph_osd_args || return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    ceph osd pool set $poolname pg_autoscale_mode off || return 1
+    wait_for_clean || return 1
+    local poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+    local pgid=${poolid}.0
+
+    echo ABCDEF > $dir/ORIG
+    for i in $(seq 1 $objects)
+    do
+        rados -p $poolname put obj${i} $dir/ORIG || return 1
+    done
+
+    # record the data digests, then corrupt the data of obj1 on a replica
+    # without changing its size, so that only a deep scrub can see it
+    pg_deep_scrub $pgid || return 1
+    local replica=$(get_not_primary $poolname obj1)
+    echo UVWXYZ > $dir/CORRUPT
+    objectstore_tool $dir $replica obj1 set-bytes $dir/CORRUPT || return 1
+    rm -f $dir/ORIG $dir/CORRUPT
+
+    pg_deep_scrub $pgid || return 1
+    test "$(get_pg_stat $pgid stat_sum.num_deep_scrub_errors)" -gt 0 || return 1
+    ceph pg $pgid query -f json | jq -r .state | grep -q inconsistent || return 1
+
+    split_pool_pg $poolname || return 1
+
+    # The scrub errors are only known to the primary that did the deep
+    # scrub, so a PG whose primary changed with the split may not have them.
+    local pgs_with_deep_errors=0
+    for pgid in ${poolid}.0 ${poolid}.1
+    do
+        test "$(get_pg_stat $pgid stats_invalid)" = true || return 1
+        local deep_errors_before=$(get_pg_stat $pgid stat_sum.num_deep_scrub_errors)
+        local state_before=$(ceph pg $pgid query -f json | jq -r .state)
+        echo "$pgid before scrub: num_deep_scrub_errors=$deep_errors_before state=$state_before"
+        if test $deep_errors_before -eq 0 ; then
+            continue
+        fi
+        pgs_with_deep_errors=$((pgs_with_deep_errors + 1))
+        echo $state_before | grep -q inconsistent || return 1
+        local last_deep_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
+
+        pg_scrub $pgid || return 1
+
+        # make sure that it was a shallow scrub
+        test "$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)" = "$last_deep_scrub" || return 1
+        test "$(get_pg_stat $pgid stats_invalid)" = false || return 1
+        local deep_errors_after=$(get_pg_stat $pgid stat_sum.num_deep_scrub_errors)
+        local scrub_errors_after=$(get_pg_stat $pgid stat_sum.num_scrub_errors)
+        local state_after=$(ceph pg $pgid query -f json | jq -r .state)
+        echo "$pgid after scrub: num_deep_scrub_errors=$deep_errors_after num_scrub_errors=$scrub_errors_after state=$state_after"
+        test $deep_errors_after = $deep_errors_before || return 1
+        test $scrub_errors_after -ge $deep_errors_before || return 1
+        echo $state_after | grep -q inconsistent || return 1
+    done
+    test $pgs_with_deep_errors -gt 0 || return 1
+
+    flush_pg_stats || return 1
+    for ((i=0; i < 30; i++)); do
+        ceph health detail | grep -q OSD_SCRUB_ERRORS && return 0
+        sleep 1
+    done
+    ceph health detail
+    return 1
+}
 
 
 main osd-scrub-test "$@"
