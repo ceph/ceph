@@ -144,6 +144,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
     int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
     int ceph_mknod_batch(ceph_mount_info *cmount, const char *dirpath, const char **names, int n, mode_t mode)
+    int ceph_unlink_batch(ceph_mount_info *cmount, const char *dirpath, const char **names, int n)
 
     int ceph_close(ceph_mount_info *cmount, int fd)
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)

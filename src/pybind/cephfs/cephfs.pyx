@@ -1970,6 +1970,34 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in mknod_batch {}".format(dirpath.decode('utf-8')))
 
+    def unlink_batch(self, dirpath, names):
+        """
+        Unlink several files of one directory with a single request to the
+        MDS (prototype). Either all of them are unlinked or none is.
+
+        :param dirpath: the path of the directory that holds the files.
+        :param names: the names of the files, without any path. At most 1024.
+        """
+        self.require_state("mounted")
+        dirpath = cstr(dirpath, 'dirpath')
+        names = [cstr(n, 'name') for n in names]
+        if not names:
+            raise make_ex(22, "unlink_batch needs at least one name")
+
+        cdef:
+            char* _dirpath = dirpath
+            int _n = len(names)
+            char **_names = to_bytes_array(names)
+
+        try:
+            with nogil:
+                ret = ceph_unlink_batch(self.cluster, _dirpath,
+                                        <const char **>_names, _n)
+        finally:
+            free(_names)
+        if ret < 0:
+            raise make_ex(ret, "error in unlink_batch {}".format(dirpath.decode('utf-8')))
+
     def getxattr(self, path, name, size=255, follow_symlink=True):
         """
          Get an extended attribute.
