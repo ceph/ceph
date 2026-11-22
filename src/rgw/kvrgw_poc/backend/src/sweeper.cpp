@@ -254,7 +254,7 @@ void Sweeper::process_pm_entry(std::string_view key, std::string_view value,
 void Sweeper::process_group_po_entry(std::string_view key, std::string_view value,
                                       int64_t now)
 {
-  // Group P:O key: [ns='P'][cat='G'][ref_tag_0 12B] = 14B
+  // Group P:O key: [ns='P'][cat='G'][lane 1B][ref_tag_0 12B] = 15B (legacy 14B, no lane)
   if (!parse_group_po_key(key)) {
     return;
   }

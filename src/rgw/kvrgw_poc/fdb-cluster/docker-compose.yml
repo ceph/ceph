@@ -1,5 +1,5 @@
 x-fdb-engine: ssd-redwood-1
-x-fdb-configure: "logs=6 commit_proxies=2 resolvers=2"
+x-fdb-configure: "logs=6 commit_proxies=2 resolvers=3"
 services:
   fdb-storage00:
     image: rockylinux:9-minimal

@@ -126,12 +126,16 @@ struct KeyHeaderPO {
 static_assert(sizeof(KeyHeaderPO) == 10);
 
 // Group P:O key header.
-// Wire layout: [ns='P'][cat='G'] — 2B, followed by ref_tag_0 (12B) → 14B total key.
+// Wire layout: [ns='P'][cat='G'][lane 1B] — 3B, followed by ref_tag_0 (12B) → 15B total key.
+// `lane` is a random byte chosen per key; it spreads the otherwise append-only
+// Group P:O range across 256 sub-ranges so FDB data distribution can split it.
+// Keys written before the lane byte existed are 14B (no lane); parsers accept both.
 struct KeyHeaderPOGroup {
   char ns{'P'};
   char cat{'G'};
+  uint8_t lane{0};
 };
-static_assert(sizeof(KeyHeaderPOGroup) == 2);
+static_assert(sizeof(KeyHeaderPOGroup) == 3);
 
 // Single P:M key — Sweeper-driven multipart cleanup entry (see
 // plans/fixing_agent_mess.md Section 4). Same layout convention as P:O.

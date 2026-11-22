@@ -18,10 +18,13 @@
 
 #include <arpa/inet.h>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <endian.h>
+#include <functional>
+#include <thread>
 
 namespace kvrgw {
 // Shared with service_impl_multipart.cpp (declared in service_impl.hpp) —
@@ -297,9 +300,25 @@ void make_po_key(bucket_id_t bucket_id, std::string_view ref_tag_bytes, KeyBuf& 
   out.append(ref_tag_bytes.data(), ref_tag_bytes.size());
 }
 
+// Per-thread xorshift64 for the Group P:O lane byte (no lock, no atomic).
+static uint8_t next_group_po_lane()
+{
+  static thread_local uint64_t s = [] {
+    uint64_t seed = std::chrono::steady_clock::now().time_since_epoch().count() ^
+                    (std::hash<std::thread::id>{}(std::this_thread::get_id()) *
+                     0x9E3779B97F4A7C15ULL);
+    return seed ? seed : 0x9E3779B97F4A7C15ULL;
+  }();
+  s ^= s << 13;
+  s ^= s >> 7;
+  s ^= s << 17;
+  return static_cast<uint8_t>(s >> 32);
+}
+
 void make_group_po_key(std::string_view group_ref_tag, KeyBuf& out)
 {
   KeyHeaderPOGroup hdr{};
+  hdr.lane = next_group_po_lane();
   out.set_header(hdr);
   out.append(group_ref_tag.data(), group_ref_tag.size());
 }
@@ -334,11 +353,13 @@ std::optional<PoKeyParts> parse_po_key(std::string_view key)
   return parts;
 }
 
-// Group P:O key: [ns='P'][cat='G'][ref_tag_0 12B] = 14B
+// Group P:O key: [ns='P'][cat='G'][lane 1B][ref_tag_0 12B] = 15B.
+// Legacy keys without the lane byte (14B) are still accepted.
 bool parse_group_po_key(std::string_view key)
 {
   constexpr size_t kGroupPoKeySize = sizeof(KeyHeaderPOGroup) + kRefTagSize;
-  return key.size() == kGroupPoKeySize &&
+  constexpr size_t kLegacyGroupPoKeySize = kGroupPoKeySize - 1;
+  return (key.size() == kGroupPoKeySize || key.size() == kLegacyGroupPoKeySize) &&
          key[0] == kNamespacePending &&
          key[offsetof(KeyHeaderPOGroup, cat)] == kOpTypeGroup;
 }
