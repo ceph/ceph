@@ -412,6 +412,7 @@ for i in $(seq 0 $((instances-1))); do
       KVRGW_MAX_KV_STORE="${max_kv_store}" \
       KVRGW_BATCH_SIZE="${batch_size}" \
       KVRGW_ADMIN_SOCKET="/tmp/kvrgw-admin-perf-${i}.sock" \
+      taskset -c "${KVRGW_BACKEND_CPUS:-33-55}" \
       "${ROOT}/build/kv-rgw-backend" ${perf_flag} "/tmp/kvrgw-perf-${i}.sock" "${ROOT}/data-${i}" \
       < "${inst_fifo}" > "${inst_log}" 2>&1 &
   PIDS+=($!)

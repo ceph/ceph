@@ -342,7 +342,7 @@ services:
     container_name: fdb-stateless11
     network_mode: host
     mem_limit: 12g
-    cpuset: "56"
+    cpuset: "28"
     volumes:
       - /mnt/fdb-log1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
@@ -354,7 +354,7 @@ services:
     container_name: fdb-stateless21
     network_mode: host
     mem_limit: 12g
-    cpuset: "57"
+    cpuset: "29"
     volumes:
       - /mnt/fdb-log2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
@@ -366,7 +366,7 @@ services:
     container_name: fdb-stateless02
     network_mode: host
     mem_limit: 12g
-    cpuset: "58"
+    cpuset: "30"
     volumes:
       - /mnt/fdb-log0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
@@ -378,7 +378,7 @@ services:
     container_name: fdb-stateless12
     network_mode: host
     mem_limit: 12g
-    cpuset: "59"
+    cpuset: "31"
     volumes:
       - /mnt/fdb-log1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
@@ -390,7 +390,7 @@ services:
     container_name: fdb-stateless22
     network_mode: host
     mem_limit: 12g
-    cpuset: "60"
+    cpuset: "32"
     volumes:
       - /mnt/fdb-log2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro

@@ -467,6 +467,24 @@ kvrgw_start_fdb() {
   return 1
 }
 
+# Print 3 coordinator addresses: in each zone, the stateless process hosting the
+# least busy roles, so coordinators stay off resolvers/proxies/master.
+kvrgw_pick_coordinators() {
+  kvrgw_fdbcli "status json" 2>/dev/null | python3 -c '
+import json, sys
+w = {"resolver": 4, "commit_proxy": 4, "grv_proxy": 4, "master": 2}
+best = {}
+for p in json.load(sys.stdin)["cluster"]["processes"].values():
+    if p.get("class_type") != "stateless":
+        continue
+    z = p["locality"]["zoneid"]
+    k = (sum(w.get(r["role"], 0) for r in p.get("roles", [])), p["address"])
+    if z not in best or k < best[z]:
+        best[z] = k
+print(" ".join(b[1] for b in best.values()))
+' 2>/dev/null || true
+}
+
 kvrgw_clean_fdb() {
   local compose_dir="${ROOT}/fdb-cluster"
   local compose_file="${compose_dir}/docker-compose.yml"
@@ -529,7 +547,14 @@ kvrgw_clean_fdb() {
       return 1
     fi
   fi
-  kvrgw_fdbcli "coordinators auto" >/dev/null 2>&1 || true
+  local coord_addrs
+  coord_addrs="$(kvrgw_pick_coordinators)"
+  if [[ "$(wc -w <<<"${coord_addrs}")" -eq 3 ]]; then
+    echo "Setting coordinators: ${coord_addrs}"
+    kvrgw_fdbcli "coordinators ${coord_addrs}" >/dev/null 2>&1 || kvrgw_fdbcli "coordinators auto" >/dev/null 2>&1 || true
+  else
+    kvrgw_fdbcli "coordinators auto" >/dev/null 2>&1 || true
+  fi
   sleep 3
   cp /mnt/fdb0/fdb.cluster "${FDB_CLUSTER_FILE}"
   echo "Waiting for FDB healthy (up to 60s)..."
@@ -774,6 +799,8 @@ kvrgw_verify() {
 kvrgw_run_fast_tests() {
   export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
   export KVRGW_INSTANCES RGW_ID RGW_IDS RGW_IDS_CSV
+  "${ROOT}/build/fdb_error_test"
+  "${ROOT}/build/create_bucket_test"
   "${ROOT}/scripts/test_head_bucket.sh"
   "${ROOT}/scripts/test_corrupted_etag.sh"
   "${ROOT}/scripts/test_l_namespace_fdb.sh"

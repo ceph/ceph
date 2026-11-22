@@ -32,24 +32,34 @@ MAX_CPU=$(grep -oP 'Max CPU cores for FDB:\s*\K[0-9]+' "${RESOURCES}")
 MAX_MEM=$(grep -oP 'Max DRAM for FDB:\s*\K[0-9]+' "${RESOURCES}")
 
 # #15: Parse AVAIL_CORES from System-Resources.md NUMA lines
-# Order: node0 physical, node0 HT, node1 physical, node1 HT
+# Order: node0 physical, node1 physical, node0 HT, node1 HT
+# (all physical cores are used before any hyperthread sibling)
+# Each NUMA line is "<physical range>, <HT range>"; the first range is physical.
 AVAIL_CORES=()
+HT_CORES=()
 expand_range() {
-  local spec="$1"
-  for part in ${spec//,/ }; do
-    if [[ "$part" == *-* ]]; then
-      local lo=${part%-*} hi=${part#*-}
-      local c
-      for (( c=lo; c<=hi; c++ )); do :; AVAIL_CORES+=("$c"); done
-    else
-      AVAIL_CORES+=("$part")
-    fi
+  local spec="$1" target="$2"
+  local lo hi c
+  if [[ "$spec" == *-* ]]; then
+    lo=${spec%-*}; hi=${spec#*-}
+  else
+    lo=$spec; hi=$spec
+  fi
+  for (( c=lo; c<=hi; c++ )); do
+    if [[ "$target" == "ht" ]]; then HT_CORES+=("$c"); else AVAIL_CORES+=("$c"); fi
   done
+}
+add_node() {
+  local spec="$1"
+  [[ -z "$spec" ]] && return 0
+  expand_range "${spec%%,*}" phys
+  if [[ "$spec" == *,* ]]; then expand_range "${spec#*,}" ht; fi
 }
 node0=$(grep -oP 'NUMA node0.*cores \K[0-9,\- ]+' "${RESOURCES}" | head -1 | tr -d ' ' || true)
 node1=$(grep -oP 'NUMA node1.*cores \K[0-9,\- ]+' "${RESOURCES}" | head -1 | tr -d ' ' || true)
-if [[ -n "$node0" ]]; then expand_range "$node0"; fi
-if [[ -n "$node1" ]]; then expand_range "$node1"; fi
+add_node "$node0"
+add_node "$node1"
+AVAIL_CORES+=("${HT_CORES[@]}")
 if [[ ${#AVAIL_CORES[@]} -eq 0 ]]; then
   echo "ERROR: could not parse NUMA core list from ${RESOURCES}" >&2; exit 1
 fi
