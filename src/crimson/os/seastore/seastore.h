@@ -241,6 +241,10 @@ public:
 
     shard_stats_t get_io_stats(bool report_detail, double seconds) const;
 
+    uint64_t get_num_batches() const {
+      return stats.batch_txns.sample_count;
+    }
+
     cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
 
     unsigned int get_store_index() const {
@@ -503,6 +507,14 @@ public:
       64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536
     };
 
+    static constexpr std::array<double, 13> BATCH_TXNS_BUCKETS = {
+      1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 128
+    };
+    static constexpr std::array<double, 11> BATCH_BYTES_BUCKETS = {
+      4096, 16384, 65536, 131072, 262144, 524288,
+      1048576, 2097152, 4194304, 8388608, 16777216
+    };
+
     // Clock for the xattr change time: the change of one attr takes
     // microseconds, below the lowres_clock resolution.
     using xattr_clock_t = std::chrono::steady_clock;
@@ -537,6 +549,8 @@ public:
       uint64_t xattr_tree_set_records = 0;
       uint64_t xattr_tree_set_bytes = 0;   // key + value
       seastar::metrics::histogram xattr_tree_kv_size;
+      seastar::metrics::histogram batch_txns;
+      seastar::metrics::histogram batch_bytes;
 
       // same metrics collected two more times for high tail txns.
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
@@ -582,6 +596,25 @@ public:
         ++hist.sample_count;
         hist.sample_sum += len;
       }
+    }
+
+    static void add_batch_hist_sample(
+        seastar::metrics::histogram& hist, uint64_t value) {
+      if (hist.buckets.empty()) {
+        return;
+      }
+      for (auto& b : hist.buckets) {
+        if (value <= b.upper_bound) {
+          ++b.count;
+        }
+      }
+      ++hist.sample_count;
+      hist.sample_sum += value;
+    }
+
+    void add_batch_sample(uint64_t num_txns, uint64_t num_bytes) {
+      add_batch_hist_sample(stats.batch_txns, num_txns);
+      add_batch_hist_sample(stats.batch_bytes, num_bytes);
     }
 
     seastar::metrics::histogram& get_latency(

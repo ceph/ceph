@@ -434,6 +434,41 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
       ),
     }
   );
+
+  stats.batch_txns.buckets.resize(BATCH_TXNS_BUCKETS.size());
+  for (std::size_t i = 0; i < BATCH_TXNS_BUCKETS.size(); ++i) {
+    stats.batch_txns.buckets[i].upper_bound = BATCH_TXNS_BUCKETS[i];
+    stats.batch_txns.buckets[i].count = 0;
+  }
+  stats.batch_bytes.buckets.resize(BATCH_BYTES_BUCKETS.size());
+  for (std::size_t i = 0; i < BATCH_BYTES_BUCKETS.size(); ++i) {
+    stats.batch_bytes.buckets[i].upper_bound = BATCH_BYTES_BUCKETS[i];
+    stats.batch_bytes.buckets[i].count = 0;
+  }
+  metrics.add_group(
+    "seastore",
+    {
+      sm::make_histogram(
+        "batch_txns",
+        [this]() -> seastar::metrics::histogram& {
+          return stats.batch_txns;
+        },
+        sm::description("number of client transactions merged into each "
+                        "batch committed by the shard (sample_count is the "
+                        "number of batches, sample_sum the transactions)"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_histogram(
+        "batch_bytes",
+        [this]() -> seastar::metrics::histogram& {
+          return stats.batch_bytes;
+        },
+        sm::description("encoded size (bytes) of each batch committed by "
+                        "the shard"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+    }
+  );
 }
 
 seastar::future<> SeaStore::get_shard_nums(Device &device)
@@ -2133,6 +2168,7 @@ seastar::future<> SeaStore::Shard::dispatch_batches()
     auto merged = build_next_batch(pending_txns_promises);
     DEBUG("draining {} txns, committing batch ({} ops)",
           pending_txns_promises.size(), merged.get_num_ops());
+    add_batch_sample(pending_txns_promises.size(), merged.get_num_bytes());
     co_await run_one_batch(std::move(merged));
     DEBUG("committed batch of {} txns", pending_txns_promises.size());
     for (auto& p : pending_txns_promises) {
