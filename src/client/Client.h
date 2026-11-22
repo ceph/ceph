@@ -1104,17 +1104,15 @@ public:
     if (!logger) {
       return;
     }
-    auto cur = sync_in_flight.fetch_add(1, std::memory_order_relaxed) + 1;
-    logger->inc(l_c_sync_in_flight);
-    logger->set_max(l_c_sync_in_flight_peak, cur);
+    // counted per CPU, and the perf counters set on tick() (see
+    // update_io_stat_logger()): every buffered read or write counts
+    sync_in_flight.inc();
   }
   void dec_sync_in_flight() {
     if (!logger) {
       return;
     }
-    auto prev = sync_in_flight.fetch_sub(1, std::memory_order_relaxed);
-    ceph_assert(prev > 0);
-    logger->dec(l_c_sync_in_flight);
+    sync_in_flight.dec();
   }
 
   void inc_opened_files() {
@@ -1170,7 +1168,6 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<PerfCounters> readahead_logger;
   std::atomic<uint64_t> aio_in_flight{0};
-  std::atomic<uint64_t> sync_in_flight{0};
   std::unique_ptr<MDSMap> mdsmap;
 #if defined(__linux__)
   std::unique_ptr<FSCrypt> fscrypt;
@@ -2726,6 +2723,12 @@ private:
     void inc() {
       slots[slot()].v.fetch_add(1, std::memory_order_relaxed);
     }
+    // for a count that also goes down (a gauge): one slot alone may wrap
+    // below zero, as a thread may go down on another CPU than it went up
+    // on; the sum does not
+    void dec() {
+      slots[slot()].v.fetch_sub(1, std::memory_order_relaxed);
+    }
     uint64_t get() const {
       uint64_t n = 0;
       for (const auto& s : slots)
@@ -2751,6 +2754,7 @@ private:
   };
   ShardedCounter cap_hits;
   ShardedCounter cap_misses;
+  ShardedCounter sync_in_flight;
 
   uint64_t opened_files = 0;
   uint64_t pinned_icaps = 0;

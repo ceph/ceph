@@ -1020,6 +1020,11 @@ void Client::update_io_stat_logger()
   logger->set(l_c_rd_sz_sqsum, (uint64_t)t.rd_sz.m2);
   logger->set(l_c_wr_sz_avg, (uint64_t)t.wr_sz.mean);
   logger->set(l_c_wr_sz_sqsum, (uint64_t)t.wr_sz.m2);
+  // the sync I/Os in flight now, and the most seen at a tick; the slots
+  // are not read at one instant, so the sum may come out below zero
+  int64_t sync = std::max<int64_t>(0, (int64_t)sync_in_flight.get());
+  logger->set(l_c_sync_in_flight, sync);
+  logger->set_max(l_c_sync_in_flight_peak, sync);
 }
 // ===================
 // metadata cache stuff
