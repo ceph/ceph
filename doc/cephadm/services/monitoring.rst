@@ -90,7 +90,7 @@ steps below:
 
      ceph orch apply grafana
 
-It might take a minute or two for the services to be deployed. After they
+There will be a delay before the services are deployed. After they
 have been deployed, ``ceph orch ls`` lists them:
 
 .. prompt:: bash #
@@ -257,7 +257,7 @@ configuration. The following configuration options are available:
 - ``container_image_alertmanager``
 - ``container_image_node_exporter``
 - ``container_image_loki``
-- ``container_image_alloy`` (Umbrella 21 and later releases)
+- ``container_image_alloy`` (Umbrella and later releases)
 - ``container_image_promtail``
 - ``container_image_haproxy``
 - ``container_image_keepalived``
@@ -461,15 +461,15 @@ If you have an existing Prometheus monitoring infrastructure, or would like
 to manage it yourself, you need to configure it to integrate with your Ceph
 cluster.
 
-* Enable the ``prometheus`` module in the ceph-mgr daemon
+* Enable the ``prometheus`` module in the Manager daemon
 
   .. prompt:: bash #
 
      ceph mgr module enable prometheus
 
-  By default, the active ceph-mgr daemon serves Prometheus metrics on port 9283.
-  Standby ceph-mgr daemons listen on the same port but return no metrics, so
-  configure Prometheus to scrape every host that runs a ceph-mgr daemon.
+  By default, the active Manager daemon serves Prometheus metrics on port 9283.
+  Standby Manager daemons listen on the same port but return no metrics, so
+  configure Prometheus to scrape every host that runs a Manager daemon.
 
 To make this integration easier, cephadm provides a service discovery endpoint at
 ``http://<mgr-ip>:8765/sd/``. This endpoint can be used by an external
