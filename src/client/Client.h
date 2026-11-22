@@ -2446,6 +2446,7 @@ private:
 	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0, FSCrypt_Options fscrypt_options = {});
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
+  bool has_absolute_path(const InodeRef& in);
   bool make_absolute_path_string(const InodeRef& in, std::string& path);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 		  const UserPerm& perms, InodeRef *inp,
@@ -2916,6 +2917,9 @@ private:
   uint64_t nr_metadata_request = 0;
 
   std::vector<MDSCapAuth> cap_auths;
+  // whether no auth cap can deny an access (mds_check_access() would
+  // return 0 for every path and mask), which spares open() the path
+  bool cap_auths_allow_all = true;
 
   feature_bitset_t myfeatures;
 

@@ -231,6 +231,21 @@ bool Inode::make_path_string(std::string& s)
   return false;
 }
 
+// whether make_path_string() would succeed, without making the string
+bool Inode::has_path() const
+{
+  for (const Inode *in = this; ; ) {
+    if (in->client->_get_root_ino(false) == in->ino)
+      return true;
+    if (in->dentries.empty())
+      return false;
+    const Dentry *dn = in->get_first_parent();
+    if (!dn->dir)
+      return false;
+    in = dn->dir->parent_inode;
+  }
+}
+
 /*
  * make a filepath suitable for an mds request:
  *  - if we are non-snapped/live, the ino is sufficient, e.g. #1234

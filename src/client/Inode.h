@@ -391,6 +391,7 @@ struct Inode : RefCountedObject {
 
   void make_long_path(filepath& p);
   void make_short_path(filepath& p);
+  bool has_path() const;
   bool make_path_string(std::string& s);
   void make_nosnap_relative_path(filepath& p);
 
