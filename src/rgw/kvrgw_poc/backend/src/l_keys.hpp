@@ -24,6 +24,11 @@
 
 namespace kvrgw {
 
+// Counter allocation is a read-modify-write on a singleshared key
+// Concurrent callers (e.g. several backends starting together) conflict with each other.
+// Use more attempts than the generic kMaxTxnRetries to absorb that contention.
+inline constexpr int kCounterAllocMaxRetries = 20;
+
 // ---------------------------------------------------------------------------
 // Pure Endianness / Codec for 64-bit Big-Endian Numeric Counter
 // ---------------------------------------------------------------------------

@@ -19,11 +19,30 @@
 #include "keys.hpp"
 
 #include <endian.h>
+#include <algorithm>
 #include <cstring>
+#include <random>
+#include <array>
 #include <thread>
 #include <chrono>
 
 namespace kvrgw {
+
+//--------------------------------------------------------------------------------
+// Randomized exponential back-off (cap 200ms)
+static void counter_alloc_backoff(int attempt)
+{
+  thread_local std::mt19937 rng{std::random_device{}()};
+
+  constexpr std::array caps_usec = {
+    8'000, 16'000, 32'000, 64'000, 128'000, 256'000
+  };
+
+  attempt = std::min(attempt, static_cast<int>(caps_usec.size() - 1));
+  std::uniform_int_distribution<int> dist(1, caps_usec[attempt]);
+
+  sleep_for_usec(dist(rng));
+}
 
 // ---------------------------------------------------------------------------
 // Pure Endianness / Codec
@@ -55,12 +74,12 @@ KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
 {
   const auto key = make_l_key(kLocalTypeNumeric, counter_name);
 
-  for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
+  for (int attempt = 0; attempt < kCounterAllocMaxRetries; ++attempt) {
     auto tr_res = store.begin_transaction();
     if (!tr_res) {
       auto ec = fdb_to_error(tr_res.error());
       if (is_retriable(ec)) {
-	sleep_for_msec(10 * (attempt + 1));
+        counter_alloc_backoff(attempt);
         continue;
       }
       return ec;
@@ -71,7 +90,7 @@ KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
     if (!val_res) {
       auto ec = fdb_to_error(val_res.error());
       if (is_retriable(ec)) {
-	sleep_for_msec(10 * (attempt + 1));
+        counter_alloc_backoff(attempt);
         continue;
       }
       return ec;
@@ -99,7 +118,7 @@ KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
     if (!is_retriable(ec)) {
       return ec;
     }
-    sleep_for_msec(10 * (attempt + 1));
+    counter_alloc_backoff(attempt);
   }
 
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;

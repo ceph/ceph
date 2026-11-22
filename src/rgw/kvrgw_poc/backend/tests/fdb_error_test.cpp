@@ -25,6 +25,7 @@
 
 #include "error_codes.hpp"
 #include "kv_store.hpp"
+#include "l_keys.hpp"
 
 #include <cassert>
 #include <cstring>
@@ -652,7 +653,7 @@ TEST(allocate_stops_on_non_retriable_get)
 TEST(allocate_exhausts_retries)
 {
   inject::reset();
-  for (int i = 0; i < kvrgw::kMaxTxnRetries; ++i) {
+  for (int i = 0; i < kvrgw::kCounterAllocMaxRetries; ++i) {
     inject::push_get_success(false);
     inject::push_commit_error(1020);
   }
@@ -660,7 +661,26 @@ TEST(allocate_exhausts_retries)
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
   ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_MAX_RETRIES_EXCEEDED);
-  ASSERT_EQ(inject::g_commit_calls, kvrgw::kMaxTxnRetries);
+  ASSERT_EQ(inject::g_commit_calls, kvrgw::kCounterAllocMaxRetries);
+}
+
+// Simulates N backends starting at once: with N-1 conflicts before our commit
+// succeeds, allocation must still succeed (the old 3-attempt limit failed here).
+TEST(allocate_survives_contention)
+{
+  inject::reset();
+  constexpr int kConflicts = 5;
+  for (int i = 0; i < kConflicts; ++i) {
+    inject::push_get_success(false);
+    inject::push_commit_error(1020);
+  }
+  inject::push_get_success(false);
+  inject::push_commit_success();
+  auto store = *kvrgw::KvStore::create();
+  auto result = store.allocate_rgw_id();
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(*result, static_cast<uint32_t>(1));
+  ASSERT_EQ(inject::g_commit_calls, kConflicts + 1);
 }
 
 TEST(allocate_maps_unknown_fdb_code_to_internal)
