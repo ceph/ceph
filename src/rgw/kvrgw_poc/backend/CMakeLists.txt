@@ -275,6 +275,21 @@ set_target_properties(d_write_test PROPERTIES
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
 
+add_executable(create_bucket_test
+  tests/create_bucket_test.cpp
+)
+target_include_directories(create_bucket_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(create_bucket_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(create_bucket_test PRIVATE kvrgw)
+set_target_properties(create_bucket_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+
 add_executable(put_condition_test
   tests/put_condition_test.cpp
 )
@@ -438,3 +453,4 @@ add_test(NAME err_insertion_test COMMAND err_insertion_test)
 add_test(NAME batch_mixed_test COMMAND batch_mixed_test)
 add_test(NAME d_write_test COMMAND d_write_test)
 add_test(NAME put_condition_test COMMAND put_condition_test)
+add_test(NAME create_bucket_test COMMAND create_bucket_test)

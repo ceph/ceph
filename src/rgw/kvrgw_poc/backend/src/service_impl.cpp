@@ -2253,6 +2253,51 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
 }
 
 //---------------------------------------------------------------------------------
+KvrgwErrorCode KvRgwServiceImpl::create_bucket_attempt(tenant_id_t tenant_id,
+                                                       std::string_view bucket_name,
+                                                       const KeyBuf &bucket_key)
+{
+  auto tr_res = store_.begin_transaction();
+  if (!tr_res) {
+    return fdb_to_error(tr_res.error());
+  }
+  auto &tr = *tr_res;
+
+  auto value = tr->kv_get(bucket_key.view());
+  if (!value) {
+    return fdb_to_error(value.error());
+  }
+
+  if (value->has_value()) {
+    // Already exists: adopt the stored state, nothing to commit (and no
+    // bucket id was allocated).
+    auto bv = parse_bucket_value(**value);
+    if (!bv) {
+      return KVRGW_ERR_CORRUPT_VALUE;
+    }
+    put_bucket_cache(tenant_id, bucket_name, bv->bucket_id, bv->access_flags,
+                     bv->versioning_state);
+    return KVRGW_ERR_OK;
+  }
+
+  uint64_t bucket_num = 0;
+  auto ec = LKeyNumericCounter::allocate_in_txn(*tr, kLocalCounterBucketId,
+                                                bucket_num);
+  if (ec != KVRGW_ERR_OK) {
+    return ec;
+  }
+
+  const bucket_id_t bucket_id = bucket_id_t::from_counter(bucket_num);
+  tr->kv_put(bucket_key.view(), make_bucket_value(bucket_id, now_unix()));
+  fdb_error_t err = tr->commit();
+  if (err) {
+    return fdb_to_error(err);
+  }
+  put_bucket_cache(tenant_id, bucket_name, bucket_id);
+  return KVRGW_ERR_OK;
+}
+
+//---------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
                                                std::string_view bucket_name)
 {
@@ -2262,46 +2307,15 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
     return KVRGW_ERR_INVALID_BUCKET_NAME;
   }
 
-  auto state = read_bucket_state(tenant_id, bucket_name);
-  if (!state) {
-    return fdb_to_error(state.error());
-  }
-  if (state->has_value()) {
-    return KVRGW_ERR_OK;
-  }
-
-  uint64_t bucket_num = 0;
-  auto ec = LKeyNumericCounter::allocate(store_, kLocalCounterBucketId, bucket_num);
-  if (ec != KVRGW_ERR_OK) {
-    return ec;
-  }
-
-  const bucket_id_t bucket_id = bucket_id_t::from_counter(bucket_num);
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
 
-  for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
-    auto tr_res = store_.begin_transaction();
-    if (!tr_res) {
-      auto ec = fdb_to_error(tr_res.error());
-      if (is_retriable(ec)) {
-        sleep_for_msec(10 * (attempt + 1));
-        continue;
-      }
+  for (int attempt = 0; attempt < kCounterAllocMaxRetries; ++attempt) {
+    auto ec = create_bucket_attempt(tenant_id, bucket_name, bucket_key);
+    if (ec == KVRGW_ERR_OK || !is_retriable(ec)) {
       return ec;
     }
-    auto &tr = *tr_res;
-    tr->kv_put(bucket_key.view(), make_bucket_value(bucket_id, now_unix()));
-    fdb_error_t err = tr->commit();
-    if (!err) {
-      put_bucket_cache(tenant_id, bucket_name, bucket_id);
-      return KVRGW_ERR_OK;
-    }
-    auto commit_ec = fdb_to_error(err);
-    if (!is_retriable(commit_ec)) {
-      return commit_ec;
-    }
-    sleep_for_msec(10 * (attempt + 1));
+    counter_alloc_backoff(attempt);
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }

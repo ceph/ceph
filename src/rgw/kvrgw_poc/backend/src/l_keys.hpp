@@ -29,6 +29,10 @@ namespace kvrgw {
 // Use more attempts than the generic kMaxTxnRetries to absorb that contention.
 inline constexpr int kCounterAllocMaxRetries = 20;
 
+// Randomized exponential back-off to use between counter-allocation attempts
+// so that concurrent allocators do not retry in lockstep.
+void counter_alloc_backoff(int attempt);
+
 // ---------------------------------------------------------------------------
 // Pure Endianness / Codec for 64-bit Big-Endian Numeric Counter
 // ---------------------------------------------------------------------------
@@ -45,6 +49,14 @@ class LKeyNumericCounter {
   static KvrgwErrorCode allocate(KvStore& store,
 				 std::string_view counter_name,
 				 uint64_t& out_id);
+
+  // Allocates the next counter value inside the caller's transaction: reads
+  // the counter key and writes counter+1 on `tr`. Does NOT commit and does
+  // not retry; if the transaction is abandoned or its commit fails, the
+  // increment is discarded with it (no id is consumed).
+  static KvrgwErrorCode allocate_in_txn(KvTransaction& tr,
+					std::string_view counter_name,
+					uint64_t& out_id);
 };
 
 } // namespace kvrgw

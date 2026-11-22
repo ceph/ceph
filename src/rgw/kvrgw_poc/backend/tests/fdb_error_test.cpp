@@ -703,6 +703,63 @@ TEST(allocate_fails_on_short_counter)
   ASSERT_TRUE(!result);
   ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_CORRUPT_VALUE);
 }
+// allocate_in_txn: runs on the caller's transaction, never commits.
+TEST(allocate_in_txn_absent_counter_gives_1_without_commit)
+{
+  inject::reset();
+  inject::push_get_success(false);
+  auto store = *kvrgw::KvStore::create();
+  auto tr = store.begin_transaction();
+  ASSERT_TRUE(tr.has_value());
+  uint64_t id = 0;
+  auto ec = kvrgw::LKeyNumericCounter::allocate_in_txn(**tr, "c", id);
+  ASSERT_EQ(ec, kvrgw::KVRGW_ERR_OK);
+  ASSERT_EQ(id, static_cast<uint64_t>(1));
+  ASSERT_EQ(inject::g_commit_calls, 0);
+}
+
+TEST(allocate_in_txn_increments_existing_counter)
+{
+  inject::reset();
+  char be[sizeof(uint64_t)];
+  kvrgw::encode_numeric_counter(41, std::span<char, sizeof(uint64_t)>(be, sizeof(be)));
+  inject::push_get_success(true, std::string(be, sizeof(be)));
+  auto store = *kvrgw::KvStore::create();
+  auto tr = store.begin_transaction();
+  ASSERT_TRUE(tr.has_value());
+  uint64_t id = 0;
+  auto ec = kvrgw::LKeyNumericCounter::allocate_in_txn(**tr, "c", id);
+  ASSERT_EQ(ec, kvrgw::KVRGW_ERR_OK);
+  ASSERT_EQ(id, static_cast<uint64_t>(42));
+  ASSERT_EQ(inject::g_commit_calls, 0);
+}
+
+TEST(allocate_in_txn_propagates_get_error)
+{
+  inject::reset();
+  inject::push_get_error(1020);
+  auto store = *kvrgw::KvStore::create();
+  auto tr = store.begin_transaction();
+  ASSERT_TRUE(tr.has_value());
+  uint64_t id = 0;
+  auto ec = kvrgw::LKeyNumericCounter::allocate_in_txn(**tr, "c", id);
+  ASSERT_TRUE(kvrgw::is_retriable(ec));
+  ASSERT_EQ(inject::g_commit_calls, 0);
+}
+
+TEST(allocate_in_txn_fails_on_short_counter)
+{
+  inject::reset();
+  inject::push_get_success(true, std::string(sizeof(uint64_t) - 1, '\0'));
+  auto store = *kvrgw::KvStore::create();
+  auto tr = store.begin_transaction();
+  ASSERT_TRUE(tr.has_value());
+  uint64_t id = 0;
+  auto ec = kvrgw::LKeyNumericCounter::allocate_in_txn(**tr, "c", id);
+  ASSERT_EQ(ec, kvrgw::KVRGW_ERR_CORRUPT_VALUE);
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Group 8: begin_transaction error propagation

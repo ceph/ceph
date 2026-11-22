@@ -745,6 +745,11 @@ class KvRgwServiceImpl final {
                         uint8_t access_flags = 0, VersioningState versioning_state = VERSIONING_DISABLED);
   void invalidate_bucket_cache(tenant_id_t tenant_id, std::string_view bucket_name);
 
+  // Single create_bucket attempt (one FDB transaction). Returns the raw error
+  // and does no retrying; create_bucket() owns the retry policy.
+  KvrgwErrorCode create_bucket_attempt(tenant_id_t tenant_id, std::string_view bucket_name,
+                                       const KeyBuf &bucket_key);
+
   // Thread-local, lock-free front door for the opportunistic bucket-cache
   // refresh in resolve_bucket_verify().
   // Checks a small per-thread table to see whether this thread had

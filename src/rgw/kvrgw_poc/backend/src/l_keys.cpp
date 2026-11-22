@@ -30,7 +30,7 @@ namespace kvrgw {
 
 //--------------------------------------------------------------------------------
 // Randomized exponential back-off (cap 200ms)
-static void counter_alloc_backoff(int attempt)
+void counter_alloc_backoff(int attempt)
 {
   thread_local std::mt19937 rng{std::random_device{}()};
 
@@ -66,14 +66,41 @@ void encode_numeric_counter(uint64_t val, std::span<char, sizeof(uint64_t)> out_
 }
 
 // ---------------------------------------------------------------------------
+// In-transaction Numeric Counter Allocator
+// ---------------------------------------------------------------------------
+KvrgwErrorCode LKeyNumericCounter::allocate_in_txn(KvTransaction& tr,
+						   std::string_view counter_name,
+						   uint64_t& out_id)
+{
+  const auto key = make_l_key(kLocalTypeNumeric, counter_name);
+
+  auto val_res = tr.kv_get(key.view());
+  if (!val_res) {
+    return fdb_to_error(val_res.error());
+  }
+
+  uint64_t cur = 0;
+  if (val_res->has_value()) {
+    if (!decode_numeric_counter(**val_res, cur)) {
+      return KVRGW_ERR_CORRUPT_VALUE;
+    }
+  }
+
+  const uint64_t next = cur + 1;
+  char buf[sizeof(uint64_t)];
+  encode_numeric_counter(next, std::span<char, sizeof(uint64_t)>(buf, sizeof(buf)));
+  tr.kv_put(key.view(), std::string_view(buf, sizeof(buf)));
+  out_id = next;
+  return KVRGW_ERR_OK;
+}
+
+// ---------------------------------------------------------------------------
 // Standalone Numeric Counter Allocator
 // ---------------------------------------------------------------------------
 KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
 					     std::string_view counter_name,
 					     uint64_t& out_id)
 {
-  const auto key = make_l_key(kLocalTypeNumeric, counter_name);
-
   for (int attempt = 0; attempt < kCounterAllocMaxRetries; ++attempt) {
     auto tr_res = store.begin_transaction();
     if (!tr_res) {
@@ -86,27 +113,15 @@ KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
     }
 
     auto& tr = *tr_res;
-    auto val_res = tr->kv_get(key.view());
-    if (!val_res) {
-      auto ec = fdb_to_error(val_res.error());
-      if (is_retriable(ec)) {
+    uint64_t next = 0;
+    auto alloc_ec = allocate_in_txn(*tr, counter_name, next);
+    if (alloc_ec != KVRGW_ERR_OK) {
+      if (is_retriable(alloc_ec)) {
         counter_alloc_backoff(attempt);
         continue;
       }
-      return ec;
+      return alloc_ec;
     }
-
-    uint64_t cur = 0;
-    if (val_res->has_value()) {
-      if (!decode_numeric_counter(**val_res, cur)) {
-        return KVRGW_ERR_CORRUPT_VALUE;
-      }
-    }
-
-    const uint64_t next = cur + 1;
-    char buf[sizeof(uint64_t)];
-    encode_numeric_counter(next, std::span<char, sizeof(uint64_t)>(buf, sizeof(buf)));
-    tr->kv_put(key.view(), std::string_view(buf, sizeof(buf)));
 
     fdb_error_t err = tr->commit();
     if (!err) {
