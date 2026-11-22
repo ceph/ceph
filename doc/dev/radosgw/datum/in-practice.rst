@@ -271,7 +271,7 @@ endpoint updates used by the recorded planner; the right uses the library's byte
           selected = datum::key::ending_before(selected, "photos/80");
 
           const auto intervals =
-              datum::interval::compile_intervals<1>(selected);
+              datum::interval::compile_intervals(selected);
 
        .. rst-class:: datum-annotation
 
@@ -280,7 +280,7 @@ endpoint updates used by the recorded planner; the right uses the library's byte
        PR implementation: `bounds operations <https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/query.h>`_ ·
        `range compilation <https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/query.h>`_.
 
-``compile_intervals<1>`` produces at most one range here: the intersection of the prefix range and
+``compile_intervals`` infers space for at most one range here: the intersection of the prefix range and
 two bounds. A backend adapter maps finite endpoints to the database’s inclusive or
 exclusive endpoints and preserves the native query options chosen by the caller.
 Such database bindings live with the consumer integration. The runnable example operates on
@@ -475,9 +475,11 @@ physical reads. This comparison changes only how the logical gaps are calculated
 
 The :doc:`landing page's interactive read planner <index>` extends this calculation to overlapping
 requests and multiple cached regions, then limits how much data to read in each batch.
-It passes the difference directly to ``take<6>`` and retains a bounded canonical batch.
-Six slots suffice for its three request and three cache intervals; a production caller must
-establish its own output bound or choose dynamic output. The
+It passes the difference directly to ``take`` and retains a canonical batch whose inline
+capacity is inferred from the fixed request and cache arrays.
+Six slots suffice for its three request and three cache intervals. Unknown or large structural
+bounds automatically select dynamic output; an explicit ``take<Capacity>`` instead enforces
+an application entry limit. The
 :doc:`quota lesson <06-covered-quota>` also checks a complete numeric plan with ``static_assert``.
 
 When each selected cut needs the identity of a source record, use

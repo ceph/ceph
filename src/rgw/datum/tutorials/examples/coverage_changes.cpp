@@ -12,7 +12,7 @@ constexpr auto desired = iv::bounds({5, 7});
 
 // N4950 [expr.const]: https://timsong-cpp.github.io/cppwp/n4950/expr.const
 // Inline canonical storage retains the complete result during C++23 constant evaluation:
-constexpr auto changed = iv::compile_intervals<2>(previous ^ desired);
+constexpr auto changed = iv::compile_intervals(previous ^ desired);
 static_assert(changed.size() == 2);
 static_assert(changed[0] == iv::bounds({0, 5}));
 static_assert(changed[1] == iv::bounds({8, 4}));

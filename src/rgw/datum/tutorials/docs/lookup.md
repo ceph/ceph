@@ -128,6 +128,11 @@ values; workspace results borrow them. Checked range admission follows standard
 `views::all` ownership.
 [Canonical operands and evaluation](design.md#canonical-operands-and-evaluation).
 
+**Automatic storage; `dynamic_storage`.** Ordinary compilation and covered quotas select inline
+output for small structural bounds, and a vector otherwise. Use the explicit dynamic policy for
+one owning type across expression shapes; use `<Capacity>` for a hard output entry limit.
+[Storage policy](design.md#canonical-operands-and-evaluation).
+
 **Ceph vocabulary; `ceph-datum.h`.** Shared operations for native `buffer::list`
 storage: copy into an ordinary destination, retain a slice, create an independent
 native copy, or expose fragments as standard spans.
@@ -306,7 +311,8 @@ create independent bytes or return a standard Ranges view.
 across fragments. [Lesson 1](../tutorial.md#1-hello-world--in-pieces).
 
 **`take()`, covered quota.** `interval::take()` selects up to the requested measure
-of native/admitted algebra. `take<Capacity>` retains inline canonical output.
+of native/admitted algebra. Small structural bounds automatically select inline canonical output;
+`take<Capacity>` imposes a hard entry limit, and the `dynamic_storage` argument forces a vector.
 [Lesson 6](../tutorial.md#6-five-bytes-please) and [bounded batches](../tutorial.md#bounded-read-batches).
 
 **View.** A way to observe data. C++ Ranges' views model `std::ranges::view` and can

@@ -27,9 +27,12 @@ TEST_CASE("formatting adapters preserve built-in Datum diagnostic policy", "[dat
     CHECK(backend::format("{}", expression).starts_with("interval_difference{lhs=interval{"));
 
     const auto bounded = iv::compile_intervals<2>(expression);
-    const auto dynamic = iv::compile_intervals(expression);
+    const auto inferred = iv::compile_intervals(expression);
+    const auto dynamic = iv::compile_intervals(expression, iv::dynamic_storage);
     CHECK(backend::format("{}", datum::render::display(bounded)).starts_with(
         "interval_set{intervals=[interval{"));
     CHECK(backend::format("{}", datum::render::display(dynamic)).starts_with(
         "interval_set{intervals=[interval{"));
+    CHECK(backend::format("{}", datum::render::display(inferred)) ==
+          backend::format("{}", datum::render::display(dynamic)));
 }

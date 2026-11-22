@@ -709,11 +709,13 @@ TEST_CASE("clipping handles empty origins and unbounded selections")
                            Q::empty()};
     const auto lens = [](const Q& row) -> const Q& { return row; };
     const std::array selections {
-        iv::compile_intervals(Q::universal()), iv::compile_intervals(Q::empty()),
-        iv::compile_intervals(Q::singleton(0)), iv::compile_intervals(Q::closed(-4, 4)),
+        iv::compile_intervals(Q::universal(), iv::dynamic_storage),
+        iv::compile_intervals(Q::empty(), iv::dynamic_storage),
+        iv::compile_intervals(Q::singleton(0), iv::dynamic_storage),
+        iv::compile_intervals(Q::closed(-4, 4), iv::dynamic_storage),
         iv::compile_intervals(std::array {Q::between(B::negative_infinity(), B::closed(-6)),
                                        Q::closed_open(-3, -1), Q::singleton(0), Q::open(2, 6),
-                                       Q::between(B::open(8), B::positive_infinity())})};
+                                       Q::between(B::open(8), B::positive_infinity())}, iv::dynamic_storage)};
     const auto prepared_source = iv::compile_intervals(rows);
     for (const auto& selection : selections) {
         const iv::clip_view cuts {rows, selection, lens};

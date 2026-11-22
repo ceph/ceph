@@ -347,9 +347,12 @@ in inline canonical storage and checks all nine changed bytes during compilation
 ```cpp
 constexpr auto previous = iv::bounds({0, 8});
 constexpr auto desired = iv::bounds({5, 7});
-constexpr auto changed = iv::compile_intervals<2>(previous ^ desired);
+constexpr auto changed = iv::compile_intervals(previous ^ desired);
 static_assert(iv::measure(changed, iv::bytes) == 9);
 ```
+
+The expression's type proves a bound of two components, so ordinary compilation selects
+inline storage automatically. No capacity argument or preliminary counting pass is needed.
 
 Its output distinguishes components from covered bytes:
 
@@ -676,7 +679,7 @@ at the record boundary and demonstrates `clip_view` for stable, repeatable input
 
 ```cpp
 using interval = iv::byte_query;
-constexpr auto selection = iv::compile_intervals<1>(interval::closed_open(8, 12));
+constexpr auto selection = iv::compile_intervals(interval::closed_open(8, 12));
 const iv::clip_view cuts {records, selection, [](const text_record& row) {
     return datum::byte_extent {row.offset, row.text.size()};
 }};
@@ -784,7 +787,7 @@ The [complete program](examples/06_covered_quota.cpp) includes
 
 ```cpp
 // Retain two canonical pieces for measurement and selection; gaps consume no quota:
-constexpr auto coverage = iv::compile_intervals<2>(iv::set_union(
+constexpr auto coverage = iv::compile_intervals(iv::set_union(
     interval::closed_open(0, 3),
     interval::closed_open(10, 15)
 ));
@@ -800,7 +803,7 @@ byte quota, and the supplied metric:
 constexpr std::uint64_t quota = 5;
 
 // Count only covered bytes toward the quota:
-constexpr auto selected = iv::take<2>(coverage, quota, iv::bytes);
+constexpr auto selected = iv::take(coverage, quota, iv::bytes);
 static_assert(iv::measure(selected, iv::bytes) == 5);
 ```
 
@@ -865,17 +868,18 @@ served: 8 bytes
 
 ### Bounded read batches
 
-Use `take<Capacity>` when a batch has a known maximum number of intervals. It returns the
-same canonical range contract using inline interval storage. The
+Use `take` to retain a batch. Small bounds known from source types select inline storage;
+unknown or large bounds select dynamic storage. The
 [read-planner program](examples/read_plan.cpp) prepares requests and cache coverage, then selects:
 
 ```cpp
-const auto batch = iv::take<6>(iv::difference(requested, cached), 14 * MiB, iv::bytes);
+const auto batch = iv::take(iv::difference(requested, cached), 14 * MiB, iv::bytes);
 ```
 
 Three request and three cache intervals can produce at most six missing pieces. The result
-therefore needs no missing-coverage vector or vector-backed batch. An insufficient capacity
-throws without returning partial output. Capacity counts interval entries; point values can
+therefore needs no missing-coverage vector or vector-backed batch. Use `take<Capacity>` when
+an application needs a hard entry limit; an insufficient capacity throws without returning
+partial output. Capacity counts interval entries; point values can
 still copy or allocate, and cursor preparation can inspect input bounds ahead of the output.
 
 Zero quota returns before source iteration. After exact or partial exhaustion, the quota walk
@@ -893,7 +897,7 @@ Known byte geometry can use the same operations during C++23 constant evaluation
 and keeps a bounded five-byte batch:
 
 ```cpp
-constexpr auto reads = iv::take<2>(
+constexpr auto reads = iv::take(
     iv::difference(iv::byte_query::closed_open(0, 15), iv::byte_query::closed_open(3, 10)),
     5, iv::bytes);
 
@@ -904,12 +908,33 @@ static_assert(iv::measure(reads, iv::bytes) == 5);
 ```
 
 The program prints these planned positions at runtime; actual I/O remains the caller's job.
-Use bounded compilation or `take<Capacity>` to retain these numeric plans as `constexpr`
-objects. C++23 permits transient allocation during constant evaluation when that storage is
-released within the evaluation; a nonempty vector allocation cannot remain in the resulting
+Ordinary compilation and `take` automatically retain these small numeric plans inline as
+`constexpr` objects. C++23 permits transient allocation during constant evaluation when that
+storage is released within the evaluation; a nonempty vector allocation cannot remain in the resulting
 `constexpr` object. Inline entries avoid that allocation for this byte domain. Custom points,
 metrics, and callbacks must themselves support constant evaluation. See N4950's constant
 expression rules in the [bibliography](#bibliography).
+
+The bound is conservative and comes from types, not values. Identical expression shapes
+have the same result type even when their actual component counts differ. Fixed arrays,
+fixed spans, and known nonexpanding adaptors carry bounds; vectors and dynamic spans do not.
+The current internal policy caps the complete inline storage object at 512 bytes and keeps
+it movable for standard range pipelines. This is not a stable concrete-type guarantee.
+Raw input normalization can still allocate temporary workspace before retaining inline output.
+
+Prefer `auto` and range-based consumers. When a collection or return interface needs the same
+owning type for different expression shapes, select dynamic storage explicitly:
+
+```cpp
+const auto first = iv::compile_intervals(previous, iv::dynamic_storage);
+const auto changed = iv::compile_intervals(previous ^ desired, iv::dynamic_storage);
+const std::array selections {first, changed};
+const auto batch = iv::take(changed, 5, iv::bytes, iv::dynamic_storage);
+```
+
+`plan::compile_intervals` accepts the same dynamic policy for resolved query descriptions.
+Explicit `compile_intervals<Capacity>` also accepts raw ranges; its limit applies after
+normalization, so several overlapping entries can fit into one output slot.
 
 ## 7 Move it and keep reading
 
@@ -1731,7 +1756,7 @@ also shows a compatible plain record.
 Read the selection and retrieve the control by its type:
 
 ```cpp
-constexpr auto coverage = plan::compile_intervals<1>(order);
+constexpr auto coverage = plan::compile_intervals(order);
 constexpr auto quota = plan::control<std::uint64_t>(order);
 
 std::println("requested: {} bytes", iv::measure(coverage, iv::bytes));
@@ -1747,7 +1772,7 @@ The program explicitly applies the quota using the operation from section 6:
 
 ```cpp
 // This example interprets its uint64_t control as a covered-byte quota:
-constexpr auto selected = iv::take<1>(order.intervals, quota, iv::bytes);
+constexpr auto selected = iv::take(order.intervals, quota, iv::bytes);
 static_assert(iv::measure(selected, iv::bytes) == 5);
 for (const auto& span : selected) {
     std::println("[{}, {})", span.lower().key(), span.upper().key());
@@ -2581,6 +2606,11 @@ identify sources in the separate local RGW integration snapshot described in the
 - WG21 N4950, [constant expressions](https://timsong-cpp.github.io/cppwp/n4950/expr.const).
   The C++23 allocation rules permit temporary storage released within evaluation. Bounded
   numeric interval plans retain their entries inline and can survive as `constexpr` values.
+- WG21 N4950, [arrays](https://timsong-cpp.github.io/cppwp/n4950/array.overview),
+  [spans](https://timsong-cpp.github.io/cppwp/n4950/views.span),
+  [reference views](https://timsong-cpp.github.io/cppwp/n4950/range.ref.view), and
+  [owning views](https://timsong-cpp.github.io/cppwp/n4950/range.owning.view).
+  These define the fixed cardinalities and wrappers used for automatic retained-storage bounds.
 - Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
   `isEmpty`, `encloses`, `equals`, and `canonical` explain why order-only bound operations
   need not determine discrete membership or membership-equivalent representations.

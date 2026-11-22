@@ -163,6 +163,14 @@ public:
 template <std::ranges::viewable_range RangeT, typename LensT>
 intervals_view(RangeT&&, LensT&&) -> intervals_view<std::views::all_t<RangeT>, std::decay_t<LensT>>;
 
+namespace detail {
+
+template <typename ViewT, typename LensT>
+struct component_bound<intervals_view<ViewT, LensT>>
+    : std::integral_constant<std::size_t, component_bound_v<ViewT>> {};
+
+} // detail
+
 // Own the points without introducing a second container or iterator protocol.
 // Capacity bounds entries, not allocations made by points or source storage.
 template <ordered_domain DomainT, std::size_t Capacity>
@@ -265,6 +273,14 @@ public:
     void end() const&& = delete;
 
 };
+
+namespace detail {
+
+template <typename ExprT>
+struct component_bound<interval_observation<ExprT>>
+    : std::integral_constant<std::size_t, component_bound_v<ExprT>> {};
+
+} // detail
 
 template <expression ExprT>
 requires requires (ExprT&& source) {

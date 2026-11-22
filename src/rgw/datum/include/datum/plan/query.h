@@ -154,6 +154,12 @@ constexpr auto compile_intervals(const QueryT& query)
     return interval::compile_intervals<Capacity>(query.intervals);
 }
 
+template <resolved_query QueryT>
+constexpr auto compile_intervals(const QueryT& query, interval::dynamic_storage_t policy)
+{
+    return interval::compile_intervals(query.intervals, policy);
+}
+
 } // ceph::salad::datum::plan
 
 #endif // CEPH_RGW_DATUM_PLAN_QUERY_H

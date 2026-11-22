@@ -8,7 +8,7 @@ namespace iv = datum::interval;
 
 // WG21 N4950 [expr.const]: https://timsong-cpp.github.io/cppwp/n4950/expr.const
 // Inline entries can survive C++23 constant evaluation:
-constexpr auto reads = iv::take<2>(
+constexpr auto reads = iv::take(
     iv::difference(iv::byte_query::closed_open(0, 15), iv::byte_query::closed_open(3, 10)),
     5, iv::bytes);
 

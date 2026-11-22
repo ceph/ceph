@@ -210,7 +210,7 @@ necessary.</p>
           <div class="code-head"><h3>The Datum code behind this selection:</h3><span>C++23</span></div>
           <pre><code id="datum-read-plan-code">const auto requested = iv::compile_intervals(request_ranges);
 const auto cached = iv::compile_intervals(cache_ranges);
-const auto batch = iv::take&lt;6&gt;(iv::difference(requested, cached), 14 * MiB, iv::bytes);</code></pre>
+const auto batch = iv::take(iv::difference(requested, cached), 14 * MiB, iv::bytes);</code></pre>
           <details class="source-details" id="datum-read-source-details">
             <summary>See the inputs and complete runnable program</summary>
             <pre><code id="datum-read-full-code">// Plan storage reads around cached data, with a limit on bytes read in one batch.
@@ -240,7 +240,7 @@ int main()
 
     const auto requested = iv::compile_intervals(request_ranges);
     const auto cached = iv::compile_intervals(cache_ranges);
-    const auto batch = iv::take&lt;6&gt;(iv::difference(requested, cached), 14 * MiB, iv::bytes);
+    const auto batch = iv::take(iv::difference(requested, cached), 14 * MiB, iv::bytes);
 
     std::ranges::for_each(batch, [](const auto&amp; part) {
         std::cout &lt;&lt; &#x27;[&#x27; &lt;&lt; part.lower().key() / MiB &lt;&lt; &quot;, &quot;
@@ -1346,8 +1346,8 @@ a complete program is also available from the Complete examples page.</p></noscr
       return example.replace('iv::bounds({8 * MiB, 16 * MiB})',
           `iv::bounds({${request} * MiB, 16 * MiB})`)
         .replace('iv::bounds({4 * MiB, 8 * MiB})', `iv::bounds({${cache} * MiB, 8 * MiB})`)
-        .replace('iv::take<6>(iv::difference(requested, cached), 14 * MiB, iv::bytes)',
-          `iv::take<6>(iv::difference(requested, cached), ${budget} * MiB, iv::bytes)`);
+        .replace('iv::take(iv::difference(requested, cached), 14 * MiB, iv::bytes)',
+          `iv::take(iv::difference(requested, cached), ${budget} * MiB, iv::bytes)`);
     }
 
     function coreCode(source) {

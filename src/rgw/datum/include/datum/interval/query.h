@@ -28,6 +28,7 @@
 #include "datum/compat/interval_point.h"
 #include "datum/compat/query_storage.h"
 #include "datum/compat/string.h"
+#include "datum/interval/detail/capacity.h"
 #include "datum/range.h"
 
 #include <compare>
@@ -967,7 +968,13 @@ public:
     }
 
 public:
-    constexpr void push_back(value_type value)
+    constexpr void push_back(const value_type& value)
+    {
+        ensure_capacity();
+        intervals.unchecked_emplace_back(value);
+    }
+
+    constexpr void push_back(value_type&& value)
     {
         ensure_capacity();
         intervals.unchecked_emplace_back(std::move(value));
@@ -2309,11 +2316,79 @@ private:
 template <std::ranges::viewable_range RangeT>
 canonical_range(RangeT&&) -> canonical_range<std::views::all_t<RangeT>>;
 
+// Retain one dynamic owning type across differently shaped sources:
+struct dynamic_storage_t final {};
+inline constexpr dynamic_storage_t dynamic_storage {};
+
 namespace detail {
+
+template <interval_view T>
+struct component_bound<T> : std::integral_constant<std::size_t, 1> {};
+
+template <ordered_domain DomainT, std::size_t Capacity>
+struct component_bound<static_interval_set<DomainT, Capacity>>
+    : std::integral_constant<std::size_t, Capacity> {};
+
+template <typename StorageT>
+struct component_bound<canonical_range<StorageT>>
+    : std::integral_constant<std::size_t, component_bound_v<StorageT>> {};
+
+template <set_operation Operation, typename LeftT, typename RightT>
+struct component_bound<binary_expression<Operation, LeftT, RightT>>
+    : std::integral_constant<std::size_t,
+                            add_component_bounds(component_bound_v<LeftT>,
+                                                 component_bound_v<RightT>)> {};
+
+template <typename T>
+concept compilation_source = domain_expression<T> ||
+    (std::ranges::input_range<T> and interval_view<std::ranges::range_reference_t<T>>);
+
+template <compilation_source SourceT>
+consteval auto compilation_domain()
+{
+    if constexpr (domain_expression<SourceT>) {
+        return std::type_identity<expression_domain_t<SourceT>> {};
+    }
+
+    if constexpr (!domain_expression<SourceT>) {
+        return std::type_identity<expression_domain_t<std::ranges::range_reference_t<SourceT>>> {};
+    }
+}
+
+template <compilation_source SourceT>
+using compilation_domain_t = typename decltype(compilation_domain<SourceT>())::type;
+
+template <compilation_source SourceT>
+struct automatic_storage final
+{
+    using domain_type = compilation_domain_t<SourceT>;
+
+    // Bound the complete object, and avoid forming a large array type before this check.
+    // Movability preserves ordinary owning Ranges adaptation without requiring point assignment:
+    static constexpr std::size_t byte_limit = 512;
+    static constexpr auto capacity = component_bound_v<SourceT>;
+    static constexpr bool fits = capacity <= byte_limit / sizeof(query<domain_type>);
+    using bounded = static_interval_set<domain_type, fits ? capacity : 0>;
+    using type = std::conditional_t<fits and sizeof(bounded) <= byte_limit and std::movable<bounded>,
+                                    bounded, std::vector<query<domain_type>>>;
+};
+
+template <compilation_source SourceT>
+using automatic_storage_t = typename automatic_storage<SourceT>::type;
 
 // Only producers that establish canonical geometry may bypass admission checks.
 struct canonical_access final
 {
+    // Fill the final owner directly; synchronous producers are borrowed and do not escape:
+    template <typename StorageT, typename ProducerT>
+    static constexpr auto build(ProducerT&& produce)
+    {
+        canonical_range<StorageT> result {typename canonical_range<StorageT>::verified {}};
+        std::invoke(produce, result.source);
+
+        return result;
+    }
+
     template <typename StorageT>
     static constexpr auto adopt(StorageT values)
     {
@@ -2321,53 +2396,78 @@ struct canonical_access final
                                          typename canonical_range<StorageT>::verified {}};
     }
 
-    template <typename StorageT, expression ExprT>
-    static constexpr auto compile(const ExprT& expression)
+    template <typename StorageT, compilation_source SourceT>
+    static constexpr auto compile(SourceT&& source)
     {
-        canonical_range<StorageT> result {typename canonical_range<StorageT>::verified {}};
-        if constexpr (requires { result.source.reserve(0); }) {
-            result.source.reserve(interval_view<ExprT> ? 1 : 4);
+        if constexpr (domain_expression<SourceT>) {
+            return build<StorageT>([&source](auto& selected) {
+                if constexpr (requires { selected.reserve(0); }) {
+                    selected.reserve(interval_view<SourceT> ? 1 : 4);
+                }
+                interval::for_each_interval(source, [&selected](auto&& value) {
+                    selected.push_back(std::forward<decltype(value)>(value));
+                });
+            });
         }
-        interval::for_each_interval(expression, [&result](auto&& value) {
-            result.source.push_back(std::forward<decltype(value)>(value));
-        });
 
-        return result;
+        if constexpr (!domain_expression<SourceT>) {
+            return normalize<StorageT>(std::forward<SourceT>(source));
+        }
+    }
+
+    // Reuse admission and normalization; dynamic output adopts its existing buffer directly:
+    template <typename StorageT, std::ranges::input_range RangeT>
+    static constexpr auto normalize(RangeT&& source)
+    {
+        using domain_type = compilation_domain_t<RangeT>;
+        workspace<domain_type> scratch;
+        scratch.reset(1);
+        for (const auto& value : std::ranges::ref_view {source}) {
+            const auto bounds = detail::bounds_of(value);
+            scratch.append(0, bounds.lower(), bounds.upper());
+        }
+        detail::normalize_buffer(scratch, 0);
+        auto values = scratch.take(0);
+        if constexpr (std::same_as<StorageT, decltype(values)>) {
+            return adopt(std::move(values));
+        }
+
+        if constexpr (!std::same_as<StorageT, decltype(values)>) {
+            return build<StorageT>([&values](auto& selected) {
+                for (auto& value : values) {
+                    selected.push_back(std::move(value));
+                }
+            });
+        }
     }
 
 };
 
 } // detail
 
-template <expression ExprT>
-constexpr auto compile_intervals(const ExprT& expression)
+// Native expressions stream; raw ranges normalize. Only the owning result's storage is selected:
+template <detail::compilation_source SourceT>
+constexpr auto compile_intervals(SourceT&& source)
 {
-    return detail::canonical_access::compile<std::vector<query<expression_domain_t<ExprT>>>>(expression);
+    return detail::canonical_access::compile<detail::automatic_storage_t<SourceT>>(
+        std::forward<SourceT>(source));
 }
 
-template <std::size_t Capacity, expression ExprT>
-constexpr auto compile_intervals(const ExprT& expression)
+// An explicit limit bounds canonical output, including after raw normalization:
+template <std::size_t Capacity, detail::compilation_source SourceT>
+constexpr auto compile_intervals(SourceT&& source)
 {
-    return detail::canonical_access::compile<static_interval_set<expression_domain_t<ExprT>, Capacity>>(expression);
+    using storage_type = static_interval_set<detail::compilation_domain_t<SourceT>, Capacity>;
+
+    return detail::canonical_access::compile<storage_type>(std::forward<SourceT>(source));
 }
 
-// Raw interval ranges are normalized; expression compilation already emits
-// canonical geometry. Both paths return the same range contract.
-template <std::ranges::input_range RangeT>
-requires (!expression<RangeT>) and
-         interval_range_for<RangeT, expression_domain_t<std::ranges::range_reference_t<RangeT>>>
-constexpr auto compile_intervals(RangeT&& source)
+template <detail::compilation_source SourceT>
+constexpr auto compile_intervals(SourceT&& source, dynamic_storage_t)
 {
-    using domain_type = expression_domain_t<std::ranges::range_reference_t<RangeT>>;
-    workspace<domain_type> scratch;
-    scratch.reset(1);
-    for (const auto& value : std::ranges::ref_view {source}) {
-        const auto bounds = detail::bounds_of(value);
-        scratch.append(0, bounds.lower(), bounds.upper());
-    }
-    detail::normalize_buffer(scratch, 0);
+    using storage_type = std::vector<query<detail::compilation_domain_t<SourceT>>>;
 
-    return detail::canonical_access::adopt(scratch.take(0));
+    return detail::canonical_access::compile<storage_type>(std::forward<SourceT>(source));
 }
 
 // Budget failure publishes nothing and clears scratch. A consumer exception

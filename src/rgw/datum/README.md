@@ -66,7 +66,7 @@ Other core operations already accept standard ranges under their established nam
 | Map logical cuts into a packed payload | `interval::visit_packed_overlaps(source, selection, consumer)` |
 | Convert finite half-open byte bounds | `interval::bounds(byte_extent)`, `interval::extent_of(interval)` |
 | Count or take selected coverage | `interval::measure(range, metric)`, `interval::take(expression, quota, metric)` |
-| Retain a bounded read batch | `interval::take<Capacity>(expression, quota, metric)` |
+| Retain a read batch | `interval::take(expression, quota, metric)` |
 | Visit data and preserve continuation | `traversal::scan_range`, `traversal::for_each_page` |
 
 Use the standard algorithms directly with Datum projections and comparisons.
@@ -81,8 +81,8 @@ Keep an interval expression until its consumer needs a particular representation
 | --- | --- | --- |
 | Test membership of existing values | `contains(expression, value)` | Evaluates the expression directly |
 | Traverse algebra once with a standard pipeline | `observe_intervals(expression)` | Avoids collecting intermediate coverage |
-| Retain a quota-limited batch with a known entry bound | `take<Capacity>(expression, quota, bytes)` | Streams directly into inline canonical output |
-| Retain coverage for multiple passes, or normalize unordered entries | `compile_intervals` | Owns prepared point values; bounded expression output is also available |
+| Retain a quota-limited batch | `take(expression, quota, bytes)` | Streams directly into automatically selected owning storage |
+| Retain coverage for multiple passes, or normalize unordered entries | `compile_intervals` | Owns prepared point values; small structural bounds select inline output |
 | Align ordered record and selection streams | `visit_overlaps` | Preserves both origins, including input producers returning records by value |
 | Find cuts in a packed sparse payload | `visit_packed_overlaps` | Supplies logical bounds and packed backing offsets together |
 | Validate stable records and expose repeatable cuts | `clip_view` | Checks geometry before traversal |
@@ -500,8 +500,9 @@ static_assert(!iv::contains(selected, 40));
 and enclosure compare cached bounds without copying points. General expression
 relations normalize each side and sweep the canonical intervals. Union,
 intersection, difference, and symmetric difference produce ordered, nonempty, coalesced output;
-`compile_intervals()` retains that output in a `canonical_range` backed by a vector;
-`compile_intervals<Capacity>()` uses bounded inline storage for an expression.
+`compile_intervals()` retains that output in a `canonical_range`, choosing inline storage
+for small structural bounds and a vector otherwise. `compile_intervals<Capacity>()` imposes
+an explicit entry limit; `compile_intervals(source, dynamic_storage)` always uses a vector.
 
 | Selection | Named operation | Operator |
 | --- | --- | --- |
@@ -776,9 +777,11 @@ and positive for distinct ordered positions; subtraction and advancement must pr
 and agree with distance. Concepts check syntax, while profiles supply these semantic laws.
 
 Taking a quota returns a `canonical_range` owning its interval values, without sorting or
-revalidating the result. The default output uses a vector; `take<Capacity>` uses existing
-inline interval storage. Point payloads retain their domain's ownership semantics and can
-still copy or allocate. A bounded capacity failure throws without returning a partial result;
+revalidating the result. The default selects inline or dynamic storage using the same policy
+as compilation; `take<Capacity>` imposes an explicit entry limit, and
+`take(expression, quota, metric, dynamic_storage)` always uses a vector. Point payloads retain
+their domain's ownership semantics and can still copy or allocate. A bounded capacity failure
+throws without returning a partial result;
 capacity bounds output entries, not point allocation or cursor preparation.
 Zero quota returns before source iteration. Exact or partial exhaustion performs no further
 increment or dereference; preparing a canonical result can still look ahead through input bounds.
@@ -787,7 +790,7 @@ Foreign geometry keeps explicit `compile_intervals`/`evaluate` preparation.
 The [read planner](tutorials/examples/read_plan.cpp) selects a bounded batch directly:
 
 ```cpp
-const auto batch = iv::take<6>(iv::difference(requested, cached), 14 * MiB, iv::bytes);
+const auto batch = iv::take(iv::difference(requested, cached), 14 * MiB, iv::bytes);
 ```
 
 Three request and three cache intervals bound the difference by six pieces. The planner needs
@@ -912,15 +915,33 @@ canonical lvalues. External mutation must preserve normalization during observat
 
 | Operation | Storage behind the returned `canonical_range` |
 | --- | --- |
-| `compile_intervals(expression)` or `compile_intervals(raw_ranges)` | Owns a vector of normalized interval values |
-| `compile_intervals<Capacity>(expression)` | Owns inline interval values, with the requested entry limit |
+| `compile_intervals(expression)` or `compile_intervals(raw_ranges)` | Owns normalized values; automatically selects inline or vector storage |
+| `compile_intervals<Capacity>(source)` | Owns inline interval values, with the requested entry limit |
+| `compile_intervals(source, dynamic_storage)` | Owns a vector of normalized interval values |
 | `evaluate(expression, scratch)` | Borrows a read-only span into the workspace |
-| `take(coverage, quota, metric)` | Owns a vector of selected interval values |
+| `take(coverage, quota, metric)` | Owns selected values; automatically selects inline or vector storage |
 | `take<Capacity>(expression, quota, metric)` | Owns inline selected interval values, with the requested entry limit |
+| `take(expression, quota, metric, dynamic_storage)` | Owns a vector of selected interval values |
 | `canonical_range{range}` for an unadmitted range | Checks existing geometry; storage follows `views::all` |
 
+Automatic selection uses a conservative component bound from source types, without counting
+values or traversing twice. Individual intervals, fixed arrays/spans, admitted fixed storage,
+and known nonexpanding range adaptors carry bounds. Binary algebra adds operand bounds;
+complement includes its universal interval. Unknown or overflowing bounds use dynamic storage.
+The current private policy permits a complete inline storage object of at most 512 bytes and
+requires it to remain movable for standard owning range pipelines. This ceiling is an
+implementation choice; code should not depend on the default's concrete storage type.
+It bounds result storage, not expression depth, preparation work, or point-owned allocations.
+Raw normalization still uses temporary workspace allocation, including during constant evaluation;
+its explicit capacity limits normalized output, not the number of input entries.
+
+Different expression shapes can therefore return different types. Use `auto` or a range-based
+interface for ordinary consumers. Choose `dynamic_storage` when fields, homogeneous collections,
+or function return branches need one owning type across shapes. `plan::compile_intervals`
+supports the same automatic, explicit-capacity, and dynamic forms for resolved queries.
+
 Each result supports read-only range iteration; sizing, indexing, and contiguous access
-follow its backing storage. An owned vector result is a range, rather than a
+follow its backing storage. An owned inline or vector result is a range, rather than a
 `std::ranges::view`. Storage ownership and point-payload lifetime remain separate:
 `owning_value` follows both. A standard `std::ranges::owning_view<R>` carries payload
 ownership only when `R` is already an audited owning value.
@@ -982,7 +1003,7 @@ struct byte_order
 
 constexpr byte_order order {iv::byte_query::closed_open(0, 8), {}, {}, {std::uint64_t {5}}};
 static_assert(plan::resolved_query<byte_order>);
-constexpr auto selected = iv::take<1>(
+constexpr auto selected = iv::take(
     order.intervals, plan::control<std::uint64_t>(order), iv::bytes);
 static_assert(iv::measure(selected, iv::bytes) == 5);
 ```
@@ -1397,6 +1418,12 @@ describe local machinery, not backend throughput.
 - WG21 N4950, [constant expressions](https://timsong-cpp.github.io/cppwp/n4950/expr.const).
   Temporary allocation must be released within constant evaluation. Inline numeric interval
   storage supports persistent `constexpr` plans without retained dynamic allocation.
+- WG21 N4950, [arrays](https://timsong-cpp.github.io/cppwp/n4950/array.overview),
+  [spans](https://timsong-cpp.github.io/cppwp/n4950/views.span),
+  [reference views](https://timsong-cpp.github.io/cppwp/n4950/range.ref.view), and
+  [owning views](https://timsong-cpp.github.io/cppwp/n4950/range.owning.view).
+  Fixed extents and cardinality-preserving wrappers support structural storage inference;
+  runtime sizes and arbitrary user range wrappers do not establish static bounds.
 - WG21 N4950, [temporary objects](https://timsong-cpp.github.io/cppwp/n4950/class.temporary) and
   [argument-dependent lookup](https://timsong-cpp.github.io/cppwp/n4950/basic.lookup.argdep).
   Cached foreign boundary values remain alive while overlap endpoints are borrowed. Internal

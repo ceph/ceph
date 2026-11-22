@@ -89,11 +89,11 @@ can require lookahead through input bounds. Compound output descriptors borrow l
 `copy_interval` retains point values. See [algebra observation](../tutorial.md#observe-algebra-as-a-range)
 and the [lazy-read program](../examples/lazy_reads.cpp).
 
-For a covered-byte batch, `interval::take<Capacity>(expression, quota, metric)` streams
-native/admitted algebra directly into inline canonical output. Zero quota avoids iteration;
+For a covered-byte batch, `interval::take(expression, quota, metric)` streams
+native/admitted algebra directly into automatically selected owning output. Zero quota avoids iteration;
 exact or partial exhaustion performs no next increment. Nested cursor preparation can still
-look ahead. Capacity limits entries and throws without returning a partial batch; it does not
-bound point allocations or input preparation. The [read planner](../examples/read_plan.cpp)
+look ahead. Explicit `take<Capacity>` limits entries and throws without returning a partial
+batch; it does not bound point allocations or input preparation. The [read planner](../examples/read_plan.cpp)
 uses this form to avoid collecting missing coverage and a vector-backed batch.
 
 ## Choose preparation for the consumer
@@ -101,11 +101,14 @@ uses this form to avoid collecting missing coverage and a vector-backed batch.
 Use `contains(expression, point)` when filtering records by membership. For a single pass over
 native/admitted algebra, use `observe_intervals`; a byte consumer can turn each finite half-open
 part into `byte_extent` with `extent_of`. For a bounded batch, pass the algebra directly to
-`take<Capacity>`. These paths avoid collecting coverage just to traverse it once.
+`take`. These paths avoid collecting coverage just to traverse it once.
 
 Retain `compile_intervals` where it provides something the caller needs: normalization of raw
 unordered entries, repeated geometry consumers, or owned point values that must survive the
-input. Use its bounded form when an expression's output has a known entry bound. Keep
+input. Small structural bounds automatically select inline output; unknown or large bounds
+use a vector. Use explicit `<Capacity>` for an application entry limit, and `dynamic_storage`
+when different expression shapes must share one concrete owning type. Raw normalization may
+still allocate temporary workspace. Keep
 `evaluate(expression, workspace)` where preparation must obey explicit work/intermediate-entry
 limits. Lazy output and bounded output capacity do not enforce those workspace limits.
 
@@ -121,7 +124,7 @@ forward inputs and prevalidation are useful for repeatable traversal. Choose `vi
 when sparse logical origins correspond to a densely packed payload; it counts every preceding
 origin's bytes, even when that origin is unselected.
 
-Known numeric geometry can use bounded compilation and `take<Capacity>` during C++23 constant
+Known numeric geometry can use ordinary compilation and `take` during C++23 constant
 evaluation. The [constant-plan example](../examples/constexpr_plan.cpp) checks the actual pieces
 and measure with `static_assert`; it prints only after compilation. Inline entries allow a plan
 to remain a `constexpr` value. Custom domains and callbacks must also support constant evaluation;

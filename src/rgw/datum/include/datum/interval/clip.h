@@ -415,6 +415,12 @@ public:
 
 namespace detail {
 
+template <typename SourceT, canonical_sequence SelectionT, typename LensT>
+struct component_bound<clip_view<SourceT, SelectionT, LensT>>
+    : std::integral_constant<std::size_t,
+                            add_component_bounds(component_bound_v<SourceT>,
+                                                 component_bound_v<SelectionT>)> {};
+
 template <typename RangeT>
 using overlap_row_t = std::remove_cvref_t<std::ranges::range_reference_t<RangeT>>;
 
