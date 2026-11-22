@@ -82,6 +82,21 @@ public:
     gid_count = count;
     alloced_gids = true;
   }
+  /*
+   * A copy with the effective uid and gid looked up now where they are
+   * left to the process (-1), sharing the caller's gid list: to look the
+   * ids up once before a lock is taken, where uid() and gid() would make
+   * a system call every time they are asked.
+   */
+  UserPerm resolved() const {
+    UserPerm p;
+    p.shallow_copy(*this);
+    if (p.m_uid == (uid_t)-1)
+      p.m_uid = ::geteuid();
+    if (p.m_gid == (gid_t)-1)
+      p.m_gid = ::getegid();
+    return p;
+  }
   void shallow_copy(const UserPerm& o) {
     m_uid = o.m_uid;
     m_gid = o.m_gid;

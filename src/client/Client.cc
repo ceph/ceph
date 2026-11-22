@@ -15684,7 +15684,7 @@ InodeRef Client::open_snapdir(const InodeRef& diri)
 }
 
 int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
-		      Inode **out, const UserPerm& perms)
+		      Inode **out, const UserPerm& caller_perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -15695,6 +15695,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   tout(cct) << __func__ << std::endl;
   tout(cct) << name << std::endl;
 
+  // ask for the process's ids, if they are its, before taking client_lock
+  const UserPerm perms = caller_perms.resolved();
   std::scoped_lock lock(client_lock);
 
   int r = 0;
@@ -15783,7 +15785,7 @@ int Client::ll_lookup_inode(
 
 int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 		       struct ceph_statx *stx, unsigned want, unsigned flags,
-		       const UserPerm& perms)
+		       const UserPerm& caller_perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -15794,6 +15796,8 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
   tout(cct) << "ll_lookupx" << std::endl;
   tout(cct) << name << std::endl;
 
+  // ask for the process's ids, if they are its, before taking client_lock
+  const UserPerm perms = caller_perms.resolved();
   std::scoped_lock lock(client_lock);
 
   int r = 0;
