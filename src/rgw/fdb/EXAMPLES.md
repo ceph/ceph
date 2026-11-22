@@ -19,6 +19,11 @@ Welcome, traveller. This is a cookbook-style tour of libfdb. It starts with
 ordinary key/value operations and then moves toward transactions, selectors,
 query algebra, content keys, watches, and system utilities.
 
+For a complete Ceph-specific use of these pieces, see
+[bounded metadata archiving](../CEPH_FDB_EXAMPLES.md): Ceph buffer-list payloads,
+composed key selection, borrowed typed helpers, and staged publication after
+one confirmed batch commit.
+
 Choose the interface according to transaction ownership:
 
 | Need | Usual interface |
@@ -1137,6 +1142,126 @@ is needed. These predicates are `constexpr` and can participate in constant
 evaluation when the expression's value types permit it. Complements and
 unbounded expressions are still interpreted relative to FoundationDB's
 ordinary keyspace.
+
+#### Interval mathematics for reconciliation
+
+Think of a selection as a set of eligible keys or positions. For `a <= b`, a
+half-open byte extent `[a, b)` contains offsets `a` through `b - 1`, so its length is `b - a`.
+Adjacent extents `[0, 5)` and `[5, 8)` have empty intersection and unite to
+`[0, 8)`. This convention avoids counting their boundary twice. `[a, a)` is
+empty; the closed singleton `[a, a]` contains one position.
+
+Let the old byte coverage be `A = [0, 8)` and the desired coverage be
+`B = [5, 12)`:
+
+| Question | Algebra | Result |
+| --- | --- | --- |
+| What remains covered? | `A & B` | `[5, 8)` |
+| What must be added? | `B - A` | `[8, 12)` |
+| What must be removed? | `A - B` | `[0, 5)` |
+| What changes in either direction? | `A ^ B` | `[0, 5)` union `[8, 12)` |
+| What is covered by either plan? | `A \| B` | `[0, 12)` |
+
+The pure algebra expresses this without a database or Ceph payload dependency:
+
+```cpp
+#include "rgw/fdb/interval.h"
+
+#include <cassert>
+#include <compare>
+#include <cstdint>
+
+namespace algebra = ceph::libfdb::interval;
+
+struct byte_offset_domain final
+{
+  using value_type = std::uint64_t;
+
+  static constexpr std::strong_ordering compare(const value_type lhs, const value_type rhs)
+  {
+    return lhs <=> rhs;
+  }
+
+};
+
+void reconcile_byte_extents()
+{
+  using extent = algebra::query<byte_offset_domain>;
+
+  const auto previous = extent::closed_open(0, 8);
+  const auto desired = extent::closed_open(5, 12);
+  const auto additions = desired - previous;
+  const auto removals = previous - desired;
+  const auto changed = previous ^ desired;
+
+  assert(algebra::is_disjoint(additions, removals));
+  assert(algebra::contains(additions, 8));
+  assert(not algebra::contains(additions, 12));
+  assert(algebra::contains(changed, 0));
+  assert(not algebra::contains(additions, 0));
+
+  // Apply only the edits needed to reach the desired coverage:
+  algebra::interval_set<byte_offset_domain> applied {previous};
+  applied -= removals;
+  applied |= additions;
+
+  assert(algebra::encloses(applied, desired));
+  assert(algebra::encloses(desired, applied));
+}
+```
+
+Additions and removals are disjoint, and
+`(A - (A - B)) | (B - A)` restores `B`. The same calculation can drive extent
+repair, coverage reconciliation, or changes between two key-selection policies.
+Geometry only identifies the ranges; the application still performs its reads,
+writes, or byte movement. Prefix operations additionally need a domain successor;
+the byte-offset example needs only the strong ordering above. Keep unbounded
+endpoints as bounds rather than overflowing a numeric endpoint to invent one.
+
+Symmetric difference is a toggle, with the membership rule
+`x in A ^ B` exactly when `x` is in one operand but not both:
+
+```text
+A ^ B = (A - B) | (B - A) = (A | B) - (A & B)
+A ^ A = empty
+(S ^ delta) ^ delta = S
+```
+
+Repeated XOR keeps positions present in an odd number of operands. Operand order
+does not change that geometry, and applying the same toggle twice cancels it.
+
+This makes XOR useful for a complete change set. It differs from finding holes
+inside a window. For `S = [2, 8)` and `W = [5, 10)`, `W - S` is `[8, 10)`,
+whereas `S ^ W` also retains `[2, 5)` outside `W`. A complement restricted to a
+window is `W - S`, equivalently `W & ~S`. In the FDB adapter, bare `~S` ranges
+over the entire ordinary keyspace `["", "\xFF")`; intersect with the intended
+tenant/bucket scope when expressing a local exclusion.
+
+Set identities help simplify and check a selection before issuing reads:
+
+```text
+A & (B | C) = (A & B) | (A & C)
+~(A | B) = (~A) & (~B)
+~(A & B) = (~A) | (~B)
+A - B = A & ~B
+```
+
+These equalities describe membership in one common universe and ordered domain,
+not C++ expression-object equality or execution-option equality. They apply to
+unconfigured geometry or compatible options. Option conflicts can still throw,
+and per-interval read limits can change the records a query actually returns.
+Ask `encloses(A, B)` whether `B` is a subset of `A`, or check enclosure in both
+directions for equal geometry; these predicates ignore execution options.
+
+For finite byte coverage, `|A ^ B| = |A| + |B| - 2 * |A & B|`, where the bars
+count byte positions. Here that is `8 + 7 - 2 * 3 = 9`. Summing lengths over
+canonical disjoint extents avoids counting overlapping bytes twice.
+
+`algebra::interval_count(changed)` is two in the pure example; use
+`q::interval_count()` for FDB selections. These count canonical components, not
+covered bytes, possible keys, or stored database rows. The changed coverage above
+has two components and nine byte positions. Database record counts require reading the selected records;
+an empty result set does not make its selection geometrically empty.
 
 ### Prefix Cursors
 
