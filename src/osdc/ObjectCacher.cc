@@ -2045,7 +2045,8 @@ int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
       ex.buffer_extents.front().first != 0 ||
       ex.buffer_extents.front().second != ex.length)
     return -EAGAIN;
-  if (!gate_enter())
+  int slot = gate_enter();
+  if (slot < 0)
     return -EBUSY;
   // Only look: no writer is inside while the gate is open to us.  Take
   // the object as it is; readx() under the lock creates or updates it.
@@ -2077,7 +2078,7 @@ int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
       }
     }
   }
-  gate_exit();
+  gate_exit(slot);
   if (r < 0)
     return r;
   unsigned cpu = 0;
@@ -2368,7 +2369,7 @@ bool ObjectCacher::set_is_empty(ObjectSet *oset)
 {
   // under the lock, or through the read gate (gate_peek())
   ceph_assert(ceph_mutex_is_locked(lock) ||
-              gate_readers.load(std::memory_order_relaxed) > 0);
+              gate_has_readers());
   if (oset->objects.empty())
     return true;
 

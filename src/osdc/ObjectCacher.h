@@ -4,6 +4,8 @@
 #ifndef CEPH_OBJECTCACHER_H
 #define CEPH_OBJECTCACHER_H
 
+#include <sched.h>
+
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/Context.h"
@@ -423,8 +425,22 @@ class ObjectCacher {
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
   bool read_gate = false;
-  std::atomic<bool> gate_closed{false};
-  alignas(64) std::atomic<uint32_t> gate_readers{0};
+  alignas(64) std::atomic<bool> gate_closed{false};
+  // the readers inside the read gate, counted per CPU (mod GATE_SLOTS) so
+  // that readers on different CPUs do not pass one cache line around;
+  // whoever shuts the gate waits for all of them
+  static constexpr unsigned GATE_SLOTS = 32;
+  struct alignas(64) GateSlot {
+    std::atomic<uint32_t> n{0};
+  };
+  GateSlot gate_readers[GATE_SLOTS];
+  bool gate_has_readers() const {
+    for (auto& g : gate_readers) {
+      if (g.n.load(std::memory_order_seq_cst) != 0)
+        return true;
+    }
+    return false;
+  }
   // read_hit()'s perf counters, per CPU so that readers do not share a
   // cache line; the flusher adds them to perfcounter every second
   struct alignas(64) HitSlot {
@@ -688,8 +704,7 @@ class ObjectCacher {
     if (!read_gate)
       return;
     gate_closed.store(true, std::memory_order_seq_cst);
-    for (int spins = 0;
-         gate_readers.load(std::memory_order_seq_cst) != 0; ++spins) {
+    for (int spins = 0; gate_has_readers(); ++spins) {
       if (spins > 100)
         std::this_thread::yield();
     }
@@ -715,10 +730,11 @@ class ObjectCacher {
    */
   template <typename F>
   bool gate_peek(F&& f) {
-    if (!read_gate || !gate_enter())
+    int slot;
+    if (!read_gate || (slot = gate_enter()) < 0)
       return false;
     f();
-    gate_exit();
+    gate_exit(slot);
     return true;
   }
   /**
@@ -735,16 +751,21 @@ private:
                       bool block_writes_upfront, bool *defer_wait);
   bool _writeback_wait_needed();
   void _wake_writeback_waiters();
-  bool gate_enter() {
-    gate_readers.fetch_add(1, std::memory_order_seq_cst);
+  // enter the read gate: the slot to leave it by (gate_exit()), which is
+  // the one entered by even if the thread moves to another CPU, or -1
+  // when the gate is shut
+  int gate_enter() {
+    int cpu = sched_getcpu();
+    int slot = (cpu < 0 ? 0 : cpu) % GATE_SLOTS;
+    gate_readers[slot].n.fetch_add(1, std::memory_order_seq_cst);
     if (gate_closed.load(std::memory_order_seq_cst)) {
-      gate_readers.fetch_sub(1, std::memory_order_release);
-      return false;
+      gate_readers[slot].n.fetch_sub(1, std::memory_order_release);
+      return -1;
     }
-    return true;
+    return slot;
   }
-  void gate_exit() {
-    gate_readers.fetch_sub(1, std::memory_order_release);
+  void gate_exit(int slot) {
+    gate_readers[slot].n.fetch_sub(1, std::memory_order_release);
   }
   // shut the gate for a scope that holds the lock (see gate_shut())
   struct GateShut {
