@@ -1098,6 +1098,138 @@ TEST(LibCephFS, MknodBatch) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, UnlinkBatch) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir[256];
+  sprintf(dir, "/test_unlink_batch_%d", getpid());
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir, 0755));
+
+  auto path_of = [&](const std::string& name) {
+    return std::string(dir) + "/" + name;
+  };
+  auto as_array = [](const std::vector<std::string>& names) {
+    std::vector<const char*> p;
+    for (auto& n : names)
+      p.push_back(n.c_str());
+    return p;
+  };
+  auto create = [&](const std::vector<std::string>& names) {
+    auto p = as_array(names);
+    return ceph_mknod_batch(cmount, dir, p.data(), p.size(), 0644);
+  };
+  auto unlink = [&](const std::vector<std::string>& names) {
+    auto p = as_array(names);
+    return ceph_unlink_batch(cmount, dir, p.data(), p.size());
+  };
+  auto exists = [&](const std::string& name) {
+    struct ceph_statx stx;
+    int r = ceph_statx(cmount, path_of(name).c_str(), &stx, CEPH_STATX_INO,
+		       AT_SYMLINK_NOFOLLOW);
+    EXPECT_TRUE(r == 0 || r == -ENOENT);
+    return r == 0;
+  };
+  auto count_entries = [&]() {
+    struct ceph_dir_result *dirp;
+    EXPECT_EQ(0, ceph_opendir(cmount, dir, &dirp));
+    int entries = 0;
+    while (struct dirent *de = ceph_readdir(cmount, dirp)) {
+      if (strcmp(de->d_name, ".") && strcmp(de->d_name, ".."))
+	entries++;
+    }
+    EXPECT_EQ(0, ceph_closedir(cmount, dirp));
+    return entries;
+  };
+
+  // a batch removes exactly its files
+  std::vector<std::string> names, keep;
+  for (int i = 0; i < 100; i++)
+    names.push_back("a" + std::to_string(i));
+  for (int i = 0; i < 5; i++)
+    keep.push_back("keep" + std::to_string(i));
+  ASSERT_EQ(0, create(names));
+  ASSERT_EQ(0, create(keep));
+  ASSERT_EQ(105, count_entries());
+  ASSERT_EQ(0, unlink(names));
+  for (auto& n : names)
+    ASSERT_FALSE(exists(n));
+  for (auto& n : keep)
+    ASSERT_TRUE(exists(n));
+  ASSERT_EQ(5, count_entries());
+
+  // a batch of one
+  ASSERT_EQ(0, create({"single"}));
+  ASSERT_EQ(0, unlink({"single"}));
+  ASSERT_FALSE(exists("single"));
+
+  // files made the ordinary way, with data, which this client has caps on
+  for (auto n : {"w0", "w1", "w2"}) {
+    int fd = ceph_open(cmount, path_of(n).c_str(), O_CREAT|O_WRONLY, 0644);
+    ASSERT_GT(fd, 0);
+    ASSERT_EQ(4, ceph_write(cmount, fd, "data", 4, 0));
+    ASSERT_EQ(0, ceph_close(cmount, fd));
+  }
+  ASSERT_EQ(0, ceph_symlink(cmount, "w0", path_of("link").c_str()));
+  ASSERT_EQ(0, unlink({"w0", "w1", "w2", "link"}));
+  ASSERT_FALSE(exists("w0"));
+  ASSERT_FALSE(exists("w2"));
+  ASSERT_FALSE(exists("link"));
+
+  // all or nothing: a name that does not exist fails the batch
+  ASSERT_EQ(-ENOENT, unlink({"keep0", "nosuchfile", "keep1"}));
+  ASSERT_EQ(-ENOENT, unlink({"nosuchfile", "keep0"}));
+  // the same name twice
+  ASSERT_EQ(-EINVAL, unlink({"keep0", "keep1", "keep0"}));
+  // a directory among the names
+  ASSERT_EQ(0, ceph_mkdir(cmount, path_of("subdir").c_str(), 0755));
+  ASSERT_EQ(-EISDIR, unlink({"keep0", "subdir", "keep1"}));
+  ASSERT_EQ(-EISDIR, unlink({"subdir", "keep0"}));
+  // a file with a second link
+  ASSERT_EQ(0, ceph_link(cmount, path_of("keep4").c_str(),
+			 path_of("hardlink").c_str()));
+  ASSERT_EQ(-EOPNOTSUPP, unlink({"keep0", "keep4"}));
+  ASSERT_EQ(-EOPNOTSUPP, unlink({"keep0", "hardlink"}));
+  for (auto& n : keep)
+    ASSERT_TRUE(exists(n));
+  ASSERT_EQ(7, count_entries());
+
+  // a file that is open when its batch is unlinked is gone from the
+  // directory and stays usable through the fd
+  int fd = ceph_open(cmount, path_of("keep0").c_str(), O_RDWR, 0);
+  ASSERT_GT(fd, 0);
+  ASSERT_EQ(5, ceph_write(cmount, fd, "hello", 5, 0));
+  ASSERT_EQ(0, unlink({"keep0", "keep1", "keep2", "keep3"}));
+  ASSERT_FALSE(exists("keep0"));
+  char buf[8];
+  ASSERT_EQ(5, ceph_read(cmount, fd, buf, sizeof(buf), 0));
+  ASSERT_EQ(0, memcmp(buf, "hello", 5));
+  ASSERT_EQ(3, ceph_write(cmount, fd, "abc", 3, 5));
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_fstatx(cmount, fd, &stx, CEPH_STATX_SIZE|CEPH_STATX_NLINK, 0));
+  ASSERT_EQ(8u, stx.stx_size);
+  ASSERT_EQ(0u, stx.stx_nlink);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  // a name can be used again
+  ASSERT_EQ(0, create({"keep0"}));
+  ASSERT_EQ(0, unlink({"keep0"}));
+
+  // what is left goes the ordinary way, and the directory is empty
+  // (a file that has had a second link keeps a snaprealm of its own, which
+  // the batch does not handle)
+  ASSERT_EQ(0, ceph_unlink(cmount, path_of("hardlink").c_str()));
+  ASSERT_EQ(0, ceph_unlink(cmount, path_of("keep4").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, path_of("subdir").c_str()));
+  ASSERT_EQ(0, count_entries());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir));
+
+  ceph_shutdown(cmount);
+}
+
 #if defined(__linux__) && defined(O_PATH)
 TEST(LibCephFS, FlagO_PATH) {
   struct ceph_mount_info *cmount;
