@@ -57,11 +57,14 @@ Background
 
 No matter what type of Ceph client is used (for example: Block Device, Object
 Storage, Filesystem, native API), Ceph stores all data as RADOS objects within
-:ref:`rados_pools`.  Ceph users must have access to a given pool in order to read and
-write data, and they need Monitor and Manager capabilities in order to use Ceph's
-administrative commands: ``r`` for commands that read cluster state, ``rw`` for
-commands that change it, and ``x`` in addition for ``auth`` commands. The
-following concepts will help you understand Ceph's user management.
+:ref:`rados_pools`. CephX users must have access to a given pool in order to
+read and write data, and they need Monitor and Manager capabilities in order to
+issue Ceph's administrative commands: ``r`` for commands that read cluster
+state, ``rw`` for commands that change it, and ``x`` in addition for ``auth``
+commands. A ``ceph tell`` command sent to a Monitor needs ``rwx``, even if it
+only reads state.
+
+The following concepts will help you understand Ceph's user management.
 
 .. _rados-ops-user:
 
@@ -184,6 +187,8 @@ Capability syntax follows this form::
 
         mgr | osd | pg | py | service
 
+  ``py`` covers the commands of all Manager modules.
+
   The ``{match-type}`` is one of the following: ::
 
         = | prefix | regex
@@ -273,7 +278,8 @@ The following entries describe valid capability profiles:
               keys under the ``rgw/`` prefix. OSD access is limited to pools
               tagged with the ``rgw`` application. The Manager accepts
               ``profile rgw`` but grants nothing with it. Squid 19.2.7,
-              Tentacle 20.2.4, and earlier releases do not have this profile.
+              Tentacle 20.2.5, Umbrella 21.2.0, and earlier releases do not
+              have this profile.
 
 
 ``profile bootstrap-osd`` (Monitor only)
