@@ -2268,6 +2268,7 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
     code = l_mdss_req_open_latency;
     break;
   case CEPH_MDS_OP_MKNOD:
+  case CEPH_MDS_OP_MKNOD_BATCH:
     code = l_mdss_req_mknod_latency;
     break;
   case CEPH_MDS_OP_LINK:
@@ -2957,6 +2958,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     // no prior locks.
   case CEPH_MDS_OP_MKNOD:
     handle_client_mknod(mdr);
+    break;
+  case CEPH_MDS_OP_MKNOD_BATCH:
+    handle_client_mknod_batch(mdr);
     break;
   case CEPH_MDS_OP_LINK:
     handle_client_link(mdr);
@@ -3693,7 +3697,8 @@ CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
 CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-				  const file_layout_t *layout)
+				  const file_layout_t *layout,
+				  bool ino_allocated)
 {
   CInode *in = new CInode(mdcache);
   auto _inode = in->_get_inode();
@@ -3707,7 +3712,12 @@ CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t 
   inodeno_t _useino = useino;
 
   // assign ino
-  do {
+  if (ino_allocated) {
+    // the caller allocated useino itself (handle_client_mknod_batch takes a
+    // whole range from the inotable at once) and journals and applies it
+    ceph_assert(useino);
+    _inode->ino = useino;
+  } else do {
     if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(_useino))) {
       if (mdcache->test_and_clear_taken_inos(_inode->ino)) {
         _inode->ino = 0;
@@ -3743,7 +3753,7 @@ CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t 
     //ceph_abort(); // just for now.
   }
 
-  if (allow_prealloc_inos &&
+  if (allow_prealloc_inos && !ino_allocated &&
       mdr->session->get_num_projected_prealloc_inos() < g_conf()->mds_client_prealloc_inos / 2) {
     int need = g_conf()->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, need);
@@ -3803,7 +3813,7 @@ CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t 
   _inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
   _inode->fscrypt_file.assign(req->fscrypt_file.begin(), req->fscrypt_file.end());
 
-  if (req->get_data().length()) {
+  if (req->get_data().length() && !ino_allocated) {
     auto p = req->get_data().cbegin();
 
     // xattrs on new inode?
@@ -7842,6 +7852,295 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dn->get_dir(), false);
+}
+
+
+// MKNOD_BATCH (prototype)
+//
+// Create several regular files in one directory with one request and one
+// journal event.  The request's path names the directory and the first file,
+// as for mknod; the components of path2 are the other names.  All of the
+// files are created or none is.
+//
+// What a batch saves over as many mknods is everything that is paid per
+// request or per journal event: the messages, the path walk and the locks on
+// the directory, the projection of the directory's stats (done once per
+// dirfrag), the EUpdate and its completion, and the reply.  What it still
+// pays per file is the dentry, the inode and their encoding.
+//
+// Limits of the prototype: regular files only, no caps are issued on them,
+// the reply carries no trace, every dirfrag the names hash to must be auth
+// here, and no fscrypt names, alternate names or ACLs.
+
+static const unsigned MKNOD_BATCH_MAX = 1024;
+
+class C_MDS_mknod_batch_finish : public ServerLogContext {
+  std::vector<std::pair<CDentry*, CInode*>> items;
+  interval_set<inodeno_t> inos;
+public:
+  C_MDS_mknod_batch_finish(Server *s, const MDRequestRef& r,
+			   std::vector<std::pair<CDentry*, CInode*>>&& i,
+			   const interval_set<inodeno_t>& a) :
+    ServerLogContext(s, r), items(std::move(i)), inos(a) {}
+  void finish(int r) override {
+    ceph_assert(r == 0);
+
+    for (auto& [dn, newi] : items) {
+      dn->pop_projected_linkage();
+      newi->mark_dirty(mdr->ls);
+      newi->mark_dirty_parent(mdr->ls, true);
+    }
+
+    mdr->apply();
+
+    // the whole range was projected with one project_alloc_ids()
+    get_mds()->inotable->apply_alloc_ids(inos);
+
+    MDRequestRef null_ref;
+    for (auto& [dn, newi] : items)
+      get_mds()->mdcache->send_dentry_link(dn, null_ref);
+
+    // one hit for the batch: enough to keep the directory's popularity
+    // moving, and a walk up the tree per file is what a batch is meant to
+    // avoid
+    get_mds()->balancer->hit_inode(items.front().second, META_POP_IWR);
+
+    server->respond_to_request(mdr, 0);
+  }
+};
+
+void Server::handle_client_mknod_batch(const MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  unsigned mode = req->head.args.mknod.mode;
+  if ((mode & S_IFMT) == 0)
+    mode |= S_IFREG;
+  if (!S_ISREG(mode)) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  // the first name is the last component of the path, the rest are path2
+  // (a batch of one file has no path2)
+  static const filepath no_more;
+  const filepath& more = req->has_filepath2() ? req->get_filepath2() : no_more;
+  const filepath& refpath = req->get_filepath();
+  const unsigned total = 1 + more.depth();
+  if (refpath.depth() == 0 || total > MKNOD_BATCH_MAX) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  {
+    std::set<std::string_view> seen;
+    seen.insert(refpath.last_dentry());
+    for (unsigned i = 0; i < more.depth(); i++) {
+      std::string_view name = more[i];
+      if (name.empty() || name == "." || name == "..") {
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+      if (name.length() > NAME_MAX) {
+	respond_to_request(mdr, -ENAMETOOLONG);
+	return;
+      }
+      if (!seen.insert(name).second) {
+	dout(10) << "mknod_batch name " << name << " given twice" << dendl;
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+    }
+  }
+
+  // Lock the path and the first dentry exactly as mknod does.  This takes
+  // the wrlocks on the directory's filelock and nestlock that cover every
+  // dentry we add below.
+  mdr->disable_lock_cache();
+  CDentry *dn0 = rdlock_path_xlock_dentry(mdr, true, false, false, true);
+  if (!dn0)
+    return;
+
+  CInode *diri = dn0->get_dir()->get_inode();
+  if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
+  if (req->get_alternate_name().size() || req->fscrypt_auth.size()) {
+    respond_to_request(mdr, -EOPNOTSUPP);
+    return;
+  }
+
+  // Find or add the null dentry of every other name.  Nothing here is kept
+  // across a retry: when we have to wait, the request is dispatched again
+  // and looks everything up afresh.
+  std::vector<CDentry*> dns;
+  dns.reserve(total);
+  dns.push_back(dn0);
+  {
+    MutationImpl::LockOpVec lov;
+    for (unsigned i = 0; i < more.depth(); i++) {
+      std::string_view name = more[i];
+      frag_t fg = diri->pick_dirfrag(name);
+      CDir *dir = diri->get_dirfrag(fg);
+      if (!dir) {
+	if (diri->is_frozen()) {
+	  dout(7) << "mknod_batch " << *diri << " is frozen, waiting" << dendl;
+	  diri->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	  return;
+	}
+	dir = diri->get_or_open_dirfrag(mdcache, fg);
+      }
+      if (!dir->is_auth()) {
+	// a real implementation would split the batch by auth mds
+	dout(7) << "mknod_batch " << *dir << " is not auth, EXDEV" << dendl;
+	respond_to_request(mdr, -EXDEV);
+	return;
+      }
+      CDentry *dn = dir->lookup(name);
+      if (dn) {
+	if (dn->state_test(CDentry::STATE_PURGING) ||
+	    !dn->get_projected_linkage()->is_null()) {
+	  dout(7) << "mknod_batch " << *dn << " exists" << dendl;
+	  respond_to_request(mdr, -EEXIST);
+	  return;
+	}
+      } else if (dir->is_complete() ||
+		 (dir->has_bloom() && !dir->is_in_bloom(name))) {
+	if (dir->is_frozen()) {
+	  dout(7) << "mknod_batch " << *dir << " is frozen, waiting" << dendl;
+	  dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	  return;
+	}
+	dn = dir->add_null_dentry(name);
+      } else {
+	dout(7) << "mknod_batch incomplete " << *dir << ", fetching " << name << dendl;
+	dir->fetch(name, CEPH_NOSNAP, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+      lov.add_xlock(&dn->lock);
+      dns.push_back(dn);
+    }
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+  }
+
+  // every dentry is xlocked and auth pinned from here on, and nothing below
+  // waits: once the inode numbers are projected the event must be journaled
+
+  {
+    std::map<CDir*, unsigned> per_dir;
+    for (auto dn : dns)
+      per_dir[dn->get_dir()]++;
+    for (auto& [dir, n] : per_dir) {
+      if (dir->get_frag_size() + (int64_t)n > bal_fragment_size_max) {
+	dout(10) << "mknod_batch " << *dir << " would exceed "
+		 << bal_fragment_size_max << " (ENOSPC)" << dendl;
+	respond_to_request(mdr, -ENOSPC);
+	return;
+      }
+    }
+    const auto& pi = diri->get_projected_inode();
+    if (dir_max_entries &&
+	(uint64_t)(pi->dirstat.nfiles + pi->dirstat.nsubdirs) + total > dir_max_entries) {
+      dout(10) << "mknod_batch " << *diri << " would exceed " << dir_max_entries
+	       << " entries (ENOSPC)" << dendl;
+      respond_to_request(mdr, -ENOSPC);
+      return;
+    }
+  }
+
+  file_layout_t layout;
+  if (mdr->dir_layout != file_layout_t())
+    layout = mdr->dir_layout;
+  else
+    layout = mdcache->default_file_layout;
+  if (!is_valid_layout(&layout)) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  SnapRealm *realm = diri->find_snaprealm();
+  ceph_assert(follows >= realm->get_newest_seq());
+
+  // One range of inode numbers for the whole batch, straight from the
+  // inotable.  It is journaled as EMetaBlob's preallocated_inos with no
+  // sessionmap version: replay then marks the range used in the inotable and
+  // leaves the session alone, which is what happens here too.  Numbers that
+  // a replay marked as taken are skipped, so ask for that many more.
+  interval_set<inodeno_t> inos;
+  mds->inotable->project_alloc_ids(inos, total + mdcache->num_taken_inos());
+  std::vector<inodeno_t> usable;
+  usable.reserve(total);
+  for (auto p = inos.begin(); p != inos.end() && usable.size() < total; ++p) {
+    const uint64_t start = p.get_start(), len = p.get_len();
+    for (uint64_t v = start; v < start + len && usable.size() < total; v++) {
+      if (!mdcache->test_and_clear_taken_inos(inodeno_t(v)))
+	usable.push_back(inodeno_t(v));
+    }
+  }
+  ceph_assert(usable.size() == total);
+
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "mknod_batch");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  le->metablob.set_ino_alloc(inodeno_t(), inodeno_t(), inos, req->get_source(),
+			     0, mds->inotable->get_projected_version());
+
+  std::vector<std::pair<CDentry*, CInode*>> items;
+  items.reserve(total);
+  std::map<CDir*, std::vector<CInode*>> by_dir;
+  for (unsigned i = 0; i < total; i++) {
+    CDentry *dn = dns[i];
+    ceph_assert(dn->get_projected_linkage()->is_null());
+    dn->first = std::max(dn->first, snapid_t(follows + 1));
+
+    CInode *newi = prepare_new_inode(mdr, dn->get_dir(), usable[i], mode, &layout, true);
+    dn->push_projected_linkage(newi);
+
+    auto _inode = newi->_get_inode();
+    _inode->version = dn->pre_dirty();
+    _inode->rdev = 0;
+    _inode->rstat.rfiles = 1;
+    _inode->accounted_rstat = _inode->rstat;
+    if (layout.pool_id != mdcache->default_file_layout.pool_id)
+      _inode->add_old_pool(mdcache->default_file_layout.pool_id);
+    _inode->update_backtrace();
+    newi->first = dn->first;
+
+    items.emplace_back(dn, newi);
+    by_dir[dn->get_dir()].push_back(newi);
+  }
+
+  // Project the directory's stats once per dirfrag, not once per file.
+  // predirty_journal_parents() adds linkunlink to the dirfrag's nfiles, but
+  // for the rstat it adds the rstat of the one inode it is given.  So lend
+  // that inode the rstat of all its siblings in the dirfrag for the call.
+  for (auto& [dir, newis] : by_dir) {
+    CInode *first = newis.front();
+    auto _inode = first->_get_inode();
+    _inode->rstat.rfiles = newis.size();
+    _inode->accounted_rstat = _inode->rstat;
+    mdcache->predirty_journal_parents(mdr, &le->metablob, first, dir,
+				      PREDIRTY_PRIMARY|PREDIRTY_DIR, newis.size());
+    _inode->rstat.rfiles = 1;
+    _inode->accounted_rstat = _inode->rstat;
+  }
+
+  for (auto& [dn, newi] : items)
+    le->metablob.add_primary_dentry(dn, newi, true, true, true);
+
+  dout(10) << "mknod_batch " << total << " files in " << *diri
+	   << " inos " << inos << dendl;
+
+  std::set<CDir*> dirs;
+  for (auto& [dir, newis] : by_dir)
+    dirs.insert(dir);
+
+  journal_and_reply(mdr, nullptr, nullptr, le,
+		    new C_MDS_mknod_batch_finish(this, mdr, std::move(items), inos));
+
+  for (auto dir : dirs)
+    mds->balancer->maybe_fragment(dir, false);
 }
 
 
