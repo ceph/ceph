@@ -5,11 +5,46 @@
 ===========
 
 The RGW **ops log** records one line per HTTP request when ops logging is
-enabled (see :confval:`rgw_enable_ops_log`). Sinks include a log file, RADOS
-objects, or other backends configured for the zone.
+enabled (see :confval:`rgw_enable_ops_log`). See `Destinations`_ for where the
+entries go.
 
 JSON-formatted ops logs (file or RADOS) include standard request metadata and,
 for failed requests, error fields described below.
+
+Destinations
+============
+
+The gateway writes each entry to every destination that is set:
+
+- A file, named by ``rgw_ops_log_file_path``. It defaults to
+  ``/var/log/ceph/ops-log-$cluster-$name.log``, so turning on the ops log is
+  enough to get it in a file. A cephadm deployment rotates the file; other
+  deployments should rotate it with ``logrotate`` or a similar tool.
+- A Unix domain socket, named by :confval:`rgw_ops_log_socket_path`. See
+  `Reading the Ops Log from a Socket`_.
+- RADOS, when :confval:`rgw_ops_log_rados` is ``true``. Nothing trims these
+  entries, so use this only with a plan to remove them with
+  ``radosgw-admin log rm``.
+
+The file and the socket receive the entries as JSON. Each holds up to
+:confval:`rgw_ops_log_data_backlog` (5 MiB by default) of entries that have
+not yet been written or read, and drops entries beyond that.
+
+Reading the Ops Log from a Socket
+=================================
+
+When :confval:`rgw_ops_log_socket_path` is set, the gateway listens on that
+socket. Each reader that connects receives ``[`` and then the JSON entries,
+separated by a comma and a newline, for as long as it stays connected. The
+array is never closed, and a reader that reconnects receives a new ``[``, so
+the stream is not a complete JSON document. For example, to append the raw
+stream to a file:
+
+.. prompt:: bash #
+
+   socat -u UNIX-CONNECT:/run/ceph/opslog.sock - >> /var/log/rgw-opslog.raw
+
+For one JSON object per line, use the file destination instead.
 
 Error fields
 ============
