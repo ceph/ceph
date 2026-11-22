@@ -1152,18 +1152,29 @@ void SegmentCleaner::maybe_adjust_thresholds()
   peak_open_segments_window = std::max(
       peak_open_segments_window, segments.get_num_open());
 
-  // Only recompute hard_limit every 30s.
+  // Recompute hard_limit periodically (every 30s) or immediately upon rapid bursty consumption
   LOG_PREFIX(SegmentCleaner::maybe_adjust_thresholds);
   auto now = seastar::lowres_clock::now();
   double elapsed_sec = 0.0;
+  std::size_t total_bytes = segments.get_total_bytes();
   if (adaptive_last_time != seastar::lowres_clock::time_point{}) {
     elapsed_sec = std::chrono::duration<double>(
         now - adaptive_last_time).count();
-    if (elapsed_sec < 30.0) {
+    double cur_proj_used = static_cast<double>(stats.projected_used_bytes);
+    bool rapid_consumption = false;
+    if (total_bytes > 0 && elapsed_sec >= 10.0) {
+      // Trigger early if net projected space consumption surges by >= 5% of total capacity
+      double delta_consumed = cur_proj_used - last_adjusted_projected_used;
+      if (delta_consumed >= static_cast<double>(total_bytes) * 0.05) {
+        rapid_consumption = true;
+      }
+    }
+    if (elapsed_sec < 30.0 && !rapid_consumption) {
       return;
     }
   }
   adaptive_last_time = now;
+  last_adjusted_projected_used = stats.projected_used_bytes;
   double old_hard_limit = config.available_ratio_hard_limit;
   double old_gc_max = config.available_ratio_gc_max;
 
@@ -1174,7 +1185,6 @@ void SegmentCleaner::maybe_adjust_thresholds()
       "seastore_data_device_generations");
   std::size_t named_writers = hot + cold + 2;
   std::size_t seg_size = segments.get_segment_size();
-  std::size_t total_bytes = segments.get_total_bytes();
   if (total_bytes == 0 || seg_size == 0) {
     return;
   }

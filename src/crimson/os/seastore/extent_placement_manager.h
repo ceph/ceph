@@ -1269,10 +1269,8 @@ private:
     }
 
     seastar::future<> wait_background() {
-      if (!blocking_io) {
-        blocking_io = seastar::shared_promise<>();
-      }
-      return blocking_io->get_shared_future();
+      background_waiters.emplace_back();
+      return background_waiters.back().get_future();
     }
 
   protected:
@@ -1531,11 +1529,16 @@ private:
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
-    std::optional<seastar::shared_promise<>> blocking_io;
+    struct io_waiter_t {
+      io_usage_t usage;
+      seastar::promise<> pr;
+      seastar::lowres_system_clock::time_point begin_time;
+    };
+    std::deque<std::unique_ptr<io_waiter_t>> io_waiters;
+    std::deque<seastar::promise<>> background_waiters;
     // Set by maybe_wake_blocked_io() whenever it actually unblocks a
     // user IO; consumed by run() to yield exactly once on that edge,
-    // giving the woken continuation a chance to retry the reservation
-    // before the next background cycle.
+    // giving the woken continuation a chance to make forward progress.
     bool pending_user_io_wake = false;
     std::optional<seastar::future<>> promote_process_join;
     std::optional<seastar::promise<>> blocking_promote;

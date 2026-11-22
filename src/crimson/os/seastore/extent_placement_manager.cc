@@ -758,6 +758,14 @@ ExtentPlacementManager::BackgroundProcess::stop_background()
   }
   state = state_t::HALT;
   assert(!is_running());
+  while (!io_waiters.empty()) {
+    io_waiters.front()->pr.set_value();
+    io_waiters.pop_front();
+  }
+  while (!background_waiters.empty()) {
+    background_waiters.front().set_value();
+    background_waiters.pop_front();
+  }
   do_wake_background();
   do_wake_promote();
   co_await seastar::when_all(futs.begin(), futs.end());
@@ -838,10 +846,11 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
   // prepare until the prior one exits and clears this.
   ++stats.io_count;
 
-  auto res = try_reserve_io(usage);
-  if (res.is_successful()) {
-    co_return;
-  } else {
+  if (io_waiters.empty()) {
+    auto res = try_reserve_io(usage);
+    if (res.is_successful()) {
+      co_return;
+    }
     LOG_PREFIX(BackgroundProcess::reserve_projected_usage);
     DEBUG("blocked: inline={}, main={}, cold={}, usage={}",
           res.reserve_inline_success,
@@ -855,51 +864,23 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     if (!res.cleaner_result.is_successful()) {
       ++stats.io_blocked_count_clean;
     }
-    ++stats.io_blocking_num;
-    ++stats.io_blocked_count;
-    stats.io_blocked_sum += stats.io_blocking_num;
-
-    auto begin_time = seastar::lowres_system_clock::now();
-    // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
-    // Kick the background so it can free space and call maybe_wake_blocked_io().
-    auto arm_blocking_io_and_wake = [this] {
-      if (!blocking_io) {
-        blocking_io = seastar::shared_promise<>();
-      }
-      do_wake_background();
-    };
-    arm_blocking_io_and_wake();
-    // we just blocked this IO, now wait until
-    // maybe_wake_blocked_io will set value to blocking_io
-    while (true) {
-      co_await blocking_io->get_shared_future();
-      auto res = try_reserve_io(usage);
-      if (res.is_successful()) {
-        DEBUG("unblocked");
-        assert(stats.io_blocking_num == 1);
-        --stats.io_blocking_num;
-        auto end_time = seastar::lowres_system_clock::now();
-        auto duration = end_time - begin_time;
-        stats.io_blocked_time += std::chrono::duration_cast<
-        std::chrono::milliseconds>(duration).count();
-        break;
-      } else {
-        DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
-              res.reserve_inline_success,
-              res.cleaner_result.reserve_main_success,
-              res.cleaner_result.reserve_cold_success,
-              usage);
-        abort_io_usage(usage, res);
-        if (!res.reserve_inline_success) {
-          ++stats.io_retried_blocked_count_trim;
-        }
-          if (!res.cleaner_result.is_successful()) {
-          ++stats.io_retried_blocked_count_clean;
-        }
-        arm_blocking_io_and_wake();
-      }
-    }
   }
+
+  // Queue into FIFO reservation queue to prevent thundering herd and starvation
+  auto begin_time = seastar::lowres_system_clock::now();
+  auto waiter = std::make_unique<io_waiter_t>();
+  waiter->usage = usage;
+  waiter->begin_time = begin_time;
+  auto fut = waiter->pr.get_future();
+  io_waiters.push_back(std::move(waiter));
+
+  ++stats.io_blocking_num;
+  ++stats.io_blocked_count;
+  stats.io_blocked_sum += stats.io_blocking_num;
+
+  do_wake_background();
+
+  co_await std::move(fut);
 }
 
 void
@@ -909,15 +890,42 @@ ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
     return;
   }
   LOG_PREFIX(ExtentPlacementManager::maybe_wake_blocked_io);
-  if (!should_block_io() && blocking_io) {
-    DEBUG("");
-    blocking_io->set_value();
-    blocking_io = std::nullopt;
-    // Remember that we just woke a blocked IO; run() yields once on
-    // this edge so the woken continuation has a chance to retry the
-    // reservation before the cleaner spins another cycle and consumes
-    // the projected_avail headroom we just freed.
-    pending_user_io_wake = true;
+
+  while (!io_waiters.empty()) {
+    auto& waiter = io_waiters.front();
+    auto res = try_reserve_io(waiter->usage);
+    if (res.is_successful()) {
+      DEBUG("unblocked waiter for usage={}", waiter->usage);
+      ceph_assert(stats.io_blocking_num > 0);
+      --stats.io_blocking_num;
+      auto end_time = seastar::lowres_system_clock::now();
+      auto duration = end_time - waiter->begin_time;
+      stats.io_blocked_time += std::chrono::duration_cast<
+        std::chrono::milliseconds>(duration).count();
+
+      waiter->pr.set_value();
+      io_waiters.pop_front();
+      pending_user_io_wake = true;
+    } else {
+      DEBUG("cannot unblock front waiter: inline={}, main={}, cold={}, usage={}",
+            res.reserve_inline_success,
+            res.cleaner_result.reserve_main_success,
+            res.cleaner_result.reserve_cold_success,
+            waiter->usage);
+      abort_io_usage(waiter->usage, res);
+      if (!res.reserve_inline_success) {
+        ++stats.io_retried_blocked_count_trim;
+      }
+      if (!res.cleaner_result.is_successful()) {
+        ++stats.io_retried_blocked_count_clean;
+      }
+      break;
+    }
+  }
+
+  while (!background_waiters.empty()) {
+    background_waiters.front().set_value();
+    background_waiters.pop_front();
   }
 }
 

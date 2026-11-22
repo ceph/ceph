@@ -1816,6 +1816,7 @@ private:
   // Adaptive state: peak open segments observed since last adjust.
   std::size_t peak_open_segments_window = 0;
   seastar::lowres_clock::time_point adaptive_last_time;
+  double last_adjusted_projected_used = 0.0;
 
   // Peak projected_used with slow exponential decay per adjust cycle. Decay
   // 0.5% per 30s window = half-life ~1 hour: long enough not to forget peaks
