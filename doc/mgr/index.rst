@@ -16,9 +16,7 @@ see a health warning to that effect, and some of the other information
 in the output of ``ceph status`` will be missing or stale until a mgr is started.
 
 Run at least two ``ceph-mgr`` daemons for high availability, ideally one on
-each Monitor host. :ref:`cephadm` deploys two Manager daemons by default. It
-is not mandatory to place mgr daemons on the same nodes as mons, but it is
-almost always sensible.
+each Monitor host. :ref:`cephadm` deploys two Manager daemons by default.
 
 .. toctree::
     :maxdepth: 1

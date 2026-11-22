@@ -6,8 +6,9 @@ ceph-mgr Administrator's Guide
 Manual Setup
 ------------
 
-Usually, ``ceph-mgr`` daemons are deployed with :ref:`cephadm`. These
-instructions describe how to set up a ``ceph-mgr`` daemon manually.
+``ceph-mgr`` daemons are usually deployed with :ref:`cephadm`,
+:ref:`mgr-rook`, or another orchestrator. These instructions describe how to
+set up a ``ceph-mgr`` daemon manually.
 
 First, create an authentication key for your daemon:
 
@@ -51,7 +52,7 @@ The ``services`` section of the ``ceph status`` output shows each
      This Manager daemon is not currently receiving or executing commands, but it is ready to
      take over if the current active Manager becomes unavailable. To make a standby take
      over, fail the active Manager with ``ceph mgr fail``. The Monitors then promote one of
-     the standbys; you cannot choose which one. Running ``ceph mgr fail`` with the name of a
+     the standbys. You cannot choose which one. Running ``ceph mgr fail`` with the name of a
      standby fails that standby, not the active Manager. All other
      Manager daemons which are not ``active`` or ``active (starting)`` will be in this state.
 
@@ -113,13 +114,13 @@ daemon as failed using ``ceph mgr fail <mgr name>``.
 Performance and Scalability
 ---------------------------
 
-In Umbrella 21 and later releases, Manager modules share a cache of cluster
+In Umbrella and later releases, Manager modules share a cache of cluster
 maps, and the cache is enabled by default.
 
 The cache helps most on large clusters, where maps such as the OSDMap are large
 and costly to serialize for each request.
 
-A cached map is dropped when the Manager receives a new version of it, for
+A cached map is dropped when the Manager receives a new version, for
 example a new OSDMap. The cached PG statistics (``pg_dump`` and ``pg_stats``)
 and ``mon_status`` are dropped each time the Monitors send the Manager their
 status digest, every 5 seconds by default. If needed, you can flush one entry
@@ -141,7 +142,7 @@ perf counters of a Manager module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
 you'll find the hit/miss ratio of the Manager cache, which can help verify the
 cache is operating effectively.
 
-In Umbrella 21 and later releases, the Manager includes a ThreadMonitor that
+In Umbrella and later releases, the Manager includes a ThreadMonitor that
 measures, for each enabled module, the CPU usage of two threads (the thread
 that runs the module's notify and command handlers, and its ``serve()``
 thread) and the memory usage (RSS) of the whole ``ceph-mgr`` process. Threads
@@ -262,10 +263,10 @@ other enabled modules ``on``, and disabled modules ``-`` (output shortened):
        "dashboard": "https://192.0.2.10:8443/"
    }
 
-With its default settings, the Dashboard serves HTTPS on port 8443 and
+With default settings, the Dashboard serves HTTPS on port 8443 and
 publishes the IP address of the active Manager. It publishes its address only
-after a TLS certificate is configured (see :ref:`dashboard-ssl-tls-support`);
-until then, ``ceph mgr services`` does not list it.
+after a TLS certificate is configured (see :ref:`dashboard-ssl-tls-support`).
+Until then, ``ceph mgr services`` does not list it.
 
 
 The first time the cluster starts, it uses the :confval:`mgr_initial_modules`
@@ -280,7 +281,7 @@ add a section like this to your ``ceph.conf``:
         mgr_initial_modules = iostat nfs dashboard
 
 The value replaces the default list, so include any default module that you
-want to keep. The default list depends on the release: for example, Squid 19.2
+want to keep. The default list depends on the release: for example, Squid
 also enables ``restful``, and Tentacle 20.2.3 and later releases also enable
 ``nvmeof``. This example keeps ``iostat`` and ``nfs``, which every supported
 release enables by default, and adds the Dashboard. Always-on modules such as
