@@ -44,7 +44,7 @@ The dashboard provides the following features:
   :ref:`dashboard-user-role-management` for details.
 * **Single Sign-On (SSO)**: The dashboard supports authentication
   via an external identity provider using the SAML 2.0 protocol or the
-  OAuth2 protocol (Tentacle 20.2 and later). See
+  OAuth2 protocol (Tentacle and later). See
   :ref:`dashboard-saml2-sso-support` and :ref:`dashboard-oauth2-sso-support`
   for details.
 * **SSL/TLS support**: All HTTP communication between the web browser and the
@@ -131,8 +131,8 @@ updates on any changes in the cluster and allows quick access to other sections 
 
 .. note::
 
-   This section describes the landing page of Squid 19.2 and Tentacle 20.2.
-   In Umbrella 21 and later releases, the landing page is the *Overview*
+   This section describes the landing page of Squid and Tentacle.
+   In Umbrella and later releases, the landing page is the *Overview*
    page, with health, alerts, storage and performance cards.
 
 .. image:: dashboard-landing-page.png
@@ -265,17 +265,17 @@ to:
 
 .. note::
 
-   In Squid 19.2 and Tentacle 20.2, the Ceph Dashboard supports only RSA
+   In Squid and Tentacle, the Ceph Dashboard supports only RSA
    private keys for SSL/TLS certificates, because the Manager checks the key
    with pyOpenSSL's ``PKey.check()`` method, which supports only RSA keys.
-   With an ECDSA or EC key, the dashboard does not start. In Squid 19.2 the
-   module fails with an error similar to:
+   With an ECDSA or EC key, the dashboard does not start. In Squid and
+   Tentacle 20.2.0 the module fails with an error similar to:
 
    ``MGR_MODULE_ERROR: Module 'dashboard' has failed: key type unsupported``
 
-   In Tentacle 20.2 the module does not fail; the Manager log repeats
-   ``Config not ready to serve, waiting`` with the key error. In these
-   releases, generate or request certificates with RSA keys. Umbrella 21
+   From Tentacle 20.2.1 the module does not fail. The Manager log repeats
+   ``Config not ready to serve, waiting`` with the key error. In Squid and
+   Tentacle, generate or request certificates with RSA keys. Umbrella
    and later releases check the key with the ``cryptography`` library, and
    this check no longer rejects EC keys.
 
@@ -288,10 +288,10 @@ Manager instances by running the following commands:
    ceph dashboard set-ssl-certificate-key -i dashboard.key
 
 If unique certificates are desired for each manager instance,
-the name of the instance can be included as follows (where ``$name`` is the ID
-of the ``ceph-mgr`` instance; on clusters deployed by cephadm the ID is the
+the name of the instance can be included as follows, where ``$name`` is the ID
+of the ``ceph-mgr`` instance. On clusters deployed by cephadm, the ID is the
 short host name followed by a dot and six random letters, for example
-``host1.abcdef``):
+``host1.abcdef``.
 
 .. prompt:: bash #
 
@@ -370,7 +370,7 @@ Replace ``$name`` with the ID of the ceph-mgr instance hosting the dashboard.
 Username and Password
 ^^^^^^^^^^^^^^^^^^^^^
 
-To use the dashboard, you need a user account with at least one role: a user
+To use the Dashboard, you need a user account with at least one role: a user
 without a role can log in but has no permissions. We provide a set of
 predefined *system roles* that you can use. For more details please refer to
 the `User and Role Management`_ section.
@@ -509,7 +509,7 @@ To disable API SSL verification run the following command:
 
    ceph dashboard set-iscsi-api-ssl-verification false
 
-When cephadm deploys the iSCSI gateways, it adds them to the dashboard and
+When cephadm deploys iSCSI gateways, it adds them to the dashboard and
 sets the SSL verification option. Gateways that cephadm does not manage
 must be defined with the following commands. The gateway URL has the form
 ``<scheme>://<username>:<password>@<host>[:port]``.
@@ -528,10 +528,9 @@ Enabling the Embedding of Grafana Dashboards
 
 `Grafana`_ pulls data from `Prometheus <https://prometheus.io/>`_. Although
 Grafana can use other data sources, the Grafana dashboards we provide contain
-queries that are specific to Prometheus. Our Grafana dashboards therefore
-require Prometheus as the data source. The Ceph Manager :ref:`mgr-prometheus`
+queries that are specific to Prometheus. The Ceph Manager :ref:`mgr-prometheus`
 exports its data in the Prometheus exposition format. These Grafana
-dashboards rely on metric names from the Prometheus module, from the
+dashboards use metrics from the Prometheus module, from the
 ``ceph-exporter`` daemon, which exports the performance counters of the Ceph
 daemons on each host, and from the `Node exporter
 <https://prometheus.io/docs/guides/node-exporter/>`_, a separate application
@@ -619,7 +618,7 @@ on appropriate hosts, proceed with the following steps.
       Moreover, you don't *need* to have more than one target for Ceph specific
       data, provided by the ``prometheus`` mgr module. But it is recommended to
       configure Prometheus to scrape Ceph specific data from all existing Ceph
-      managers. Only the active Ceph Manager serves metrics; a standby Manager
+      managers. Only the active Ceph Manager serves metrics. A standby Manager
       returns an empty response. Scraping every Manager host means that
       Prometheus keeps receiving metrics after a Manager failover.
 
@@ -952,9 +951,9 @@ least the Alertmanager API.
 #. Use the API of Prometheus and the Alertmanager
 
    This allows you to manage alerts and silences. It enables the **Active
-   Alerts**, **Silences** and **Alert Rules** tabs (in Squid 19.2: **Active
-   Alerts**, **Alerts** and **Silences**) under **Observability** >
-   **Alerts**.
+   Alerts**, **Silences** and **Alert Rules** tabs (in Squid and Tentacle
+   20.2.0: **Active Alerts**, **Alerts** and **Silences**) under
+   **Observability** > **Alerts**.
 
    Alerts can be sorted by name, severity, state and start time.
    Unfortunately it's not possible to know when an alert was sent out through a
@@ -1002,8 +1001,7 @@ least the Alertmanager API.
 #. Use both methods
 
    The behaviors of both methods are configured in a way that they
-   should not disturb each other, though annoying duplicated notifications
-   may pop up.
+   should not disturb each other.
 
 If you are using a self-signed certificate in your Prometheus or your
 Alertmanager setup, you should disable certificate verification in the
