@@ -42,8 +42,8 @@ def retry_decorator(timeout: int = 60,
     def wrapper(f: typing.Callable[..., typing.Any]):
         @functools.wraps(f)
         def inner(*args, **kwargs):
-            tstart: float = time.time()
-            elapsed: float = 0
+            tstart = time.time()
+            elapsed = 0
             exc = None
             details = additional_details or "%s failed" % f.__qualname__
 

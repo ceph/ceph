@@ -113,7 +113,7 @@ class DaemonWatchdog(Greenlet):
         daemon_timeout = int(self.config.get('daemon_timeout', 300))
         daemon_restart = self.config.get('daemon_restart', False)
         daemon_failure_time = {}
-        bark_reason: str = ""
+        bark_reason = ""
         while not self.stopping.is_set():
             bark = False
             now = time.time()

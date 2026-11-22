@@ -735,7 +735,7 @@ class LocalKernelMount(LocalCephFSMount, tasks.cephfs.kernel_mount.KernelMountBa
                 self.inst = c['inst']
                 return self.inst
 
-tasks.cephfs.kernel_mount.KernelMount = LocalKernelMount
+tasks.cephfs.kernel_mount.KernelMount = LocalKernelMount # type: ignore
 
 class LocalFuseMount(LocalCephFSMount, tasks.cephfs.fuse_mount.FuseMountBase):
     def __init__(self, ctx, test_dir, client_id, client_remote=LocalRemote(),
@@ -806,7 +806,7 @@ class LocalFuseMount(LocalCephFSMount, tasks.cephfs.fuse_mount.FuseMountBase):
             else:
                 pass
 
-tasks.cephfs.fuse_mount.FuseMount = LocalFuseMount
+tasks.cephfs.fuse_mount.FuseMount = LocalFuseMount # type: ignore
 
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
