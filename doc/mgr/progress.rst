@@ -15,9 +15,9 @@ based on the number of PGs that are in the ``active+clean`` state.
 Enabling
 --------
 
-The *progress* module is an always-on Manager module, and its event tracking is
-on by default. To turn event tracking back on after it was turned off, run the
-following command:
+The ``progress`` module is an always-on Manager module, and its event tracking
+is on by default. To turn event tracking back on after it was turned off, run
+the following command:
 
 .. prompt:: bash #
 

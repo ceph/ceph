@@ -23,10 +23,10 @@ has no effect.)
 * **basic** (default: on): Basic information about the cluster
 
   - capacity of the cluster
-  - number of Monitors, Managers, OSDs, MDSs, object gateways, or other
+  - numbers of Monitors, Managers, OSDs, MDSs, object gateways, and other
     daemons
-  - software version currently being used
-  - number and types of RADOS pools and CephFS file systems
+  - software version
+  - numbers and types of RADOS pools and CephFS file systems
   - names of configuration options that have been changed from their
     default (but *not* their values)
 
@@ -59,12 +59,12 @@ The basic, crash and device reports do not include pool names, object
 names, object contents, hostnames or device serial numbers.
 
 When the ``perf`` channel is on, the report also includes the performance
-counters that the daemons send to the Manager. In Tentacle 20.2 and later
+counters that the daemons send to the Manager. In Tentacle and later
 releases, these include the labels of labeled counters, and some labels
 carry names from the cluster. For example, the MDS counters carry the CephFS
 file system name and client IDs, the ``rbd-mirror`` per-image counters carry
 pool and image names, and the ``cephfs-mirror`` counters carry file system
-names and peer cluster names. Umbrella 21 and later releases also report
+names and peer cluster names. Umbrella and later releases also report
 subvolume paths and mirrored directory paths. To see exactly what would be
 sent, run ``ceph telemetry preview perf``, or ``ceph telemetry show perf``
 when telemetry is on.
@@ -135,7 +135,7 @@ To allow the *telemetry* module to share data, run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on --license sharing-1-0
+   ceph telemetry on
 
 Please note: Telemetry data is licensed under the `Community Data License
 Agreement - Sharing - Version 1.0 <https://cdla.dev/sharing-1-0/>`_.  This means
@@ -273,7 +273,7 @@ To enroll in the most recent collections, run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on --license sharing-1-0
+   ceph telemetry on
 
 Enable a new channel that is currently disabled by running a command of the
 following form:
@@ -315,9 +315,8 @@ report is due one interval after this one.
 
    ceph telemetry send
 
-If telemetry has not been enabled (by running the command
-``ceph telemetry on --license sharing-1-0``), add ``--license sharing-1-0`` to
-the ``ceph telemetry send`` command.
+If telemetry has not been enabled (by running the command ``ceph telemetry
+on``), add ``--license sharing-1-0`` to the ``ceph telemetry send`` command.
 
 Sending telemetry through a proxy
 ---------------------------------
@@ -368,7 +367,5 @@ on the leaderboard, run a command of the following form:
 
    ceph config set mgr mgr/telemetry/leaderboard_description 'Ceph cluster for Computational Biology at the University of XYZ'
 
-Each report carries the ``leaderboard`` setting (``false`` by default) and the
-``leaderboard_description`` text, whether or not ``leaderboard`` is ``true``.
-What the public dashboards show for the cluster is decided by the telemetry
-service, not by the module.
+If the ``ident`` channel is enabled, its details will not be displayed in the
+leaderboard.

@@ -7,7 +7,7 @@ it in the Ceph cluster for later analysis.
 Authentication Setup
 --------------------
 
-The *crash* module is always on, and ``ceph mgr module disable crash`` is
+The ``crash`` module is always on, and ``ceph mgr module disable crash`` is
 refused. In Squid 19.2.3 and later releases, an always-on module can be turned
 off with ``ceph mgr module force disable crash --yes-i-really-mean-it``.
 Without ``--yes-i-really-mean-it``, the command is refused with a warning that
@@ -37,8 +37,8 @@ Automated collection
 
 Daemons write crash dumps to the directory set by the ``crash_dir`` option,
 ``/var/lib/ceph/crash`` by default. On hosts managed by cephadm, the
-directory is ``/var/lib/ceph/<cluster-fsid>/crash`` on the host, and cephadm
-mounts it at ``/var/lib/ceph/crash`` inside the daemon containers. Crash
+directory is ``/var/lib/ceph/<cluster-fsid>/crash`` on the host and is
+mounted at ``/var/lib/ceph/crash`` inside daemon containers. Crash
 directories are named by time and date and a randomly-generated UUID, and
 contain a metadata file 'meta' and a recent log file, with a "crash_id" that
 is the same.
