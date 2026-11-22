@@ -407,6 +407,7 @@ TEST_CASE("Datum boundary predicates match a dense finite set model", "[datum][a
             const auto mb = models[j];
             CHECK(iv::intersects(a, b) == ((ma & mb) != 0));
             CHECK(iv::encloses(a, b) == ((mb & ~ma) == 0));
+            CHECK(mask(iv::intersection(a, b)) == (ma & mb));
             CHECK(mask(iv::difference(a, b)) == (ma & ~mb));
             CHECK(mask(iv::set_union(a, b)) == (ma | mb));
         }

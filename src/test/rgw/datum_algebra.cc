@@ -1,10 +1,12 @@
-// Pure coverage algebra: independent canonical geometry, lifetime, limits, and work bounds.
+// Pure coverage algebra: independent canonical geometry, lifetime, limits, and work bounds:
 #include "datum/interval/metric.h"
 #include "datum/interval/range.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -108,8 +110,23 @@ constexpr bool constant_algebra()
 
 static_assert(constant_algebra());
 static_assert(std::same_as<decltype(query::closed(0, 4) & query::closed(2, 6)), query>);
+static_assert(iv::is_empty(query::empty() & query::universal()));
+static_assert(iv::is_empty(query::universal() & query::empty()));
+static_assert((query::open(1, 2) & query::universal()) == query::open(1, 2));
 
 struct other_domain : iv::comparison_domain<int> {};
+
+namespace associated_provider {
+
+struct domain : iv::comparison_domain<int> {};
+using query = iv::query<domain>;
+void difference(query&&, query&&) = delete;
+
+} // associated_provider
+
+constexpr auto complemented = iv::complement(associated_provider::query::closed(0, 2));
+static_assert(iv::contains(complemented, 3));
+static_assert(!iv::contains(~associated_provider::query::closed(0, 2), 1));
 
 template <typename LeftT, typename RightT>
 concept has_xor = requires (LeftT left, RightT right) { left ^ right; };
@@ -120,11 +137,21 @@ struct point final
 {
     const int value;
     static inline std::size_t copies = 0;
+    static inline int copy_budget = -1;
 
     explicit point(const int input) : value(input)
     {}
 
-    point(const point& source) : value(source.value) { ++copies; }
+    point(const point& source) : value(source.value)
+    {
+        if (0 == copy_budget) {
+            throw std::runtime_error {"point copy budget exhausted"};
+        }
+        if (copy_budget > 0) {
+            --copy_budget;
+        }
+        ++copies;
+    }
 };
 
 struct point_domain final
@@ -145,6 +172,25 @@ struct point_domain final
 };
 
 using point_query = iv::query<point_domain>;
+
+struct owning_accessors final
+{
+    using domain_type = iv::comparison_domain<std::string>;
+
+    std::string first;
+    std::string last;
+
+    auto lower() const { return iv::boundary<domain_type>::closed(first); }
+    auto upper() const { return iv::boundary<domain_type>::open(last); }
+};
+
+template <typename T>
+concept can_observe = requires (T&& value) { iv::observe_intervals(std::forward<T>(value)); };
+
+static_assert(iv::interval_view<owning_accessors>);
+static_assert(!iv::stable_interval<owning_accessors>);
+static_assert(!can_observe<decltype(iv::symmetric_difference(owning_accessors {},
+                                                          owning_accessors {}))>);
 
 template <unsigned Depth, typename CoverageT>
 auto nested_xor(const CoverageT& left, const CoverageT& right)
@@ -241,6 +287,49 @@ TEST_CASE("XOR owns temporary strings and cursor snapshots retain leaf endpoints
           string_query::closed_open(std::string(80, 'm'), std::string(80, 'z')));
     ++current;
     CHECK(current == visible.end());
+}
+
+TEST_CASE("foreign owning accessor values survive scoped overlap and XOR preparation")
+{
+    using string_query = iv::query<owning_accessors::domain_type>;
+    const auto retained = [] {
+        const owning_accessors left {std::string(80, 'a'), std::string(80, 'm')};
+        const owning_accessors right {std::string(80, 'g'), std::string(80, 'z')};
+        CHECK(iv::intersection(left, right) ==
+              string_query::closed_open(std::string(80, 'g'), std::string(80, 'm')));
+        const auto expression = iv::symmetric_difference(left, right);
+        iv::workspace<owning_accessors::domain_type> scratch;
+        const auto evaluated = iv::evaluate(expression, scratch);
+        const auto compiled = iv::compile_intervals(expression);
+        CHECK(std::ranges::equal(evaluated, compiled));
+
+        return compiled;
+    }();
+    REQUIRE(retained.size() == 2);
+    CHECK(retained[0] == string_query::closed_open(std::string(80, 'a'), std::string(80, 'g')));
+    CHECK(retained[1] == string_query::closed_open(std::string(80, 'm'), std::string(80, 'z')));
+}
+
+TEST_CASE("empty scalar overlap borrows points and retained overlap propagates copy failure")
+{
+    const auto left = point_query::closed_open(point {0}, point {10});
+    const auto touching = point_query::closed_open(point {10}, point {20});
+    const auto overlapping = point_query::closed_open(point {5}, point {20});
+    struct restore final
+    {
+        ~restore() { point::copy_budget = -1; }
+    } reset;
+    point::copies = 0;
+    point::copy_budget = 0;
+    CHECK(iv::is_empty(iv::intersection(left, touching)));
+    CHECK(iv::is_empty(iv::intersection(touching, left)));
+    CHECK(point::copies == 0);
+    CHECK_THROWS_AS(iv::intersection(left, overlapping), std::runtime_error);
+    point::copy_budget = -1;
+    const auto retained = iv::intersection(left, overlapping);
+    CHECK(retained.lower().key().value == 5);
+    CHECK(retained.upper().key().value == 10);
+    CHECK(point::copies == 2);
 }
 
 TEST_CASE("immutable points need no assignment and nested XOR has bounded observation work")

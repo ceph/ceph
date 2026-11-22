@@ -130,18 +130,6 @@ using clip_geometry_result = std::invoke_result_t<
 
 template <interval_view LeftT, interval_view RightT>
 requires same_expression_domain<LeftT, RightT>
-constexpr auto overlap_bounds(const LeftT& left, const RightT& right)
-{
-    using domain_type = expression_domain_t<LeftT>;
-
-    return borrowed_interval<domain_type> {
-        max_bound(left.lower(), right.lower(), inclusivity_merge::all),
-        min_bound(left.upper(), right.upper(), inclusivity_merge::all)
-    };
-}
-
-template <interval_view LeftT, interval_view RightT>
-requires same_expression_domain<LeftT, RightT>
 constexpr auto overlap_upper_order(const LeftT& left, const RightT& right)
 {
     if (const auto order = compare_position(left.upper(), right.upper()); order != 0) {

@@ -513,6 +513,9 @@ intersection, difference, and symmetric difference produce ordered, nonempty, co
 
 Operators forward to the named pure value operations and require the same ordered domain.
 Intersection of two individual intervals is eager; other combinations retain expressions.
+An empty scalar intersection returns before copying result endpoints; a nonempty result
+copies its point values into a query. Foreign interval types can use the named operations
+or bring an operator into scope explicitly.
 Use parentheses for mixed operations: C++ gives `-` higher precedence than `&`, then `^`, then `|`.
 Canonical lvalues are borrowed and temporaries retained through the same operand-storage policy.
 No operation mutates its operands or merges execution controls.
@@ -1394,6 +1397,10 @@ describe local machinery, not backend throughput.
 - WG21 N4950, [constant expressions](https://timsong-cpp.github.io/cppwp/n4950/expr.const).
   Temporary allocation must be released within constant evaluation. Inline numeric interval
   storage supports persistent `constexpr` plans without retained dynamic allocation.
+- WG21 N4950, [temporary objects](https://timsong-cpp.github.io/cppwp/n4950/class.temporary) and
+  [argument-dependent lookup](https://timsong-cpp.github.io/cppwp/n4950/basic.lookup.argdep).
+  Cached foreign boundary values remain alive while overlap endpoints are borrowed. Internal
+  complement dispatch is qualified so a domain's namespace cannot replace the algebra operation.
 - Guava contributors. [*Range*, release 33.4.7-jre](https://guava.dev/releases/33.4.7-jre/api/docs/com/google/common/collect/Range.html).
   `isEmpty`, `encloses`, `equals`, and `canonical` document the distinction between bounds,
   representation equality, and discrete membership. Datum retains its own empty-bound rules.

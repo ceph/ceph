@@ -694,13 +694,7 @@ struct binary_expression final : expression_tag
 };
 
 template <expression LhsT, expression RhsT>
-using difference_expr = binary_expression<set_operation::subtract, LhsT, RhsT>;
-template <expression LhsT, expression RhsT>
-using intersection_expr = binary_expression<set_operation::intersect, LhsT, RhsT>;
-template <expression LhsT, expression RhsT>
 using set_union_expr = binary_expression<set_operation::unite, LhsT, RhsT>;
-template <expression LhsT, expression RhsT>
-using symmetric_difference_expr = binary_expression<set_operation::symmetric_difference, LhsT, RhsT>;
 
 template <set_operation Operation, typename LhsT, typename RhsT>
 requires same_expression_domain<LhsT, RhsT>
@@ -867,6 +861,22 @@ constexpr auto max_bound(const LhsT& lhs, const RhsT& rhs, const inclusivity_mer
 
     return borrow_bound(lhs).with_inclusive(
         merge_inclusive(lhs.inclusive(), rhs.inclusive(), merge));
+}
+
+// N4950 [class.temporary] defines temporary lifetime:
+// https://timsong-cpp.github.io/cppwp/n4950/class.temporary
+// Cache foreign owning accessor results with bounds_of, and keep endpoint storage alive
+// until the borrowed overlap has been consumed:
+template <stable_interval LeftT, stable_interval RightT>
+requires same_expression_domain<LeftT, RightT>
+constexpr auto overlap_bounds(const LeftT& left, const RightT& right)
+{
+    using domain_type = typename std::remove_cvref_t<LeftT>::domain_type;
+
+    return borrowed_interval<domain_type> {
+        max_bound(left.lower(), right.lower(), inclusivity_merge::all),
+        min_bound(left.upper(), right.upper(), inclusivity_merge::all)
+    };
 }
 
 } // detail
@@ -1048,19 +1058,12 @@ constexpr auto intersection(const LhsT& lhs, const RhsT& rhs)
     const auto lhs_bounds = detail::bounds_of(lhs);
     const auto rhs_bounds = detail::bounds_of(rhs);
 
-    if (detail::empty_bounds(lhs_bounds) || detail::empty_bounds(rhs_bounds)) {
+    const auto shared = detail::overlap_bounds(lhs_bounds, rhs_bounds);
+    if (detail::empty_bounds(shared)) {
         return query<domain_type>::empty();
     }
 
-    auto out = query<domain_type>::between(
-        detail::max_bound(lhs_bounds.lower(), rhs_bounds.lower(), detail::inclusivity_merge::all),
-        detail::min_bound(lhs_bounds.upper(), rhs_bounds.upper(), detail::inclusivity_merge::all));
-
-    if (is_empty(out)) {
-        return query<domain_type>::empty();
-    }
-
-    return out;
+    return query<domain_type>::between(shared.lower(), shared.upper());
 }
 
 namespace detail {
@@ -1192,7 +1195,10 @@ constexpr auto complement(ExprT&& expression)
 {
     using domain_type = typename std::remove_cvref_t<ExprT>::domain_type;
 
-    return difference(query<domain_type>::universal(), std::forward<ExprT>(expression));
+    // N4950 [basic.lookup.argdep] adds associated candidates to an unqualified call:
+    // https://timsong-cpp.github.io/cppwp/n4950/basic.lookup.argdep
+    // Qualify internal dispatch so the domain's namespace cannot replace the algebra operation:
+    return interval::difference(query<domain_type>::universal(), std::forward<ExprT>(expression));
 }
 
 template <typename LhsT, typename RhsT>
@@ -1964,8 +1970,7 @@ public:
             while (left != left_end and right != right_end) {
                 const auto l = bounds(*left);
                 const auto r = bounds(*right);
-                const geometry value {max_bound(l.first, r.first, inclusivity_merge::all),
-                                      min_bound(l.last, r.last, inclusivity_merge::all)};
+                const auto value = overlap_bounds(l, r);
                 const auto order = compare_position(l.last, r.last);
                 if (order <= 0) {
                     ++left;
