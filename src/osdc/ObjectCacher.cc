@@ -1392,12 +1392,30 @@ void ObjectCacher::trim()
 
   uint64_t max_clean_bh = max_size >> BUFFER_MEMORY_WEIGHT;
   uint64_t nr_clean_bh = bh_lru_rest.lru_get_size() - bh_lru_rest.lru_get_num_pinned();
+  // a member of a group trims what is beyond both its share of the limits
+  // and the group's (and nothing within its share)
+  uint64_t trim_bytes = UINT64_MAX, trim_bhs = UINT64_MAX;
+  if (group) {
+    uint64_t clean = get_stat_clean();
+    uint64_t ob = clean > share(max_size) ? clean - share(max_size) : 0;
+    uint64_t obh = nr_clean_bh > share(max_clean_bh) ?
+                   nr_clean_bh - share(max_clean_bh) : 0;
+    if (ob || obh) {
+      Totals t = group_totals();
+      ob = std::min<uint64_t>(ob, t.clean > max_size ? t.clean - max_size : 0);
+      obh = std::min<uint64_t>(obh, t.clean_bh > max_clean_bh ?
+                                    t.clean_bh - max_clean_bh : 0);
+    }
+    trim_bytes = ob;
+    trim_bhs = obh;
+  }
   // read_hit() marks what it reads instead of moving it in the LRU: give
   // each such BufferHead one more round, at most one pass over the LRU
   uint64_t second_chances = read_gate ? bh_lru_rest.lru_get_size() : 0;
   while (get_stat_clean() > 0 &&
-	 ((uint64_t)get_stat_clean() > max_size ||
-	  nr_clean_bh > max_clean_bh)) {
+	 (group ? (trim_bytes > 0 || trim_bhs > 0) :
+	  ((uint64_t)get_stat_clean() > max_size ||
+	   nr_clean_bh > max_clean_bh))) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -1415,10 +1433,14 @@ void ObjectCacher::trim()
     ceph_assert(bh->is_clean() || bh->is_zero() || bh->is_error());
 
     Object *ob = bh->ob;
+    uint64_t len = bh->length();
     bh_remove(ob, bh);
     delete bh;
 
     --nr_clean_bh;
+    trim_bytes -= std::min(trim_bytes, len);
+    if (trim_bhs)
+      --trim_bhs;
 
     if (ob->complete) {
       ldout(cct, 10) << "trim clearing complete on " << *ob << dendl;
@@ -1427,7 +1449,7 @@ void ObjectCacher::trim()
   }
 
   uint64_t ob_second_chances = read_gate ? ob_lru.lru_get_size() : 0;
-  while (ob_lru.lru_get_size() > max_objects) {
+  while (ob_lru.lru_get_size() > share(max_objects)) {
     Object *ob = static_cast<Object*>(ob_lru.lru_expire());
     if (!ob)
       break;
@@ -2116,14 +2138,22 @@ void ObjectCacher::_wake_writeback_waiters()
   if (_writeback_wait_needed())
     return;
   // The limit counts what the waiters wait to write; each that goes takes
-  // its bytes, and at least one BufferHead, out of the room left
+  // its bytes, and at least one BufferHead, out of the room left: in this
+  // cache, or in the group's when this member is beyond its share
   uint64_t used = get_stat_dirty() + get_stat_tx();
-  uint64_t limit = max_dirty + get_stat_dirty_waiting();
+  uint64_t used_bh = dirty_or_tx_bh.size();
+  uint64_t limit = share(max_dirty) + get_stat_dirty_waiting();
+  uint64_t bh_limit = share(max_dirty >> BUFFER_MEMORY_WEIGHT) + waiters;
+  if (group && (used >= limit || used_bh >= bh_limit)) {
+    Totals t = group_totals();
+    used = t.dirty_tx;
+    used_bh = t.dirty_tx_bh;
+    limit = max_dirty + t.waiting;
+    bh_limit = (max_dirty >> BUFFER_MEMORY_WEIGHT) + t.waiters;
+  }
   uint64_t avg = std::max<uint64_t>(1, get_stat_dirty_waiting() / waiters);
   uint64_t n = (limit > used ? limit - used : 0) / avg;
-  uint64_t bh_limit = (max_dirty >> BUFFER_MEMORY_WEIGHT) + waiters;
-  n = std::min<uint64_t>(n, bh_limit > dirty_or_tx_bh.size() ?
-                            bh_limit - dirty_or_tx_bh.size() : 0);
+  n = std::min<uint64_t>(n, bh_limit > used_bh ? bh_limit - used_bh : 0);
   n = std::max<uint64_t>(n, 1);
   // those woken already and not back yet take their share of it, and no
   // more than MAX_WOKEN_WRITEBACK_WAITERS are let go at once
@@ -2145,11 +2175,51 @@ bool ObjectCacher::_writeback_wait_needed()
   //    threads do not wait for each other.  this effectively allows the cache
   //    size to balloon proportional to the data that is in flight.
   uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
-  return get_stat_dirty() + get_stat_tx() > 0 &&
-         (((uint64_t)(get_stat_dirty() + get_stat_tx()) >=
-           max_dirty + get_stat_dirty_waiting()) ||
-          (dirty_or_tx_bh.size() >=
-           max_dirty_bh + get_stat_nr_dirty_waiters()));
+  auto over = [](uint64_t used, uint64_t used_bh, uint64_t waiting,
+                     uint64_t waiters, uint64_t limit, uint64_t limit_bh) {
+    return used > 0 &&
+           (used >= limit + waiting || used_bh >= limit_bh + waiters);
+  };
+  // a member of a group within its share of the limit does not wait
+  bool local = over(get_stat_dirty() + get_stat_tx(), dirty_or_tx_bh.size(),
+                    get_stat_dirty_waiting(), get_stat_nr_dirty_waiters(),
+                    share(max_dirty), share(max_dirty_bh));
+  if (!group || !local)
+    return local;
+  Totals t = group_totals();
+  return over(t.dirty_tx, t.dirty_tx_bh, t.waiting, t.waiters,
+              max_dirty, max_dirty_bh);
+}
+
+void ObjectCacher::publish()
+{
+  if (!group)
+    return;
+  auto r = std::memory_order_relaxed;
+  pub.clean.store(get_stat_clean(), r);
+  pub.clean_bh.store(bh_lru_rest.lru_get_size() -
+                     bh_lru_rest.lru_get_num_pinned(), r);
+  pub.dirty.store(get_stat_dirty(), r);
+  pub.dirty_tx.store(get_stat_dirty() + get_stat_tx(), r);
+  pub.dirty_tx_bh.store(dirty_or_tx_bh.size(), r);
+  pub.waiting.store(get_stat_dirty_waiting(), r);
+  pub.waiters.store(get_stat_nr_dirty_waiters(), r);
+}
+
+ObjectCacher::Totals ObjectCacher::group_totals() const
+{
+  Totals t;
+  auto r = std::memory_order_relaxed;
+  for (auto m : *group) {
+    t.clean += m->pub.clean.load(r);
+    t.clean_bh += m->pub.clean_bh.load(r);
+    t.dirty += m->pub.dirty.load(r);
+    t.dirty_tx += m->pub.dirty_tx.load(r);
+    t.dirty_tx_bh += m->pub.dirty_tx_bh.load(r);
+    t.waiting += m->pub.waiting.load(r);
+    t.waiters += m->pub.waiters.load(r);
+  }
+  return t;
 }
 
 /*
@@ -2184,15 +2254,22 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     flusher_cond.notify_all();
     stat_dirty_waiting += len;
     ++stat_nr_dirty_waiters;
+    publish();
     std::unique_lock l{lock, std::adopt_lock};
     gate_open();
-    stat_cond.wait(l);
+    if (group) {
+      // room another member frees does not wake us
+      stat_cond.wait_for(l, std::chrono::milliseconds(10));
+    } else {
+      stat_cond.wait(l);
+    }
     gate_shut();
     l.release();
     stat_dirty_waiting -= len;
     --stat_nr_dirty_waiters;
     if (stat_nr_dirty_woken)
       --stat_nr_dirty_woken;
+    publish();
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
   }
@@ -2293,18 +2370,30 @@ void ObjectCacher::flusher_entry()
 
     loff_t actual = get_stat_dirty() + get_stat_dirty_waiting();
     int actual_bhs = dirty_or_tx_bh.size() + get_stat_nr_dirty_waiters();
-    if (actual > 0 && (uint64_t) actual > target_dirty) {
+    // beyond the target: this cache's, or, for a member of a group, its
+    // share of it and the group's (flush what is beyond both)
+    loff_t over = actual - (loff_t)share(target_dirty);
+    int over_bhs = actual_bhs - (int)share(target_dirty_bh);
+    if (group && (over > 0 || over_bhs > 0)) {
+      Totals t = group_totals();
+      over = std::min<loff_t>(over, t.dirty + t.waiting - target_dirty);
+      over_bhs = std::min<int>(over_bhs,
+                               t.dirty_tx_bh + t.waiters - target_dirty_bh);
+      if (t.clean > max_size || t.clean_bh > (max_size >> BUFFER_MEMORY_WEIGHT))
+        trim();   // as no read or write of ours may come to do it
+    }
+    if (actual > 0 && over > 0) {
       // flush some dirty pages
       ldout(cct, 10) << "flusher " << get_stat_dirty() << " dirty + "
 		     << get_stat_dirty_waiting() << " dirty_waiting > target "
 		     << target_dirty << ", flushing some dirty bhs" << dendl;
-      flush(&trace, actual - target_dirty);
-    } else if (actual_bhs > target_dirty_bh) {
+      flush(&trace, over);
+    } else if (over_bhs > 0) {
       ldout(cct, 10) << "flusher " << dirty_or_tx_bh.size() << " dirty/tx bh + "
                      << get_stat_nr_dirty_waiters() << " dirty_waiters > "
                      << "target dirty bh " << target_dirty_bh
                      << ", flushing some dirty bhs" << dendl;
-      flush(&trace, 0, actual_bhs - target_dirty_bh);
+      flush(&trace, 0, over_bhs);
     } else {
       // check tail of lru for old dirty items
       ceph::real_time cutoff = ceph::real_clock::now();
@@ -3023,6 +3112,7 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
   default:
     ceph_abort_msg("bh_stat_add: invalid bufferhead state");
   }
+  publish();
   _wake_writeback_waiters();
 }
 
@@ -3058,6 +3148,7 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
   default:
     ceph_abort_msg("bh_stat_sub: invalid bufferhead state");
   }
+  publish();
 }
 
 void ObjectCacher::bh_set_state(BufferHead *bh, int s)

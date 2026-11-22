@@ -424,6 +424,26 @@ class ObjectCacher {
   ceph::mutex& lock;
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
+  // the ObjectCachers that share this one's limits, see set_budget_group()
+  const std::vector<ObjectCacher*> *group = nullptr;
+  // what a member of a group uses, for the others to add up: changed
+  // under its lock only, read without it
+  struct alignas(64) Published {
+    std::atomic<uint64_t> clean{0}, clean_bh{0}, dirty{0}, dirty_tx{0},
+                          dirty_tx_bh{0}, waiting{0}, waiters{0};
+  };
+  Published pub;
+  struct Totals {
+    uint64_t clean = 0, clean_bh = 0, dirty = 0, dirty_tx = 0,
+             dirty_tx_bh = 0, waiting = 0, waiters = 0;
+  };
+  void publish();
+  Totals group_totals() const;
+  // a member's share of a limit of the group
+  uint64_t share(uint64_t v) const {
+    return group ? v / group->size() : v;
+  }
+
   bool read_gate = false;
   alignas(64) std::atomic<bool> gate_closed{false};
   // the readers inside the read gate, counted per CPU (mod GATE_SLOTS) so
@@ -699,6 +719,20 @@ class ObjectCacher {
    */
   void enable_read_gate() {
     read_gate = true;
+  }
+  /**
+   * Share the limits (max_size, max_dirty, target_dirty) with the other
+   * members of @g, which all have the same limits and are all in @g: for
+   * a user that shards its cache by object set, each shard with its own
+   * lock.  A member within its share of a limit (the limit divided by the
+   * number of members) is never held back for the others; one beyond it
+   * is held to the limit for what all members use.  Members do not wake
+   * each other: writers waiting for room that another member frees look
+   * again every 10 ms.  max_objects is divided between them.  Call before
+   * start().
+   */
+  void set_budget_group(const std::vector<ObjectCacher*> *g) {
+    group = g;
   }
   void gate_shut() {
     if (!read_gate)
