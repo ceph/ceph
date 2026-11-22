@@ -144,6 +144,11 @@ struct interval_bound final
  std::string key;
  bool inclusive;
 
+ explicit constexpr interval_bound(std::string&& key_value, const bool is_inclusive)
+  : key(std::move(key_value)),
+    inclusive(is_inclusive)
+ {}
+
  explicit constexpr interval_bound(const concepts::libfdb_key auto& key_value,
                                    const bool is_inclusive)
   : key(::ceph::libfdb::detail::as_libfdb_key_view(key_value)),
@@ -153,14 +158,14 @@ struct interval_bound final
  constexpr bool operator==(const interval_bound&) const noexcept = default;
 };
 
-constexpr interval_bound closed(const concepts::libfdb_key auto& key)
+constexpr interval_bound closed(concepts::libfdb_key auto&& key)
 {
- return interval_bound(key, true);
+ return interval_bound(std::forward<decltype(key)>(key), true);
 }
 
-constexpr interval_bound open(const concepts::libfdb_key auto& key)
+constexpr interval_bound open(concepts::libfdb_key auto&& key)
 {
- return interval_bound(key, false);
+ return interval_bound(std::forward<decltype(key)>(key), false);
 }
 
 struct interval;
@@ -208,19 +213,17 @@ struct interval final
   detail::normalize_keyspace(*this);
  }
 
- constexpr interval(const concepts::libfdb_key auto& lower,
-                    const concepts::libfdb_key auto& upper)
-  : interval(closed(lower), open(upper))
+ constexpr interval(concepts::libfdb_key auto&& lower, concepts::libfdb_key auto&& upper)
+  : interval(closed(std::forward<decltype(lower)>(lower)), open(std::forward<decltype(upper)>(upper)))
  {}
 
- constexpr interval(const concepts::libfdb_key auto& lower,
-                    interval_bound upper)
-  : interval(closed(lower), std::move(upper))
+ constexpr interval(concepts::libfdb_key auto&& lower, interval_bound upper)
+  : interval(closed(std::forward<decltype(lower)>(lower)), std::move(upper))
  {}
 
  constexpr interval(interval_bound lower,
-                    const concepts::libfdb_key auto& upper)
-  : interval(std::move(lower), open(upper))
+                    concepts::libfdb_key auto&& upper)
+  : interval(std::move(lower), open(std::forward<decltype(upper)>(upper)))
  {}
 
  constexpr explicit interval(const concepts::libfdb_key auto& prefix)
@@ -342,6 +345,11 @@ constexpr std::string key_string(const concepts::libfdb_key auto& key)
  return std::string(key_view(key));
 }
 
+constexpr std::string key_string(std::string key)
+{
+ return key;
+}
+
 constexpr void normalize_keyspace(interval& x)
 {
  if (byte_string_domain::is_reserved_key(x.end_key)) {
@@ -351,10 +359,10 @@ constexpr void normalize_keyspace(interval& x)
 }
 
 // Clamp an executable selector to ordinary FDB keyspace:
-constexpr interval clamp_to_keyspace(interval x)
+constexpr interval clamp_to_keyspace(interval&& x)
 {
  normalize_keyspace(x);
- return x;
+ return std::move(x);
 }
 
 constexpr bool is_empty_select(const interval& x) noexcept
@@ -392,6 +400,15 @@ constexpr interval to_select(const LowerT& lower,
                              const query_options& options)
 {
  return clamp_to_keyspace(to_unchecked_select(lower, upper, options));
+}
+
+constexpr interval to_select(interval&& x, const query_options& options)
+{
+ if (is_empty_select(x)) {
+  return to_select(boundary::closed(""), boundary::open(""), options);
+ }
+ x.options = options;
+ return clamp_to_keyspace(std::move(x));
 }
 
 template <core::interval_view IntervalT>
@@ -558,7 +575,7 @@ constexpr bool is_universal(const interval& x)
         x.begin_inclusive and not x.end_inclusive;
 }
 
-constexpr interval singleton(const concepts::libfdb_key auto& key)
+constexpr interval singleton(concepts::libfdb_key auto&& key)
 {
  const auto key_view = detail::key_view(key);
 
@@ -566,10 +583,12 @@ constexpr interval singleton(const concepts::libfdb_key auto& key)
   return empty();
  }
 
- return interval(closed(key_view), closed(key_view));
+ auto lower = closed(std::forward<decltype(key)>(key));
+ auto upper = closed(lower.key);
+ return interval(std::move(lower), std::move(upper));
 }
 
-constexpr interval prefix(const concepts::libfdb_key auto& key)
+constexpr interval prefix(concepts::libfdb_key auto&& key)
 {
  const auto key_view = detail::key_view(key);
 
@@ -583,7 +602,7 @@ constexpr interval prefix(const concepts::libfdb_key auto& key)
 
  if (auto upper = byte_string_domain::successor(key_view)) {
   // Prefix math is pure byte-string math; the final selector is keyspace-clamped.
-  return interval(closed(key_view), open(*upper));
+  return interval(closed(std::forward<decltype(key)>(key)), open(std::move(*upper)));
  }
 
  return empty();
@@ -594,10 +613,10 @@ constexpr interval between(interval_bound lower, interval_bound upper)
  return detail::to_select(interval(std::move(lower), std::move(upper)), {});
 }
 
-constexpr interval between(const concepts::libfdb_key auto& begin_key,
-                           const concepts::libfdb_key auto& end_key)
+constexpr interval between(concepts::libfdb_key auto&& begin_key, concepts::libfdb_key auto&& end_key)
 {
- return between(closed(begin_key), open(end_key));
+ return between(closed(std::forward<decltype(begin_key)>(begin_key)),
+                 open(std::forward<decltype(end_key)>(end_key)));
 }
 
 constexpr interval with_options(interval x, const query_options& options)
@@ -966,6 +985,17 @@ constexpr auto compile_intervals(const ExprT& expr)
 }
 
 template <expression ExprT>
+inline constexpr std::size_t interval_capacity_v =
+ core::interval_capacity_v<decltype(detail::core_expression_of(std::declval<const ExprT&>()))>;
+
+template <expression ExprT>
+requires (std::dynamic_extent != interval_capacity_v<ExprT>)
+constexpr auto compile_intervals(std::in_place_t, const ExprT& expr)
+{
+ return query::compile_intervals<interval_capacity_v<ExprT>>(expr);
+}
+
+template <expression ExprT>
 constexpr std::size_t interval_count(const ExprT& expr)
 {
  if constexpr (query_interval<ExprT>) {
@@ -1038,137 +1068,149 @@ constexpr bool encloses(const LHS_T& outer, const RHS_T& inner)
   core::detail::difference_expr<decltype(inside), decltype(outside)> {.lhs = inside, .rhs = outside});
 }
 
-constexpr boundary closed_bound(const concepts::libfdb_key auto& key)
+constexpr boundary closed_bound(concepts::libfdb_key auto&& key)
 {
- return boundary::closed(detail::key_string(key));
+ return boundary::closed(detail::key_string(std::forward<decltype(key)>(key)));
 }
 
-constexpr boundary open_bound(const concepts::libfdb_key auto& key)
+constexpr boundary open_bound(concepts::libfdb_key auto&& key)
 {
- return boundary::open(detail::key_string(key));
+ return boundary::open(detail::key_string(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto lower_at_or_after(const concepts::libfdb_key auto& key)
+constexpr auto lower_at_or_after(concepts::libfdb_key auto&& key)
 {
- return core::lower_at_or_after<byte_string_domain>(detail::key_string(key));
+ return core::lower_at_or_after<byte_string_domain>(detail::key_string(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto lower_after(const concepts::libfdb_key auto& key)
+constexpr auto lower_after(concepts::libfdb_key auto&& key)
 {
- return core::lower_after<byte_string_domain>(detail::key_string(key));
+ return core::lower_after<byte_string_domain>(detail::key_string(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto upper_at_or_before(const concepts::libfdb_key auto& key)
+constexpr auto upper_at_or_before(concepts::libfdb_key auto&& key)
 {
- return core::upper_at_or_before<byte_string_domain>(detail::key_string(key));
+ return core::upper_at_or_before<byte_string_domain>(detail::key_string(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto upper_before(const concepts::libfdb_key auto& key)
+constexpr auto upper_before(concepts::libfdb_key auto&& key)
 {
- return core::upper_before<byte_string_domain>(detail::key_string(key));
+ return core::upper_before<byte_string_domain>(detail::key_string(std::forward<decltype(key)>(key)));
 }
 
 constexpr auto between(core::lower_endpoint<byte_string_domain> lower,
                        core::upper_endpoint<byte_string_domain> upper)
 {
- return detail::to_select(core::between(std::move(lower), std::move(upper)), {});
+ return detail::to_select(interval {std::move(lower.value), std::move(upper.value),
+  core::endpoint_inclusion::included == lower.inclusion,
+  core::endpoint_inclusion::included == upper.inclusion}, {});
 }
 
 constexpr auto from(core::lower_endpoint<byte_string_domain> lower)
 {
  // The missing upper side means public libfdb universal, not algebraic +infinity.
- return detail::to_select(core::from(std::move(lower)), {});
+ return detail::to_select(interval {std::move(lower.value), byte_string_domain::keyspace_limit(),
+  core::endpoint_inclusion::included == lower.inclusion, false}, {});
 }
 
 constexpr auto until(core::upper_endpoint<byte_string_domain> upper)
 {
  // The missing lower side means public libfdb universal, not algebraic -infinity.
- return detail::to_select(core::until(std::move(upper)), {});
+ return detail::to_select(interval {byte_string_domain::minimum_key(), std::move(upper.value),
+  true, core::endpoint_inclusion::included == upper.inclusion}, {});
 }
 
-constexpr auto at(const concepts::libfdb_key auto& key)
+constexpr auto at(concepts::libfdb_key auto&& key)
 {
- return singleton(key);
+ return singleton(std::forward<decltype(key)>(key));
 }
 
-constexpr auto at_or_after(const concepts::libfdb_key auto& key)
+constexpr auto at_or_after(concepts::libfdb_key auto&& key)
 {
- return from(lower_at_or_after(key));
+ return from(lower_at_or_after(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto after(const concepts::libfdb_key auto& key)
+constexpr auto after(concepts::libfdb_key auto&& key)
 {
- return from(lower_after(key));
+ return from(lower_after(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto at_or_before(const concepts::libfdb_key auto& key)
+constexpr auto at_or_before(concepts::libfdb_key auto&& key)
 {
- return until(upper_at_or_before(key));
+ return until(upper_at_or_before(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto before(const concepts::libfdb_key auto& key)
+constexpr auto before(concepts::libfdb_key auto&& key)
 {
- return until(upper_before(key));
+ return until(upper_before(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto closed_between(const concepts::libfdb_key auto& lower,
-                              const concepts::libfdb_key auto& upper)
+constexpr auto closed_between(concepts::libfdb_key auto&& lower, concepts::libfdb_key auto&& upper)
 {
- return between(lower_at_or_after(lower), upper_at_or_before(upper));
+ return between(lower_at_or_after(std::forward<decltype(lower)>(lower)),
+                 upper_at_or_before(std::forward<decltype(upper)>(upper)));
 }
 
-constexpr auto open_between(const concepts::libfdb_key auto& lower,
-                            const concepts::libfdb_key auto& upper)
+constexpr auto open_between(concepts::libfdb_key auto&& lower, concepts::libfdb_key auto&& upper)
 {
- return between(lower_after(lower), upper_before(upper));
-}
-
-template <expression ExprT>
-constexpr auto starting_at(ExprT&& expr, const concepts::libfdb_key auto& key)
-{
- return query::intersection(std::forward<ExprT>(expr), at_or_after(key));
+ return between(lower_after(std::forward<decltype(lower)>(lower)),
+                 upper_before(std::forward<decltype(upper)>(upper)));
 }
 
 template <expression ExprT>
-constexpr auto starting_after(ExprT&& expr, const concepts::libfdb_key auto& key)
+constexpr auto starting_at(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr), after(key));
+ return query::intersection(std::forward<ExprT>(expr),
+   at_or_after(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
-constexpr auto ending_at(ExprT&& expr, const concepts::libfdb_key auto& key)
+constexpr auto starting_after(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr), at_or_before(key));
+ return query::intersection(std::forward<ExprT>(expr),
+   after(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
-constexpr auto ending_before(ExprT&& expr, const concepts::libfdb_key auto& key)
+constexpr auto ending_at(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr), before(key));
+ return query::intersection(std::forward<ExprT>(expr),
+   at_or_before(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
-constexpr auto without(ExprT&& expr, const concepts::libfdb_key auto& key)
+constexpr auto ending_before(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::difference(std::forward<ExprT>(expr), at(key));
+ return query::intersection(std::forward<ExprT>(expr),
+   before(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
-constexpr auto without_prefix(ExprT&& expr, const concepts::libfdb_key auto& key)
+constexpr auto without(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::difference(std::forward<ExprT>(expr), prefix(key));
+ return query::difference(std::forward<ExprT>(expr),
+   at(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto prefix_starting_at(const concepts::libfdb_key auto& prefix_key,
-                                  const concepts::libfdb_key auto& cursor)
+template <expression ExprT>
+constexpr auto without_prefix(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return starting_at(prefix(prefix_key), cursor);
+ return query::difference(std::forward<ExprT>(expr),
+   prefix(std::forward<decltype(key)>(key)));
 }
 
-constexpr auto prefix_starting_after(const concepts::libfdb_key auto& prefix_key,
-                                     const concepts::libfdb_key auto& cursor)
+constexpr auto prefix_starting_at(concepts::libfdb_key auto&& prefix_key,
+                                  concepts::libfdb_key auto&& cursor)
 {
- return starting_after(prefix(prefix_key), cursor);
+ return starting_at(prefix(std::forward<decltype(prefix_key)>(prefix_key)),
+                     std::forward<decltype(cursor)>(cursor));
+}
+
+constexpr auto prefix_starting_after(concepts::libfdb_key auto&& prefix_key,
+                                     concepts::libfdb_key auto&& cursor)
+{
+ return starting_after(prefix(std::forward<decltype(prefix_key)>(prefix_key)),
+                        std::forward<decltype(cursor)>(cursor));
 }
 
 } // namespace ceph::libfdb::query
@@ -1178,14 +1220,14 @@ namespace ceph::libfdb {
 using range_endpoint = query::interval_bound;
 using select = query::interval;
 
-constexpr range_endpoint inclusive(const concepts::libfdb_key auto& key)
+constexpr range_endpoint inclusive(concepts::libfdb_key auto&& key)
 {
- return query::closed(key);
+ return query::closed(std::forward<decltype(key)>(key));
 }
 
-constexpr range_endpoint exclusive(const concepts::libfdb_key auto& key)
+constexpr range_endpoint exclusive(concepts::libfdb_key auto&& key)
 {
- return query::open(key);
+ return query::open(std::forward<decltype(key)>(key));
 }
 
 } // namespace ceph::libfdb

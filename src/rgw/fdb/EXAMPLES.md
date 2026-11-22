@@ -1211,6 +1211,43 @@ evaluation when the expression's value types permit it. Complements and
 unbounded expressions are still interpreted relative to FoundationDB's
 ordinary keyspace.
 
+#### Preparing bounded interval lists
+
+When an expression's shape supplies a finite bound, let the library infer fixed
+storage rather than guessing a capacity or counting first:
+
+```cpp
+const auto selected = q::difference(q::prefix("tenant/"), q::prefix("tenant/private/"));
+static_assert(2 == q::interval_capacity_v<decltype(selected)>);
+const auto prepared = q::compile_intervals(std::in_place, selected);
+
+for (const auto& interval : prepared) {
+  // Execute or inspect each prepared interval:
+  inspect(interval);
+}
+```
+
+`interval_capacity_v<Expression>` is an upper bound on emitted components, not
+their actual count or the number of selected keys. If two operands have bounds
+`p` and `q`, their union, intersection, difference, and symmetric difference need
+at most `p + q` components. Complement is difference from one universal interval,
+so a bound of `p` becomes at most `p + 1`. Empty or coalescing results can be much
+smaller. Overflow and expressions whose size is known only at runtime yield
+`std::dynamic_extent`; use ordinary `compile_intervals(expression)` for those.
+
+The same inferred overload is available in the pure interval namespace and can
+be used during constant evaluation. Fixed storage requires assignable interval
+values. Dynamic algebra continues to support immutable, non-default-constructible
+keys. Fixed interval-list storage does not remove allocations inside owned keys,
+such as long strings. `compile_intervals<Capacity>()` remains available when the
+caller deliberately supplies a bound, and rejects insufficient capacity.
+
+Reuse an `interval_set` for repeated geometric work. Predicates and expression evaluation
+borrow its existing canonical storage. Difference prepares a compound right
+operand once, only if the left operand emits anything. Small expression trees
+use bounded inline scratch internally; larger or unsuitable value types retain
+dynamic storage.
+
 #### Interval mathematics for reconciliation
 
 Think of a selection as a set of eligible keys or positions. For `a <= b`, a

@@ -822,6 +822,14 @@ static_assert(!std::assignable_from<immutable_key&, immutable_key>);
 static_assert(!fixed_compilable<core::query<immutable_domain>>);
 static_assert(fixed_compilable<integer_query>);
 
+template <typename ExprT>
+concept inferred_fixed_compilable = requires(const ExprT& expr) {
+ core::compile_intervals(std::in_place, expr);
+};
+
+static_assert(!inferred_fixed_compilable<core::query<immutable_domain>>);
+static_assert(inferred_fixed_compilable<integer_query>);
+
 TEST_CASE("dynamic algebra supports immutable keys without default construction or equality", "[fdb][algebra][immutable]")
 {
  using query = core::query<immutable_domain>;
