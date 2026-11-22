@@ -9,7 +9,8 @@ current state of the Ceph cluster at time of upgrade. There are two CLI
 commands to manage this information. Version information from 
 before the introduction of this feature is not available.
 
-.. note:: Version tracking is not part of Tentacle or any earlier release.
+.. note:: Version tracking is expected in an Umbrella update release. Earlier
+   releases do not have it.
 
 Viewing Version History
 =======================
