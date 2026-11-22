@@ -33,6 +33,22 @@ For example, one may use s3cmd to set or delete a policy thus::
   $ s3cmd delpolicy s3://happybucket
 
 
+Bucket Policies and ACLs
+========================
+
+The Ceph Object Gateway evaluates a request against the bucket policy and any
+identity policies before it checks ACLs. An explicit ``Deny`` in a policy
+refuses the request, and an ``Allow`` grants it, whatever the ACLs say. Only
+when no policy statement applies to the request does the gateway fall back to
+the bucket and object ACLs. See :doc:`s3/authentication` for the ACL
+permissions.
+
+Users in an account work differently. Within one account, ACLs are not
+consulted, and a policy must allow the request. A request from another
+account must be allowed both by the requester's identity policies and by the
+bucket policy or ACLs. See the Principals section of :doc:`account`.
+
+
 Limitations
 ===========
 
@@ -111,6 +127,9 @@ directly to individual users, and granting an entire account access to
 a bucket grants access to all users in that account.
 
 Bucket policies do not yet support string interpolation.
+
+A bucket policy can be as large as ``rgw_max_put_param_size``, 1 MiB by
+default. The gateway does not enforce Amazon S3's 20 KB limit.
 
 For all requests, condition keys we support are:
 - aws:CurrentTime
