@@ -2198,8 +2198,7 @@ seastar::future<> SeaStore::Shard::run_one_batch(
 	     ctx.iter.colls.size(),
 	     ctx.iter.objects.size());
 
-      std::vector<OnodeRef> onodes(
-        ctx.iter.colls.size() * ctx.iter.objects.size());
+      onode_cache_t onodes;
 
       // Get the total number of operations from the transaction
       const size_t total_ops = ctx.ext_transaction.get_num_ops();
@@ -2297,7 +2296,7 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_do_transaction_step(
   internal_context_t &ctx,
-  std::vector<OnodeRef> &onodes,
+  onode_cache_t &onodes,
   ceph::os::Transaction::iterator &i)
 {
   LOG_PREFIX(SeaStoreS::_do_transaction_step);
@@ -2362,9 +2361,9 @@ SeaStore::Shard::_do_transaction_step(
     crimson::ct_error::value_too_large>;
   // cid must stay a reference into the iterator: the async lookups outlive a local copy
   const coll_t &cid = i.get_cid(op->cid);
-  const size_t onode_base = size_t(op->cid) * i.objects.size();
-  const size_t oid_idx = onode_base + op->oid;
-  const size_t dest_oid_idx = onode_base + op->dest_oid;
+  const uint64_t cid_key = uint64_t(op->cid) << 32;
+  const uint64_t oid_idx = cid_key | op->oid;
+  const uint64_t dest_oid_idx = cid_key | op->dest_oid;
   auto fut = onode_iertr::make_ready_future<OnodeRef>(OnodeRef());
   bool create = false;
   if (op->op == Transaction::OP_TOUCH ||

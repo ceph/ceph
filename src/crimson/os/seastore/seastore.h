@@ -376,9 +376,11 @@ public:
     using tm_iertr = base_iertr::extend<
       crimson::ct_error::value_too_large>;
     using tm_ret = tm_iertr::future<>;
+    // Node based: references to the onodes stay valid when more are added
+    using onode_cache_t = std::unordered_map<uint64_t, OnodeRef>;
     tm_ret _do_transaction_step(
       internal_context_t &ctx,
-      std::vector<OnodeRef> &onodes,
+      onode_cache_t &onodes,
       ceph::os::Transaction::iterator &i);
 
     tm_ret _remove(
