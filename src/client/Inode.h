@@ -194,9 +194,12 @@ struct Inode : RefCountedObject {
     static thread_local Lock *held;
 #endif
   };
-  mutable Lock lock;
+  // Its own cache line: shared holders (getattr, cached reads of one
+  // file) write its reader count twice per call, which would take the
+  // line from the CPUs reading the fields next to it (ino, snapid, ...)
+  alignas(64) mutable Lock lock;
 
-  ceph::coarse_mono_time hold_caps_until;
+  alignas(64) ceph::coarse_mono_time hold_caps_until;
   Client *client;
 
   // -- the actual inode --
@@ -343,9 +346,10 @@ struct Inode : RefCountedObject {
   // Fr/Fc refs counts them (caps_used(), cap_ref_count(), _release()).
   // Unlike the first Fc ref in cap_refs they take no inode ref: the
   // reader's Fh keeps the inode.
-  std::atomic<uint32_t> fast_rd_refs{0};
+  // Its own cache line too, as the lock (each reader changes it twice)
+  alignas(64) std::atomic<uint32_t> fast_rd_refs{0};
 
-  ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
+  alignas(64) ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
   uint64_t reported_size = 0;
   uint64_t wanted_max_size = 0;
