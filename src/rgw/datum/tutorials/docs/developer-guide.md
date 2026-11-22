@@ -17,6 +17,11 @@ formats remain contracts. Datum vocabulary describes their use without changing 
 Start with supplied operations: `byte_extent` and `byte_mapping` for byte geometry,
 `key::byte_query` for string-key selections, and `order_by` with field projections for ordering.
 Use standard Ranges algorithms and views where their evaluation and lifetime rules fit.
+For coverage changes, `symmetric_difference(previous, desired)` or `previous ^ desired`
+identifies changed membership. Keep `desired - previous` and `previous - desired` when the
+consumer needs addition/removal direction, and `visit_overlaps` when it needs source identity.
+Algebra operators preserve domain identity, borrowing, and the named operations' evaluation;
+they do not combine plan requirements, residual predicates, controls, or native effects.
 Keep Ceph buffers in the maintained `<ceph-datum.h>` vocabulary and native records, codecs,
 errno translation, reshard accounting, and persistence in native bindings.
 See the [layer map](design.md#architectural-guidelines) and
@@ -103,6 +108,12 @@ unordered entries, repeated geometry consumers, or owned point values that must 
 input. Use its bounded form when an expression's output has a known entry bound. Keep
 `evaluate(expression, workspace)` where preparation must obey explicit work/intermediate-entry
 limits. Lazy output and bounded output capacity do not enforce those workspace limits.
+
+XOR (exclusive OR) uses one monotone boundary-parity transition in both push and pull consumers. Each merge
+processes at most two events per canonical input interval with constant additional state,
+without recursively duplicating expression subtrees. Total composed work still includes each
+node's actual inputs and outputs; a lazy expression is not a global resource budget. Covered
+quotas and controlled visitation keep their existing preparation/lookahead and stop contracts.
 
 Choose `visit_overlaps` for synchronous alignment of ordered, internally disjoint record and
 selection streams, including input producers returning values. Use `clip_view` when its stable,

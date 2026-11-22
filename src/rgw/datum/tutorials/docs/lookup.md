@@ -293,6 +293,10 @@ progress, the rejected row's position, and its error.
 **`set_union`; union.** Select points that belong to either operand.
 [Chapter 2½](../tutorial.md#2½-an-interval-interlude).
 
+**`symmetric_difference`; XOR.** Select points in exactly one operand, using `a ^ b` or the
+named function. Repeated toggles cancel; changed membership does not retain addition/removal
+direction or record provenance. [Coverage changes](../tutorial.md#select-what-changes).
+
 **`slice`, Ceph bytes.** Return another `ceph::buffer::list` whose segment handles
 share the selected payloads. The result retains Ceph-managed storage; it does not
 create independent bytes or return a standard Ranges view.

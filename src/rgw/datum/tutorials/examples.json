@@ -40,6 +40,11 @@
     "summary": "Retain inline read geometry in a constexpr object and check its contents and byte count with static_assert."
   },
   {
+    "name": "coverage_changes", "source": "examples/coverage_changes.cpp", "requires_ceph": false,
+    "title": "Changed byte coverage",
+    "summary": "Retain symmetric difference at compile time, keeping changed coverage distinct from additions and removals."
+  },
+  {
     "name": "comparison_cache_gap", "source": "comparisons/cache-gap-example.cc", "requires_ceph": false,
     "title": "Worked cache-gap comparison",
     "summary": "Compare explicit gap branching with direct lazy subtraction and checked byte extents."

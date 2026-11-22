@@ -169,6 +169,10 @@ add_executable(unittest_rgw_datum_observation "${CMAKE_CURRENT_LIST_DIR}/datum_o
 target_link_libraries(unittest_rgw_datum_observation PRIVATE datum::core)
 list(APPEND datum_tests unittest_rgw_datum_observation)
 
+add_executable(unittest_rgw_datum_algebra "${CMAKE_CURRENT_LIST_DIR}/datum_algebra.cc")
+target_link_libraries(unittest_rgw_datum_algebra PRIVATE datum::core)
+list(APPEND datum_tests unittest_rgw_datum_algebra)
+
 add_executable(unittest_rgw_datum_quota "${CMAKE_CURRENT_LIST_DIR}/datum_quota.cc")
 target_link_libraries(unittest_rgw_datum_quota PRIVATE datum::core)
 list(APPEND datum_tests unittest_rgw_datum_quota)
@@ -294,6 +298,7 @@ set_tests_properties(unittest_rgw_datum_ranges PROPERTIES LABELS "datum;range;sc
 set_tests_properties(unittest_rgw_datum_overlap PROPERTIES LABELS "datum;range;overlap")
 set_tests_properties(unittest_rgw_datum_transfer PROPERTIES LABELS "datum;bytes;transfer")
 set_tests_properties(unittest_rgw_datum_observation PROPERTIES LABELS "datum;range;observation")
+set_tests_properties(unittest_rgw_datum_algebra PROPERTIES LABELS "datum;algebra;constexpr")
 set_tests_properties(unittest_rgw_datum_quota PROPERTIES LABELS "datum;range;quota")
 set_tests_properties(unittest_rgw_datum_vocabulary PROPERTIES LABELS "datum;vocabulary;range")
 

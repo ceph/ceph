@@ -10,6 +10,8 @@ The lessons use one-pass overlap traversal for synchronous cuts, bounded quota p
 `static_assert`, and fragmented transfer where both sides have separate buffers. See
 [how to choose preparation](docs/developer-guide.md#choose-preparation-for-the-consumer)
 and the [complete constant-plan program](examples/constexpr_plan.cpp).
+The [coverage-change program](examples/coverage_changes.cpp) checks pure symmetric difference
+at compile time, keeping changed membership distinct from additions, removals, and source identity.
 
 The shared [supplemental example catalog](examples.json) supplies CMake and both documentation
 publishers. It includes the complete read planner, streaming/transfer programs, and worked

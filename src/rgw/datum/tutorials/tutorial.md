@@ -295,7 +295,8 @@ const auto only_a = iv::difference(a, b);
 
 Each result supports the same `contains(selection, seat)` test as section 2.
 The complete program filters the numbered row against each selection and prints
-the matching seats. The combinations are lazy expressions: `contains` evaluates membership when asked.
+the matching seats. Union and difference are lazy expressions; intersection of two individual
+intervals is evaluated immediately. `contains` evaluates membership when asked.
 These simple interval operands are copied into the expressions, retaining their boundary values.
 ([5](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/include/datum/interval/query.h))
 
@@ -318,6 +319,9 @@ Move `b` away from `a`, as in the
 const auto b = iv::closed_between<seat_numbers>(7, 9);
 ```
 
+The variation also uses `a | b`, `a & b`, and `a - b`. These operators forward to the
+same named operations. Parenthesize mixed operations when their order matters.
+
 The intersection is empty, and the union preserves the gap at seat 6:
 
 ```text
@@ -332,6 +336,42 @@ A selection can cover several separate pieces, as the `without` example already
 showed. These operations determine membership; the next lesson prepares ordered,
 merged interval coverage for reuse. Ordering alone supplies neither a distance
 nor a next value. Section 6 adds a metric when we need to count covered bytes.
+
+### Select what changes
+
+`symmetric_difference(a, b)`, also spelled `a ^ b`, selects points in exactly one operand.
+For old byte coverage `[0,8)` and desired coverage `[5,12)`, it produces `[0,5)` and `[8,12)`.
+The [complete coverage-change program](examples/coverage_changes.cpp) retains those two pieces
+in inline canonical storage and checks all nine changed bytes during compilation:
+
+```cpp
+constexpr auto previous = iv::bounds({0, 8});
+constexpr auto desired = iv::bounds({5, 7});
+constexpr auto changed = iv::compile_intervals<2>(previous ^ desired);
+static_assert(iv::measure(changed, iv::bytes) == 9);
+```
+
+Its output distinguishes components from covered bytes:
+
+```text
+changed 0, length 5
+changed 8, length 4
+components: 2, bytes: 9
+```
+
+Use `desired - previous` for additions and `previous - desired` for removals. XOR (exclusive OR) identifies
+changed membership without retaining those directions, payload values, or record origins.
+Applying the same toggle twice restores the original geometry: `(a ^ b) ^ b` selects `a`.
+Hole selection within a window remains `window - selected`; XOR would also retain selected
+positions outside that window. Complement, `~selected`, uses the full algebraic domain.
+
+All five operators are pure value operations; none changes an operand. They retain the named
+operations' ownership and evaluation rules. `-` binds before `&`, then `^`, then `|`; use
+parentheses for clear mixed expressions. A boundary-parity merge supports XOR without expanding
+it into two differences or collecting intermediate vectors. Each binary merge visits its
+canonical input events monotonically; composed preparation can still look ahead. The
+[developer's guide](docs/developer-guide.md#choose-preparation-for-the-consumer) explains when
+to use lazy observation, bounded output, or an explicitly limited workspace.
 
 ## 3 Untangle the ranges
 
@@ -2510,6 +2550,8 @@ identify sources in the separate local RGW integration snapshot described in the
   [*Snapshot Semantics for Temporal Multiset Relations*](https://arxiv.org/html/1902.04938).
   PVLDB 12(6), 2019; extended version, section 5.2 and appendix E.2. Provides background
   for retaining source identities while splitting intervals at relevant boundaries.
+  Symmetric difference adapts pointwise Boolean coverage and coalesced changepoints;
+  arbitrary open/closed cuts and C++ lifetime rules are established separately in Datum.
 - Stephen Chou, Fredrik Kjolstad, and Saman Amarasinghe.
   [*Format Abstraction for Sparse Tensor Algebra Compilers*](https://compilers.stanford.edu/publications/taco-formats.pdf).
   PACMPL 2, OOPSLA, article 123, 2018; sections 3.3 and 4.4. Describes ordered co-iteration

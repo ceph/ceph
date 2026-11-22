@@ -17,9 +17,9 @@ int main()
     const auto b = iv::closed_between<seat_numbers>(7, 9);
 
     // Describe the three combinations:
-    const auto together = iv::set_union(a, b);
-    const auto overlap = iv::intersection(a, b);
-    const auto only_a = iv::difference(a, b);
+    const auto together = a | b;
+    const auto overlap = a & b;
+    const auto only_a = a - b;
 
     // Print member seats; brackets also make an empty selection visible:
     const auto print_seats = [&seats](const auto label, const auto& selection) {

@@ -676,7 +676,12 @@ using operand_storage =
     std::conditional_t<canonical_sequence<T> and std::is_lvalue_reference_v<T>,
                        const std::remove_reference_t<T>&, std::remove_cvref_t<T>>;
 
-enum struct set_operation { unite, intersect, subtract };
+enum struct set_operation { unite, intersect, subtract, symmetric_difference };
+
+constexpr bool empty_for_equal_operands(const set_operation operation) noexcept
+{
+    return set_operation::subtract == operation || set_operation::symmetric_difference == operation;
+}
 
 template <set_operation Operation, expression LhsT, expression RhsT>
 requires same_expression_domain<LhsT, RhsT>
@@ -694,6 +699,16 @@ template <expression LhsT, expression RhsT>
 using intersection_expr = binary_expression<set_operation::intersect, LhsT, RhsT>;
 template <expression LhsT, expression RhsT>
 using set_union_expr = binary_expression<set_operation::unite, LhsT, RhsT>;
+template <expression LhsT, expression RhsT>
+using symmetric_difference_expr = binary_expression<set_operation::symmetric_difference, LhsT, RhsT>;
+
+template <set_operation Operation, typename LhsT, typename RhsT>
+requires same_expression_domain<LhsT, RhsT>
+constexpr auto make_binary_expression(LhsT&& lhs, RhsT&& rhs)
+{
+    return binary_expression<Operation, operand_storage<LhsT&&>, operand_storage<RhsT&&>> {
+        {}, std::forward<LhsT>(lhs), std::forward<RhsT>(rhs)};
+}
 
 } // detail
 
@@ -1018,6 +1033,10 @@ constexpr bool contains(const detail::binary_expression<Operation, LhsT, RhsT>& 
     if constexpr (detail::set_operation::subtract == Operation) {
         return interval::contains(expression.lhs, value) and !interval::contains(expression.rhs, value);
     }
+
+    if constexpr (detail::set_operation::symmetric_difference == Operation) {
+        return interval::contains(expression.lhs, value) != interval::contains(expression.rhs, value);
+    }
 }
 
 template <interval_view LhsT, interval_view RhsT>
@@ -1148,33 +1167,24 @@ template <typename LhsT, typename RhsT>
 requires same_expression_domain<LhsT, RhsT>
 constexpr auto difference(LhsT&& lhs, RhsT&& rhs)
 {
-    using lhs_type = detail::operand_storage<LhsT&&>;
-    using rhs_type = detail::operand_storage<RhsT&&>;
-
-    return detail::difference_expr<lhs_type, rhs_type> {
-        {}, std::forward<LhsT>(lhs), std::forward<RhsT>(rhs)};
+    return detail::make_binary_expression<detail::set_operation::subtract>(
+        std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
 }
 
 template <typename LhsT, typename RhsT>
 requires same_expression_domain<LhsT, RhsT> and (!interval_view<LhsT> || !interval_view<RhsT>)
 constexpr auto intersection(LhsT&& lhs, RhsT&& rhs)
 {
-    using lhs_type = detail::operand_storage<LhsT&&>;
-    using rhs_type = detail::operand_storage<RhsT&&>;
-
-    return detail::intersection_expr<lhs_type, rhs_type> {
-        {}, std::forward<LhsT>(lhs), std::forward<RhsT>(rhs)};
+    return detail::make_binary_expression<detail::set_operation::intersect>(
+        std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
 }
 
 template <typename LhsT, typename RhsT>
 requires same_expression_domain<LhsT, RhsT>
 constexpr auto set_union(LhsT&& lhs, RhsT&& rhs)
 {
-    using lhs_type = detail::operand_storage<LhsT&&>;
-    using rhs_type = detail::operand_storage<RhsT&&>;
-
-    return detail::set_union_expr<lhs_type, rhs_type> {
-        {}, std::forward<LhsT>(lhs), std::forward<RhsT>(rhs)};
+    return detail::make_binary_expression<detail::set_operation::unite>(
+        std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
 }
 
 template <expression ExprT>
@@ -1183,6 +1193,48 @@ constexpr auto complement(ExprT&& expression)
     using domain_type = typename std::remove_cvref_t<ExprT>::domain_type;
 
     return difference(query<domain_type>::universal(), std::forward<ExprT>(expression));
+}
+
+template <typename LhsT, typename RhsT>
+requires same_expression_domain<LhsT, RhsT>
+constexpr auto symmetric_difference(LhsT&& lhs, RhsT&& rhs)
+{
+    return detail::make_binary_expression<detail::set_operation::symmetric_difference>(
+        std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
+}
+
+template <typename LhsT, typename RhsT>
+requires same_expression_domain<LhsT, RhsT>
+constexpr auto operator&(LhsT&& lhs, RhsT&& rhs)
+{
+    return interval::intersection(std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
+}
+
+template <typename LhsT, typename RhsT>
+requires same_expression_domain<LhsT, RhsT>
+constexpr auto operator|(LhsT&& lhs, RhsT&& rhs)
+{
+    return interval::set_union(std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
+}
+
+template <typename LhsT, typename RhsT>
+requires same_expression_domain<LhsT, RhsT>
+constexpr auto operator-(LhsT&& lhs, RhsT&& rhs)
+{
+    return interval::difference(std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
+}
+
+template <typename LhsT, typename RhsT>
+requires same_expression_domain<LhsT, RhsT>
+constexpr auto operator^(LhsT&& lhs, RhsT&& rhs)
+{
+    return interval::symmetric_difference(std::forward<LhsT>(lhs), std::forward<RhsT>(rhs));
+}
+
+template <domain_expression ExprT>
+constexpr auto operator~(ExprT&& expression)
+{
+    return interval::complement(std::forward<ExprT>(expression));
 }
 
 template <ordered_domain DomainT, typename SinkT>
@@ -1510,6 +1562,81 @@ constexpr void collect_union(const ExprT& source, workspace<expression_domain_t<
     }
 }
 
+struct symmetric_difference_state final
+{
+    bool left_upper = false;
+    bool right_upper = false;
+};
+
+// Pointwise coverage and canonical changepoints follow Dignos et al. (2019), section 5.2:
+// https://arxiv.org/html/1902.04938
+// Merge boundary cuts directly: coincident toggles cancel; surviving pairs bound selected runs.
+// A closed lower cut precedes an open lower cut at the same point; upper cuts flip inclusion.
+// Both push and pull consumers share this state transition, retaining each operand only once:
+template <typename LeftT, typename LeftEndT, typename RightT, typename RightEndT, typename TickT>
+constexpr auto next_symmetric_difference(LeftT& left, const LeftEndT& left_end,
+                                         RightT& right, const RightEndT& right_end,
+                                         symmetric_difference_state& state, TickT&& tick)
+{
+    using domain_type = expression_domain_t<std::iter_value_t<LeftT>>;
+    using bound_type = boundary_ref<domain_type>;
+    using result_type = std::optional<borrowed_interval<domain_type>>;
+
+    const auto event = [](const auto& position, const bool upper) {
+        const auto bounds = bounds_of(*position);
+        if (upper) {
+            return borrow_bound(bounds.upper()).with_inclusive(!bounds.upper().inclusive());
+        }
+
+        return borrow_bound(bounds.lower());
+    };
+    const auto advance = [](auto& position, bool& upper) {
+        if (!upper) {
+            upper = true;
+            return;
+        }
+
+        upper = false;
+        ++position;
+    };
+    std::optional<bound_type> lower;
+
+    while (left != left_end || right != right_end) {
+        std::invoke(tick);
+        const auto lhs = left == left_end ? std::optional<bound_type> {}
+                                          : std::optional {event(left, state.left_upper)};
+        const auto rhs = right == right_end ? std::optional<bound_type> {}
+                                            : std::optional {event(right, state.right_upper)};
+        auto order = !lhs ? std::strong_ordering::greater
+                         : !rhs ? std::strong_ordering::less : compare_position(*lhs, *rhs);
+        if (0 == order and lhs and rhs and interval::is_finite(*lhs)) {
+            order = rhs->inclusive() <=> lhs->inclusive();
+        }
+        if (0 == order) {
+            advance(left, state.left_upper);
+            advance(right, state.right_upper);
+            continue;
+        }
+
+        const auto selected = order < 0 ? *lhs : *rhs;
+        if (order < 0) {
+            advance(left, state.left_upper);
+        }
+        if (order > 0) {
+            advance(right, state.right_upper);
+        }
+        if (!lower) {
+            lower.emplace(selected);
+            continue;
+        }
+
+        return result_type {std::in_place, *lower,
+                            selected.with_inclusive(!selected.inclusive())};
+    }
+
+    return result_type {};
+}
+
 template <set_operation Operation, bool FirstOnly = false, std::ranges::input_range LhsT,
           std::ranges::input_range RhsT, typename SinkT, typename TickT>
 requires std::ranges::input_range<const LhsT> and std::ranges::input_range<const RhsT> and
@@ -1526,6 +1653,18 @@ constexpr void sweep(const LhsT& lhs, const RhsT& rhs, SinkT& sink, TickT&& tick
 
         return FirstOnly and emitted;
     };
+    if constexpr (Operation == set_operation::symmetric_difference) {
+        symmetric_difference_state state;
+        while (const auto selected = next_symmetric_difference(left, left_end, right, right_end,
+                                                               state, tick)) {
+            if (emit.template operator()<false>(selected->first, selected->last)) {
+                return;
+            }
+        }
+
+        return;
+    }
+
     if constexpr (Operation == set_operation::unite) {
         using domain = expression_domain_t<std::ranges::range_value_t<LhsT>>;
 
@@ -1765,7 +1904,8 @@ public:
 
         std::optional<geometry> selected;
         [[no_unique_address]] std::conditional_t<Operation == set_operation::subtract,
-                                                 std::optional<geometry>, no_remainder> remaining;
+            std::optional<geometry>, std::conditional_t<Operation == set_operation::symmetric_difference,
+                                                       symmetric_difference_state, no_remainder>> state;
 
     private:
         static constexpr geometry bounds(const auto& value)
@@ -1843,27 +1983,27 @@ public:
 
         constexpr void subtract()
         {
-            while (remaining || left != left_end) {
-                if (!remaining) {
-                    remaining.emplace(bounds(*left));
+            while (state || left != left_end) {
+                if (!state) {
+                    state.emplace(bounds(*left));
                     ++left;
                 }
                 if (right == right_end) {
-                    selected.emplace(*remaining);
-                    remaining.reset();
+                    selected.emplace(*state);
+                    state.reset();
 
                     return;
                 }
                 const auto removed = bounds(*right);
-                const auto prefix_lower = remaining->first;
+                const auto prefix_lower = state->first;
                 const auto begin_order = compare_position(prefix_lower, removed.first);
                 // Ordered lower bounds determine which separation test can matter.
                 if (begin_order < 0) {
-                    const auto after = compare_position(remaining->last, removed.first);
-                    if (after < 0 || (after == 0 and (!remaining->last.inclusive() ||
+                    const auto after = compare_position(state->last, removed.first);
+                    if (after < 0 || (after == 0 and (!state->last.inclusive() ||
                                                      !removed.first.inclusive()))) {
-                        selected.emplace(*remaining);
-                        remaining.reset();
+                        selected.emplace(*state);
+                        state.reset();
 
                         return;
                     }
@@ -1879,23 +2019,23 @@ public:
                         continue;
                     }
                 }
-                const auto end_order = compare_position(removed.last, remaining->last);
+                const auto end_order = compare_position(removed.last, state->last);
                 if (end_order > 0 || (end_order == 0 and
-                                      (removed.last.inclusive() || !remaining->last.inclusive()))) {
-                    remaining.reset();
+                                      (removed.last.inclusive() || !state->last.inclusive()))) {
+                    state.reset();
                     // An equal upper key cannot remove points from a later canonical interval.
                     if (end_order == 0 and left != left_end) {
                         ++right;
                     }
                 }
 
-                if (remaining) {
+                if (state) {
                     const auto upper =
                         end_order < 0
                             ? removed.last
-                            : remaining->last.with_inclusive(remaining->last.inclusive() and
+                            : state->last.with_inclusive(state->last.inclusive() and
                                                              removed.last.inclusive());
-                    remaining->first = upper.with_inclusive(!upper.inclusive());
+                    state->first = upper.with_inclusive(!upper.inclusive());
                     ++right;
                 }
                 if (begin_order < 0) {
@@ -1926,6 +2066,10 @@ public:
             if constexpr (Operation == set_operation::subtract) {
                 subtract();
             }
+
+            if constexpr (Operation == set_operation::symmetric_difference) {
+                selected = next_symmetric_difference(left, left_end, right, right_end, state, [] {});
+            }
         }
 
     public:
@@ -1940,21 +2084,21 @@ public:
             : left(std::ranges::begin(source.lhs)), left_end(std::ranges::end(source.lhs)),
               right(std::ranges::begin(source.rhs)), right_end(std::ranges::end(source.rhs))
         {
-            constexpr bool contiguous_subtraction =
-                Operation == set_operation::subtract and std::ranges::contiguous_range<const LhsT> and
+            constexpr bool contiguous_cancellation =
+                empty_for_equal_operands(Operation) and std::ranges::contiguous_range<const LhsT> and
                 std::ranges::contiguous_range<const RhsT> and std::ranges::sized_range<const LhsT> and
                 std::ranges::sized_range<const RhsT> and
                 std::same_as<std::ranges::range_value_t<const LhsT>,
                              std::ranges::range_value_t<const RhsT>>;
-            if constexpr (contiguous_subtraction) {
-                // Identical admitted storage denotes the same set; A minus A is empty.
+            if constexpr (contiguous_cancellation) {
+                // Identical admitted storage denotes the same set; subtraction and XOR cancel.
                 if (std::ranges::data(source.lhs) == std::ranges::data(source.rhs) and
                     std::ranges::size(source.lhs) == std::ranges::size(source.rhs)) {
                     return;
                 }
             }
 
-            if constexpr (Operation == set_operation::subtract and !contiguous_subtraction) {
+            if constexpr (empty_for_equal_operands(Operation) and !contiguous_cancellation) {
                 if (same_canonical_operand(source.lhs, source.rhs)) {
                     return;
                 }
@@ -2039,7 +2183,7 @@ constexpr void for_each_compound(const ExprT& source, SinkT& sink)
     constexpr bool direct_difference =
         operation<std::remove_cvref_t<ExprT>> == set_operation::subtract and
         interval_view<lhs_type> and interval_view<rhs_type>;
-    if constexpr (operation<std::remove_cvref_t<ExprT>> == set_operation::subtract) {
+    if constexpr (empty_for_equal_operands(operation<std::remove_cvref_t<ExprT>>)) {
         if (same_canonical_operand(source.lhs, source.rhs)) {
             return;
         }
@@ -2309,8 +2453,8 @@ constexpr bool is_empty_expression(const ExprT& expression)
         if constexpr (!canonical_sequence<ExprT>) {
             if constexpr (detail::streamable_expression<ExprT>() and
                           !detail::union_expression<std::remove_cvref_t<ExprT>>) {
-                if constexpr (detail::operation<std::remove_cvref_t<ExprT>> ==
-                              detail::set_operation::subtract) {
+                if constexpr (detail::empty_for_equal_operands(
+                                  detail::operation<std::remove_cvref_t<ExprT>>)) {
                     if (detail::same_canonical_operand(expression.lhs, expression.rhs)) {
                         return true;
                     }

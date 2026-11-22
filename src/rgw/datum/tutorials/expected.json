@@ -6,6 +6,7 @@
   "fragment_transfer": "copied: 6\nfirst: bc\nlast: defg.\n",
   "lazy_reads": "read 0, length 4\nread 8, length 4\nplanned: 2\n",
   "constexpr_plan": "read 0, length 3\nread 10, length 2\nplanned: 5 bytes\n",
+  "coverage_changes": "changed 0, length 5\nchanged 8, length 4\ncomponents: 2, bytes: 9\n",
   "comparison_cache_gap": "read 0..15 (16 bytes)\nread 48..63 (16 bytes)\n",
   "comparison_key_range": "photos/30\nphotos/70\nphotos/30@9\nphotos/30@2\nphotos/70@4\n",
   "comparison_fragment": "payload\n",

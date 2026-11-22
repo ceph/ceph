@@ -139,6 +139,10 @@ struct display_schema<interval::detail::binary_expression<Operation, LHS_T, RHS_
             return "interval_intersection";
         }
 
+        if constexpr (interval::detail::set_operation::symmetric_difference == Operation) {
+            return "interval_symmetric_difference";
+        }
+
         return "interval_difference";
     }();
     static constexpr auto fields =

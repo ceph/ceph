@@ -244,6 +244,8 @@ TEST_CASE("interval expression diagnostics do not compile or flatten their sourc
     const auto overlap = iv::intersection(combined, integer_query::closed_open(2, 7));
     CHECK(text(combined).starts_with("interval_union{lhs=interval{"));
     CHECK(text(overlap).starts_with("interval_intersection{lhs=interval_union{"));
+    CHECK(text(combined ^ integer_query::singleton(2)).starts_with(
+        "interval_symmetric_difference{lhs=interval_union{"));
     const auto compiled = iv::compile_intervals<2>(selection);
     CHECK(text(compiled).starts_with("interval_set{intervals=[interval{"));
     std::string prefix;

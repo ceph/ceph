@@ -499,9 +499,32 @@ static_assert(!iv::contains(selected, 40));
 `contains()` evaluates expression structure directly. Direct interval overlap
 and enclosure compare cached bounds without copying points. General expression
 relations normalize each side and sweep the canonical intervals. Union,
-intersection and difference produce ordered, nonempty, coalesced output;
+intersection, difference, and symmetric difference produce ordered, nonempty, coalesced output;
 `compile_intervals()` retains that output in a `canonical_range` backed by a vector;
 `compile_intervals<Capacity>()` uses bounded inline storage for an expression.
+
+| Selection | Named operation | Operator |
+| --- | --- | --- |
+| Either operand | `set_union(a, b)` | `a \| b` |
+| Both operands | `intersection(a, b)` | `a & b` |
+| Left operand only | `difference(a, b)` | `a - b` |
+| Exactly one operand | `symmetric_difference(a, b)` | `a ^ b` |
+| Everything outside the operand | `complement(a)` | `~a` |
+
+Operators forward to the named pure value operations and require the same ordered domain.
+Intersection of two individual intervals is eager; other combinations retain expressions.
+Use parentheses for mixed operations: C++ gives `-` higher precedence than `&`, then `^`, then `|`.
+Canonical lvalues are borrowed and temporaries retained through the same operand-storage policy.
+No operation mutates its operands or merges execution controls.
+
+For old coverage `[0,8)` and desired coverage `[5,12)`, XOR (exclusive OR) selects `[0,5)` and `[8,12)`:
+two components covering nine bytes. Use `desired - old` for additions and `old - desired`
+for removals; XOR does not retain that direction or record provenance. Repeated XOR selects
+odd membership, so `(a ^ b) ^ b` restores `a`. A hole within a window is `window - selected`;
+`window ^ selected` also retains selected positions outside the window. Bare complement uses
+algebraic infinities; finite byte metrics require finite half-open output.
+The [coverage-change example](tutorials/examples/coverage_changes.cpp) retains a complete XOR
+plan at compile time. Component counts, covered bytes, and native row counts remain distinct.
 
 An ordinary callable receives scoped canonical intervals through
 `for_each_interval()`. A sink exposing `emit_interval(lower, upper)` instead
@@ -518,6 +541,13 @@ accessors keep their observation and materialization path. Explicit `evaluate()`
 with a workspace retains intermediate values and enforces its work and entry
 limits before publication. Default streaming traversal has no workspace or
 work-budget bookkeeping.
+
+Symmetric difference merges lower and upper boundary cuts directly, canceling coincident cuts
+and joining the surviving pairs. The same transition serves push and pull consumers. Each merge
+processes at most two events per canonical input interval with constant additional state; it
+does not expand nested expressions into repeated directional differences or sort intermediates.
+Composed work includes each node's actual input/output traversal; laziness is not a global
+work bound. Use explicit workspace evaluation when preparation needs a work or entry limit.
 
 Include `<datum/interval/range.h>` and use `observe_intervals(expression)` to expose those
 cursors as a read-only standard range. An lvalue expression is borrowed; a temporary expression
@@ -1334,6 +1364,8 @@ describe local machinery, not backend throughput.
   PVLDB 12(6), 2019; extended version, section 5.2 and appendix E.2. Interval refinement
   retains input identities; coalescing depends on the observable annotation. Datum's
   `visit_overlaps` applies these principles to scoped cuts of disjoint ordered inputs.
+  Symmetric difference adapts pointwise Boolean coverage and coalesced changepoints to
+  arbitrary open/closed cuts; Datum separately establishes its endpoint and lifetime rules.
 - Stephen Chou, Fredrik Kjolstad, and Saman Amarasinghe.
   [*Format Abstraction for Sparse Tensor Algebra Compilers*](https://compilers.stanford.edu/publications/taco-formats.pdf).
   PACMPL 2, OOPSLA, article 123, 2018; sections 3.3 and 4.4.

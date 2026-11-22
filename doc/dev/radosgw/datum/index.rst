@@ -43,6 +43,8 @@ without keeping it alive.
   transfer into fragmented output, and retain storage without first assembling a contiguous buffer.
 * **Read planning:** :doc:`stream missing coverage <03-normalize-ranges>`, align layouts with
   selections, and :doc:`keep bounded plans at compile time <06-covered-quota>`.
+  Pure symmetric difference also selects changed coverage; additions and removals retain
+  their separate direction.
 * **Records and codecs:** :doc:`project record fields <08-toy-basket>` and
   :doc:`encode selected fields <12-postcard>` using shared record declarations.
 * **Keys and ordering:** :doc:`build ordered keys <04-numeric-keys>` and compose comparisons
