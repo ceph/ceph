@@ -104,11 +104,11 @@ To upgrade to a specific release, run a command of the following form:
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v21.2.0, run the following command:
+For example, to upgrade to v20.2.3, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version 21.2.0
+  ceph orch upgrade start --ceph-version 20.2.3
 
 .. note::
 
@@ -117,7 +117,7 @@ For example, to upgrade to v21.2.0, run the following command:
 
     .. prompt:: bash #
 
-       ceph orch upgrade start --image quay.io/ceph/ceph:v21.2.0
+       ceph orch upgrade start --image quay.io/ceph/ceph:v20.2.3
 
 
 CRUSH bucket-scoped OSD upgrades (``osd ok-to-upgrade``)
@@ -215,7 +215,7 @@ looks like this:
 
   [...]
     progress:
-      Upgrade to 21.2.0 (20m)
+      Upgrade to 20.2.3 (20m)
         [=======.....................] (remaining: 60m)
 
 

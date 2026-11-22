@@ -2123,7 +2123,7 @@ on these see: :ref:`Pause Purge threads<pause-purge-threads>` and :ref:`Pause Cl
 
 
 .. note:: Before Squid 19.2.4, pool namespaces for CephFS subvolumes had names
-   in this format: "fsvolumens_<subvol-name>". However, this could lead to a
+   of the form "fsvolumens_<subvol-name>". However, this could lead to a
    namespace clash when two subvolumes with the same name were located in
    different subvolume groups. Squid 19.2.4 and later, and all Tentacle and
    later releases, use the format "fsvolumens__<subvol-grp-name>_<subvol-name>".
