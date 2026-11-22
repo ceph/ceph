@@ -36,6 +36,9 @@ struct segment_info_t {
   boost::intrusive::list_member_hook<
     boost::intrusive::link_mode<boost::intrusive::auto_unlink>> empty_hook;
 
+  boost::intrusive::list_member_hook<
+    boost::intrusive::link_mode<boost::intrusive::auto_unlink>> closed_bucket_hook;
+
   // segment_info_t is initiated as set_empty()
   Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
 
@@ -119,6 +122,10 @@ public:
   }
 
   const segment_info_t& operator[](segment_id_t id) const {
+    return segments[id];
+  }
+
+  segment_info_t& operator[](segment_id_t id) {
     return segments[id];
   }
 
@@ -1625,14 +1632,15 @@ public:
 
 private:
   /*
-   * 10 buckets for the number of closed segments by usage
-   * 2 extra buckets for the number of open and empty segments
+   * Utilization buckets for closed segments by usage [0.0, 1.0)
+   * Plus 2 extra buckets for open and empty segments.
    */
+  static constexpr std::size_t NUM_CLOSED_UTIL_BUCKETS = 10;
   static constexpr double UTIL_STATE_OPEN = 1.05;
   static constexpr double UTIL_STATE_EMPTY = 1.15;
-  static constexpr std::size_t UTIL_BUCKETS = 12;
+  static constexpr std::size_t UTIL_BUCKETS = NUM_CLOSED_UTIL_BUCKETS + 2;
   static std::size_t get_bucket_index(double util) {
-    auto index = std::floor(util * 10);
+    auto index = std::floor(util * NUM_CLOSED_UTIL_BUCKETS);
     assert(index < UTIL_BUCKETS);
     return index;
   }
@@ -1780,12 +1788,33 @@ private:
     const segment_header_t& header,
     segment_id_t segment_id);
 
-  void adjust_segment_util(double old_usage, double new_usage) {
+  using closed_bucket_hook_options = boost::intrusive::member_hook<
+    segment_info_t,
+    boost::intrusive::list_member_hook<
+      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>,
+    &segment_info_t::closed_bucket_hook>;
+  using closed_bucket_list_t = boost::intrusive::list<
+    segment_info_t,
+    closed_bucket_hook_options,
+    boost::intrusive::constant_time_size<false>>;
+  std::array<closed_bucket_list_t, NUM_CLOSED_UTIL_BUCKETS> closed_util_buckets;
+
+  void adjust_segment_util(segment_id_t segment, double old_usage, double new_usage) {
     auto old_index = get_bucket_index(old_usage);
     auto new_index = get_bucket_index(new_usage);
     assert(stats.segment_util.buckets[old_index].count > 0);
     stats.segment_util.buckets[old_index].count--;
     stats.segment_util.buckets[new_index].count++;
+
+    auto& info = segments[segment];
+    if (old_index < NUM_CLOSED_UTIL_BUCKETS) {
+      if (info.closed_bucket_hook.is_linked()) {
+        info.closed_bucket_hook.unlink();
+      }
+    }
+    if (new_index < NUM_CLOSED_UTIL_BUCKETS && info.is_closed()) {
+      closed_util_buckets[new_index].push_back(info);
+    }
   }
 
   void init_mark_segment_closed(
@@ -1801,7 +1830,7 @@ private:
     ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
     segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
-    adjust_segment_util(old_usage, new_usage);
+    adjust_segment_util(segment, old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {
       ool_segment_seq_allocator.set_next_segment_seq(seq);
     }

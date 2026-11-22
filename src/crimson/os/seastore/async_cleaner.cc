@@ -974,7 +974,7 @@ void SegmentCleaner::register_metrics()
   stats.segment_util.buckets.resize(UTIL_BUCKETS);
   std::size_t i;
   for (i = 0; i < UTIL_BUCKETS; ++i) {
-    stats.segment_util.buckets[i].upper_bound = ((double)(i + 1)) / 10;
+    stats.segment_util.buckets[i].upper_bound = ((double)(i + 1)) / NUM_CLOSED_UTIL_BUCKETS;
     stats.segment_util.buckets[i].count = 0;
   }
   // NOTE: by default the segments are empty
@@ -1135,7 +1135,7 @@ segment_id_t SegmentCleaner::allocate_segment(
     }
     background_callback->maybe_wake_background();
     auto new_usage = calc_utilization(seg_id);
-    adjust_segment_util(old_usage, new_usage);
+    adjust_segment_util(seg_id, old_usage, new_usage);
     INFO("opened, {}", stat_printer_t{*this, false});
     return seg_id;
   }
@@ -1255,7 +1255,7 @@ void SegmentCleaner::close_segment(segment_id_t segment)
     stats.closed_ool_total_bytes += segments.get_segment_size();
   }
   auto new_usage = calc_utilization(segment);
-  adjust_segment_util(old_usage, new_usage);
+  adjust_segment_util(segment, old_usage, new_usage);
   INFO("closed, {} -- {}", stat_printer_t{*this, false}, seg_info);
 }
 
@@ -1382,35 +1382,49 @@ do_reclaim_space_ret do_reclaim_space(
             backref_entries.emplace(cached_backref);
           }
         }
+        // Sort backref entries to group logical extents by laddr for LBA B-tree cache locality
+        std::vector<backref_entry_t> sorted_entries(
+          backref_entries.begin(), backref_entries.end());
+        std::sort(sorted_entries.begin(), sorted_entries.end(),
+          [](const backref_entry_t &a, const backref_entry_t &b) {
+            if (is_logical_type(a.type) && is_logical_type(b.type)) {
+              return a.laddr < b.laddr;
+            }
+            if (is_logical_type(a.type) != is_logical_type(b.type)) {
+              return is_logical_type(a.type);
+            }
+            return a.paddr < b.paddr;
+          });
+
         // retrieve live extents
         DEBUGT("start, backref_entries={}, backref_extents={}",
-               t, backref_entries.size(), extents.size());
-	return seastar::do_with(
-	  std::move(backref_entries),
-	  [&extent_callback, &extents, &t](auto &backref_entries) {
-	  return trans_intr::parallel_for_each(
-	    backref_entries,
-	    [&extent_callback, &extents, &t](auto &ent)
-	  {
-	    LOG_PREFIX(SegmentCleaner::do_reclaim_space);
-	    TRACET("getting extent of type {} at {}~0x{:x}",
-	      t,
-	      ent.type,
-	      ent.paddr,
-	      ent.len);
-	    return extent_callback.get_extents_if_live(
-	      t, ent.type, ent.paddr, ent.laddr, ent.len
-	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
-	      if (list.empty()) {
-		TRACET("addr {} dead, skipping", t, ent.paddr);
-	      } else {
-		for (auto &e : list) {
-		  extents.emplace_back(std::move(e));
-		}
-	      }
-	    });
-	  });
-	}).si_then([FNAME, &extents, &extent_callback,
+               t, sorted_entries.size(), extents.size());
+ return seastar::do_with(
+   std::move(sorted_entries),
+   [&extent_callback, &extents, &t](auto &sorted_entries) {
+   return trans_intr::parallel_for_each(
+     sorted_entries,
+     [&extent_callback, &extents, &t](auto &ent)
+   {
+     LOG_PREFIX(SegmentCleaner::do_reclaim_space);
+     TRACET("getting extent of type {} at {}~0x{:x}",
+       t,
+       ent.type,
+       ent.paddr,
+       ent.len);
+     return extent_callback.get_extents_if_live(
+       t, ent.type, ent.paddr, ent.laddr, ent.len
+     ).si_then([FNAME, &extents, &ent, &t](auto list) {
+       if (list.empty()) {
+  TRACET("addr {} dead, skipping", t, ent.paddr);
+       } else {
+  for (auto &e : list) {
+    extents.emplace_back(std::move(e));
+  }
+       }
+     });
+   });
+ }).si_then([FNAME, &extents, &extent_callback,
 		    &reclaimed, &t, modify_time, target_generation] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
@@ -1552,7 +1566,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
             }
             segments.mark_empty(segment_to_release);
             auto new_usage = calc_utilization(segment_to_release);
-            adjust_segment_util(old_usage, new_usage);
+            adjust_segment_util(segment_to_release, old_usage, new_usage);
             INFO("reclaim released {}, {}",
                  segment_to_release, stat_printer_t{*this, false});
             background_callback->maybe_wake_blocked_io();
@@ -1804,7 +1818,7 @@ void SegmentCleaner::mark_space_used(
     seg_addr.get_segment_off(),
     len);
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
-  adjust_segment_util(old_usage, new_usage);
+  adjust_segment_util(seg_addr.get_segment_id(), old_usage, new_usage);
 
   background_callback->maybe_wake_background();
   assert(ret > 0);
@@ -1839,7 +1853,7 @@ void SegmentCleaner::mark_space_free(
     seg_addr.get_segment_off(),
     len);
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
-  adjust_segment_util(old_usage, new_usage);
+  adjust_segment_util(seg_addr.get_segment_id(), old_usage, new_usage);
   background_callback->maybe_wake_blocked_io();
   assert(ret >= 0);
   DEBUG("segment {} free len: {}~0x{:x}, live_bytes: 0x{:x}",
@@ -1874,21 +1888,56 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
   segment_id_t greedy_id = NULL_SEG_ID;
   double greedy_min_util = 1.0;
-  for (auto& [_id, segment_info] : segments) {
-    if (segment_info.is_closed() &&
-        (trimmer == nullptr ||
-         !segment_info.is_in_journal(trimmer->get_journal_tail()))) {
-      // Track the configured formula's best-scoring reclaim candidate.
-      double benefit_cost = calc_gc_benefit_cost(_id, now_time, bound_time);
-      if (benefit_cost > max_benefit_cost) {
-        id = _id;
-        max_benefit_cost = benefit_cost;
+  if (gc_formula == gc_formula_t::GREEDY) {
+    // Fast-path greedy selection: inspect lowest utilization buckets first in O(1)
+    for (std::size_t b = 0; b < NUM_CLOSED_UTIL_BUCKETS; ++b) {
+      if (closed_util_buckets[b].empty()) {
+        continue;
       }
-      // Track the greedy candidate (lowest utilization / highest free fraction).
-      double util = calc_utilization(_id);
-      if (util < greedy_min_util) {
-        greedy_id = _id;
-        greedy_min_util = util;
+      for (const auto& segment_info : closed_util_buckets[b]) {
+        if (trimmer == nullptr ||
+            !segment_info.is_in_journal(trimmer->get_journal_tail())) {
+          double util = calc_utilization(segment_info.id);
+          if (util < greedy_min_util) {
+            greedy_min_util = util;
+            greedy_id = segment_info.id;
+            if (util == 0.0) {
+              DEBUG("fast-path zero-utilization greedy segment {}", greedy_id);
+              return greedy_id;
+            }
+          }
+        }
+      }
+      if (greedy_id != NULL_SEG_ID) {
+        DEBUG("greedy picked segment {} with util {:.4f} from bucket {}",
+              greedy_id, greedy_min_util, b);
+        return greedy_id;
+      }
+    }
+  } else {
+    // For COST_BENEFIT / BENEFIT formulas: scan closed segments in utilization buckets
+    for (std::size_t b = 0; b < NUM_CLOSED_UTIL_BUCKETS; ++b) {
+      if (closed_util_buckets[b].empty()) {
+        continue;
+      }
+      for (const auto& segment_info : closed_util_buckets[b]) {
+        if (trimmer == nullptr ||
+            !segment_info.is_in_journal(trimmer->get_journal_tail())) {
+          double util = calc_utilization(segment_info.id);
+          if (util == 0.0) {
+            DEBUG("fast-path zero-utilization segment {}", segment_info.id);
+            return segment_info.id;
+          }
+          double benefit_cost = calc_gc_benefit_cost(segment_info.id, now_time, bound_time);
+          if (benefit_cost > max_benefit_cost) {
+            id = segment_info.id;
+            max_benefit_cost = benefit_cost;
+          }
+          if (util < greedy_min_util) {
+            greedy_id = segment_info.id;
+            greedy_min_util = util;
+          }
+        }
       }
     }
   }
