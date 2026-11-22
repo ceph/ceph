@@ -1489,6 +1489,7 @@ protected:
    */
   struct OCShard {
     ceph::mutex oc_lock = ceph::make_mutex("Client::oc_lock");
+    std::atomic<int> oc_lock_spinners{0};
     std::unique_ptr<WritebackHandler> writeback_handler;
     std::unique_ptr<ObjectCacher> oc;
   };
@@ -1525,18 +1526,31 @@ public:
    * such a lock waits to be woken and run again long after its holder has
    * left, and the lock stays idle for that hand-off on every acquisition.
    */
-  static void lock_spinning(ceph::mutex& m) {
-    for (int i = 0; i < 100; i++) {
-      if (m.try_lock())
-        return;
+  static void lock_spinning(ceph::mutex& m, std::atomic<int>& spinners) {
+    if (m.try_lock())
+      return;
+    // Few spinners at a time, as the kernel's mutexes allow one: one is
+    // enough to take the lock the moment it is free, and with thousands
+    // of threads on fewer CPUs more of them only take the CPU from the
+    // holder they wait for
+    if (spinners.fetch_add(1, std::memory_order_relaxed) <
+        max_lock_spinners) {
+      for (int i = 0; i < 100; i++) {
 #if defined(__x86_64__) || defined(__i386__)
-      __builtin_ia32_pause();
+        __builtin_ia32_pause();
 #elif defined(__aarch64__)
-      asm volatile("yield");
+        asm volatile("yield");
 #endif
+        if (m.try_lock()) {
+          spinners.fetch_sub(1, std::memory_order_relaxed);
+          return;
+        }
+      }
     }
+    spinners.fetch_sub(1, std::memory_order_relaxed);
     m.lock();
   }
+  static constexpr int max_lock_spinners = 2;
   // whether this thread holds an oc_lock (is in an OCScope)
   static bool oc_lock_held() {
     return oc_scope != nullptr;

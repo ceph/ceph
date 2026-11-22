@@ -5277,7 +5277,7 @@ Client::OCScope::OCScope(Client *c, OCShard& sh) : shard(sh), client(c)
   // while, and do the rest of the write outside it: 16 threads writing 4K
   // that slept for it were slower than when they all queued on
   // client_lock, whose holder took it again at once
-  lock_spinning(shard.oc_lock);
+  lock_spinning(shard.oc_lock, shard.oc_lock_spinners);
   // whatever we do under oc_lock may change the cache: keep the readers
   // of the read gate out
   shard.oc->gate_shut();

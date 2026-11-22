@@ -190,6 +190,7 @@ struct Inode : RefCountedObject {
     // shared holders, and whether a writer is in or about to be
     std::atomic<uint32_t> readers{0};
     std::atomic<bool> writer{false};
+    std::atomic<int> spinners{0};
 #ifdef CEPH_DEBUG_MUTEX
     static thread_local Lock *held;
 #endif
