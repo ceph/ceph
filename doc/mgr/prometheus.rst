@@ -51,7 +51,7 @@ components have distinct responsibilities:
   performance counters of the Ceph daemons on that host, other than Manager
   daemons, from their admin sockets and exposes them as Prometheus metrics.
   It also exposes a few metrics of its own, such as
-  ``ceph_exporter_scrape_time`` and, in Tentacle 20.2 and later releases,
+  ``ceph_exporter_scrape_time`` and, in Tentacle and later releases,
   ``ceph_daemon_socket_up``.
 
 Configuration
@@ -95,8 +95,8 @@ SSL/TLS Support
 
 .. note::
 
-   Native TLS for the metrics endpoint is available in later releases only.
-   Squid 19.2, Tentacle 20.2 and Umbrella 21 do not have the ``ssl``,
+   Native TLS for the metrics endpoint is available in Vampire and later
+   releases. Earlier releases do not have the ``ssl``,
    ``ssl_server_port``, ``crt_file`` and ``key_file`` options or the
    ``ceph prometheus set-ssl-certificate`` commands.
 
@@ -146,7 +146,7 @@ to certificate files on disk:
       ceph prometheus clear-ssl-certificate
 
 To set a certificate for one Manager daemon, pass its ID without the
-``mgr.`` prefix (for ``mgr.a``, the ID is ``a``):
+``mgr.`` prefix. For example, the ID for ``mgr.a`` is ``a``:
 
 .. prompt:: bash #
 
@@ -273,7 +273,7 @@ The metrics take the following form:
     ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
 
 The module also maintains an in-memory history of health-check states.
-It saves the history in the monitors' configuration key store, so the
+It saves the history in the Monitors' configuration key store, so the
 history survives a Manager restart or failover. The
 :confval:`mgr/prometheus/healthcheck_history_max_entries` option limits the
 number of entries (default: 1000); when the history is full, the oldest entry
@@ -396,7 +396,7 @@ Pools have a ``ceph_pool_metadata`` metric of the following form:
 
     ceph_pool_metadata{pool_id="2",name="cephfs_metadata_a",type="replicated",description="replica:3",compression_mode="none",application="Filesystem"} 1.0
 
-The ``application`` label exists in Tentacle 20.2 and later releases.
+The ``application`` label exists in Tentacle and later releases.
 
 OSDs have a ``ceph_osd_metadata`` metric of the following form:
 
@@ -482,6 +482,10 @@ module sets, so Prometheus must scrape the Manager with ``honor_labels: true``
         "([^:.]*).*"
     ) and on (instance, device)
     label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon="osd.0"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")
+
+Prometheus can instead rewrite these labels at ingest, with
+`metric_relabel_configs <https://prometheus.io/docs/prometheus/latest/configuration/configuration/#metric_relabel_configs>`_
+in the scrape jobs, so that queries need no ``label_replace``.
 
 Configuring Prometheus server
 =============================

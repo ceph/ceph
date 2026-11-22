@@ -77,7 +77,7 @@ Ceph Dashboard.
 Ceph Daemon Health Metrics
 ==========================
 
-In Tentacle 20.2 and later releases, the ``ceph-exporter`` daemon provides a
+In Tentacle and later releases, the ``ceph-exporter`` daemon provides a
 metric named ``ceph_daemon_socket_up`` that shows whether a Ceph daemon
 responds on its admin socket: ``1`` means healthy and ``0`` means unhealthy.
 Although a Ceph daemon might still be "alive" when it
@@ -246,7 +246,7 @@ Pool-specific metrics include:
   and graphs.  In addition to the above three common labels, this metric
   provides the following:
 
-  * ``application``: In Tentacle 20.2 and later releases, the applications
+  * ``application``: In Tentacle and later releases, the applications
     enabled on the pool, separated by a comma and a space: ``Block`` (rbd),
     ``Filesystem`` (cephfs), ``Object`` (rgw), or the application name.
     Example: ``application="Block"``
@@ -354,7 +354,7 @@ Generic Metrics
 * ``ceph_rgw_req``: Number of requests the daemon has started, of every
   type, as a running total. Useful for detecting bottlenecks and optimizing
   load distribution.
-* ``ceph_rgw_qlen``: Operations queue length for the daemon. Useful for
+* ``ceph_rgw_qlen``: Op queue length for the daemon. Useful for
   detecting bottlenecks and optimizing load distribution.
 * ``ceph_rgw_failed_req``: Aborted requests. Useful for detecting daemon
   errors.
@@ -467,6 +467,9 @@ Example:
   this MDS
 * ``ceph_mds_root_rfiles``: Total number of files in the file system, from
   the recursive statistics of the root directory as known to this MDS
+
+``ceph_mds_root_rbytes`` and ``ceph_mds_root_rfiles`` are lazily updated, so
+they can lag behind recent changes.
 
 
 Useful Queries
