@@ -335,6 +335,9 @@ struct Inode : RefCountedObject {
   int64_t cap_dirtier_uid = -1;
   int64_t cap_dirtier_gid = -1;
   unsigned dirty_caps = 0;
+  // a buffered write is marking Fw dirty (Client::_write_fast()); under
+  // lock alone
+  bool fw_marking = false;
   unsigned flushing_caps = 0;
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen = 0;

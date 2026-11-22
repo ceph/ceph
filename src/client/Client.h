@@ -1341,6 +1341,7 @@ protected:
   void signal_caps_inode(Inode *in);
   void wait_on_caps(Inode *in);
   int put_cap_ref_fast(Inode *in, int cap);
+  int _put_cap_ref_fast(Inode *in, int last);
   void put_fast_rd_ref(Inode *in);
   template <typename F>
   bool _getattr_fast(Inode *in, unsigned mask, F&& fill);

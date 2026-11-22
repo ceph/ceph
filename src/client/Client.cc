@@ -4305,7 +4305,12 @@ void Client::put_cap_ref(Inode *in, int cap)
 int Client::put_cap_ref_fast(Inode *in, int cap)
 {
   std::scoped_lock il(in->lock);
-  int last = in->put_cap_ref(cap);
+  return _put_cap_ref_fast(in, in->put_cap_ref(cap));
+}
+
+// the rest of put_cap_ref_fast(), with Inode::lock held, for the @last refs
+int Client::_put_cap_ref_fast(Inode *in, int last)
+{
   if (!last)
     return 0;
   // the last Fw ref needs client_lock only to finish a cap snap
@@ -18868,11 +18873,31 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
   in->mtime = in->ctime = ceph_clock_now();
   in->change_attr++;
   bool dirty = in->auth_cap && (in->dirty_caps & CEPH_CAP_FILE_WR);
+  // Fw is clean (a cap flush took it): one writer marks it dirty again
+  // under client_lock.  The others see fw_marking and go on as if it
+  // were dirty: the marker still holds its Fw and Fb refs, and marks Fw
+  // after their stamps, so the next flush carries them.  Without this
+  // every writer that came by before the marker got client_lock queued
+  // on it too, and with thousands of writers on one file the queue
+  // never drained: most of them waited on client_lock, and some waited
+  // for the whole run.
+  bool marker = false;
+  if (!dirty && in->auth_cap) {
+    if (in->fw_marking)
+      dirty = true;
+    else
+      marker = in->fw_marking = true;
+  }
+  // Drop the refs before letting go of Inode::lock: writers of one file
+  // queue on it, and taking it again for each ref made three hand-offs
+  // of a contended lock per write instead of one.
+  int last = 0;
+  if (dirty)
+    last = _put_cap_ref_fast(in, in->put_cap_ref(CEPH_CAP_FILE_BUFFER |
+                                                 CEPH_CAP_FILE_WR));
   il.unlock();
 
   if (dirty) {
-    int last = put_cap_ref_fast(in, CEPH_CAP_FILE_BUFFER);
-    last |= put_cap_ref_fast(in, CEPH_CAP_FILE_WR);
     if (last) {
       ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
       std::scoped_lock cl(client_lock);
@@ -18882,6 +18907,10 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
     ceph_assert(!Inode::Lock::held_by_me());  // client_lock goes first
     std::scoped_lock cl(client_lock);
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+    if (marker) {
+      std::scoped_lock l(in->lock);
+      in->fw_marking = false;
+    }
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     put_cap_ref(in, CEPH_CAP_FILE_WR);
   }
