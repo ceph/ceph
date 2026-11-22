@@ -3254,7 +3254,8 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
 bool Client::is_dir_operation(MetaRequest *req)
 {
   int op = req->get_op();
-  if (op == CEPH_MDS_OP_MKNOD || op == CEPH_MDS_OP_LINK ||
+  if (op == CEPH_MDS_OP_MKNOD || op == CEPH_MDS_OP_MKNOD_BATCH ||
+      op == CEPH_MDS_OP_LINK ||
       op == CEPH_MDS_OP_UNLINK || op == CEPH_MDS_OP_RENAME ||
       op == CEPH_MDS_OP_MKDIR || op == CEPH_MDS_OP_RMDIR ||
       op == CEPH_MDS_OP_SYMLINK || op == CEPH_MDS_OP_CREATE)
@@ -16497,6 +16498,101 @@ int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& per
   int r = _readlink(in, "", buf, buflen, perms);
   ldout(cct, 3) << "ll_readlink " << vino << " = " << r << dendl;
   return r;
+}
+
+/*
+ * Prototype: create several regular files in one directory with a single
+ * CEPH_MDS_OP_MKNOD_BATCH request.  All of them are created or none is.  The
+ * reply carries no trace, so nothing is added to the cache: the directory
+ * stops being complete and the new names are looked up when first used.
+ */
+int Client::mknod_batch(const char *dirpath, const std::vector<std::string>& names,
+			mode_t mode, const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  if (names.empty())
+    return -EINVAL;
+  if ((mode & S_IFMT) == 0)
+    mode |= S_IFREG;
+  if (!S_ISREG(mode))
+    return -EINVAL;
+  for (const auto& name : names) {
+    if (name.empty() || name == "." || name == ".." ||
+	name.find('/') != std::string::npos)
+      return -EINVAL;
+    if (name.length() > NAME_MAX)
+      return -ENAMETOOLONG;
+  }
+
+  std::scoped_lock lock(client_lock);
+
+  InodeRef diri;
+  if (int rc = path_walk(cwd, filepath(dirpath), &diri, perms, {}); rc < 0)
+    return rc;
+  if (!diri->is_dir())
+    return -ENOTDIR;
+  if (diri->snapid != CEPH_NOSNAP)
+    return -EROFS;
+  if (diri->is_fscrypt_enabled())
+    return -EOPNOTSUPP;
+  if (should_check_perms()) {
+    int r = may_create(diri, perms);
+    if (r < 0)
+      return r;
+  }
+  if (is_quota_files_exceeded(diri.get(), perms))
+    return -EDQUOT;
+
+  ldout(cct, 8) << __func__ << "(" << diri->ino << " " << names.size()
+		<< " names, first " << names.front() << ", 0" << oct << mode
+		<< dec << ")" << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD_BATCH);
+  req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
+
+  filepath path;
+  diri->make_nosnap_relative_path(path);
+  path.push_dentry(names.front());
+  req->set_filepath(path);
+
+  filepath more;
+  for (size_t i = 1; i < names.size(); i++)
+    more.push_dentry(names[i]);
+  req->set_filepath2(more);
+
+  req->set_inode(diri);
+  req->head.args.mknod.mode = mode;
+  req->head.args.mknod.rdev = 0;
+  // as a create does through its dentry: give back Fs on the directory
+  // unless we hold Fx, so the mds need not revoke it to change the dir
+  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_unless = CEPH_CAP_FILE_EXCL;
+
+  int res = make_request(req, perms);
+
+  if (res == 0) {
+    // We were told nothing about the new files.  Make sure nothing cached
+    // says they do not exist.
+    clear_dir_complete_and_ordered(diri.get(), true);
+    if (diri->dir) {
+      for (const auto& name : names) {
+	auto it = diri->dir->dentries.find(name);
+	if (it != diri->dir->dentries.end() && !it->second->inode) {
+	  it->second->lease_mds = -1;
+	  it->second->cap_shared_gen = diri->shared_gen - 1;
+	}
+      }
+    }
+  }
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << path << " + " << more.depth()
+		<< ") = " << res << dendl;
+  return res;
 }
 
 int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,

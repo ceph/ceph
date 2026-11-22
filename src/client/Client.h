@@ -611,6 +611,8 @@ public:
   
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
+  int mknod_batch(const char *dirpath, const std::vector<std::string>& names,
+		  mode_t mode, const UserPerm& perms);
 
   int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0) {
     return open(path, flags, perms, mode, 0, 0, 0, NULL);
