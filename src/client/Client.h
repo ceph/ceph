@@ -1508,6 +1508,25 @@ protected:
   // the OCScope this thread is in, if any
   static thread_local OCScope *oc_scope;
 public:
+  /*
+   * Take a lock that many threads take often, for a short while each, and
+   * that they do much of their work without: try for it a while before
+   * sleeping on it, as an adaptive mutex does.  A thread that sleeps for
+   * such a lock waits to be woken and run again long after its holder has
+   * left, and the lock stays idle for that hand-off on every acquisition.
+   */
+  static void lock_spinning(ceph::mutex& m) {
+    for (int i = 0; i < 100; i++) {
+      if (m.try_lock())
+        return;
+#if defined(__x86_64__) || defined(__i386__)
+      __builtin_ia32_pause();
+#elif defined(__aarch64__)
+      asm volatile("yield");
+#endif
+    }
+    m.lock();
+  }
   // whether this thread holds oc_lock (is in an OCScope)
   static bool oc_lock_held() {
     return oc_scope != nullptr;

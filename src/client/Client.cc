@@ -5242,7 +5242,11 @@ Client::OCScope::OCScope(Client *c) : client(c)
   // oc_lock is not recursive: no Client code runs under it, so no OCScope
   // may be opened from within another one
   ceph_assert(oc_scope == nullptr);
-  client->oc_lock.lock();
+  // Writers through one mount take oc_lock once per write, for a short
+  // while, and do the rest of the write outside it: 16 threads writing 4K
+  // that slept for it were slower than when they all queued on
+  // client_lock, whose holder took it again at once
+  lock_spinning(client->oc_lock);
   // whatever we do under oc_lock may change the cache: keep the readers
   // of the read gate out
   client->objectcacher->gate_shut();

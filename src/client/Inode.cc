@@ -58,7 +58,8 @@ void Inode::Lock::lock()
   ceph_assert(held == nullptr);             // never two Inode::locks
   ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
 #endif
-  m.lock();
+  // writers of one file take it for each write, as they take oc_lock
+  Client::lock_spinning(m);
   // keep new readers out and wait for those inside: they only look, and
   // leave soon
   writer.store(true, std::memory_order_seq_cst);
