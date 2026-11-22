@@ -2275,6 +2275,7 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
     code = l_mdss_req_link_latency;
     break;
   case CEPH_MDS_OP_UNLINK:
+  case CEPH_MDS_OP_UNLINK_BATCH:
     code = l_mdss_req_unlink_latency;
     break;
   case CEPH_MDS_OP_RMDIR:
@@ -2968,6 +2969,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   case CEPH_MDS_OP_UNLINK:
   case CEPH_MDS_OP_RMDIR:
     handle_client_unlink(mdr);
+    break;
+  case CEPH_MDS_OP_UNLINK_BATCH:
+    handle_client_unlink_batch(mdr);
     break;
   case CEPH_MDS_OP_RENAME:
     handle_client_rename(mdr);
@@ -9372,6 +9376,363 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
         "trigger the _eval_stray_remote path to verify the fix.");
   }
 }
+
+// UNLINK_BATCH (prototype)
+//
+// Unlink several regular files (or symlinks) of one directory with one
+// request and one journal event.  The request's path names the directory and
+// the first file, as for unlink; the components of path2 are the other
+// names.  All of the files are unlinked or none is.
+//
+// Each file gets what unlink gives it: its dentry and the inode's linklock
+// and snaplock are xlocked, the inode moves to a stray dentry of its own,
+// and the stray is handed to the StrayManager.  What the batch pays once is
+// the messages, the path walk and the locks on the directory, the projection
+// of the stats of the directory and of the stray directory (once per
+// dirfrag), the EUpdate and its completion, and the reply.  The purge of
+// each stray is journaled later, per file, as after an unlink.
+//
+// Limits of the prototype.  The whole batch is refused when any name is
+// missing (-ENOENT) or a directory (-EISDIR), when a dirfrag the names hash
+// to is not auth here (-EXDEV), and for what unlink handles but this does
+// not: a remote dentry or an inode with other links, an inode with a
+// snaprealm of its own, a directory whose realm has had snapshots since a
+// file was created, and fscrypt or alternate names (-EOPNOTSUPP).  The
+// reply carries no trace.
+
+static const unsigned UNLINK_BATCH_MAX = 1024;
+
+struct unlink_batch_item {
+  CDentry *dn;
+  CDentry *straydn;
+  CInode *in;
+  version_t dnpv;
+};
+
+class C_MDS_unlink_batch_finish : public ServerLogContext {
+  std::vector<unlink_batch_item> items;
+public:
+  C_MDS_unlink_batch_finish(Server *s, const MDRequestRef& r,
+			    std::vector<unlink_batch_item>&& i) :
+    ServerLogContext(s, r), items(std::move(i)) {}
+  void finish(int r) override {
+    ceph_assert(r == 0);
+    MDCache *mdcache = get_mds()->mdcache;
+
+    // as _unlink_local_finish() does for one file
+    for (auto& it : items) {
+      it.dn->get_dir()->unlink_inode(it.dn);
+      it.dn->pop_projected_linkage();
+      it.dn->mark_dirty(it.dnpv, mdr->ls);
+
+      it.straydn->pop_projected_linkage();
+      mdcache->touch_dentry_bottom(it.straydn);
+    }
+
+    mdr->apply();
+
+    for (auto& it : items)
+      mdcache->send_dentry_unlink(it.dn, it.straydn, mdr);
+
+    // one hit for the batch
+    get_mds()->balancer->hit_dir(items.front().dn->get_dir(), META_POP_IWR);
+
+    // evaluate the strays before the locks are dropped, as unlink does
+    for (auto& it : items) {
+      if (!it.straydn->get_projected_linkage()->is_null())
+	mdcache->notify_stray(it.straydn);
+    }
+
+    server->respond_to_request(mdr, 0);
+
+    for (auto& it : items)
+      it.dn->get_dir()->try_remove_unlinked_dn(it.dn);
+  }
+};
+
+void Server::handle_client_unlink_batch(const MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  // the first name is the last component of the path, the rest are path2
+  // (a batch of one file has no path2)
+  static const filepath no_more;
+  const filepath& more = req->has_filepath2() ? req->get_filepath2() : no_more;
+  const filepath& refpath = req->get_filepath();
+  const unsigned total = 1 + more.depth();
+  if (refpath.depth() == 0 || total > UNLINK_BATCH_MAX) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  {
+    std::set<std::string_view> seen;
+    seen.insert(refpath.last_dentry());
+    for (unsigned i = 0; i < more.depth(); i++) {
+      std::string_view name = more[i];
+      if (name.empty() || name == "." || name == "..") {
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+      if (name.length() > NAME_MAX) {
+	respond_to_request(mdr, -ENAMETOOLONG);
+	return;
+      }
+      if (!seen.insert(name).second) {
+	dout(10) << "unlink_batch name " << name << " given twice" << dendl;
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+    }
+  }
+  if (req->get_alternate_name().size() || req->fscrypt_auth.size()) {
+    respond_to_request(mdr, -EOPNOTSUPP);
+    return;
+  }
+
+  // Lock the path and the first dentry exactly as unlink does.  This takes
+  // the wrlocks on the directory's filelock and nestlock that cover every
+  // dentry we remove below, and answers -ENOENT when the first is missing.
+  mdr->disable_lock_cache();
+  CDentry *dn0 = rdlock_path_xlock_dentry(mdr, false, true);
+  if (!dn0)
+    return;
+
+  CInode *diri = dn0->get_dir()->get_inode();
+  if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
+  // Find the dentry of every other name.  Nothing here is kept across a
+  // retry: when we have to wait, the request is dispatched again and looks
+  // everything up afresh.
+  std::vector<CDentry*> dns;
+  dns.reserve(total);
+  dns.push_back(dn0);
+  for (unsigned i = 0; i < more.depth(); i++) {
+    std::string_view name = more[i];
+    frag_t fg = diri->pick_dirfrag(name);
+    CDir *dir = diri->get_dirfrag(fg);
+    if (!dir) {
+      if (diri->is_frozen()) {
+	dout(7) << "unlink_batch " << *diri << " is frozen, waiting" << dendl;
+	diri->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+      dir = diri->get_or_open_dirfrag(mdcache, fg);
+    }
+    if (!dir->is_auth()) {
+      // a real implementation would split the batch by auth mds
+      dout(7) << "unlink_batch " << *dir << " is not auth, EXDEV" << dendl;
+      respond_to_request(mdr, -EXDEV);
+      return;
+    }
+    CDentry *dn = dir->lookup(name);
+    if (!dn) {
+      if (dir->is_complete() ||
+	  (dir->has_bloom() && !dir->is_in_bloom(name))) {
+	dout(7) << "unlink_batch no " << name << " in " << *dir << dendl;
+	respond_to_request(mdr, -ENOENT);
+	return;
+      }
+      dout(7) << "unlink_batch incomplete " << *dir << ", fetching " << name << dendl;
+      dir->fetch(name, CEPH_NOSNAP, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    if (dn->get_projected_linkage()->is_null()) {
+      dout(7) << "unlink_batch " << *dn << " is null" << dendl;
+      respond_to_request(mdr, -ENOENT);
+      return;
+    }
+    dns.push_back(dn);
+  }
+
+  // What each of them links to.  Refuse what this prototype does not do,
+  // before anything is changed.
+  SnapRealm *realm = diri->find_snaprealm();
+  const snapid_t follows = realm->get_newest_seq();
+  std::vector<CInode*> ins;
+  ins.reserve(total);
+  for (auto dn : dns) {
+    CDentry::linkage_t *dnl = dn->get_projected_linkage();
+    if (!dnl->is_primary()) {
+      dout(7) << "unlink_batch " << *dn << " is not a primary link" << dendl;
+      respond_to_request(mdr, -EOPNOTSUPP);
+      return;
+    }
+    CInode *in = dnl->get_inode();
+    if (in->is_dir()) {
+      dout(7) << "unlink_batch " << *dn << " is a directory" << dendl;
+      respond_to_request(mdr, -EISDIR);
+      return;
+    }
+    const auto& pi = in->get_projected_inode();
+    if (!in->is_auth() ||
+	pi->nlink != 1 ||
+	in->snaprealm ||
+	in->is_projected_snaprealm_global() ||
+	follows + 1 > in->get_oldest_snap() ||
+	!pi->fscrypt_auth.empty()) {
+      dout(7) << "unlink_batch cannot do " << *in << dendl;
+      respond_to_request(mdr, -EOPNOTSUPP);
+      return;
+    }
+    ins.push_back(in);
+  }
+
+  // A stray dentry for each, as prepare_stray_dentry() makes one.
+  std::vector<CDentry*> straydns;
+  straydns.reserve(total);
+  {
+    std::map<CDir*, unsigned> per_straydir;
+    for (auto in : ins)
+      per_straydir[mdcache->get_stray_dir(in)]++;
+    for (auto& [straydir, n] : per_straydir) {
+      if (straydir->get_frag_size() + (int64_t)n > bal_fragment_size_max) {
+	dout(10) << "unlink_batch " << *straydir << " would exceed "
+		 << bal_fragment_size_max << " (ENOSPC)" << dendl;
+	respond_to_request(mdr, -ENOSPC);
+	return;
+      }
+    }
+  }
+  for (auto in : ins) {
+    std::string straydname;
+    in->name_stray_dentry(straydname);
+    CDir *straydir = mdcache->get_stray_dir(in);
+    CDentry *straydn = straydir->lookup(straydname);
+    if (!straydn) {
+      if (straydir->is_frozen_dir()) {
+	dout(10) << "unlink_batch " << *straydir << " is frozen, waiting" << dendl;
+	mds->locker->drop_locks(mdr.get());
+	mdr->drop_local_auth_pins();
+	straydir->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+      straydn = straydir->add_null_dentry(straydname);
+      straydn->mark_new();
+    } else {
+      ceph_assert(straydn->get_projected_linkage()->is_null());
+    }
+    straydn->state_set(CDentry::STATE_STRAY);
+    mdr->pin(straydn);
+    straydns.push_back(straydn);
+  }
+
+  // The locks unlink takes for one file, for all of them.
+  {
+    MutationImpl::LockOpVec lov;
+    for (unsigned i = 0; i < total; i++) {
+      if (i > 0)
+	lov.add_xlock(&dns[i]->lock);
+      lov.add_xlock(&ins[i]->linklock);
+      lov.add_xlock(&ins[i]->snaplock);
+      lov.add_wrlock(&straydns[i]->get_dir()->inode->filelock);
+      lov.add_wrlock(&straydns[i]->get_dir()->inode->nestlock);
+      lov.add_xlock(&straydns[i]->lock);
+    }
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+  }
+
+  // every dentry and inode is xlocked and auth pinned from here on, and
+  // nothing below waits
+
+  const snapid_t stray_first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "unlink_batch");
+  le->metablob.add_client_req(mdr->reqid, req->get_oldest_client_tid());
+
+  std::vector<unlink_batch_item> items;
+  items.reserve(total);
+  std::map<CDir*, std::vector<CInode*>> by_dir, by_straydir;
+  for (unsigned i = 0; i < total; i++) {
+    CDentry *dn = dns[i];
+    CDentry *straydn = straydns[i];
+    CInode *in = ins[i];
+
+    straydn->first = stray_first;
+    straydn->push_projected_linkage(in);
+
+    // the unlinked dentry
+    version_t dnpv = dn->pre_dirty();
+
+    auto pi = in->project_inode(mdr);
+    {
+      std::string t;
+      dn->make_path_string(t, true);
+      pi.inode->stray_prior_path = std::move(t);
+    }
+    pi.inode->version = in->pre_dirty();
+    pi.inode->ctime = mdr->get_op_stamp();
+    if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+      pi.inode->rstat.rctime = mdr->get_op_stamp();
+    pi.inode->change_attr++;
+    pi.inode->nlink--;
+    ceph_assert(pi.inode->nlink == 0);
+    in->state_set(CInode::STATE_ORPHAN);
+
+    items.push_back({dn, straydn, in, dnpv});
+    by_dir[dn->get_dir()].push_back(in);
+    by_straydir[straydn->get_dir()].push_back(in);
+  }
+
+  // Project the stats of the directory and of the stray directory once per
+  // dirfrag, not once per file.  For the nfiles of the dirfrag,
+  // predirty_journal_parents() adds linkunlink.  For its rstat it takes the
+  // one inode it is given: on an unlink it subtracts that inode's
+  // accounted_rstat, on a link it adds its rstat, and either way it then
+  // sets the inode's accounted_rstat to its rstat.  So lend that inode the
+  // sum over its siblings for the call, and bring the siblings up to date
+  // by hand.
+  for (auto& [dir, members] : by_dir) {
+    nest_info_t sum;
+    for (auto in : members)
+      sum.add(in->_get_projected_inode()->accounted_rstat);
+    CInode *first = members.front();
+    first->_get_projected_inode()->accounted_rstat = sum;
+    mdcache->predirty_journal_parents(mdr, &le->metablob, first, dir,
+				      PREDIRTY_PRIMARY|PREDIRTY_DIR,
+				      -(int)members.size());
+    for (auto in : members) {
+      auto _pi = in->_get_projected_inode();
+      _pi->accounted_rstat = _pi->rstat;
+      in->clear_dirty_rstat();
+    }
+  }
+  for (auto& [straydir, members] : by_straydir) {
+    nest_info_t sum;
+    for (auto in : members)
+      sum.add(in->_get_projected_inode()->rstat);
+    CInode *first = members.front();
+    auto _pi = first->_get_projected_inode();
+    const nest_info_t own = _pi->rstat;
+    _pi->rstat = sum;
+    mdcache->predirty_journal_parents(mdr, &le->metablob, first, straydir,
+				      PREDIRTY_PRIMARY|PREDIRTY_DIR,
+				      members.size());
+    _pi->rstat = own;
+    _pi->accounted_rstat = own;
+  }
+
+  for (auto& it : items) {
+    it.in->_get_projected_inode()->update_backtrace();
+    le->metablob.add_primary_dentry(it.straydn, it.in, true, true);
+
+    mdcache->journal_cow_dentry(mdr.get(), &le->metablob, it.dn);
+    le->metablob.add_null_dentry(it.dn, true);
+
+    it.dn->push_projected_linkage();
+
+    ceph_assert(it.in->first <= it.straydn->first);
+    it.in->first = it.straydn->first;
+  }
+
+  dout(10) << "unlink_batch " << total << " files in " << *diri << dendl;
+
+  journal_and_reply(mdr, nullptr, nullptr, le,
+		    new C_MDS_unlink_batch_finish(this, mdr, std::move(items)));
+}
+
 
 bool Server::_rmdir_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn)
 {

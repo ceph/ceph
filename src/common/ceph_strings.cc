@@ -310,6 +310,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_MKNOD_BATCH: return "mknod_batch";
 	case CEPH_MDS_OP_LINK: return "link";
 	case CEPH_MDS_OP_UNLINK: return "unlink";
+	case CEPH_MDS_OP_UNLINK_BATCH: return "unlink_batch";
 	case CEPH_MDS_OP_RENAME: return "rename";
 	case CEPH_MDS_OP_MKDIR: return "mkdir";
 	case CEPH_MDS_OP_RMDIR: return "rmdir";

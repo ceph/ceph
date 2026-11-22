@@ -420,6 +420,10 @@ enum {
 	 * request.  path is <dir>/<first name>, path2 holds the other names
 	 * as its components, args.mknod.mode the mode of all of them. */
 	CEPH_MDS_OP_MKNOD_BATCH = 0x01210,
+	/* prototype: unlink several files of one directory with one request.
+	 * path is <dir>/<first name>, path2 holds the other names as its
+	 * components. */
+	CEPH_MDS_OP_UNLINK_BATCH = 0x01211,
 	CEPH_MDS_OP_MKDIR      = 0x01220,
 	CEPH_MDS_OP_RMDIR      = 0x01221,
 	CEPH_MDS_OP_SYMLINK    = 0x01222,

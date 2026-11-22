@@ -326,6 +326,7 @@ public:
 
   // unlink
   void handle_client_unlink(const MDRequestRef& mdr);
+  void handle_client_unlink_batch(const MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(const MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_has_snaps(const MDRequestRef& mdr, CInode *diri);
