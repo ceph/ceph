@@ -2781,6 +2781,10 @@ private:
   std::ofstream traceout;
 
   bool fscrypt_as;
+  // looked up by name on every open and every quota check, which costs a
+  // key normalization and a map lookup: kept here, set by the observer
+  std::atomic<bool> force_lazyio{false};
+  std::atomic<bool> quota_enabled{true};
 
   ceph::condition_variable mount_cond, sync_cond;
 
