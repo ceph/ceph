@@ -428,6 +428,12 @@ class ObjectCacher {
   uint64_t max_dirty, target_dirty, max_size, max_objects;
   // the ObjectCachers that share this one's limits, see set_budget_group()
   const std::vector<ObjectCacher*> *group = nullptr;
+  // in a group, the writers of a member wait for room on its group_cond
+  // under its sleep_lock, a leaf lock taken under a member's lock, so
+  // that room any member frees can wake them (see
+  // _maybe_wait_for_writeback()); a waker holds one at a time
+  ceph::mutex sleep_lock = ceph::make_mutex("ObjectCacher::sleep_lock");
+  ceph::condition_variable group_cond;
   // what a member of a group uses, for the others to add up: changed
   // under its lock only, read without it
   struct alignas(64) Published {
@@ -532,8 +538,10 @@ class ObjectCacher {
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
   size_t stat_nr_dirty_waiters;
-  // waiters woken for room that have not taken the lock again yet
-  size_t stat_nr_dirty_woken;
+  // the waiters asleep: those not asleep were woken for room and have not
+  // taken the lock again yet (changed under the lock the waiters sleep
+  // with: this cache's, or the group's)
+  std::atomic<size_t> stat_nr_dirty_sleeping{0};
   static constexpr uint64_t MAX_WOKEN_WRITEBACK_WAITERS = 32;
 
   void verify_stats() const;
@@ -728,10 +736,9 @@ class ObjectCacher {
    * a user that shards its cache by object set, each shard with its own
    * lock.  A member within its share of a limit (the limit divided by the
    * number of members) is never held back for the others; one beyond it
-   * is held to the limit for what all members use.  Members do not wake
-   * each other: writers waiting for room that another member frees look
-   * again every 10 ms.  max_objects is divided between them.  Call before
-   * start().
+   * is held to the limit for what all members use, and room another
+   * member frees wakes its writers.  max_objects is divided between them.
+   * Call before start().
    */
   void set_budget_group(const std::vector<ObjectCacher*> *g) {
     group = g;
@@ -787,6 +794,10 @@ private:
                       bool block_writes_upfront, bool *defer_wait);
   bool _writeback_wait_needed();
   void _wake_writeback_waiters();
+  void _wake_local_waiters();
+  void _wake_group_waiters();
+  void _notify_writeback_waiters(uint64_t n);
+  uint64_t last_dirty_tx = 0;   // dirty + tx when _wake_group_waiters() last looked
   // enter the read gate: the slot to leave it by (gate_exit()), which is
   // the one entered by even if the thread moves to another CPU, or -1
   // when the gate is shut

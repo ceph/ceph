@@ -765,7 +765,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     last_read_tid(0), flusher_stop(false), flusher_thread(this),finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0),
     stat_missing(0), stat_error(0), stat_dirty_waiting(0),
-    stat_nr_dirty_waiters(0), stat_nr_dirty_woken(0), reads_outstanding(0)
+    stat_nr_dirty_waiters(0), reads_outstanding(0)
 {
   perf_start();
   finisher.start();
@@ -2129,12 +2129,96 @@ void ObjectCacher::wait_for_writeback_space(uint64_t len)
 // see _maybe_wait_for_writeback()
 void ObjectCacher::_wake_writeback_waiters()
 {
+  _wake_local_waiters();
+  if (group)
+    _wake_group_waiters();
+}
+
+/*
+ * Room freed here may be what the waiters of another member of the group
+ * wait for, which their own cache's changes would not wake them for: wake
+ * as many of them as the group has room for (no more than
+ * MAX_WOKEN_WRITEBACK_WAITERS), spread over the members.  Waking one of
+ * each, to pass it on, made a chain of wake-ups where each small write
+ * took a little of the room and woke the next: the writers came back too
+ * slowly to keep the flushers busy.
+ *
+ * A waiter registers and publishes that it waits, and then looks at the
+ * group's totals; we publish what we freed, and then look for waiters:
+ * with a full fence between on either side, either it sees the room, or
+ * we see it.  It looks and goes to sleep under its member's sleep_lock,
+ * and we wake it under that, so it cannot miss the wake-up in between.
+ * Each member has its own, so the writers woken in one member do not
+ * queue for a lock with those of all the others.
+ */
+void ObjectCacher::_wake_group_waiters()
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  uint64_t dirty_tx = get_stat_dirty() + get_stat_tx();
+  bool freed = dirty_tx < last_dirty_tx;
+  last_dirty_tx = dirty_tx;
+  if (!freed)
+    return;
+  std::atomic_thread_fence(std::memory_order_seq_cst);
+  auto r = std::memory_order_relaxed;
+  Totals t = group_totals();
+  if (t.waiters <= pub.waiters.load(r))
+    return;   // nobody waits elsewhere
+  uint64_t limit = max_dirty + t.waiting;
+  uint64_t limit_bh = (max_dirty >> BUFFER_MEMORY_WEIGHT) + t.waiters;
+  if (t.dirty_tx >= limit || t.dirty_tx_bh >= limit_bh)
+    return;   // no room in the group: only their own cache can let them go
+  // as _wake_local_waiters() counts them: each that goes takes its bytes,
+  // and at least one BufferHead, out of the room
+  uint64_t avg = std::max<uint64_t>(1, t.waiting / t.waiters);
+  uint64_t n = std::min<uint64_t>({(limit - t.dirty_tx) / avg,
+                                   limit_bh - t.dirty_tx_bh,
+                                   MAX_WOKEN_WRITEBACK_WAITERS});
+  n = std::max<uint64_t>(n, 1);
+  // round robin over the other members, no more of each than wait there
+  std::vector<uint64_t> wake(group->size(), 0);
+  for (bool any = true; n > 0 && any; ) {
+    any = false;
+    size_t i = 0;
+    for (auto m : *group) {
+      if (n == 0)
+        break;
+      if (m != this && wake[i] < m->pub.waiters.load(r)) {
+        ++wake[i];
+        --n;
+        any = true;
+      }
+      ++i;
+    }
+  }
+  size_t i = 0;
+  for (auto m : *group) {
+    if (uint64_t k = wake[i++]; k > 0) {
+      std::scoped_lock sl(m->sleep_lock);
+      while (k--)
+        m->group_cond.notify_one();
+    }
+  }
+}
+
+void ObjectCacher::_notify_writeback_waiters(uint64_t n)
+{
+  if (group) {
+    std::scoped_lock sl(sleep_lock);
+    while (n--)
+      group_cond.notify_one();
+  } else {
+    while (n--)
+      stat_cond.notify_one();
+  }
+}
+
+void ObjectCacher::_wake_local_waiters()
+{
   ceph_assert(ceph_mutex_is_locked(lock));
   uint64_t waiters = get_stat_nr_dirty_waiters();
-  if (!waiters) {
-    stat_nr_dirty_woken = 0;
+  if (!waiters)
     return;
-  }
   if (_writeback_wait_needed())
     return;
   // The limit counts what the waiters wait to write; each that goes takes
@@ -2157,14 +2241,13 @@ void ObjectCacher::_wake_writeback_waiters()
   n = std::max<uint64_t>(n, 1);
   // those woken already and not back yet take their share of it, and no
   // more than MAX_WOKEN_WRITEBACK_WAITERS are let go at once
-  uint64_t woken = std::min<uint64_t>(stat_nr_dirty_woken, waiters);
-  if (n <= woken || woken >= MAX_WOKEN_WRITEBACK_WAITERS)
+  uint64_t sleeping = std::min<uint64_t>(stat_nr_dirty_sleeping, waiters);
+  uint64_t woken = waiters - sleeping;
+  if (n <= woken || woken >= MAX_WOKEN_WRITEBACK_WAITERS || !sleeping)
     return;
   n = std::min<uint64_t>({n - woken, MAX_WOKEN_WRITEBACK_WAITERS - woken,
-                          waiters - woken});
-  stat_nr_dirty_woken = woken + n;
-  while (n--)
-    stat_cond.notify_one();
+                          sleeping});
+  _notify_writeback_waiters(n);
 }
 
 bool ObjectCacher::_writeback_wait_needed()
@@ -2242,7 +2325,14 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
   ceph::mono_time start = ceph::mono_clock::now();
   int blocked = 0;
   // wait for writeback?
-  while (_writeback_wait_needed()) {
+  while (true) {
+    // a member of a group looks at the group's totals and sleeps under
+    // its sleep_lock (see _wake_group_waiters())
+    std::unique_lock<ceph::mutex> gl;
+    if (group)
+      gl = std::unique_lock<ceph::mutex>(sleep_lock);
+    if (!_writeback_wait_needed())
+      break;
 
     if (blocked == 0) {
       trace->event("start wait for writeback");
@@ -2255,20 +2345,39 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     stat_dirty_waiting += len;
     ++stat_nr_dirty_waiters;
     publish();
-    std::unique_lock l{lock, std::adopt_lock};
+    if (group) {
+      // look again now that the others can see us wait, for room they
+      // freed and did not see us waiting for
+      std::atomic_thread_fence(std::memory_order_seq_cst);
+      stat_dirty_waiting -= len;
+      --stat_nr_dirty_waiters;
+      bool needed = _writeback_wait_needed();
+      stat_dirty_waiting += len;
+      ++stat_nr_dirty_waiters;
+      if (!needed) {
+        stat_dirty_waiting -= len;
+        --stat_nr_dirty_waiters;
+        publish();
+        break;
+      }
+    }
+    ++stat_nr_dirty_sleeping;
     gate_open();
     if (group) {
-      // room another member frees does not wake us
-      stat_cond.wait_for(l, std::chrono::milliseconds(10));
+      lock.unlock();
+      group_cond.wait(gl);
+      --stat_nr_dirty_sleeping;
+      gl.unlock();
+      lock.lock();
     } else {
+      std::unique_lock l{lock, std::adopt_lock};
       stat_cond.wait(l);
+      --stat_nr_dirty_sleeping;
+      l.release();
     }
     gate_shut();
-    l.release();
     stat_dirty_waiting -= len;
     --stat_nr_dirty_waiters;
-    if (stat_nr_dirty_woken)
-      --stat_nr_dirty_woken;
     publish();
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
