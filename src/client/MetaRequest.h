@@ -46,6 +46,10 @@ public:
   int dentry_drop = 0, dentry_unless = 0;
   int old_dentry_drop = 0, old_dentry_unless = 0;
   int other_inode_drop = 0, other_inode_unless = 0;
+  // inodes of a batch request, whose batch_inode_drop caps are released
+  // with the request as other_inode_drop is for one
+  std::vector<InodeRef> batch_inodes;
+  int batch_inode_drop = 0;
   std::vector<MClientRequest::Release> cap_releases;
 
   int regetattr_mask = 0;          // getattr mask if i need to re-stat after a traceless reply

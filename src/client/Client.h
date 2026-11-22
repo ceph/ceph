@@ -611,6 +611,8 @@ public:
   
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
+  int unlink_batch(const char *dirpath, const std::vector<std::string>& names,
+		   const UserPerm& perms);
   int mknod_batch(const char *dirpath, const std::vector<std::string>& names,
 		  mode_t mode, const UserPerm& perms);
 

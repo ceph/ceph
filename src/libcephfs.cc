@@ -1571,6 +1571,24 @@ extern "C" int ceph_mknod_batch(struct ceph_mount_info *cmount,
   return cmount->get_client()->mknod_batch(dirpath, v, mode, cmount->default_perms);
 }
 
+extern "C" int ceph_unlink_batch(struct ceph_mount_info *cmount,
+				 const char *dirpath, const char **names,
+				 int n)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  if (!dirpath || !names || n < 1)
+    return -EINVAL;
+  std::vector<std::string> v;
+  v.reserve(n);
+  for (int i = 0; i < n; i++) {
+    if (!names[i])
+      return -EINVAL;
+    v.emplace_back(names[i]);
+  }
+  return cmount->get_client()->unlink_batch(dirpath, v, cmount->default_perms);
+}
+
 extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
 			 int flags, mode_t mode)
 {

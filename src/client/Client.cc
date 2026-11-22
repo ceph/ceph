@@ -2672,7 +2672,11 @@ void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
     encode_inode_release(req->other_inode(), req,
 			 mds, req->other_inode_drop,
 			 req->other_inode_unless);
-  
+  if (req->batch_inode_drop) {
+    for (auto& in : req->batch_inodes)
+      encode_inode_release(in.get(), req, mds, req->batch_inode_drop, 0);
+  }
+
   if (req->dentry_drop && req->dentry())
     encode_dentry_release(req->dentry(), req,
 			  mds, req->dentry_drop,
@@ -16585,6 +16589,116 @@ int Client::mknod_batch(const char *dirpath, const std::vector<std::string>& nam
 	  it->second->cap_shared_gen = diri->shared_gen - 1;
 	}
       }
+    }
+  }
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << path << " + " << more.depth()
+		<< ") = " << res << dendl;
+  return res;
+}
+
+/*
+ * Unlink several files of one directory with one CEPH_MDS_OP_UNLINK_BATCH
+ * request.  All of them are unlinked or none is.  The reply carries no trace,
+ * so the dentries we have cached for the names are unlinked here.
+ */
+int Client::unlink_batch(const char *dirpath, const std::vector<std::string>& names,
+			 const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  if (names.empty())
+    return -EINVAL;
+  for (const auto& name : names) {
+    if (name.empty() || name == "." || name == ".." ||
+	name.find('/') != std::string::npos)
+      return -EINVAL;
+    if (name.length() > NAME_MAX)
+      return -ENAMETOOLONG;
+  }
+
+  std::scoped_lock lock(client_lock);
+
+  InodeRef diri;
+  if (int rc = path_walk(cwd, filepath(dirpath), &diri, perms, {}); rc < 0)
+    return rc;
+  if (!diri->is_dir())
+    return -ENOTDIR;
+  if (diri->snapid != CEPH_NOSNAP)
+    return -EROFS;
+  if (diri->is_fscrypt_enabled())
+    return -EOPNOTSUPP;
+  if (should_check_perms()) {
+    int r = _getattr_for_perm(diri, perms);
+    if (r < 0)
+      return r;
+    r = inode_permission(diri, perms, CLIENT_MAY_EXEC | CLIENT_MAY_WRITE);
+    if (r < 0)
+      return r;
+    // the sticky bit asks for a check of each file's owner
+    if (perms.uid() != 0 && (diri->mode & S_ISVTX) && diri->uid != perms.uid())
+      return -EOPNOTSUPP;
+  }
+
+  ldout(cct, 8) << __func__ << "(" << diri->ino << " " << names.size()
+		<< " names, first " << names.front() << ")" << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK_BATCH);
+
+  filepath path;
+  diri->make_nosnap_relative_path(path);
+  path.push_dentry(names.front());
+  req->set_filepath(path);
+
+  filepath more;
+  for (size_t i = 1; i < names.size(); i++)
+    more.push_dentry(names[i]);
+  if (more.depth())
+    req->set_filepath2(more);
+
+  req->set_inode(diri);
+  // as an unlink does through its dentry: give back Fs on the directory
+  // unless we hold Fx
+  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_unless = CEPH_CAP_FILE_EXCL;
+
+  // as an unlink does for its one file: give back the link caps of the
+  // files we know with the request, so that the mds need not revoke them
+  if (diri->dir) {
+    for (const auto& name : names) {
+      auto it = diri->dir->dentries.find(name);
+      if (it != diri->dir->dentries.end() && it->second->inode) {
+	it->second->inode->break_all_delegs();
+	req->batch_inodes.push_back(it->second->inode);
+      }
+    }
+  }
+  req->batch_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  int res = make_request(req, perms);
+
+  if (res == 0 && diri->dir) {
+    // what a reply with a null dentry in its trace does for one name
+    bool cleared = false;
+    for (const auto& name : names) {
+      auto it = diri->dir->dentries.find(name);
+      if (it == diri->dir->dentries.end())
+	continue;
+      Dentry *dn = it->second;
+      if (dn->inode) {
+	if (!cleared) {
+	  clear_dir_complete_and_ordered(diri.get(), false);
+	  cleared = true;
+	}
+	unlink(dn, true, true);  // keep dir, dentry
+      }
+      // we were given no lease: do not trust the null dentry
+      dn->lease_mds = -1;
+      dn->cap_shared_gen = diri->shared_gen - 1;
     }
   }
 
