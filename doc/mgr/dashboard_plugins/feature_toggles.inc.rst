@@ -3,7 +3,7 @@
 Feature Toggles
 ^^^^^^^^^^^^^^^
 
-This plug-in turns individual Ceph Dashboard features on or off. When a
+This plugin turns individual Ceph Dashboard features on or off. When a
 feature becomes disabled:
 
 - Its front-end elements (web pages, menu entries, charts, etc.) will become
@@ -11,7 +11,7 @@ feature becomes disabled:
 - Its associated REST API endpoints will reject any further requests (404, Not
   Found Error).
 
-The main purpose of this plug-in is to allow ad hoc customizations of the
+The main purpose of this plugin is to allow ad hoc customizations of the
 workflows exposed by the dashboard. Additionally, it could allow for dynamically
 enabling experimental features with minimal configuration burden and no service
 impact.
@@ -27,7 +27,7 @@ The list of features that can be enabled/disabled is:
 - **File System (CephFS)**: ``cephfs``
 - **Objects (RGW)**: ``rgw`` (including daemon, user and bucket management).
 - **NFS**: ``nfs`` exports.
-- **Landing page** (Squid 19.2 and Tentacle 20.2 only): ``dashboard``.
+- **Landing page** (Squid and Tentacle only): ``dashboard``.
 
 By default all features come enabled.
 
@@ -46,7 +46,7 @@ To retrieve a list of features and their current statuses:
     Feature 'rgw': enabled
     Feature 'nfs': enabled
 
-In Squid 19.2 and Tentacle 20.2 the list ends with ``Feature 'dashboard'``.
+In Squid and Tentacle the list ends with ``Feature 'dashboard'``.
 
 To enable or disable the status of a single or multiple features:
 

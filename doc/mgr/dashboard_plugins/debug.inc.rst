@@ -3,7 +3,7 @@
 Debug
 ^^^^^
 
-This plug-in changes the behavior of the dashboard in debug mode. It can be
+This plugin changes the behavior of the dashboard in debug mode. It can be
 enabled, disabled or checked with the following command:
 
 .. prompt:: bash #

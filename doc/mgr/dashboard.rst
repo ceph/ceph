@@ -1146,10 +1146,10 @@ scopes are:
 - **dashboard-settings**: allows you to change dashboard settings.
 - **nvme-of**: includes all features related to NVMe-oF gateway
   management.
-- **smb**: includes all features related to SMB management (Tentacle 20.2
+- **smb**: includes all features related to SMB management (Tentacle
   and later).
 - **cephfs-mirror**: includes all features related to CephFS mirroring
-  (Umbrella 21 and later).
+  (Umbrella and later).
 - **user**: includes all features related to dashboard user and role
   management.
 
@@ -1187,7 +1187,7 @@ The system roles are:
 
 - **administrator**: allows full permissions for all security scopes.
 - **read-only**: allows *read* permission for all security scopes except
-  *dashboard-settings* and *config-opt*, and in Umbrella 21 and later also
+  *dashboard-settings* and *config-opt*, and in Umbrella and later also
   except *user*.
 - **block-manager**: allows full permissions for the *rbd-image*,
   *rbd-mirroring*, *iscsi* and *nvme-of* scopes.
@@ -1196,10 +1196,10 @@ The system roles are:
   *monitor*, *manager*, *config-opt* and *log* scopes.
 - **pool-manager**: allows full permissions for the *pool* scope.
 - **cephfs-manager**: allows full permissions for the *cephfs* scope, and in
-  later releases also for the *cephfs-mirror* scope.
+  Vampire and later also for the *cephfs-mirror* scope.
 - **ganesha-manager**: allows full permissions for the *nfs-ganesha*,
   *cephfs* and *rgw* scopes.
-- **smb-manager** (Tentacle 20.2 and later): allows full permissions for the
+- **smb-manager** (Tentacle and later): allows full permissions for the
   *smb*, *cephfs* and *rgw* scopes.
 
 Each role also grants *read* permission on some related scopes, such as
@@ -1718,7 +1718,7 @@ To learn more about centralized logging, see :ref:`cephadm-monitoring-centralize
 1. Create the Loki service on any particular host using "Create Services" option.
 
 2. Similarly create the Alloy service, which by default is deployed on all
-   the running hosts. In Squid 19.2 and Tentacle 20.2, create the Promtail
+   the running hosts. In Squid and Tentacle, create the Promtail
    service instead.
 
 3. To see debug-level messages as well as info-level events, run the following command via CLI:
@@ -1789,6 +1789,6 @@ The subject and description are then set by the user.
 
 You can also create an issue in the dashboard. Open the **Help** menu in
 the top navigation bar and select **Report an issue...**. If the
-``feedback`` module is not enabled, the dialog says so; in Tentacle 20.2
-and later it also offers to enable the module. Select the project and the
+``feedback`` module is not enabled, the dialog says so. From Tentacle 20.2.1,
+it also offers to enable the module. Select the project and the
 issue type, enter a subject and a description, and submit the issue.
