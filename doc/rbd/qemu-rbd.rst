@@ -114,7 +114,7 @@ For example::
 Running QEMU with RBD
 =====================
 
-QEMU can pass a block device from the host on to a guest, but
+QEMU can pass a block device from the host through to a guest, but
 there's no need to map an image as a block device on
 the host. Instead, QEMU attaches an image as a virtual block
 device directly via ``librbd``. This strategy increases performance
