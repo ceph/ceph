@@ -1012,6 +1012,92 @@ TEST(LibCephFS, Fchown) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, MknodBatch) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir[256];
+  sprintf(dir, "/test_mknod_batch_%d", getpid());
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir, 0755));
+
+  auto path_of = [&](const std::string& name) {
+    return std::string(dir) + "/" + name;
+  };
+  auto batch = [&](const std::vector<std::string>& names) {
+    std::vector<const char*> p;
+    for (auto& n : names)
+      p.push_back(n.c_str());
+    return ceph_mknod_batch(cmount, dir, p.data(), p.size(), 0640);
+  };
+
+  // every file of a batch is created, as a regular file with the given
+  // mode and an inode number of its own
+  std::vector<std::string> names;
+  for (int i = 0; i < 100; i++)
+    names.push_back("a" + std::to_string(i));
+  ASSERT_EQ(0, batch(names));
+  std::set<uint64_t> inos;
+  for (auto& n : names) {
+    struct ceph_statx stx;
+    ASSERT_EQ(0, ceph_statx(cmount, path_of(n).c_str(), &stx,
+			    CEPH_STATX_INO|CEPH_STATX_MODE|CEPH_STATX_SIZE, 0));
+    ASSERT_TRUE(S_ISREG(stx.stx_mode));
+    ASSERT_EQ(0640u, stx.stx_mode & 07777);
+    ASSERT_EQ(0u, stx.stx_size);
+    ASSERT_TRUE(inos.insert(stx.stx_ino).second);
+  }
+
+  // a batch of one
+  ASSERT_EQ(0, batch({"single"}));
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_statx(cmount, path_of("single").c_str(), &stx,
+			  CEPH_STATX_INO, 0));
+
+  // all or nothing: one name that exists fails the batch and none of the
+  // other names is created
+  ASSERT_EQ(-EEXIST, batch({"b0", "a7", "b1"}));
+  ASSERT_EQ(-ENOENT, ceph_statx(cmount, path_of("b0").c_str(), &stx,
+				CEPH_STATX_INO, 0));
+  ASSERT_EQ(-ENOENT, ceph_statx(cmount, path_of("b1").c_str(), &stx,
+				CEPH_STATX_INO, 0));
+
+  // the same name twice
+  ASSERT_EQ(-EINVAL, batch({"c0", "c1", "c0"}));
+  ASSERT_EQ(-ENOENT, ceph_statx(cmount, path_of("c1").c_str(), &stx,
+				CEPH_STATX_INO, 0));
+
+  // a name that failed can be created afterwards
+  ASSERT_EQ(0, batch({"b0", "b1"}));
+
+  // the directory lists exactly what was created
+  struct ceph_dir_result *dirp;
+  ASSERT_EQ(0, ceph_opendir(cmount, dir, &dirp));
+  int entries = 0;
+  while (struct dirent *de = ceph_readdir(cmount, dirp)) {
+    if (strcmp(de->d_name, ".") && strcmp(de->d_name, ".."))
+      entries++;
+  }
+  ASSERT_EQ(0, ceph_closedir(cmount, dirp));
+  ASSERT_EQ(103, entries);
+
+  // the files are ordinary files: they can be written and unlinked
+  int fd = ceph_open(cmount, path_of("a0").c_str(), O_WRONLY, 0);
+  ASSERT_GT(fd, 0);
+  ASSERT_EQ(4, ceph_write(cmount, fd, "data", 4, 0));
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  names.push_back("single");
+  names.push_back("b0");
+  names.push_back("b1");
+  for (auto& n : names)
+    ASSERT_EQ(0, ceph_unlink(cmount, path_of(n).c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir));
+
+  ceph_shutdown(cmount);
+}
+
 #if defined(__linux__) && defined(O_PATH)
 TEST(LibCephFS, FlagO_PATH) {
   struct ceph_mount_info *cmount;
