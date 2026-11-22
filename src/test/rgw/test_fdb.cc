@@ -2501,6 +2501,35 @@ TEST_CASE("compatibility generator names delegate to scan vocabulary", "[fdb]")
  CHECK_THAT(block_generator_keys, Catch::Matchers::RangeEquals(scan_keys));
 }
 
+TEST_CASE("scalar encoding preserves wire bytes across inline capacity", "[fdb][memory]")
+{
+ for (const auto length : {0, 1, 251, 252, 253, 4096}) {
+  const std::string value(length, '\0');
+  const auto expected = lfdb::to::convert(value);
+  lfdb::detail::scalar_encoding_buffer buffer;
+  const auto *inline_storage = buffer.data();
+  const auto encoded = lfdb::detail::encode_scalar_value(value, buffer);
+
+  CHECK_THAT(encoded, Catch::Matchers::RangeEquals(expected));
+  if (256 >= expected.size()) {
+   CHECK(inline_storage == encoded.data());
+  }
+  if (256 < expected.size()) {
+   CHECK(inline_storage != encoded.data());
+  }
+
+  std::string decoded;
+  lfdb::from::convert(encoded, decoded);
+  CHECK(value == decoded);
+ }
+
+ lfdb::detail::scalar_encoding_buffer buffer;
+ const auto integer = lfdb::detail::encode_scalar_value(std::uint64_t {0x01020304}, buffer);
+ CHECK_THAT(integer, Catch::Matchers::RangeEquals(lfdb::to::convert(std::uint64_t {0x01020304})));
+ const auto literal = lfdb::detail::encode_scalar_value("metadata", buffer);
+ CHECK_THAT(literal, Catch::Matchers::RangeEquals(lfdb::to::convert(std::string_view {"metadata"})));
+}
+
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  // Manual tests of conversions to and from supported FDB built-in types.
 

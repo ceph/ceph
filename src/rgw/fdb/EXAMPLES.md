@@ -1788,6 +1788,25 @@ so each segment remains unambiguous in the compiled key. Separating key assembly
 from key use is also performance-oriented: once a key or key prefix is compiled,
 it can be reused without rebuilding those bytes each time.
 
+Pass a compiled prefix to `key()` when generating several children:
+
+```cpp
+const auto objects = fdbc::key("tenant", bucket_id);
+const auto first = fdbc::key(objects, "objects", "first");
+const auto second = objects / "second";
+
+auto owned = objects;
+owned.append("objects", "third");
+owned /= "metadata";
+const auto final = fdbc::key(std::move(owned), "version");
+```
+
+An lvalue prefix is preserved and copied directly into the new key. A consumed
+prefix can reuse its storage; `append()` and `/=` extend an exclusively owned
+key in place. Segment arguments to these mutating operations must not refer to
+the key's own encoded bytes, because growing its storage can invalidate those
+views. All forms retain the same segment escaping and ordering.
+
 For prefix scans, the compiled prefix can come from either spelling:
 
 ```cpp
