@@ -38,8 +38,18 @@ make -C examples/libfdb -j8 CEPH_BUILD="$PWD/build"
 ./examples/libfdb/mini_example
 ```
 
+If Ceph uses an external zpp_bits checkout, pass the same source directory that
+its CMake configuration uses for `zpp_bits_SOURCE_DIR`. Force a rebuild when
+changing dependency paths:
+
+```sh
+make -B -C examples/libfdb -j8 CEPH_BUILD="$PWD/build" \
+  ZPP_BITS_SOURCE_DIR=/path/to/zpp_bits
+```
+
 The program demonstrates ordinary manual completion, owned and borrowed Transactor
-calls, `and_then` composition, central failure reporting, explicit uncertain replay
+calls, `and_then`/`transform` composition, staged publication after confirmed commit,
+central failure reporting, explicit uncertain replay
 of an idempotent replacement, typed application rejection, a verified round trip,
 and range and interval-set assignment:
 
@@ -49,6 +59,7 @@ managed transaction: stored 2 people
 borrowed transaction: prepared 2 people before commit
 caller commit: confirmed
 composed transaction: stored 2 people
+staged publication: loaded 2 people after commit
 explicit replay_unknown: replaced 2 people
 application rejection: empty name, no commit submitted
 read 2 people, some of them are likely nifty
@@ -453,6 +464,8 @@ the Transactor's creation options. It borrows the body and arguments directly,
 including mutable noncopyable bodies and immovable lvalue inputs. Its failure
 describes validation or body execution; successful working data has no commit status.
 Caller argument construction still occurs before the invocation's exception boundary.
+A null borrowed handle returns a setup failure with zero body attempts; its body
+is not invoked. A valid borrowed invocation records one body attempt.
 
 `and_then()` propagates the common error type and can change the success type.
 The following complete operation reuses one body under both ownership forms:
@@ -581,6 +594,9 @@ finds no values still replaces stale output with an empty value.
 
 Prefer an owning return value when the transaction body produces one new value.
 Staging is useful for output parameters or several existing local values.
+The standalone example composes a borrowed read with `transform()` inside an
+owning call and publishes its vector through `staged(std::in_place, output)`
+only after that call confirms commit.
 
 ```cpp
 // Recompute a bucket's cached-byte count without counting a replay twice:
