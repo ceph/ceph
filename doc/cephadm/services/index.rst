@@ -15,6 +15,7 @@ for details on individual services:
     mds
     nfs
     iscsi
+    nvmeof
     custom-container
     monitoring
     snmp-gateway
