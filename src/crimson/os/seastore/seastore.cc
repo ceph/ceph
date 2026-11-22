@@ -133,6 +133,8 @@ SeaStore::Shard::Shard(
       get_conf<uint64_t>("seastore_max_concurrent_transactions")),
    store_index(store_index)
 {
+  batch_max_txns = get_conf<uint64_t>("seastore_batch_max_txns");
+  batch_max_bytes = get_conf<Option::size_t>("seastore_batch_max_bytes");
   if (store_active = is_shard_store_active(store_index, store_shard_nums); !store_active) {
     LOG_PREFIX(SeaStore::Shard::Shard);
     INFO("store_index {} is out of range - inactivating this store shard, store_shard_nums {}", store_index, store_shard_nums);
@@ -2118,6 +2120,10 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   auto& entry = pending_txns.emplace_back();
   entry.txn = std::move(_t);
   entry.batchable = txn_is_batchable(entry.txn);
+  entry.bytes = entry.txn.get_num_bytes();
+  // payload plus, per op, a block of alignment and a block of metadata
+  entry.journal_bytes = entry.bytes +
+    entry.txn.get_num_ops() * 2 * primary_device->get_block_size();
   auto fut = entry.pr.get_future();
   DEBUG("enqueue cid={} queue_depth={} in_flight={}",
         _ch->get_cid(), pending_txns.size(), batch_in_flight);
@@ -2135,6 +2141,10 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
   ceph::os::Transaction merged;
   bool first = true;
   uint64_t batch_features = 0;
+  uint64_t batch_bytes = 0;
+  uint64_t batch_journal_bytes = 0;
+  const uint64_t journal_max =
+    transaction_manager->get_journal()->get_max_write_length();
   while (!pending_txns.empty()) {
     const bool no_batch = !pending_txns.front().batchable;
     if (!first &&
@@ -2142,6 +2152,15 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
       // Batch boundary: seal what we have so far in the batch
       break;
     }
+    if (!first &&
+        ((batch_max_txns && pending_txns_promises.size() >= batch_max_txns) ||
+         (batch_max_bytes &&
+          batch_bytes + pending_txns.front().bytes > batch_max_bytes) ||
+         batch_journal_bytes + pending_txns.front().journal_bytes > journal_max)) {
+      break;
+    }
+    batch_bytes += pending_txns.front().bytes;
+    batch_journal_bytes += pending_txns.front().journal_bytes;
     auto e = std::move(pending_txns.front());
     pending_txns.pop_front();
     if (first) {

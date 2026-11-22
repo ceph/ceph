@@ -245,6 +245,11 @@ public:
       return stats.batch_txns.sample_count;
     }
 
+    void set_batch_limits(uint64_t max_txns, uint64_t max_bytes) {
+      batch_max_txns = max_txns;
+      batch_max_bytes = max_bytes;
+    }
+
     cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
 
     unsigned int get_store_index() const {
@@ -285,9 +290,14 @@ public:
       ceph::os::Transaction txn;
       seastar::promise<> pr;
       bool batchable = true;
+      uint64_t bytes = 0;
+      uint64_t journal_bytes = 0;
     };
     std::deque<batch_entry_t> pending_txns;
     bool batch_in_flight = false;
+
+    uint64_t batch_max_txns = 0;
+    uint64_t batch_max_bytes = 0;
 
     seastar::future<> dispatch_batches();
     ceph::os::Transaction build_next_batch(

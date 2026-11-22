@@ -107,6 +107,9 @@ public:
 
   virtual bool is_checksum_needed() = 0; 
 
+  /// largest encoded record the journal accepts
+  virtual extent_len_t get_max_write_length() const = 0;
+
 protected:
   using alloc_map_t = std::map<paddr_t, journal_seq_t>;
   using scan_alloc_map_ertr = replay_ertr;

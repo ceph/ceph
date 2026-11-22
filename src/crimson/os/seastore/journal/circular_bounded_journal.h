@@ -179,6 +179,10 @@ public:
     return cjs.is_checksum_needed();
   }
 
+  extent_len_t get_max_write_length() const final {
+    return cjs.get_records_total_size();
+  }
+
   // Test interfaces
   
   CircularJournalSpace& get_cjs() {
