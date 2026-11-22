@@ -51,7 +51,8 @@ The following instructions will use the default vSphere web client and esxcli.
           
           esxcli nvme fabrics discover -a NVME_TCP_ADAPTER -i GATEWAY_IP -p 8009 -c
 
-       - This command discovers the NVMe-oF gateways in the gateway group and then connects to the gateways providing multipath access.
+       - This command discovers the NVMe-oF gateways in the gateway group,
+         then connects to them, providing multipath access.
 
     #. List the NVMe/TCP controllers:
     
@@ -69,4 +70,4 @@ The following instructions will use the default vSphere web client and esxcli.
 
     #. From the vSphere client go to the ESXi host.
     #. On the Storage page go to the Devices tab.
-    #. Verify that the NVMe/TCP disks are listed in the table.
+    #. Verify that the NVMe/TCP devices are listed in the table.

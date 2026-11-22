@@ -26,25 +26,29 @@ for basic operation.
 Installation
 ============
 
-Complete the following steps to install the Ceph NVMe-oF gateway:
+If the cluster runs Tentacle 20.2.3 or later but was first deployed with an
+earlier release, enable the ``nvmeof`` Manager module first:
 
-#. Create a pool in which the gateways configuration can be managed:
+.. prompt:: bash #
 
-   .. prompt:: bash #
+   ceph mgr module enable nvmeof
 
-      ceph osd pool create NVME-OF_POOL_NAME
+Deploy the NVMe-oF gateway daemons on a specific set of nodes, and with a
+unique group name:
 
-#. Enable RBD on the NVMe-oF pool:
+.. prompt:: bash #
 
-   .. prompt:: bash #
-   
-      rbd pool init NVME-OF_POOL_NAME
+   ceph orch apply nvmeof --group NVME_OF_GROUP_NAME --placement="host01 host02"
 
-#. Deploy the NVMe-oF gateway daemons on a specific set of nodes, and with a unique group name:
+An optional ``--pool NVME-OF_POOL_NAME`` may be supplied to use a specific
+RADOS pool for gateway group metadata. Beginning with Tentacle 20.2.3, a
+``.nvmeof`` pool will be auto-created if necessary. This pool must be
+dedicated; it cannot also host RBD images.
 
-   .. prompt:: bash #
-   
-      ceph orch apply nvmeof --pool NVME-OF_POOL_NAME --group NVME_OF_GROUP_NAME --placement="host01 host02"
+A pool named with ``--pool`` must be created before you deploy the gateways.
+Before Tentacle 20.2.3, ``--pool`` is required. Without ``--pool``, the gateway
+group uses the ``.nvmeof`` pool: give ``.nvmeof`` as ``NVME-OF_POOL_NAME`` in
+the ``ceph nvme-gw`` commands below.
 
 Configuration
 =============
@@ -65,12 +69,15 @@ Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
 
    .. prompt:: bash #
 
-      ceph nvmeof subsystem add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --no-group-append
+      ceph nvmeof subsystem add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME
 
    The subsystem NQN is a user-defined string in NQN format, for example
-   ``nqn.2016-06.io.spdk:cnode1``. The ``--no-group-append`` option stops
-   the gateway from appending the group name to the NQN, so the commands
-   below can use the same NQN.
+   ``nqn.2016-06.io.spdk:cnode1``. The gateway appends a dot and the group
+   name to the NQN, so that subsystems in different gateway groups do not
+   share a name: in group ``group1``, the NQN becomes
+   ``nqn.2016-06.io.spdk:cnode1.group1``. Any underscore in the group name
+   becomes a hyphen in the NQN. Use that NQN in the commands below. On
+   Tentacle 20.2.0, the group name is not appended.
 
 #. Define the IP port on each gateway that will process the NVMe/TCP
    commands and I/O:
@@ -122,6 +129,10 @@ Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
    .. prompt:: bash #
 
       ceph nvmeof namespace add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --rbd-pool POOL_NAME --rbd-image-name IMAGE_NAME
+
+   ``POOL_NAME`` is a pool initialized for RBD with ``rbd pool init``, not
+   the gateway group metadata pool, and ``IMAGE_NAME`` is an existing RBD
+   image in that pool.
 
 #. List all namespaces in the subsystem:
 
@@ -191,7 +202,7 @@ issued by cephadm, not by operators:
   failover of its ANA groups.
 * ``ceph nvme-gw enable`` and ``ceph nvme-gw disable`` set a single
   gateway's administrative state. They were added in Tentacle 20.2.2.
-  On Umbrella and later, cephadm uses them to quiesce gateways when a
+  From Tentacle 20.2.5, cephadm uses them to quiesce gateways when a
   host enters maintenance and to bring them back afterwards. Disabling
   an available gateway takes it out of service and temporarily
   suppresses failovers while its ANA groups move, so disabling all the
