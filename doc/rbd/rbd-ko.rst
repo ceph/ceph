@@ -16,9 +16,9 @@ To mount a block device image, first return a list of the images. ::
 Map a Block Device
 ==================
 
-Use ``rbd`` to map an image name to a kernel module. You must specify the
+Use ``rbd`` to map an image. You must specify the
 image name. The pool name defaults to ``rbd`` and the user to ``client.admin``.
-``rbd`` will load RBD kernel module on your behalf if it's not already
+``rbd`` will load the RBD kernel module on your behalf if it's not already
 loaded. ::
 
   sudo rbd device map {pool-name}/{image-name} --id {user-name}
@@ -38,8 +38,8 @@ from a keyring or a file containing the secret. ::
 Show Mapped Block Devices
 =========================
 
-To show block device images mapped to kernel modules with the ``rbd``,
-specify ``device list`` arguments. ::
+To show mapped block device images with the ``rbd`` command,
+specify the ``device list`` arguments. ::
 
 	rbd device list
 

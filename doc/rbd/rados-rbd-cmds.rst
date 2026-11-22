@@ -36,12 +36,12 @@ to access the Ceph cluster. The ``admin`` Ceph user ID allows full
 administrative access to the cluster. We recommend that you acess the Ceph
 cluster with a Ceph user ID that has fewer permissions than the ``admin`` Ceph
 user ID does. We call this non-``admin`` Ceph user ID a "block device user" or
-"Ceph user".
+"CephX user".
 
-To :ref:`create a Ceph user <rados_ops_adding_a_user>`,
+To :ref:`create a CephX user <rados_ops_adding_a_user>`,
 use the ``ceph auth get-or-create`` command to
-specify the Ceph user ID name, monitor caps (capabilities), and OSD caps
-(capabilities):
+specify the Ceph user ID name, Monitor caps (capabilities), OSD caps, and
+Manager caps:
 
 .. prompt:: bash $
 
