@@ -185,8 +185,19 @@ struct Inode : RefCountedObject {
   private:
     ceph::mutex m = ceph::make_mutex("Client::Inode::lock");
     int depth = 0;   // changed by the owner only
-    // the owner, for the recursion: only the owner can find itself here
-    std::atomic<pthread_t> owner{};
+    // the owner, for the recursion: only the owner can find itself here.
+    // A thread is known by its thread pointer, which is a register read,
+    // where pthread_self() is a library call; elsewhere, by the address of
+    // a thread-local
+    static const void *me() {
+#ifdef __linux__
+      return __builtin_thread_pointer();
+#else
+      static thread_local char tag;
+      return &tag;
+#endif
+    }
+    std::atomic<const void*> owner{nullptr};
     // shared holders, and whether a writer is in or about to be
     std::atomic<uint32_t> readers{0};
     std::atomic<bool> writer{false};

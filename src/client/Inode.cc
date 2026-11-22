@@ -49,8 +49,8 @@ thread_local Inode::Lock *Inode::Lock::held = nullptr;
 
 void Inode::Lock::lock()
 {
-  pthread_t me = pthread_self();
-  if (owner.load(std::memory_order_relaxed) == me) {
+  const void *self = me();
+  if (owner.load(std::memory_order_relaxed) == self) {
     ++depth;   // recursion: we own m already
     return;
   }
@@ -67,7 +67,7 @@ void Inode::Lock::lock()
     if (spins > 100)
       std::this_thread::yield();
   }
-  owner.store(me, std::memory_order_relaxed);
+  owner.store(self, std::memory_order_relaxed);
   depth = 1;
 #ifdef CEPH_DEBUG_MUTEX
   held = this;
@@ -85,14 +85,14 @@ void Inode::Lock::unlock()
 #ifdef CEPH_DEBUG_MUTEX
   held = nullptr;
 #endif
-  owner.store(pthread_t(), std::memory_order_relaxed);
+  owner.store(nullptr, std::memory_order_relaxed);
   writer.store(false, std::memory_order_release);
   m.unlock();
 }
 
 void Inode::Lock::lock_shared()
 {
-  if (owner.load(std::memory_order_relaxed) == pthread_self()) {
+  if (owner.load(std::memory_order_relaxed) == me()) {
     ++depth;   // we hold it exclusively: that will do
     return;
   }
@@ -114,7 +114,7 @@ void Inode::Lock::lock_shared()
 
 void Inode::Lock::unlock_shared()
 {
-  if (owner.load(std::memory_order_relaxed) == pthread_self()) {
+  if (owner.load(std::memory_order_relaxed) == me()) {
     unlock();
     return;
   }
