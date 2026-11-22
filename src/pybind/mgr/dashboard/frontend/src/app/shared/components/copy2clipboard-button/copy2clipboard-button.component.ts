@@ -10,6 +10,7 @@ const ERROR_TITLE = $localize`Error`;
 const CLIPBOARD_ERROR_MESSAGE = $localize`Failed to copy text to the clipboard.`;
 const SUCCESS_TITLE = $localize`Success`;
 const CLIPBOARD_SUCCESS_MESSAGE = $localize`Copied text to the clipboard successfully.`;
+const COPY_LABEL = $localize`Copy to Clipboard`;
 
 @Component({
   selector: 'cd-copy-2-clipboard-button',
@@ -41,6 +42,9 @@ export class Copy2ClipboardButtonComponent {
   toastError = new EventEmitter<void>();
 
   icons = Icons;
+
+  // Accessible name of the icon-only button. When `text` is set, the visible text names it.
+  copyLabel = COPY_LABEL;
 
   constructor(private notificationService: NotificationService) {}
 

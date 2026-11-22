@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import * as BrowserDetect from 'detect-browser';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -79,6 +79,35 @@ describe('Copy2ClipboardButtonComponent', () => {
         'Error',
         'Failed to copy text to the clipboard.'
       ]);
+    });
+  });
+
+  describe('accessible name', () => {
+    let fixture: ComponentFixture<Copy2ClipboardButtonComponent>;
+
+    configureTestBed({
+      declarations: [Copy2ClipboardButtonComponent],
+      providers: [{ provide: NotificationService, useValue: { show: jest.fn() } }]
+    });
+
+    const getButton = (): HTMLButtonElement =>
+      fixture.nativeElement.querySelector('button.clipboard-btn');
+
+    beforeEach(() => {
+      fixture = TestBed.createComponent(Copy2ClipboardButtonComponent);
+    });
+
+    it('should set an accessible label on the icon-only button', () => {
+      fixture.detectChanges();
+      expect(getButton().getAttribute('aria-label')).toBe('Copy to Clipboard');
+    });
+
+    it('should use visible text when text is set', () => {
+      fixture.componentRef.setInput('text', 'my-token');
+      fixture.detectChanges();
+
+      expect(getButton().hasAttribute('aria-label')).toBe(false);
+      expect(getButton().textContent).toContain('my-token');
     });
   });
 });
