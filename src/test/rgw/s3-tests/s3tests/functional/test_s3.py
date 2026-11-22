@@ -8023,6 +8023,7 @@ def _do_test_create_remove_versions(client, bucket_name, key, num_versions, remo
         print(response['Versions'])
 
 
+@pytest.mark.versioning
 def test_versioning_obj_create_read_remove():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8037,6 +8038,7 @@ def test_versioning_obj_create_read_remove():
     _do_test_create_remove_versions(client, bucket_name, key, num_versions, 4, -1)
     _do_test_create_remove_versions(client, bucket_name, key, num_versions, 3, 3)
 
+@pytest.mark.versioning
 def test_versioning_obj_create_read_remove_head():
     bucket_name = get_new_bucket()
 
@@ -11298,6 +11300,7 @@ def test_list_object_versions_restore_status():
 @pytest.mark.cloud_transition
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_cloud_transition_versioned_current_retained():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11339,6 +11342,7 @@ def test_lifecycle_cloud_transition_versioned_current_retained():
 @pytest.mark.cloud_transition
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_lifecycle_cloud_transition_versioned_current_delete_marker():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11378,6 +11382,7 @@ def test_lifecycle_cloud_transition_versioned_current_delete_marker():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_restore_versioned_current_no_version_id():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11426,6 +11431,7 @@ def test_restore_versioned_current_no_version_id():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_read_through_versioned_current():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11485,6 +11491,7 @@ def test_read_through_versioned_current():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_restore_suspended_null_version():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11569,6 +11576,7 @@ def test_restore_non_versioned_version_id_rejected():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_restore_versioned_explicit_version_id():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11607,6 +11615,7 @@ def test_restore_versioned_explicit_version_id():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_restore_null_version_across_versioning_states():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -11675,6 +11684,7 @@ def test_restore_null_version_across_versioning_states():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
 def test_restore_noncurrent_null_version_not_promoted():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
@@ -19548,6 +19558,7 @@ def test_bucket_logging_put_objects():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_put_objects_versioned():
     _bucket_logging_put_objects(True)
 
@@ -19723,6 +19734,7 @@ def test_bucket_logging_delete_objects():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_delete_objects_versioned():
     _bucket_logging_delete_objects(True)
 
@@ -19792,6 +19804,7 @@ def test_bucket_logging_get_objects():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_get_objects_versioned():
     _bucket_logging_get_objects(True)
 
@@ -19868,6 +19881,7 @@ def test_bucket_logging_copy_objects():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_copy_objects_versioned():
     _bucket_logging_copy_objects(True, False)
 
@@ -19882,6 +19896,7 @@ def test_bucket_logging_copy_objects_bucket():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_copy_objects_bucket_versioned():
     _bucket_logging_copy_objects(True, True)
 
@@ -19949,6 +19964,7 @@ def test_bucket_logging_head_objects():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_head_objects_versioned():
     _bucket_logging_head_objects(True)
 
@@ -20016,6 +20032,7 @@ def test_bucket_logging_mpu_s():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_mpu_versioned_s():
     _bucket_logging_mpu(True, 'Standard')
 
@@ -20030,6 +20047,7 @@ def test_bucket_logging_mpu_j():
 
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
+@pytest.mark.versioning
 def test_bucket_logging_mpu_versioned_j():
     if not _has_bucket_logging_extension():
         pytest.skip('ceph extension to bucket logging not supported at client')
@@ -20091,6 +20109,7 @@ def test_bucket_logging_mpu_copy():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_mpu_copy_versioned():
     _bucket_logging_mpu_copy(True)
 
@@ -20166,6 +20185,7 @@ def test_bucket_logging_multi_delete():
 @pytest.mark.bucket_logging
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_without_logging_rollover
+@pytest.mark.versioning
 def test_bucket_logging_multi_delete_versioned():
     _bucket_logging_multi_delete(True)
 
