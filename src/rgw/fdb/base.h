@@ -100,6 +100,7 @@ struct future_value;
 
 inline void transaction_replay_ready(transaction& txn);
 inline void finish_version_stamps(transaction& txn, std::error_code error) noexcept;
+inline future_value take_watch_future(watch_handle&& watch);
 
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      byte_view key,
@@ -370,10 +371,16 @@ class watch_handle final
  }
 
  private:
+ friend detail::future_value detail::take_watch_future(watch_handle&& watch);
  friend class transaction;
 };
 
 namespace detail {
+
+inline future_value take_watch_future(watch_handle&& watch)
+{
+ return std::move(watch.watch_future);
+}
 
 inline byte_view as_byte_view(const concepts::libfdb_key auto& key)
 requires (!concepts::libfdb_key_view<decltype(key)>)

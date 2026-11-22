@@ -280,11 +280,6 @@ class query_cursor final
  // FDB iterator streaming uses a one-based count, reset for each interval:
  int iteration = 1;
 
- select& current_selection() noexcept
- {
-  return selections[selection_index];
- }
-
  void mark_exhausted() noexcept
  {
   selection_index = std::size(selections);
@@ -332,22 +327,28 @@ class query_cursor final
   return selection_index < std::size(selections);
  }
 
- [[nodiscard]] const select& current() const noexcept
+ [[nodiscard]] future_value start_read(transaction& txn, const read_mode mode) const
  {
-  return selections[selection_index];
+  if (not *this) {
+   throw libfdb_exception(std::errc::invalid_argument, "cannot read from an exhausted scan cursor");
+  }
+
+  return get_range_future_from_transaction(txn, selections[selection_index], iteration, mode);
  }
 
- [[nodiscard]] int fdb_iteration() const noexcept { return iteration; }
-
- void advance(const std::span<const FDBKeyValue> rows, const bool more_available)
+ [[nodiscard]] query_window finish_read(future_value future)
  {
-  if (continue_range_after(current_selection(), more_available, rows)) {
+  auto window = extract_result_pairs(std::move(future));
+
+  if (continue_range_after(selections[selection_index], window.more_available, window.result_pairs)) {
    ++iteration;
-   return;
+   return window;
   }
 
   ++selection_index;
   iteration = 1;
+
+  return window;
  }
 
  std::optional<query_window> read_next(transaction& txn,
@@ -357,11 +358,7 @@ class query_cursor final
    return std::nullopt;
   }
 
-  auto window = read_query_window(txn, current(), iteration, mode);
-
-  advance(window.result_pairs, window.more_available);
-
-  return {std::move(window)};
+  return finish_read(block_until_ready(start_read(txn, mode)));
  }
 
 };

@@ -24,6 +24,11 @@ For a complete Ceph-specific use of these pieces, see
 composed key selection, borrowed typed helpers, and staged publication after
 one confirmed batch commit.
 
+For native asynchronous composition, see the separate
+[experimental Asio and NVIDIA stdexec extension](experimental/README.md).
+It keeps ordinary completion channels native and shares structured commit
+classification and conservative replay checks with the synchronous core.
+
 Choose the interface according to transaction ownership:
 
 | Need | Usual interface |
