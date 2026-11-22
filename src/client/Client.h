@@ -1468,8 +1468,11 @@ protected:
   ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
 
   /*
-   * oc_lock protects the buffer cache: the ObjectCacher and every Inode's
-   * oset.  Lock order: client_lock -> oc_lock.
+   * The buffer cache is sharded by inode (client_oc_shards): each shard is
+   * an ObjectCacher with its own lock, oc_lock below, which protects it and
+   * the osets of its inodes; the shards share the cache's limits (see
+   * ObjectCacher::set_budget_group()).  One thread holds one shard's lock
+   * at a time.  Lock order: client_lock -> oc_lock.
    *
    * Client code calls into the ObjectCacher only through oc_call() (an
    * OCScope).  Every Client Context handed to the ObjectCacher is wrapped by
@@ -1484,11 +1487,20 @@ protected:
    *  - one completed from the cache's own finisher (oc_lock held, no
    *    OCScope) is queued on oc_finisher and run there under client_lock.
    */
-  ceph::mutex oc_lock = ceph::make_mutex("Client::oc_lock");
+  struct OCShard {
+    ceph::mutex oc_lock = ceph::make_mutex("Client::oc_lock");
+    std::unique_ptr<WritebackHandler> writeback_handler;
+    std::unique_ptr<ObjectCacher> oc;
+  };
+  std::vector<std::unique_ptr<OCShard>> oc_shards;
+  unsigned oc_shard_mask = 0;   // oc_shards.size() - 1, a power of two
+  // the shards' ObjectCachers, which share the limits
+  std::vector<ObjectCacher*> oc_group;
+  OCShard& oc_shard(const Inode *in);
 
   class OCScope {
   public:
-    explicit OCScope(Client *c);
+    OCScope(Client *c, OCShard& sh);
     ~OCScope();
     OCScope(const OCScope&) = delete;
     OCScope& operator=(const OCScope&) = delete;
@@ -1498,6 +1510,7 @@ protected:
     }
     // take the queued callbacks, to run them elsewhere
     std::vector<std::pair<Context*, int>> detach();
+    OCShard& shard;
   private:
     Client *client;
     std::vector<std::pair<Context*, int>> pending;
@@ -1524,12 +1537,16 @@ public:
     }
     m.lock();
   }
-  // whether this thread holds oc_lock (is in an OCScope)
+  // whether this thread holds an oc_lock (is in an OCScope)
   static bool oc_lock_held() {
     return oc_scope != nullptr;
   }
-  ceph::mutex& get_oc_lock() {
-    return oc_lock;
+  // whether it holds the one of @in's shard
+  bool oc_lock_held(const Inode *in) {
+    return oc_scope && &oc_scope->shard == &oc_shard(in);
+  }
+  ceph::mutex& get_oc_lock(const Inode *in) {
+    return oc_shard(in).oc_lock;
   }
   // for assertions (debug builds)
   bool client_lock_held() const {
@@ -1549,20 +1566,31 @@ protected:
     }
   };
 
+  // run @f(ObjectCacher *) under the lock of @in's shard
   template <typename F>
-  auto oc_call(F&& f) {
-    OCScope s(this);
-    return f();
+  auto oc_call(const Inode *in, F&& f) {
+    OCShard& sh = oc_shard(in);
+    OCScope s(this, sh);
+    return f(sh.oc.get());
+  }
+  // run @f(ObjectCacher *) on each shard in turn, under its lock
+  template <typename F>
+  void oc_call_all(F&& f) {
+    for (auto& sh : oc_shards) {
+      OCScope s(this, *sh);
+      f(sh->oc.get());
+    }
   }
   // oc_call() for an @f that only looks at the cache (no Contexts, no
   // changes): through the ObjectCacher read gate when it is open, so the
   // close() and check_caps() of a clean file do not take oc_lock
   template <typename F>
-  auto oc_peek(F&& f) {
-    decltype(f()) r{};
-    if (objectcacher->gate_peek([&] { r = f(); }))
+  auto oc_peek(const Inode *in, F&& f) {
+    OCShard& sh = oc_shard(in);
+    decltype(f(sh.oc.get())) r{};
+    if (sh.oc->gate_peek([&] { r = f(sh.oc.get()); }))
       return r;
-    return oc_call(std::forward<F>(f));
+    return oc_call(in, std::forward<F>(f));
   }
 
   class C_OCDefer : public Context {
@@ -1589,10 +1617,12 @@ protected:
   // wraps the ObjectCacher's OSD read/write completions (ObjecterWriteback)
   class C_OCAsync : public Context {
   public:
-    C_OCAsync(Client *c, Context *fin) : client(c), fin(fin) {}
+    C_OCAsync(Client *c, OCShard *sh, Context *fin)
+      : client(c), shard(sh), fin(fin) {}
     void finish(int r) override;
   private:
     Client *client;
+    OCShard *shard;
     Context *fin;
   };
 
@@ -1606,8 +1636,6 @@ protected:
   InodeRef cwd;
 
   std::unique_ptr<Filer>             filer;
-  std::unique_ptr<ObjectCacher>      objectcacher;
-  std::unique_ptr<WritebackHandler>  writeback_handler;
 
   Messenger *messenger;
   MonClient *monclient;

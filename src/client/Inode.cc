@@ -165,12 +165,12 @@ void Inode::print(std::ostream& out) const
   if (is_file()) {
     // oset changes under the cache's lock; we hold Inode::lock, which goes
     // first, unless we are inside an ObjectCacher call already
-    if (Client::oc_lock_held()) {
+    if (client->oc_lock_held(this)) {
       out << " " << oset;
-    } else {
-      std::scoped_lock ol(client->get_oc_lock());
+    } else if (!Client::oc_lock_held()) {
+      std::scoped_lock ol(client->get_oc_lock(this));
       out << " " << oset;
-    }
+    }   // else inside another shard's call: one oc_lock at a time
   }
 
   if (!dentries.empty())

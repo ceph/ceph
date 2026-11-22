@@ -204,6 +204,27 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: client_oc_shards
+  type: uint
+  level: advanced
+  desc: Number of object cache shards
+  long_desc: The client's object cache is split into this many shards, each
+    with its own lock, and every file's cached data goes to one of them, so
+    that threads working on different files through one mount do not queue
+    on one lock.  The shards share client_oc_size, client_oc_max_dirty and
+    client_oc_target_dirty; client_oc_max_objects is divided among them.
+    The value is rounded down to a power of two.
+  default: 8
+  min: 1
+  max: 256
+  services:
+  - mds_client
+  flags:
+  - startup
+  see_also:
+  - client_oc
+  - client_oc_size
+  - client_oc_max_dirty
 - name: client_oc_max_dirty_age
   type: float
   level: advanced
