@@ -2685,8 +2685,50 @@ private:
   // leaf lock, so the data path can check an Fh without client_lock, and
   // threads checking different Fhs do not share one lock's cache line.
   // A stripe changes on open/close only; the checks take it shared.
+  // A stripe's lock is held for a set lookup or change only, and taken on
+  // every open and close and every data-path call: a reader-writer
+  // spinlock of one word, which costs readers one atomic add and writers
+  // one compare-and-swap, where a pthread rwlock cost a library call and
+  // several atomics each way.
+  class FhStripeLock {
+  public:
+    void lock() {
+      uint32_t e = 0;
+      while (!s.compare_exchange_weak(e, WRITER, std::memory_order_acquire,
+                                      std::memory_order_relaxed)) {
+        do {
+          pause();
+        } while (s.load(std::memory_order_relaxed) != 0);
+        e = 0;
+      }
+    }
+    void unlock() {
+      s.fetch_sub(WRITER, std::memory_order_release);
+    }
+    void lock_shared() {
+      while (s.fetch_add(READER, std::memory_order_acquire) & WRITER) {
+        s.fetch_sub(READER, std::memory_order_relaxed);
+        do {
+          pause();
+        } while (s.load(std::memory_order_relaxed) & WRITER);
+      }
+    }
+    void unlock_shared() {
+      s.fetch_sub(READER, std::memory_order_release);
+    }
+  private:
+    static constexpr uint32_t WRITER = 1, READER = 2;
+    static void pause() {
+#if defined(__x86_64__) || defined(__i386__)
+      __builtin_ia32_pause();
+#elif defined(__aarch64__)
+      asm volatile("yield");
+#endif
+    }
+    std::atomic<uint32_t> s{0};
+  };
   struct alignas(64) FhStripe {
-    ceph::shared_mutex lock = ceph::make_shared_mutex("Client::fh_lock");
+    FhStripeLock lock;   // a leaf lock
     std::set<Fh*> fhs;
   };
   static constexpr unsigned FH_STRIPES = 64;
