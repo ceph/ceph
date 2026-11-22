@@ -218,11 +218,27 @@ public:
     }
   }
 
-  segment_id_t get_empty_segment() const {
-    if (empty_segments.empty()) {
+  segment_id_t get_empty_segment(device_id_t preferred_device = DEVICE_ID_NULL) const {
+    if (total_empty_segments_count == 0 || device_ids.empty()) {
       return NULL_SEG_ID;
     }
-    return empty_segments.front().id;
+    if (preferred_device != DEVICE_ID_NULL &&
+        preferred_device < empty_segments_by_device.size() &&
+        !empty_segments_by_device[preferred_device].empty()) {
+      return empty_segments_by_device[preferred_device].front().id;
+    }
+    // Round-robin striping across available devices for wear-leveling and balanced throughput
+    std::size_t num_devs = device_ids.size();
+    for (std::size_t i = 0; i < num_devs; ++i) {
+      auto dev_idx = (next_device_cursor + i) % num_devs;
+      auto d_id = device_ids[dev_idx];
+      if (d_id < empty_segments_by_device.size() &&
+          !empty_segments_by_device[d_id].empty()) {
+        next_device_cursor = (dev_idx + 1) % num_devs;
+        return empty_segments_by_device[d_id].front().id;
+      }
+    }
+    return NULL_SEG_ID;
   }
 
   void reset();
@@ -281,18 +297,28 @@ private:
   void add_empty_segment(segment_id_t id) {
     auto& info = segments[id];
     ceph_assert(!info.empty_hook.is_linked());
-    empty_segments.push_back(info);
+    auto d_id = id.device_id();
+    if (d_id >= empty_segments_by_device.size()) {
+      empty_segments_by_device.resize(d_id + 1);
+    }
+    empty_segments_by_device[d_id].push_back(info);
+    ++total_empty_segments_count;
   }
 
   void remove_empty_segment(segment_id_t id) {
     auto& info = segments[id];
     ceph_assert(info.empty_hook.is_linked());
     info.empty_hook.unlink();
+    ceph_assert(total_empty_segments_count > 0);
+    --total_empty_segments_count;
   }
 
   // See reset() for member initialization
   segment_map_t<segment_info_t> segments;
-  empty_list_t empty_segments;
+  std::vector<empty_list_t> empty_segments_by_device;
+  std::vector<device_id_t> device_ids;
+  mutable std::size_t next_device_cursor = 0;
+  std::size_t total_empty_segments_count = 0;
 
   segment_off_t segment_size;
 

@@ -284,7 +284,8 @@ void SegmentAllocator::maybe_pre_open_next_segment()
   }
   auto write_capacity = current_segment->get_write_capacity() -
                         sm_group.get_rounded_tail_length();
-  if (std::size_t(written_to) >= (std::size_t(write_capacity) * 9) / 10) {
+  // Trigger earlier (80% full threshold) to maximize overlap with in-flight payload writes
+  if (std::size_t(written_to) >= (std::size_t(write_capacity) * 8) / 10) {
     std::ignore = do_pre_open();
   }
 }

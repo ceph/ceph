@@ -93,7 +93,10 @@ std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
 void segments_info_t::reset()
 {
   segments.clear();
-  empty_segments.clear();
+  empty_segments_by_device.clear();
+  device_ids.clear();
+  next_device_cursor = 0;
+  total_empty_segments_count = 0;
 
   segment_size = 0;
 
@@ -135,6 +138,10 @@ void segments_info_t::add_segment_manager(
 
   // also validate if the device is duplicated
   segments.add_device(d_id, nsegments, segment_info_t{});
+  device_ids.push_back(d_id);
+  if (d_id >= empty_segments_by_device.size()) {
+    empty_segments_by_device.resize(d_id + 1);
+  }
 
   // assume all the segment managers share the same settings as follows.
   if (segment_size == 0) {
