@@ -3345,6 +3345,20 @@ TEST(MOSDOpReply, core_hint_roundtrip)
   EXPECT_EQ(fmt::format("{}", *decoded->get_core_hint()), "core 3 port 6810");
 }
 
+// the core is a uint16_t, as the port is: no more cores than ports
+TEST(MOSDOpReply, core_hint_encoding)
+{
+  const osd_core_hint_t hint{65535, 6810};
+  ceph::buffer::list bl;
+  encode(hint, bl);
+  // the ENCODE_START header (6 bytes), then the core and the port
+  EXPECT_EQ(bl.length(), 6u + 2u + 2u);
+  osd_core_hint_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  EXPECT_EQ(decoded, hint);
+}
+
 // the hint is optional: a v9 reply may name none
 TEST(MOSDOpReply, no_core_hint)
 {
