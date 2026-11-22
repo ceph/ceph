@@ -198,6 +198,8 @@ cdef nogil:
         pass
     int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev):
         pass
+    int ceph_mknod_batch(ceph_mount_info *cmount, const char *dirpath, const char **names, int n, mode_t mode):
+        pass
 
     int ceph_close(ceph_mount_info *cmount, int fd):
         pass

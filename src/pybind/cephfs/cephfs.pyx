@@ -1937,6 +1937,39 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in mknod {}".format(path.decode('utf-8')))
 
+    def mknod_batch(self, dirpath, names, mode):
+        """
+        Create several regular files in one directory with a single request
+        to the MDS (prototype). Either all of them are created or none is.
+
+        :param dirpath: the path of the directory to create the files in.
+        :param names: the names of the files, without any path. At most 1024.
+        :param mode: the permissions of the files. Only regular files can be
+                     created this way.
+        """
+        self.require_state("mounted")
+        dirpath = cstr(dirpath, 'dirpath')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        names = [cstr(n, 'name') for n in names]
+        if not names:
+            raise make_ex(22, "mknod_batch needs at least one name")
+
+        cdef:
+            char* _dirpath = dirpath
+            mode_t _mode = mode
+            int _n = len(names)
+            char **_names = to_bytes_array(names)
+
+        try:
+            with nogil:
+                ret = ceph_mknod_batch(self.cluster, _dirpath,
+                                       <const char **>_names, _n, _mode)
+        finally:
+            free(_names)
+        if ret < 0:
+            raise make_ex(ret, "error in mknod_batch {}".format(dirpath.decode('utf-8')))
+
     def getxattr(self, path, name, size=255, follow_symlink=True):
         """
          Get an extended attribute.
