@@ -14,8 +14,9 @@ CXXFLAGS+=-std=c++23 -Wno-unused-parameter -Wall -Wextra -Werror -g
 
 CEPH_SRC?=../../src
 CEPH_BUILD?=../../build
+ZPP_BITS_SOURCE_DIR?=$(CEPH_BUILD)/_deps/zpp_bits-src
 
-INCLUDES=-I$(CEPH_SRC) -I$(CEPH_BUILD)/_deps/zpp_bits-src
+INCLUDES=-I$(CEPH_SRC) -I$(ZPP_BITS_SOURCE_DIR)
 LIBRARY_PATH=-L$(CEPH_BUILD)/lib/ -Wl,-rpath,$(CEPH_BUILD)/lib
 LIBRARIES=-lfdb_c -lfmtd
 HEADERS=$(wildcard $(CEPH_SRC)/rgw/fdb/*.h)

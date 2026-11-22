@@ -184,6 +184,22 @@ try
  }
  println("composed transaction: stored {} people", composed->value);
 
+ // Publish the borrowed read's result only after the owning call confirms commit:
+ vector<person> published_people;
+ const auto published = txr([&](auto& current, auto& output) {
+  return txr(current, read_people).transform([&output](auto&& people) {
+   output = std::move(people);
+  });
+ }, lfdb::staged(in_place, published_people));
+ if (not published) {
+  report_failure(published.error());
+  return 1;
+ }
+ if (published_people != nifty_people) {
+  throw runtime_error("staged people did not publish after confirmed commit");
+ }
+ println("staged publication: loaded {} people after commit", published_people.size());
+
  // Replacing this key with the same value tolerates repeated commits. Incremental
  // effects need their own idempotency strategy before opting into this policy.
  const auto replaying = lfdb::make_transactor(dbh, {}, lfdb::retry_policy::replay_unknown);
