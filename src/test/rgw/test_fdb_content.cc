@@ -224,6 +224,53 @@ TEST_CASE("content composition inspects a borrowed child once", "[fdb][content][
  CHECK(child.inspections == 1);
 }
 
+TEST_CASE("content assembly normalizes its borrowed root once", "[fdb][content]")
+{
+ const inspected_child root {"https://example.test/tenant"};
+ const auto key = content::key(root, "objects", "name");
+
+ CHECK(root.inspections == 1);
+ CHECK(materialized_key(key) == tuple_string(root.bytes) + tuple_string("objects") +
+                                tuple_string("name"));
+}
+
+TEST_CASE("content input conversion completes before mutation", "[fdb][content]")
+{
+ struct conversion_failure {};
+ struct failing_segment {
+  operator std::string_view() const { throw conversion_failure {}; }
+ };
+ auto key = content::key("tenant", "objects");
+ const auto original = key;
+ const failing_segment child;
+
+ CHECK_THROWS_AS(key.append("good", child), conversion_failure);
+ CHECK(key == original);
+ CHECK_THROWS_AS(key /= child, conversion_failure);
+ CHECK(key == original);
+}
+
+TEST_CASE("content text keys retain their UTF-8 bytes", "[fdb][content]")
+{
+ for (const auto child : {"https://example.test/items?id=a%20b"sv, "users/caf\xC3\xA9"sv,
+                          "photos/\xF0\x9F\x8C\x8A"sv, std::string_view {}}) {
+  CAPTURE(child);
+  const auto prefix = content::key("tenant", "objects");
+  const auto expected = tuple_string("tenant") + tuple_string("objects") + tuple_string(child);
+
+  CHECK(materialized_key(content::key("tenant", "objects", child)) == expected);
+  CHECK(materialized_key(content::key(prefix, child)) == expected);
+
+  auto appended = prefix;
+  appended.append(child);
+  CHECK(materialized_key(appended) == expected);
+
+  auto consumed = prefix;
+  consumed /= child;
+  CHECK(materialized_key(consumed) == expected);
+ }
+}
+
 TEST_CASE("content composition preserves bytes across NUL and size boundaries", "[fdb][content][nul]")
 {
  for (const auto prefix_size : {1u, 12u, 13u, 14u, 15u, 16u, 30u, 31u, 32u, 96u, 255u}) {
@@ -247,7 +294,7 @@ TEST_CASE("content composition preserves bytes across NUL and size boundaries", 
 
     CAPTURE(prefix_size, size, pattern);
     const auto expected = prefix_bytes + tuple_string(child);
-    CHECK(content::detail::inspect_string_segment(child).encoded_size() == tuple_string(child).size());
+    CHECK(content::key(prefix, child).size() == expected.size());
     CHECK(materialized_key(content::key(prefix, child)) == expected);
     CHECK(materialized_key(prefix / child) == expected);
     CHECK(materialized_key(content::key(root, "objects", child)) == expected);
@@ -310,7 +357,7 @@ TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments
 
 TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 {
- STATIC_REQUIRE(6 == content::detail::inspect_string_segment("a\0b"sv).encoded_size());
+ STATIC_REQUIRE(6 == content::key("a\0b"sv).size());
 
  constexpr char segment_bytes[] = { 'a', '\0', 'b' };
  const auto key = content::keyspace(std::string_view(segment_bytes, sizeof(segment_bytes)));

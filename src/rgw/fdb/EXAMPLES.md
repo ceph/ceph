@@ -1933,12 +1933,14 @@ key in place. Segment arguments to these mutating operations must not refer to
 the key's own encoded bytes, because growing its storage can invalidate those
 views. All forms retain the same segment escaping and ordering.
 
-Assembly and batch `append()` size embedded-NUL escapes before reserving storage.
-They reuse the same NUL inspection when encoding; a raw segment of `n` bytes with
-`z` zero bytes occupies `n + z + 2` encoded bytes. Existing compiled-prefix bytes
-already include their escapes and separators. Consuming `/` and `/=` retain normal
-string growth for successive extensions. The aliasing restriction also applies to
-consuming `key(std::move(prefix), ...)` and `/`.
+Zero-free segments, including ordinary UTF-8 paths, URLs, and textual IDs, take a
+bulk-copy path. Only inputs with embedded NULs need escape sizing: a raw segment
+of `n` bytes with `z` zero bytes occupies `n + z + 2` encoded bytes. Assembly writes
+into the allocated buffer and finalizes its length once. Existing compiled-prefix
+bytes already include their escapes and separators and are copied unchanged.
+Consuming extensions retain geometric storage growth across successive appends.
+The aliasing restriction also applies to consuming `key(std::move(prefix), ...)`
+and `/`.
 
 For prefix scans, the compiled prefix can come from either spelling:
 
