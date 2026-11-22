@@ -235,6 +235,12 @@ There are five supported balancer modes:
    pool after ``pg_num`` settles and the usual active+clean / misplaced health
    gates allow planning.
 
+   Shard sizes start from each PG's logical ``num_bytes``. When a pool reports
+   BlueStore compression stats (``data_bytes_used`` and ``compress_under_bytes``),
+   those sizes are scaled so they sum to on-disk data usage (JJ-style). Pools
+   without compression keep unscaled ``num_bytes``. The per-pool average cannot
+   correct mixed compressibility within a single pool.
+
    Prefer ``upmap`` when shard-count uniformity is the goal; prefer
    ``upmap-utilization`` when heterogeneous PG sizes or OSD capacities leave
    some devices much fuller than others despite an even PG count.

@@ -12,6 +12,8 @@ _spec.loader.exec_module(_utilization)
 utilization = _utilization.utilization
 fill_variance = _utilization.fill_variance
 shard_bytes_for_pg = _utilization.shard_bytes_for_pg
+pool_compression_shard_scale = _utilization.pool_compression_shard_scale
+sum_num_bytes_by_pool = _utilization.sum_num_bytes_by_pool
 remap_pairs = _utilization.remap_pairs
 apply_move = _utilization.apply_move
 plan_utilization_upmaps = _utilization.plan_utilization_upmaps
@@ -172,3 +174,34 @@ def test_build_pg_shards_active_clean_filter():
     shards = build_pg_shards(pg_up, pg_stat, pools, rate, active_clean_pgids=['1.0'])
     assert list(shards.keys()) == ['1.0']
     assert shards['1.0']['bytes'] == 1000.0
+
+
+def test_pool_compression_shard_scale():
+    # No compression stats → identity.
+    assert pool_compression_shard_scale(800, 0, 0, 3.0) == 1.0
+    assert pool_compression_shard_scale(800, 150, 0, 3.0) == 1.0
+    # Compressed: data_used / (sum_num_bytes * blowup) = 150 / (800 * 3) = 0.0625.
+    assert pool_compression_shard_scale(800, 150, 2400, 3.0) == 0.0625
+
+
+def test_sum_num_bytes_by_pool_and_scaled_shards():
+    pg_stat = {
+        '1.0': {'num_bytes': 1000},
+        '1.1': {'num_bytes': 2000},
+        '2.0': {'num_bytes': 500},
+    }
+    assert sum_num_bytes_by_pool(pg_stat) == {1: 3000.0, 2: 500.0}
+    assert sum_num_bytes_by_pool(pg_stat, active_clean_pgids=['1.0']) == {1: 1000.0}
+
+    pg_up = {'1.0': [0, 1], '1.1': [1, 2]}
+    pools = {1: {'pool': 1, 'size': 2}}
+
+    def rate(_):
+        return 2.0
+
+    unscaled = build_pg_shards(pg_up, pg_stat, pools, rate)
+    scaled = build_pg_shards(
+        pg_up, pg_stat, pools, rate, shard_scale_by_pool={1: 0.5})
+    assert unscaled['1.0']['bytes'] == 1000.0
+    assert scaled['1.0']['bytes'] == 500.0
+    assert scaled['1.1']['bytes'] == 1000.0

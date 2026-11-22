@@ -6,6 +6,7 @@ Clean-room implementation of a utilization-based balancer inspired by jj-balance
 
 from __future__ import annotations
 
+import math
 import statistics
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -86,6 +87,49 @@ def shard_bytes_for_pg(num_bytes: float, pool_size: int, raw_used_rate: float) -
     if pool_size <= 0:
         return float(num_bytes)
     return float(num_bytes) * float(raw_used_rate) / float(pool_size)
+
+
+def pool_compression_shard_scale(
+    sum_num_bytes: float,
+    data_bytes_used: float,
+    compress_under_bytes: float,
+    blowup: float,
+) -> float:
+    """
+    JJ-style per-pool scale so logical PG num_bytes track on-disk usage after BlueStore compression.
+
+    When compress_under_bytes and data_bytes_used are present and positive, return
+    data_bytes_used / (sum_num_bytes * blowup). Otherwise return 1.0 (no scaling).
+    """
+    if (float(compress_under_bytes) <= 0.0
+            or float(data_bytes_used) <= 0.0
+            or float(sum_num_bytes) <= 0.0
+            or float(blowup) <= 0.0):
+        return 1.0
+    scale = float(data_bytes_used) / (float(sum_num_bytes) * float(blowup))
+    # Keep estimates finite and positive; refuse pathological ratios.
+    if not math.isfinite(scale) or scale <= 0.0:
+        return 1.0
+    return scale
+
+
+def sum_num_bytes_by_pool(
+    pg_stat: Dict[str, Dict[str, Any]],
+    active_clean_pgids: Optional[Iterable[str]] = None,
+) -> Dict[int, float]:
+    """Sum logical PG num_bytes per pool_id (optionally restricted to active+clean PGs)."""
+    allow = set(active_clean_pgids) if active_clean_pgids is not None else None
+    totals: Dict[int, float] = {}
+    for pgid, stat in pg_stat.items():
+        if allow is not None and pgid not in allow:
+            continue
+        try:
+            pool_id, _ps = parse_pgid(pgid)
+        except ValueError:
+            continue
+        totals[pool_id] = totals.get(pool_id, 0.0) + float(
+            (stat or {}).get('num_bytes', 0) or 0)
+    return totals
 
 
 def parse_pgid(pgid: str) -> Tuple[int, int]:
@@ -293,13 +337,16 @@ def build_pg_shards(
     pool_info_by_id: Dict[int, Dict[str, Any]],
     pool_raw_used_rate: Callable[[int], float],
     active_clean_pgids: Optional[Iterable[str]] = None,
+    shard_scale_by_pool: Optional[Dict[int, float]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Build planner pg_shards map from MappingState-like inputs.
 
     pool_info_by_id values need at least {'pool': id, 'size': N}.
+    shard_scale_by_pool optionally multiplies per-PG shard bytes (BlueStore compression).
     """
     allow = set(active_clean_pgids) if active_clean_pgids is not None else None
+    scales = shard_scale_by_pool or {}
     out: Dict[str, Dict[str, Any]] = {}
     for pgid, up in pg_up.items():
         if allow is not None and pgid not in allow:
@@ -315,9 +362,10 @@ def build_pg_shards(
         num_bytes = float(stat.get('num_bytes', 0) or 0)
         size = int(pi.get('size', 0) or 0)
         rate = float(pool_raw_used_rate(pool_id))
+        scale = float(scales.get(pool_id, 1.0))
         out[pgid] = {
             'osds': [int(o) for o in up],
-            'bytes': shard_bytes_for_pg(num_bytes, size, rate),
+            'bytes': shard_bytes_for_pg(num_bytes, size, rate) * scale,
             'pool_id': pool_id,
             'ps': ps,
         }

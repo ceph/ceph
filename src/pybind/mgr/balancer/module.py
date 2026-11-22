@@ -1269,8 +1269,33 @@ class Module(MgrModule):
         def raw_rate(pool_id: int) -> float:
             return float(osdmap.pool_raw_used_rate(pool_id))
 
+        # JJ-style BlueStore compression scale: shrink logical PG num_bytes toward on-disk data_bytes_used when compress_under_bytes is present.
+        df_pools = {
+            int(p['id']): p.get('stats', {})
+            for p in self.get('df').get('pools', [])
+            if 'id' in p
+        }
+        sum_bytes_by_pool = util_plan.sum_num_bytes_by_pool(
+            ms.pg_stat, active_clean)
+        shard_scale_by_pool: Dict[int, float] = {}
+        for pool_id in pool_info_by_id:
+            stats = df_pools.get(pool_id, {})
+            scale = util_plan.pool_compression_shard_scale(
+                sum_num_bytes=sum_bytes_by_pool.get(pool_id, 0.0),
+                data_bytes_used=float(stats.get('data_bytes_used', 0) or 0),
+                compress_under_bytes=float(
+                    stats.get('compress_under_bytes', 0) or 0),
+                blowup=raw_rate(pool_id),
+            )
+            shard_scale_by_pool[pool_id] = scale
+            if scale != 1.0:
+                self.log.info(
+                    'upmap-utilization: pool %d compression shard scale %.6f'
+                    % (pool_id, scale))
+
         pg_shards = util_plan.build_pg_shards(
-            ms.pg_up, ms.pg_stat, pool_info_by_id, raw_rate, active_clean)
+            ms.pg_up, ms.pg_stat, pool_info_by_id, raw_rate, active_clean,
+            shard_scale_by_pool)
 
         # Capacity: prefer device size from osd_stats; fall back to crush weight.
         capacity: Dict[int, float] = {}

@@ -36,10 +36,13 @@ substantially (or OSD capacities are heterogeneous), prefer the
 ``pg-upmap-items`` mechanism. Its stop gate is selectable
 (``upmap_utilization_deviation_mode``): ``mean`` (default; stop when fullest
 is within slack of mean fill) or ``minmax`` (stop when ``max - min`` is within
-slack). ``upmap``, ``upmap-utilization``, ``read``, and ``upmap-read`` skip a
-pool while ``pg_num`` differs from ``pg_num_target`` so remaps wait for the
-PG autoscaler (or manual ``pg_num`` changes) to finish splitting or merging.
-Capacity balancing should still be completed before read / primary balancing.
+slack). When pool BlueStore compression stats are present, PG shard byte
+estimates are scaled to on-disk ``data_bytes_used``; otherwise logical
+``num_bytes`` are used. ``upmap``, ``upmap-utilization``, ``read``, and
+``upmap-read`` skip a pool while ``pg_num`` differs from ``pg_num_target`` so
+remaps wait for the PG autoscaler (or manual ``pg_num`` changes) to finish
+splitting or merging. Capacity balancing should still be completed before
+read / primary balancing.
 
 Read Balancing
 ==============

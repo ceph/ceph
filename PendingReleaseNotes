@@ -6,7 +6,9 @@
   ``mgr/balancer/upmap_utilization_max_optimizations``,
   ``mgr/balancer/upmap_utilization_max_deviation`` (default ``0.02``), and
   ``mgr/balancer/upmap_utilization_deviation_mode`` (``mean`` or ``minmax``;
-  default ``mean``). See :ref:`balancer` and
+  default ``mean``). When a pool has BlueStore compression stats, PG shard
+  byte estimates are scaled to on-disk ``data_bytes_used`` (uncompressed pools
+  are unchanged). See :ref:`balancer` and
   https://docs.ceph.com/en/latest/rados/operations/balancer/.
 
 * RADOS: The ``upmap``, ``upmap-utilization``, ``read``, and ``upmap-read``
