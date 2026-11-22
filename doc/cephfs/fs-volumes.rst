@@ -256,7 +256,7 @@ A subvolume group can be created in a separate RADOS namespace by specifying
 the ``--namespace-isolated`` option. When a subvolume group has namespace
 isolation enabled, the group directory is placed in its own RADOS namespace
 (``fsvolumens__<group>``), and any subvolume subsequently created within that
-group automatically inherits namespace isolation -- each subvolume gets its
+group automatically inherits namespace isolation. Each subvolume gets its
 own unique RADOS namespace (``fsvolumens__<group>_<subvolume>``) without
 needing the ``--namespace-isolated`` flag on the ``fs subvolume create``
 command. This provides security isolation at the RADOS level for all
