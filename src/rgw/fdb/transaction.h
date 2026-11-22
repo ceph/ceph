@@ -527,9 +527,9 @@ class transaction_source final
   : dbh(std::move(database))
  {}
 
- transaction_source(database_handle database, const transaction_options& opts)
+ transaction_source(database_handle database, transaction_options opts)
   : dbh(std::move(database)),
-    options(opts)
+    options(std::move(opts))
  {}
 
  public:
@@ -668,7 +668,15 @@ template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn) -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
+auto in_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
+ -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
 auto in_read_transaction(database_handle dbh, FnT&& fn)
+ -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
+auto in_read_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
  -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
@@ -1063,16 +1071,30 @@ auto retry_without_commit(transaction_handle txn, FnT&& fn) -> operation_result_
 }
 
 template <transaction_op FnT>
+auto in_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
+ -> operation_result_t<FnT>
+{
+ return take_operation_result(make_transactor(std::move(dbh), options)(std::forward<FnT>(fn)));
+}
+
+template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn) -> operation_result_t<FnT>
 {
- return take_operation_result(make_transactor(std::move(dbh))(std::forward<FnT>(fn)));
+ return in_transaction(std::move(dbh), transaction_options {}, std::forward<FnT>(fn));
+}
+
+template <transaction_op FnT>
+auto in_read_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
+ -> operation_result_t<FnT>
+{
+ return retry_without_commit(make_transaction(std::move(dbh), options), std::forward<FnT>(fn));
 }
 
 template <transaction_op FnT>
 auto in_read_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>
 {
- return retry_without_commit(make_transaction(std::move(dbh)), std::forward<FnT>(fn));
+ return in_read_transaction(std::move(dbh), transaction_options {}, std::forward<FnT>(fn));
 }
 
 template <transaction_op FnT>

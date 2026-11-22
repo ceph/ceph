@@ -223,6 +223,74 @@ The source type makes the distinction explicit: a string is a FoundationDB
 connection string, while a cluster-file name must be passed as a
 `std::filesystem::path`.
 
+## Options
+
+`network_options`, `database_options`, and `transaction_options` are owning
+`option_list<CodeT>` sequences. Entries apply in written order, including repeated
+codes and identical flags. This supports additive transaction tags and settings
+whose order matters.
+
+**Migration from `option_map`:** the sorted, unique-key container and its alias
+are removed. Replace map-specific `find()`, `insert_or_assign()`, and `operator[]`
+calls with sequence operations. Braced initializers still work, but now retain
+duplicates and apply in written order. Review their ordering as well as explicit
+map-style edits; `size()` counts applications rather than distinct codes.
+
+```cpp
+lfdb::transaction_options options;
+options.reserve(4);
+options.emplace_back(FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3});
+options.append({
+  {FDB_TR_OPTION_TAG, "a"},
+  {FDB_TR_OPTION_AUTO_THROTTLE_TAG, "b"},
+  {FDB_TR_OPTION_TAG, "c"}
+});
+const std::array more {
+  lfdb::transaction_options::value_type {FDB_TR_OPTION_MAX_RETRY_DELAY, std::int64_t {1}}
+};
+options.append_range(more);
+
+// Change both TAG entries without moving their positions:
+const auto replaced = options.replace_all(FDB_TR_OPTION_TAG, "batch"); // 2
+
+// Replace a former options[FDB_TR_OPTION_TIMEOUT] = 5000 assignment:
+options.erase(FDB_TR_OPTION_TIMEOUT);
+options.emplace_back(FDB_TR_OPTION_TIMEOUT, std::int64_t {5000});
+```
+
+`push_back(pair)` and `emplace_back(code, value)` append one entry;
+`std::back_inserter()` works with range algorithms. `append_range()` accepts
+single-pass ranges and preserves their order. Initializer-list elements are
+copied; move iterators transfer owned values. Merely passing an rvalue container
+does not move its elements. An appended range must not overlap its destination.
+
+`replace_all()` returns the number of matching entries, including unchanged
+matches. It inserts nothing when the code is absent. `erase(code)` removes every
+matching entry and returns the count; `clear()` removes everything. Iteration is
+const, and insertion and erasure follow vector invalidation rules.
+
+Transactions, Transactors, and lazy database scans own their option snapshots.
+Changing the original list affects later construction. A consumed list can
+transfer its storage to `make_transaction()`. Validation happens when options
+are applied; native failures retain their error code and category.
+
+On replay, libfdb reapplies nonpersistent entries in recorded order. FoundationDB
+retains timeout, retry limit, maximum retry delay, and authorization-token options.
+The library's ordinary recovery machinery remains responsible for these rules.
+
+Database-handle helpers accept options immediately after the handle:
+
+```cpp
+lfdb::set(dbh, options, "person/example/name", "Example");
+const auto rows = lfdb::collect(dbh, options, q::prefix("person/"));
+const auto partitions = lfdb::partitions(dbh, options, q::prefix("person/"), 1024 * 1024);
+```
+
+The same argument order applies to point and range reads, scans, paged reads,
+watches, atomic mutations, transformations, and erasure. Helpers without an
+options argument use an empty list. Use an explicit transaction when several
+operations must share one configured transaction and read version.
+
 ## Basic Operations
 
 Use a `database_handle` when you want libfdb to create, commit, and retry a
@@ -1475,6 +1543,27 @@ materialized rows into the output. This is useful for bounded reads requiring on
 read version. Existing map values remain authoritative on key collisions. A
 publication failure can still leave partial output; materializing first protects
 against publishing rows from a failed database attempt.
+
+Use raw callbacks to inspect or copy encoded records without decoding them:
+
+```cpp
+std::size_t encoded_bytes = 0;
+lfdb::for_each(lfdb::raw, dbh, q::prefix("person/"),
+  [&encoded_bytes](std::span<const std::uint8_t> key,
+                   std::span<const std::uint8_t> value) {
+    encoded_bytes += key.size() + value.size();
+  });
+```
+
+Both spans expire when the callback returns. Values contain the stored encoding,
+including any serialization framing. Raw traversal borrows noncopyable consumers,
+retains the transaction during callbacks, and returns the number of rows delivered.
+An explicit read mode precedes the callback; options follow a database handle:
+`for_each(raw, dbh, options, selection, read_mode::snapshot, callback)`.
+The transaction-handle form shares its caller's transaction. The database form
+uses bounded, independently retried windows; callbacks run after recovery and are
+never replayed, while later windows can observe newer read versions. Exceptions
+from callbacks propagate immediately, including native-looking libfdb exceptions.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
