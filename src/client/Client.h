@@ -68,6 +68,8 @@
 #endif
 #include <shared_mutex>
 
+#include "include/current_cpu.h"
+
 using std::set;
 using std::map;
 using std::fstream;
@@ -2787,7 +2789,7 @@ private:
     // a slot for this thread: by CPU, so concurrent threads rarely share
     static unsigned slot() {
 #ifdef __linux__
-      int cpu = sched_getcpu();
+      int cpu = ceph::current_cpu();
       if (cpu >= 0)
         return (unsigned)cpu % NSLOTS;
 #endif

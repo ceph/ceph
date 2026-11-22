@@ -89,6 +89,7 @@
 #endif
 
 #include "common/ceph_mutex.h"
+#include "include/current_cpu.h"
 
 /* The status mechanism info */
 template<typename T>
@@ -161,7 +162,7 @@ struct RWRefState {
     static constexpr unsigned SLOTS = 32;
     static unsigned this_slot() {
 #ifdef __linux__
-      int cpu = sched_getcpu();
+      int cpu = ceph::current_cpu();
       if (cpu >= 0)
         return (unsigned)cpu % SLOTS;
 #endif

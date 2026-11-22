@@ -2105,7 +2105,7 @@ int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
     return r;
   unsigned cpu = 0;
 #ifdef __linux__
-  int c = sched_getcpu();
+  int c = ceph::current_cpu();
   if (c >= 0)
     cpu = c;
 #endif

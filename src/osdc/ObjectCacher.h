@@ -25,6 +25,8 @@
 #include <thread>
 #include <unordered_map>
 
+#include "include/current_cpu.h"
+
 class WritebackHandler;
 
 enum {
@@ -789,7 +791,7 @@ private:
   // the one entered by even if the thread moves to another CPU, or -1
   // when the gate is shut
   int gate_enter() {
-    int cpu = sched_getcpu();
+    int cpu = ceph::current_cpu();
     int slot = (cpu < 0 ? 0 : cpu) % GATE_SLOTS;
     gate_readers[slot].n.fetch_add(1, std::memory_order_seq_cst);
     if (gate_closed.load(std::memory_order_seq_cst)) {
