@@ -99,7 +99,7 @@ Dwarf_Die *DwarfParser::resolve_typedecl(Dwarf_Die *type) {
   string type_name = cache_type_prefix(type) + string(name);
 
   for (auto &p : global_type_cache) {
-    auto cus = p.second;
+    auto& cus = p.second;
     for (auto i = cus.begin(); i != cus.end(); ++i) {
       auto &v = i->second;
       if (v.find(type_name) != v.end()) return &(v[type_name]);
@@ -772,11 +772,6 @@ int handle_module(Dwfl_Module *dwflmod, void **userdata,
 }
 
 void DwarfParser::parse() {
-  if (getenv("DEBUGINFOD_URLS") == nullptr) {
-    // If the DEBUGINFOD_URLS is not set, set it to https://debuginfod.ubuntu.com as default
-    setenv("DEBUGINFOD_URLS", "https://debuginfod.ubuntu.com", 0);
-  }
-
   for (auto dwfl: dwfls) {
     dwfl_getmodules(dwfl, preprocess_module, this, 0);
   }
