@@ -4,17 +4,17 @@
 Ceph Secrets Module
 ===================
 
-The ``ceph_secrets`` manager module provides centralized secret storage for
-Ceph operators and Ceph manager modules.  Instead of embedding plaintext
+The ``ceph_secrets`` Manager module provides centralized secret storage for
+Ceph operators and Ceph Manager modules.  Instead of embedding plaintext
 credentials in service specifications or configuration objects, secrets are
 stored once and referenced by URI.  Other Manager modules can store and
-resolve secrets through ``CephSecretsClient`` (see Module API below). No
+resolve secrets with ``CephSecretsClient`` (see Module API below). No
 module uses it yet: cephadm and Rook do not resolve ``secret:/`` references.
 
 .. note::
 
-   The ``ceph_secrets`` module is not part of Squid 19.2, Tentacle 20.2, or
-   Umbrella 21. It is available only in later releases.
+   The ``ceph_secrets`` module is not part of Squid, Tentacle, or Umbrella.
+   It will be available in releases starting with Vampire.
 
 For example, an operator can store an API token once:
 
@@ -40,7 +40,7 @@ list.
 .. note::
 
    The ``mon`` backend stores secrets in the Monitors' configuration key
-   store, which is not an external KMS or vault.  Users and MGR modules with
+   store, which is not an external KMS or vault.  Users and Manager modules with
    sufficient Ceph permissions can still reveal or resolve stored secret
    values.  Namespaces provide logical and storage isolation, not an
    authorization boundary.
@@ -61,7 +61,7 @@ Namespace
 ---------
 
 A namespace is a logical storage boundary, typically matching the name of
-the consuming MGR module (for example ``cephadm``).  Secrets in different
+the consuming Manager module (for example ``cephadm``).  Secrets in different
 namespaces are stored independently and have independent epoch counters.
 Namespaces are not an authorization boundary; any caller with access to the
 ``ceph_secrets`` module can read secrets from any namespace.
@@ -315,12 +315,12 @@ no CLI command for it.
 Module API
 ==========
 
-Other MGR modules should consume ``ceph_secrets`` via ``CephSecretsClient``
+Other Manager modules should consume ``ceph_secrets`` via ``CephSecretsClient``
 (``src/pybind/mgr/ceph_secrets_client.py``) rather than calling
 ``mgr.remote()`` directly.  The client file, along with
 ``ceph_secrets_types.py``, lives at the top level of ``src/pybind/mgr/`` so
-any MGR module can import it without depending on the ``ceph_secrets`` package
-internals.
+any Manager module can import it without depending on the ``ceph_secrets``
+package internals.
 
 .. code-block:: python
 
