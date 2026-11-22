@@ -612,15 +612,20 @@ Commands
 
 :command:`perf image iostat` [-p | --pool *pool-name*] [--namespace *namespace*] [--iterations *iterations*] [--sort-by *sort-by*] [--format *format*] [--pretty-format] [*pool-spec*]
   Display image IO statistics. The output shows per-image write/read
-  operations, bytes, and latency.
+  operations, bytes, and latency. The ``--sort-by`` option sorts the images
+  by ``write-ops`` (the default), ``read-ops``, ``write-bytes``,
+  ``read-bytes``, ``write-latency``, or ``read-latency``.
 
   The pool/pool-spec refers to the pool where image data is stored (the data
   pool for images created with ``--data-pool``, otherwise the pool where the
   image is defined).
 
 :command:`perf image iotop` [-p | --pool *pool-name*] [--namespace *namespace*] [*pool-spec*]
-  Display a top-like IO monitor.
-  
+  Display a top-like IO monitor, sorted by write operations at first. Press
+  ``>`` or the right arrow key to sort by the next column to the right, ``<``
+  or the left arrow key to sort by the next column to the left, and ``q`` to
+  quit.
+
   The pool/pool-spec refers to the pool where image data is stored (the data
   pool for images created with ``--data-pool``, otherwise the pool where the
   image is defined).
