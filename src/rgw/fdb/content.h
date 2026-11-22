@@ -18,6 +18,8 @@
 
 #include "base.h"
 
+#include <algorithm>
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <iterator>
@@ -28,27 +30,44 @@ namespace ceph::libfdb::layer::content {
 
 namespace detail {
 
-// Includes the Tuple byte-string type code and segment terminator. An embedded NUL may grow the
-// string by one further escape byte during encoding:
-constexpr std::size_t encoded_string_segment_reserve_size(const std::string_view segment) noexcept
+// Reuse the first-zero inspection for exact sizing and emission:
+struct string_segment final
 {
- return 2 + std::size(segment);
+ std::string_view bytes;
+ std::size_t first_nul;
+
+ constexpr std::size_t encoded_size() const
+ {
+  if (first_nul == std::string_view::npos) {
+   return 2 + bytes.size();
+  }
+
+  return 3 + bytes.size() +
+   static_cast<std::size_t>(std::ranges::count(bytes.substr(first_nul + 1), '\0'));
+ }
+};
+
+constexpr string_segment inspect_string_segment(const std::string_view bytes) noexcept
+{
+ return {bytes, bytes.find('\0')};
 }
 
-constexpr void append_encoded_string_segment(std::string& out, const std::string_view segment)
+constexpr void append_encoded_string_segment(std::string& out, const string_segment segment)
 {
  // FoundationDB's Tuple-layer byte-string type code makes the NUL-FF escape distinguishable from a
  // segment terminator followed by an FF byte:
  out.push_back('\x01');
 
- // User-readable key segments take the common bulk-append path.
- if (!segment.contains('\0')) {
-  out.append(segment);
+ // User-readable key segments take the common bulk-append path:
+ if (segment.first_nul == std::string_view::npos) {
+  out.append(segment.bytes);
   out.push_back('\0');
   return;
  }
 
- for (const char c : segment) {
+ out.append(segment.bytes.substr(0, segment.first_nul));
+
+ for (const char c : segment.bytes.substr(segment.first_nul)) {
   out.push_back(c);
 
   if ('\0' == c) {
@@ -91,14 +110,27 @@ constexpr std::string_view first_segment_view(const auto& first, const auto&...)
  return segment_view(first);
 }
 
-constexpr std::size_t encoded_string_segments_reserve_size(const auto& ...segments)
+constexpr auto inspect_string_segments(const auto& ...segments)
 {
- return (encoded_string_segment_reserve_size(segment_view(segments)) + ... + std::size_t {0});
+ return std::array {inspect_string_segment(segment_view(segments))...};
 }
 
-constexpr void append_encoded_string_segments(std::string& out, const auto& ...segments)
+constexpr std::size_t encoded_string_segments_size(const auto& segments)
 {
- (append_encoded_string_segment(out, segment_view(segments)), ...);
+ std::size_t size = 0;
+
+ for (const auto& segment : segments) {
+  size += segment.encoded_size();
+ }
+
+ return size;
+}
+
+constexpr void append_encoded_string_segments(std::string& out, const auto& segments)
+{
+ for (const auto& segment : segments) {
+  append_encoded_string_segment(out, segment);
+ }
 }
 
 } // namespace detail
@@ -117,11 +149,12 @@ class compiled_key final
  requires key_segments<Segments...>
  explicit constexpr compiled_key(const std::string_view compiled_prefix, const Segments& ...segments)
  {
-  encoded_bytes.reserve(std::size(compiled_prefix) + detail::encoded_string_segments_reserve_size(segments...));
+  const auto inspected = detail::inspect_string_segments(segments...);
+  encoded_bytes.reserve(std::size(compiled_prefix) + detail::encoded_string_segments_size(inspected));
 
   encoded_bytes.append(compiled_prefix);
 
-  detail::append_encoded_string_segments(encoded_bytes, segments...);
+  detail::append_encoded_string_segments(encoded_bytes, inspected);
  }
 
  public:
@@ -143,9 +176,10 @@ class compiled_key final
  requires key_segments<Segments...>
  constexpr compiled_key& append(const Segments& ...segments) &
  {
-  encoded_bytes.reserve(std::size(encoded_bytes) + detail::encoded_string_segments_reserve_size(segments...));
+  const auto inspected = detail::inspect_string_segments(segments...);
+  encoded_bytes.reserve(std::size(encoded_bytes) + detail::encoded_string_segments_size(inspected));
 
-  detail::append_encoded_string_segments(encoded_bytes, segments...);
+  detail::append_encoded_string_segments(encoded_bytes, inspected);
 
   return *this;
  }
@@ -156,7 +190,8 @@ class compiled_key final
  {
   // Allow std::string retain spare capacity for a sequence of single-segment
   // extensions instead of forcing an exact-size allocation at every step:
-  detail::append_encoded_string_segment(encoded_bytes, detail::segment_view(segment));
+  detail::append_encoded_string_segment(encoded_bytes,
+    detail::inspect_string_segment(detail::segment_view(segment)));
 
   return *this;
  }
