@@ -628,8 +628,7 @@ information as possible. Especially important information:
 * Any backtraces in the ceph logs from crashes
 
 If you are satisfied that you have found a bug, please file it on `the bug
-tracker`. For more general queries, please write to the `ceph-users mailing
-list`.
+tracker`_. For more general queries, write to the ceph-users mailing list or
+use one of the other channels listed in :ref:`get-involved`.
 
 .. _the bug tracker: https://tracker.ceph.com
-.. _ceph-users mailing list:  https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/
