@@ -101,6 +101,41 @@ std::string materialized_key(const content::compiled_key& key)
  return lfdb::select(key, key).begin_key;
 }
 
+std::string tuple_string(const std::string_view bytes)
+{
+ std::string encoded(1, '\x01');
+ std::size_t first = 0;
+
+ for (auto zero = bytes.find('\0'); zero != std::string_view::npos;
+      zero = bytes.find('\0', first)) {
+  encoded.append(bytes.substr(first, zero - first));
+  encoded.append("\0\xFF", 2);
+  first = zero + 1;
+ }
+
+ encoded.append(bytes.substr(first));
+ encoded.push_back('\0');
+
+ return encoded;
+}
+
+struct inspected_child final
+{
+ std::string_view bytes;
+ mutable int inspections = 0;
+
+ explicit inspected_child(const std::string_view bytes)
+  : bytes(bytes)
+ {}
+ inspected_child(const inspected_child&) = delete;
+
+ operator std::string_view() const
+ {
+  ++inspections;
+  return bytes;
+ }
+};
+
 } // namespace
 
 TEST_CASE("content keys use the FoundationDB byte-string tuple representation",
@@ -163,6 +198,75 @@ TEST_CASE("content key assembly rejects invalid inputs", "[fdb][content]")
                    ceph::libfdb::libfdb_exception);
 }
 
+TEST_CASE("content composition inspects a borrowed child once", "[fdb][content][nul]")
+{
+ const auto prefix = content::key("tenant", "objects");
+ const inspected_child child {"a\0b"sv};
+ const auto expected = tuple_string("tenant") + tuple_string("objects") + tuple_string(child.bytes);
+
+ SECTION("preserved compiled prefix") {
+  CHECK(materialized_key(content::key(prefix, child)) == expected);
+ }
+ SECTION("consumed compiled prefix") {
+  CHECK(materialized_key(content::key(content::key("tenant", "objects"), child)) == expected);
+ }
+ SECTION("batch append") {
+  auto key = prefix;
+  key.append(child);
+  CHECK(materialized_key(key) == expected);
+ }
+ SECTION("single consuming extension") {
+  auto key = prefix;
+  key /= child;
+  CHECK(materialized_key(key) == expected);
+ }
+
+ CHECK(child.inspections == 1);
+}
+
+TEST_CASE("content composition preserves bytes across NUL and size boundaries", "[fdb][content][nul]")
+{
+ for (const auto prefix_size : {1u, 12u, 13u, 14u, 15u, 16u, 30u, 31u, 32u, 96u, 255u}) {
+  const std::string root(prefix_size, 't');
+  const auto prefix = content::key(root, "objects");
+  const auto prefix_bytes = tuple_string(root) + tuple_string("objects");
+
+  for (const auto size : {0u, 1u, 12u, 13u, 14u, 15u, 16u, 17u, 30u, 31u, 32u,
+                         63u, 64u, 65u, 127u, 128u, 129u, 255u, 256u, 257u, 1024u, 4096u}) {
+   for (int pattern = 0; pattern < 6; ++pattern) {
+    std::string child(size, 'x');
+    if (size > 0) {
+     if (pattern == 1) { child.front() = '\0'; }
+     if (pattern == 2) { child.back() = '\0'; }
+     if (pattern == 3) { child[size / 2] = '\0'; }
+     if (pattern == 4) {
+      for (std::size_t i = 0; i < size; i += 7) { child[i] = '\0'; }
+     }
+     if (pattern == 5) { std::ranges::fill(child, '\0'); }
+    }
+
+    CAPTURE(prefix_size, size, pattern);
+    const auto expected = prefix_bytes + tuple_string(child);
+    CHECK(content::detail::inspect_string_segment(child).encoded_size() == tuple_string(child).size());
+    CHECK(materialized_key(content::key(prefix, child)) == expected);
+    CHECK(materialized_key(prefix / child) == expected);
+    CHECK(materialized_key(content::key(root, "objects", child)) == expected);
+    CHECK(materialized_key(content::key(content::key(root, "objects"), child)) == expected);
+    CHECK(materialized_key(content::key(root, "objects") / child) == expected);
+
+    auto appended = prefix;
+    appended.append(child, "\0tail"sv);
+    CHECK(materialized_key(appended) == expected + tuple_string("\0tail"sv));
+
+    auto assigned = prefix;
+    assigned /= child;
+    CHECK(materialized_key(assigned) == expected);
+    CHECK(materialized_key(prefix) == prefix_bytes);
+   }
+  }
+ }
+}
+
 TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments",
           "[fdb][content]")
 {
@@ -206,7 +310,7 @@ TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments
 
 TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 {
- STATIC_REQUIRE(5 == content::detail::encoded_string_segment_reserve_size("a\0b"sv));
+ STATIC_REQUIRE(6 == content::detail::inspect_string_segment("a\0b"sv).encoded_size());
 
  constexpr char segment_bytes[] = { 'a', '\0', 'b' };
  const auto key = content::keyspace(std::string_view(segment_bytes, sizeof(segment_bytes)));
