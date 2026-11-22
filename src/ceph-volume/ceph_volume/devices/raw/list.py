@@ -62,7 +62,9 @@ class List(object):
         return [
             dev
             for dev in devices
-            if (dev_name := dev["NAME"]) and os.path.exists(dev_name)
+            if (dev_name := dev["NAME"])
+            and os.path.exists(dev_name)
+            and not disk.is_network_block_device(dev_name)
         ]
 
     def exclude_atari_partitions(self) -> None:

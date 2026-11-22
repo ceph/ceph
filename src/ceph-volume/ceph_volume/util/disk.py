@@ -484,6 +484,15 @@ def is_ceph_rbd(dev):
     return dev.startswith(('/dev/rbd'))
 
 
+def is_network_block_device(dev):
+    """
+    Boolean to determine if a given device is backed by the network, like
+    /dev/rbd0 or /dev/nbd0. Reading from them can block for as long as the
+    remote side is unavailable, so they must not be probed.
+    """
+    return os.path.basename(dev).startswith(('rbd', 'nbd'))
+
+
 class BaseFloatUnit(float):
     """
     Base class to support float representations of size values. Suffix is

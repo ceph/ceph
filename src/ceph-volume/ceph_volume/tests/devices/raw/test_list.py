@@ -200,6 +200,43 @@ class TestList(object):
             {"NAME": "/dev/sda", "KNAME": "/dev/sda", "PKNAME": "", "TYPE": "disk"}
         ]
 
+    @patch('ceph_volume.devices.raw.list.os.path.exists', return_value=True)
+    def test_exclude_invalid_devices_skips_network_devices(self, path_exists_patch):
+        devices = [
+            {"NAME": "/dev/sda", "KNAME": "/dev/sda", "PKNAME": "", "TYPE": "disk"},
+            {"NAME": "/dev/rbd0", "KNAME": "/dev/rbd0", "PKNAME": "", "TYPE": "disk"},
+            {"NAME": "/dev/nbd0", "KNAME": "/dev/nbd0", "PKNAME": "", "TYPE": "disk"},
+        ]
+
+        assert list_command.List([]).exclude_invalid_devices(devices) == [devices[0]]
+
+    @patch('ceph_volume.devices.raw.list.List.exclude_lvm_osd_devices', Mock())
+    @patch('ceph_volume.util.disk.has_bluestore_label')
+    @patch('ceph_volume.process.call')
+    @patch('ceph_volume.util.disk.lsblk_all')
+    @patch('ceph_volume.devices.raw.list.os.path.exists', return_value=True)
+    def test_raw_list_does_not_probe_network_devices(
+        self,
+        patched_path_exists,
+        patched_disk_lsblk,
+        patched_call,
+        patched_bluestore_label,
+    ):
+        patched_disk_lsblk.return_value = [
+            {"NAME": "/dev/sdc", "KNAME": "/dev/sdc", "PKNAME": "", "TYPE": "disk"},
+            {"NAME": "/dev/rbd0", "KNAME": "/dev/rbd0", "PKNAME": "", "TYPE": "disk"},
+            {"NAME": "/dev/nbd0", "KNAME": "/dev/nbd0", "PKNAME": "", "TYPE": "disk"},
+        ]
+        patched_call.return_value = [json.dumps({"/dev/sdc": None})], '', 0
+        patched_bluestore_label.return_value = False
+
+        list_command.List([]).generate()
+
+        command = patched_call.call_args[0][0]
+        assert '/dev/sdc' in command
+        assert '/dev/rbd0' not in command
+        assert '/dev/nbd0' not in command
+
     @patch("ceph_volume.devices.raw.list.List.exclude_lvm_osd_devices", Mock())
     @patch("ceph_volume.util.device.disk.get_devices")
     @patch("ceph_volume.util.disk.has_bluestore_label")
