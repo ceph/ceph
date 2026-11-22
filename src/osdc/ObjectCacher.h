@@ -494,6 +494,9 @@ class ObjectCacher {
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
   size_t stat_nr_dirty_waiters;
+  // waiters woken for room that have not taken the lock again yet
+  size_t stat_nr_dirty_woken;
+  static constexpr uint64_t MAX_WOKEN_WRITEBACK_WAITERS = 32;
 
   void verify_stats() const;
 
@@ -731,6 +734,7 @@ private:
                       ZTracer::Trace *trace, Context *onfreespace,
                       bool block_writes_upfront, bool *defer_wait);
   bool _writeback_wait_needed();
+  void _wake_writeback_waiters();
   bool gate_enter() {
     gate_readers.fetch_add(1, std::memory_order_seq_cst);
     if (gate_closed.load(std::memory_order_seq_cst)) {

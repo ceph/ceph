@@ -765,7 +765,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     last_read_tid(0), flusher_stop(false), flusher_thread(this),finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0),
     stat_missing(0), stat_error(0), stat_dirty_waiting(0),
-    stat_nr_dirty_waiters(0), reads_outstanding(0)
+    stat_nr_dirty_waiters(0), stat_nr_dirty_woken(0), reads_outstanding(0)
 {
   perf_start();
   finisher.start();
@@ -2102,6 +2102,40 @@ void ObjectCacher::wait_for_writeback_space(uint64_t len)
   _maybe_wait_for_writeback(len, &trace);
 }
 
+// Wake as many writers waiting for writeback as there is room for now,
+// see _maybe_wait_for_writeback()
+void ObjectCacher::_wake_writeback_waiters()
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  uint64_t waiters = get_stat_nr_dirty_waiters();
+  if (!waiters) {
+    stat_nr_dirty_woken = 0;
+    return;
+  }
+  if (_writeback_wait_needed())
+    return;
+  // The limit counts what the waiters wait to write; each that goes takes
+  // its bytes, and at least one BufferHead, out of the room left
+  uint64_t used = get_stat_dirty() + get_stat_tx();
+  uint64_t limit = max_dirty + get_stat_dirty_waiting();
+  uint64_t avg = std::max<uint64_t>(1, get_stat_dirty_waiting() / waiters);
+  uint64_t n = (limit > used ? limit - used : 0) / avg;
+  uint64_t bh_limit = (max_dirty >> BUFFER_MEMORY_WEIGHT) + waiters;
+  n = std::min<uint64_t>(n, bh_limit > dirty_or_tx_bh.size() ?
+                            bh_limit - dirty_or_tx_bh.size() : 0);
+  n = std::max<uint64_t>(n, 1);
+  // those woken already and not back yet take their share of it, and no
+  // more than MAX_WOKEN_WRITEBACK_WAITERS are let go at once
+  uint64_t woken = std::min<uint64_t>(stat_nr_dirty_woken, waiters);
+  if (n <= woken || woken >= MAX_WOKEN_WRITEBACK_WAITERS)
+    return;
+  n = std::min<uint64_t>({n - woken, MAX_WOKEN_WRITEBACK_WAITERS - woken,
+                          waiters - woken});
+  stat_nr_dirty_woken = woken + n;
+  while (n--)
+    stat_cond.notify_one();
+}
+
 bool ObjectCacher::_writeback_wait_needed()
 {
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -2117,6 +2151,19 @@ bool ObjectCacher::_writeback_wait_needed()
            max_dirty_bh + get_stat_nr_dirty_waiters()));
 }
 
+/*
+ * Writers wait here while the dirty and in-flight data is over the limit.
+ * A change of the cache's state that lifts the limit (counting what all
+ * waiters wait to write) wakes as many of them as there is room for, but
+ * never more than MAX_WOKEN_WRITEBACK_WAITERS that have not taken the
+ * lock again yet, and each that goes passes on what room is left.  Waking
+ * them all made them queue for the lock, and with thousands of writers
+ * the writeback completions, which need the lock to lower the dirty data,
+ * waited behind them all: the writeback, and with it the writers, nearly
+ * stopped.  Waking one at a time makes them go one by one when there is
+ * room for many.  Whatever they wait for changes the state again until
+ * the dirty data is under the limit, so none is left asleep.
+ */
 void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 					     ZTracer::Trace *trace)
 {
@@ -2143,11 +2190,15 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     l.release();
     stat_dirty_waiting -= len;
     --stat_nr_dirty_waiters;
+    if (stat_nr_dirty_woken)
+      --stat_nr_dirty_woken;
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
   }
   if (blocked > 0) {
     trace->event("finish wait for writeback");
+    // pass it on: there may be room for more waiters
+    _wake_writeback_waiters();
   }
   if (blocked && perfcounter) {
     perfcounter->inc(l_objectcacher_write_ops_blocked);
@@ -2971,8 +3022,7 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
   default:
     ceph_abort_msg("bh_stat_add: invalid bufferhead state");
   }
-  if (get_stat_dirty_waiting() > 0)
-    stat_cond.notify_all();
+  _wake_writeback_waiters();
 }
 
 void ObjectCacher::bh_stat_sub(BufferHead *bh)
@@ -3086,7 +3136,6 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
     dirty_or_tx_bh.erase(bh);
   }
   bh_stat_sub(bh);
-  if (get_stat_dirty_waiting() > 0)
-    stat_cond.notify_all();
+  _wake_writeback_waiters();
 }
 
