@@ -6,12 +6,16 @@ checks the same record-view examples with the native C++26 reflection backend.
 
 All sections and their examples are provisional while Datum continues to evolve.
 
-The lessons use one-pass overlap traversal for synchronous cuts, bounded quota plans with
+The lessons use one-pass overlap traversal for synchronous cuts, inferred inline quota plans with
 `static_assert`, and fragmented transfer where both sides have separate buffers. See
 [how to choose preparation](docs/developer-guide.md#choose-preparation-for-the-consumer)
 and the [complete constant-plan program](examples/constexpr_plan.cpp).
 The [coverage-change program](examples/coverage_changes.cpp) checks pure symmetric difference
 at compile time, keeping changed membership distinct from additions, removals, and source identity.
+The [storage guide](tutorial.md#choose-retained-storage) and
+[complete storage program](examples/retained_storage.cpp) cover automatic inference, explicit
+entry limits, and a common dynamic owning type for mixed expression shapes. Ordinary small
+plans need no capacity template argument; unknown or large bounds fall back dynamically.
 
 The shared [supplemental example catalog](examples.json) supplies CMake and both documentation
 publishers. It includes the complete read planner, streaming/transfer programs, and worked

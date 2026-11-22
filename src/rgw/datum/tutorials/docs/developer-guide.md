@@ -112,6 +112,18 @@ still allocate temporary workspace. Keep
 `evaluate(expression, workspace)` where preparation must obey explicit work/intermediate-entry
 limits. Lazy output and bounded output capacity do not enforce those workspace limits.
 
+| Retained-result requirement | Policy |
+| --- | --- |
+| Ordinary owning range | Use `auto` with `compile_intervals` or `take`; small proven bounds select inline output |
+| Application entry limit | Use `<Capacity>`; raw compilation applies the limit after normalization |
+| Common field, collection element, or function return type | Pass `interval::dynamic_storage` explicitly |
+
+The [storage lesson](../tutorial.md#choose-retained-storage) and
+[complete program](../examples/retained_storage.cpp) cover each choice, including resolved plan
+compilation. A dynamic span erases a fixed extent; a runtime size or a small actual result does
+not recover that type information. The private inline threshold is no substitute for a caller's
+work budget, and owning point values does not make borrowed point backing survive its owner.
+
 XOR (exclusive OR) uses one monotone boundary-parity transition in both push and pull consumers. Each merge
 processes at most two events per canonical input interval with constant additional state,
 without recursively duplicating expression subtrees. Total composed work still includes each

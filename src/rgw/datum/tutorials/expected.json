@@ -7,6 +7,7 @@
   "lazy_reads": "read 0, length 4\nread 8, length 4\nplanned: 2\n",
   "constexpr_plan": "read 0, length 3\nread 10, length 2\nplanned: 5 bytes\n",
   "coverage_changes": "changed 0, length 5\nchanged 8, length 4\ncomponents: 2, bytes: 9\n",
+  "retained_storage": "automatic: 2 intervals, 9 bytes\nlimit 1 after normalization: 1 interval\ncommon dynamic type: 3 selections\nruntime source: 1 interval\nquota: 7 bytes, dynamic quota: 7 bytes\nresolved plan: 9 bytes\n",
   "comparison_cache_gap": "read 0..15 (16 bytes)\nread 48..63 (16 bytes)\n",
   "comparison_key_range": "photos/30\nphotos/70\nphotos/30@9\nphotos/30@2\nphotos/70@4\n",
   "comparison_fragment": "payload\n",

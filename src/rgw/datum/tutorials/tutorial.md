@@ -455,6 +455,59 @@ included endpoints, so the normalized coverage becomes a single interval:
 [1, 10]
 ```
 
+### Choose retained storage
+
+Ordinary `compile_intervals(source)` chooses storage automatically. A small bound known from
+the source type selects inline entries; an unknown or large bound selects a vector. The array
+in this lesson supplies a bound of three entries even though its normalized output has two.
+Inference neither counts values nor makes a preliminary pass over the source.
+
+| What the caller needs | Call |
+| --- | --- |
+| An owning result with automatic storage | `iv::compile_intervals(source)` |
+| A hard limit on retained interval entries | `iv::compile_intervals<Capacity>(source)` |
+| One owning type across different expression shapes | `iv::compile_intervals(source, iv::dynamic_storage)` |
+
+Use `auto` and range-based consumers for the ordinary form. Identical expression types give
+the same result type even when the covered values differ. Different expression shapes can
+give different types, so select dynamic storage within the same ordered domain for a
+homogeneous collection or a function
+whose return branches compile different shapes. The [complete storage program](examples/retained_storage.cpp)
+demonstrates a collection with both a single interval and an XOR expression:
+
+```cpp
+const auto first = iv::compile_intervals(previous, iv::dynamic_storage);
+const auto changed = iv::compile_intervals(previous ^ desired, iv::dynamic_storage);
+const std::array selections {first, changed};
+```
+
+An explicit capacity limits normalized output, not raw input count. Two overlapping entries
+can therefore fit into one slot:
+
+```cpp
+constexpr std::array overlapping {
+    iv::byte_query::closed_open(0, 8), iv::byte_query::closed_open(5, 12)};
+constexpr auto merged = iv::compile_intervals<1>(overlapping);
+static_assert(merged.size() == 1);
+```
+
+Exceeding an explicit capacity throws `std::length_error` without returning partial output.
+Raw normalization still uses temporary workspace and can allocate before retaining inline
+entries. Capacity does not bound preparation work or allocations owned by point values.
+Owning the interval values also does not extend the lifetime of backing data they borrow.
+
+Fixed arrays, fixed spans, and known nonexpanding adaptors carry structural bounds. Vectors,
+dynamic spans, and unknown wrappers use dynamic fallback; a runtime `size()` is insufficient.
+`std::span{array}` preserves a fixed extent, while converting it to a dynamic span erases that
+bound. Overflowing bounds or inline storage that would be too large or insufficiently movable
+also fall back. The threshold is private policy; rely on the range contract and choose an
+explicit policy when its concrete result type matters.
+
+The same choices apply to [covered quotas](#bounded-read-batches) and
+[resolved query compilation](#15-write-the-order-ticket). The
+[reference storage table](https://github.com/chardan/ceph/blob/jfw-datum/src/rgw/datum/README.md#choose-retained-storage)
+also distinguishes retained values from checked admission and borrowed workspace output.
+
 ### Observe algebra as a range
 
 Prepared coverage can feed another selection without collecting its result first.
@@ -915,26 +968,18 @@ storage is released within the evaluation; a nonempty vector allocation cannot r
 metrics, and callbacks must themselves support constant evaluation. See N4950's constant
 expression rules in the [bibliography](#bibliography).
 
-The bound is conservative and comes from types, not values. Identical expression shapes
-have the same result type even when their actual component counts differ. Fixed arrays,
-fixed spans, and known nonexpanding adaptors carry bounds; vectors and dynamic spans do not.
-The current internal policy caps the complete inline storage object at 512 bytes and keeps
-it movable for standard range pipelines. This is not a stable concrete-type guarantee.
-Raw input normalization can still allocate temporary workspace before retaining inline output.
-
-Prefer `auto` and range-based consumers. When a collection or return interface needs the same
-owning type for different expression shapes, select dynamic storage explicitly:
+The [storage choices from section 3](#choose-retained-storage) apply to `take` too. An explicit
+`take<Capacity>` enforces an entry limit. Use a final `dynamic_storage` argument when batches
+from different expression shapes must share one owning type:
 
 ```cpp
-const auto first = iv::compile_intervals(previous, iv::dynamic_storage);
-const auto changed = iv::compile_intervals(previous ^ desired, iv::dynamic_storage);
-const std::array selections {first, changed};
 const auto batch = iv::take(changed, 5, iv::bytes, iv::dynamic_storage);
 ```
 
-`plan::compile_intervals` accepts the same dynamic policy for resolved query descriptions.
-Explicit `compile_intervals<Capacity>` also accepts raw ranges; its limit applies after
-normalization, so several overlapping entries can fit into one output slot.
+An unknown or large source bound automatically selects dynamic storage, which can be consumed
+within constant evaluation but cannot retain a nonempty allocation in a C++23 `constexpr`
+object. Use fixed-bound sources or an appropriate explicit capacity when retaining such a plan.
+The [complete storage program](examples/retained_storage.cpp) checks compilation and quotas together.
 
 ## 7 Move it and keep reading
 
@@ -1763,6 +1808,12 @@ std::println("requested: {} bytes", iv::measure(coverage, iv::bytes));
 std::println("quota: {} bytes", quota);
 ```
 
+Plan compilation forwards the [same storage choices](#choose-retained-storage) to the interval
+compiler: `plan::compile_intervals<Capacity>(order)` imposes a hard entry limit, and
+`plan::compile_intervals(order, iv::dynamic_storage)` selects a common dynamic owning type.
+All forms require a resolved query and compile only its interval geometry; they do not apply
+controls or execute residuals.
+
 `control<std::uint64_t>` retrieves the stored `std::uint64_t` value. Its type must
 identify exactly one control in the query; this example stores just one.
 Interpreting that number as a covered-byte quota is this example's convention,
@@ -2393,6 +2444,23 @@ It prints three half-open ranges in MiB: `[0, 4)`, `[12, 20)`, and `[40, 42)`.
 Together they select 14 MiB of requested data that is not cached. The planner needs no native
 Ceph library or running cluster. The interactive version can also download a complete program
 using the positions and per-batch limit currently selected by its controls.
+
+### Run the retained storage example
+
+The [complete storage program](examples/retained_storage.cpp) needs only the core C++23 setup.
+It checks inferred constexpr coverage, a hard limit after raw normalization, common dynamic
+types, covered quotas, and resolved plan compilation:
+
+```sh
+cmake --build build --parallel 2 --target retained_storage
+./build/retained_storage
+ctest --test-dir build --output-on-failure -R '^retained_storage$'
+```
+
+It prints the component/byte counts and common collection size recorded in
+[expected.json](expected.json). Follow [the storage lesson](#choose-retained-storage) for when
+to use each policy. `constexpr_plan` and `coverage_changes` are smaller examples of inferred
+inline retention; neither requires a manually calculated capacity argument.
 
 ### Build run and check one example
 

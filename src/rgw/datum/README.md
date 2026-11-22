@@ -60,6 +60,7 @@ Other core operations already accept standard ranges under their established nam
 | Compose a dynamic sequence of key segments | `key::compose_range(segments)` |
 | Append interval entries to bounded storage | `static_interval_set::append_range`, also through `interval_batch` |
 | Normalize raw interval entries or retain reusable coverage | `compile_intervals`, `canonical_range` |
+| Infer retained storage, impose a hard entry limit, or use a common dynamic type | [Retained storage](#choose-retained-storage) |
 | Validate and repeatedly clip stable records | `interval::clip_view` |
 | Observe algebra through standard range pipelines | `interval::observe_intervals(expression)` |
 | Align independently segmented sources | `interval::visit_overlaps(left, right, consumer, left_lens, right_lens)` |
@@ -913,6 +914,8 @@ Copying an existing canonical range preserves its storage semantics, including a
 container's copy. Pass compiled results directly to geometry operations, which borrow
 canonical lvalues. External mutation must preserve normalization during observation.
 
+### Choose retained storage
+
 | Operation | Storage behind the returned `canonical_range` |
 | --- | --- |
 | `compile_intervals(expression)` or `compile_intervals(raw_ranges)` | Owns normalized values; automatically selects inline or vector storage |
@@ -937,8 +940,25 @@ its explicit capacity limits normalized output, not the number of input entries.
 
 Different expression shapes can therefore return different types. Use `auto` or a range-based
 interface for ordinary consumers. Choose `dynamic_storage` when fields, homogeneous collections,
-or function return branches need one owning type across shapes. `plan::compile_intervals`
+or function return branches need one owning type across shapes in the same domain. `plan::compile_intervals`
 supports the same automatic, explicit-capacity, and dynamic forms for resolved queries.
+
+The [complete storage example](tutorials/examples/retained_storage.cpp) checks all three choices,
+raw normalization, covered quotas, and resolved plans. For example, select a common owning type
+when a collection mixes a single interval and a compound expression:
+
+```cpp
+const std::array selections {
+    iv::compile_intervals(previous, iv::dynamic_storage),
+    iv::compile_intervals(previous ^ desired, iv::dynamic_storage)
+};
+```
+
+Fixed-extent information matters: `std::span{array}` retains its structural bound, while a
+dynamic span or vector does not. Default result types depend on source types and private
+storage policy, rather than actual component counts. A fixed-bound result can remain a C++23
+`constexpr` object when its point operations permit it; a dynamic result's nonempty allocation
+must be consumed within that evaluation. See the [tutorial storage guide](tutorials/tutorial.md#choose-retained-storage).
 
 Each result supports read-only range iteration; sizing, indexing, and contiguous access
 follow its backing storage. An owned inline or vector result is a range, rather than a
@@ -1013,6 +1033,11 @@ empty. A consumer resolves its own application requirements before constructing 
 description. Plan compilation compiles only the intervals; it does not apply residuals or
 controls. The explicit `take` call gives the integer control its covered-byte meaning.
 Compile the full query only when another consumer needs its prepared coverage.
+
+Resolved plan compilation forwards all [retained-storage choices](#choose-retained-storage):
+ordinary inference, explicit `plan::compile_intervals<Capacity>(query)`, and
+`plan::compile_intervals(query, iv::dynamic_storage)`. Storage selection interprets neither
+controls nor residuals.
 
 ## Observation and wire schemas
 

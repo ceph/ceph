@@ -22,6 +22,7 @@ gives the setup commands.
 | Align independent layouts and selections | [Overlap traversal](../tutorial.md#align-two-independently-segmented-sources) and the [mapped-read program](../examples/overlap_reads.cpp) |
 | Select bytes from a packed sparse payload | [Packed mapping](../tutorial.md#select-from-a-packed-sparse-payload) and the [complete program](../examples/packed_payload.cpp) |
 | Put overlapping ranges in order | [Untangle the ranges](../tutorial.md#3-untangle-the-ranges) |
+| Infer retained storage, impose an entry limit, or combine result types | [Storage choices](../tutorial.md#choose-retained-storage) and the [complete program](../examples/retained_storage.cpp) |
 | Make key order match numeric order | [Put 2 before 10](../tutorial.md#4-put-2-before-10) |
 | Sort records by several keys | [Comparison composition](design.md#native-vocabulary-and-comparison-composition) |
 | Select missing byte ranges using built-in vocabulary | [Byte geometry and queries](design.md#bytes-geometry-and-standard-ranges) |
@@ -45,6 +46,11 @@ gives the setup commands.
 
 **Acceptance.** A scan callback's decision controls whether an offered entry is
 consumed and whether traversal stops. [Lesson 10](../tutorial.md#10-keep-your-place).
+
+**Automatic storage.** Ordinary compilation and covered quotas retain small structural bounds
+inline and use a vector otherwise. The result type follows source types rather than covered
+values. Prefer `auto` or range-based interfaces.
+[Storage choices](../tutorial.md#choose-retained-storage).
 
 **`append_range`.** Append an input range to a growable sequence, with native
 C++23 dispatch and a portable fallback. Use `views::join` to append characters
@@ -128,10 +134,10 @@ values; workspace results borrow them. Checked range admission follows standard
 `views::all` ownership.
 [Canonical operands and evaluation](design.md#canonical-operands-and-evaluation).
 
-**Automatic storage; `dynamic_storage`.** Ordinary compilation and covered quotas select inline
-output for small structural bounds, and a vector otherwise. Use the explicit dynamic policy for
-one owning type across expression shapes; use `<Capacity>` for a hard output entry limit.
-[Storage policy](design.md#canonical-operands-and-evaluation).
+**Capacity; explicit limits.** `compile_intervals<Capacity>` and `take<Capacity>` enforce output
+entry limits, throwing without returning partial output on overflow. Raw compilation applies
+the limit after normalization; it does not bound input entries, temporary allocations, or work.
+[Storage choices](../tutorial.md#choose-retained-storage).
 
 **Ceph vocabulary; `ceph-datum.h`.** Shared operations for native `buffer::list`
 storage: copy into an ordinary destination, retain a slice, create an independent
@@ -168,6 +174,12 @@ meaning and applies them. [Lesson 15](../tutorial.md#15-write-the-order-ticket).
 gaps contribute nothing to the quota. [Lesson 6](../tutorial.md#6-five-bytes-please).
 
 ### D–F
+
+**`dynamic_storage`.** Pass as the last argument to interval/plan compilation or covered-quota
+selection for one vector-backed owning type across expression shapes in the same domain. Dynamic output
+does not retain nonempty heap allocation in a C++23 `constexpr` object.
+[Storage choices](../tutorial.md#choose-retained-storage) and the
+[complete program](../examples/retained_storage.cpp).
 
 **`DATUM_RECORD`; `DATUM_LOCAL_RECORD`.** Declare a record and its complete field
 metadata from one field list. The local form supports records inside a function.

@@ -49,7 +49,9 @@ without keeping it alive.
   and retain storage without first assembling a contiguous buffer.
 - **Read planning:** [stream missing coverage](tutorial/03-normalize-ranges.md#observe-algebra-as-a-range),
   align layouts with selections, and
-  [keep a bounded plan at compile time](tutorial/06-covered-quota.md#keep-a-plan-at-compile-time).
+  [keep a plan at compile time](tutorial/06-covered-quota.md#keep-a-plan-at-compile-time)
+  with inferred inline capacity. [Choose retained storage](tutorial/03-normalize-ranges.md#choose-retained-storage)
+  when an application needs a hard entry limit or one owning type across expression shapes.
 - **Records and codecs:** [project record fields](tutorial/08-toy-basket.md) and
   [encode selected fields](tutorial/12-postcard.md) using shared record declarations.
 - **Keys and ordering:** [build ordered keys](tutorial/04-numeric-keys.md) and compose comparisons

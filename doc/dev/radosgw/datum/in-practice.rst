@@ -481,6 +481,8 @@ Six slots suffice for its three request and three cache intervals. Unknown or la
 bounds automatically select dynamic output; an explicit ``take<Capacity>`` instead enforces
 an application entry limit. The
 :doc:`quota lesson <06-covered-quota>` also checks a complete numeric plan with ``static_assert``.
+The `retained-storage guide <03-normalize-ranges.rst#choose-retained-storage>`_ explains all three
+choices, including ``dynamic_storage`` for common result types across expression shapes.
 
 When each selected cut needs the identity of a source record, use
 :doc:`visit_overlaps <05-labeled-slices>` with ordered, internally disjoint streams. If the

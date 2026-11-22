@@ -55,6 +55,7 @@ def guide():
     links['transfer-between-fragmented-buffers'] = (
         '01-hello-fragments', 'transfer-between-fragmented-buffers')
     links['observe-algebra-as-a-range'] = ('03-normalize-ranges', 'observe-algebra-as-a-range')
+    links['choose-retained-storage'] = ('03-normalize-ranges', 'choose-retained-storage')
     links['bounded-read-batches'] = ('06-covered-quota', 'bounded-read-batches')
     links['keep-a-plan-at-compile-time'] = ('06-covered-quota', 'keep-a-plan-at-compile-time')
     for title in re.findall(r'^### (.+)$', FENCES.sub('', appendix), re.M):
