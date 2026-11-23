@@ -6,10 +6,18 @@
 
 RBD Replay is a set of tools for capturing and replaying RADOS Block Device
 (RBD) workloads. To capture an RBD workload, ``lttng-tools`` must be installed
-on the client, and ``rbd_tracing`` must be set to ``true`` for the client, for
-example with ``rbd_tracing = true`` in the ``[client]`` section of its
-``ceph.conf``. While ``rbd_tracing`` is ``false``, the default, ``librbd``
-emits no trace events.
+on the client, together with the package that holds the ``librbd`` tracepoint
+library ``librbd_tp.so`` (``librbd-devel`` on RPM-based distributions,
+``librbd-dev`` from download.ceph.com on Debian and Ubuntu), and
+``rbd_tracing`` must be set to ``true`` for the client. While ``rbd_tracing``
+is ``false``, the default, ``librbd`` emits no trace events.
+
+.. warning:: A ``librbd`` client with ``rbd_tracing`` set to ``true`` aborts
+   if it cannot load ``librbd_tp.so``, and running clients pick up a value
+   that is set with ``ceph config set``. Install the package first, and set
+   the option only for the process that you are tracing, not for a client
+   name that other processes use, and not for every client on a host that
+   runs virtual machines.
 
 Capture and replay takes three steps:
 
