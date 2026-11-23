@@ -112,6 +112,12 @@ still allocate temporary workspace. Keep
 `evaluate(expression, workspace)` where preparation must obey explicit work/intermediate-entry
 limits. Lazy output and bounded output capacity do not enforce those workspace limits.
 
+Reuse a named expression when its inputs remain suitable for each consumer; this reuses the
+selection description, not prepared coverage. Compile once for repeated consumers that need the
+same normalized values. Expressions can borrow canonical lvalues, so keep those sources alive
+and valid throughout use. Choose storage for the consumer's retention and type requirements,
+then measure its actual workload: allocation counts alone do not predict execution time.
+
 | Retained-result requirement | Policy |
 | --- | --- |
 | Ordinary owning range | Use `auto` with `compile_intervals` or `take`; small proven bounds select inline output |

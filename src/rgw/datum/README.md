@@ -938,6 +938,12 @@ It bounds result storage, not expression depth, preparation work, or point-owned
 Raw normalization still uses temporary workspace allocation, including during constant evaluation;
 its explicit capacity limits normalized output, not the number of input entries.
 
+Choose storage from the consumer's retention and type requirements. Fewer allocations alone do
+not establish faster execution; measure the actual workload, including preparation and point
+construction. Reuse an expression value when its inputs remain suitable, or compile once when
+several consumers need the same prepared coverage. Reusing the expression does not cache coverage
+or extend the lifetime of borrowed sources.
+
 Different expression shapes can therefore return different types. Use `auto` or a range-based
 interface for ordinary consumers. Choose `dynamic_storage` when fields, homogeneous collections,
 or function return branches need one owning type across shapes in the same domain. `plan::compile_intervals`

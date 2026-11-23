@@ -47,7 +47,7 @@
   {
     "name": "retained_storage", "source": "examples/retained_storage.cpp", "requires_ceph": false,
     "title": "Choose storage for retained coverage",
-    "summary": "Infer small constexpr results, enforce a normalized-output limit, and use one dynamic owning type across expression shapes and resolved plans."
+    "summary": "Reuse a selection expression, infer small constexpr results, enforce a normalized-output limit, and share a dynamic owning type across expression shapes and resolved plans."
   },
   {
     "name": "comparison_cache_gap", "source": "comparisons/cache-gap-example.cc", "requires_ceph": false,

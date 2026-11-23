@@ -481,6 +481,19 @@ const auto changed = iv::compile_intervals(previous ^ desired, iv::dynamic_stora
 const std::array selections {first, changed};
 ```
 
+Name an expression to reuse the same selection with different consumers:
+
+```cpp
+constexpr auto changes = previous ^ desired;
+constexpr auto changed = iv::compile_intervals(changes);
+constexpr auto order = plan::make_query(changes);
+```
+
+The expression describes the operation; it does not cache prepared coverage. Compile once when
+several consumers need that coverage. An expression can borrow named canonical ranges, so keep
+those sources alive and valid for every use. The complete storage program checks both direct
+and resolved-plan compilation from the same expression.
+
 An explicit capacity limits normalized output, not raw input count. Two overlapping entries
 can therefore fit into one slot:
 
