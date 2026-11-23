@@ -101,7 +101,7 @@ class EntryCache:
         return {k[0] for k in self}
 
     def contents(self, ns: str) -> Collection[str]:
-        return [kname for kns, kname in self if ns == ns]
+        return [kname for kns, kname in self if kns == ns]
 
     def __iter__(self) -> Iterator[EntryKey]:
         return iter(self._entries.keys())
