@@ -1,0 +1,7 @@
+[Unit]
+Description=target allowing to start/stop all rgw-on-scale@.service instances at once
+After=network-online.target local-fs.target remote-fs.target
+Wants=network-online.target
+
+[Install]
+WantedBy=multi-user.target

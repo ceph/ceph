@@ -12,7 +12,8 @@ set(SYSTEMD_SYSTEM_UNIT_DIR "${SYSTEMD_SYSTEM_UNIT_DIR}"
 set(CEPH_SYSTEMD_ENV_DIR "/etc/sysconfig"
   CACHE PATH "Location for systemd service environmental variable settings files")
 set(SYSTEMD_ENV_FILE "${CEPH_SYSTEMD_ENV_DIR}/ceph")
-foreach(service
+
+set(ceph_systemd_services
     ceph-crash
     ceph-exporter@
     ceph-fuse@
@@ -26,6 +27,26 @@ foreach(service
     ceph-immutable-object-cache@
     cephfs-mirror@
     rbdmap)
+
+set(ceph_systemd_targets
+  ceph.target
+  ceph-fuse.target
+  ceph-osd.target
+  ceph-mgr.target
+  ceph-mon.target
+  ceph-mds.target
+  ceph-radosgw.target
+  ceph-rbd-mirror.target
+  ceph-immutable-object-cache.target
+  cephfs-mirror.target)
+
+# RGW on IBM Storage Scale: filesystem-backed S3 endpoints, no Ceph cluster.
+if(WITH_RADOSGW_STANDALONE)
+  list(APPEND ceph_systemd_services rgw-on-scale@)
+  list(APPEND ceph_systemd_targets rgw-on-scale.target)
+endif()
+
+foreach(service ${ceph_systemd_services})
   configure_file(
     ${service}.service.in
     ${service}.service
@@ -36,14 +57,5 @@ foreach(service
 endforeach()
 
 install(FILES
-  ceph.target
-  ceph-fuse.target
-  ceph-osd.target
-  ceph-mgr.target
-  ceph-mon.target
-  ceph-mds.target
-  ceph-radosgw.target
-  ceph-rbd-mirror.target
-  ceph-immutable-object-cache.target
-  cephfs-mirror.target
+  ${ceph_systemd_targets}
   DESTINATION ${SYSTEMD_SYSTEM_UNIT_DIR})
