@@ -3545,8 +3545,8 @@ static std::string full_command_name(CLI::App* node) {
 // actual command. A correctly-placed flag is caught by the command's own
 // visible option, so it never shows up here; a flag caught by a parent shows up
 // as a hidden ANCESTOR_COPIES_GROUP copy (added by add_multilevel_option for
-// backward compat) with count() > 0. Whether the command actually has the flag
-// decides the message:
+// backward compat) with a value stored (count() > 0). Whether the command
+// actually has the flag decides the message:
 //   - the command has it   -> it was just typed too early:
 //                             "should appear after the subcommand".
 //   - the command lacks it -> unrelated flag we accept anyway for backward
@@ -3556,7 +3556,16 @@ static std::string full_command_name(CLI::App* node) {
 // flag, so we also check the returned option's group: a real (visible) option
 // has its own group, while a hidden copy climbed from an ancestor is in
 // ANCESTOR_COPIES_GROUP.
-void warn_wrong_position_and_unrelated_option(CLI::App* root) {
+// A flag CLI11 knows, given last with no value, is never stored, because CLI11
+// fails on it first for not having a value, so the count() > 0 rule above skips
+// it. To fix that, normalize_cli11_tokens passes it in as missing_value_flag,
+// and it is checked against the command the same way:
+//   - the command has it   -> no warning: it is in the right place (after the
+//                             command), only its value is missing (CLI11's
+//                             error says that).
+//   - the command lacks it -> "is not a valid option for '<command>'".
+void warn_wrong_position_and_unrelated_option(
+    CLI::App* root, const std::string& missing_value_flag = {}) {
   // One command is parsed, so follow the parsed chain down to the real command.
   std::vector<CLI::App*> path;
   for (CLI::App* n = root; n; ) {
@@ -3588,6 +3597,24 @@ void warn_wrong_position_and_unrelated_option(CLI::App* root) {
         cerr << "Warning: " << option_display_name(opt)
              << " should appear after the subcommand\n";
       } else {
+        cerr << "Warning: " << option_display_name(opt)
+             << " is not a valid option for '" << cmd_name << "'\n";
+      }
+    }
+  }
+
+  if (!missing_value_flag.empty()) {
+    const CLI::Option* opt = root->get_option_no_throw(missing_value_flag);
+    // Checks that it's a command's flag, not a global one (for example the
+    // globals --tenant and --uid, which are valid for every command).
+    if (opt && opt->get_group() == ANCESTOR_COPIES_GROUP) {
+      const std::string primary = "--" + opt->get_single_name();
+      // Warn only if the command doesn't own the flag. If it does, only the
+      // value is missing, and CLI11's error already says that.
+      const CLI::Option* owned = leaf->get_option_no_throw(primary);
+      const bool command_has_flag =
+          owned && owned->get_group() != ANCESTOR_COPIES_GROUP;
+      if (!command_has_flag && warned.insert(primary).second) {
         cerr << "Warning: " << option_display_name(opt)
              << " is not a valid option for '" << cmd_name << "'\n";
       }
@@ -3664,9 +3691,14 @@ void warn_underscore_options(
 // be arity-checked, so they pass through untouched). A token in value position
 // (right after a value-taking flag) is never rewritten. Returns the full token
 // list.
+// missing_value_flag is set to the last token when it is a value-taking flag
+// with no value after it, and left empty otherwise. It is used to warn when
+// that flag is not valid for the command, since CLI11 fails on it right away,
+// before the usual warning check can see it.
 std::vector<std::string> normalize_cli11_tokens(
     const CLI::App& app, const std::vector<const char*>& argv,
-    std::vector<std::pair<std::string, std::string>>& underscore_rewrites) {
+    std::vector<std::pair<std::string, std::string>>& underscore_rewrites,
+    std::string& missing_value_flag) {
   std::vector<std::string> tokens;
   tokens.reserve(argv.size() * 2);
   bool pending_value = false;  // previous token was a flag awaiting its value
@@ -3735,6 +3767,9 @@ std::vector<std::string> normalize_cli11_tokens(
       }
     }
     tokens.emplace_back(token);
+  }
+  if (pending_value) {
+    missing_value_flag = tokens.back();
   }
   return tokens;
 }
@@ -5461,8 +5496,9 @@ int main(int argc, const char **argv)
       // Only CLI11's copy is normalized — the legacy loop below still iterates
       // the original `args`.
       std::vector<std::pair<std::string, std::string>> underscore_rewrites;
-      const auto cli_tokens =
-          normalize_cli11_tokens(app, cli_argv, underscore_rewrites);
+      std::string missing_value_flag;
+      const auto cli_tokens = normalize_cli11_tokens(
+          app, cli_argv, underscore_rewrites, missing_value_flag);
       std::vector<const char*> parse_argv;
       parse_argv.reserve(cli_tokens.size());
       for (const auto& t : cli_tokens) {
@@ -5476,7 +5512,7 @@ int main(int argc, const char **argv)
           return 0;
         }
         warn_underscore_options(underscore_rewrites);
-        warn_wrong_position_and_unrelated_option(&app);
+        warn_wrong_position_and_unrelated_option(&app, missing_value_flag);
         warn_duplicates(&app);
         app.exit(e);                    // prints CLI11's own message
         return to_errno_exit_code(e);   // remaps just the exit code

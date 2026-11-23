@@ -102,6 +102,8 @@ ERR_CHOWN_NO_BUCKET="failure: (2) No such file or directory: failed to fetch buc
 ERR_REQUIRES_USER="failure: (22) Invalid argument: requires user or account id"
 ERR_EINVAL="failure: (22) Invalid argument"
 ERR_SUBCOMMAND="A subcommand is required"
+# CLI11's last line after every parse error
+RUN_HELP="Run with --help for more information."
 # logging list/flush on a bucket without logging: error message but exit 0 (legacy quirk)
 ERR_NO_LOGGING="does not have logging enabled"
 # legacy message spells the flag with an underscore (pre-migration typo, kept verbatim)
@@ -182,6 +184,40 @@ check_warns() {
   if [ -n "$error_msg" ] && ! echo "$output" | grep -qF -- "$error_msg"; then
     echo "FAIL [$desc]: expected error not found: $error_msg"
     echo "     output: $output"
+    ok=0
+  fi
+  [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
+}
+
+# check_exact "desc" expected_exit "line1" "line2" ... -- command args
+# The whole output (after filter) must be exactly the given lines, in order,
+# so any unexpected line fails the row. Only for lines that stop at a parse
+# error: their output comes from the parser, not from the cluster.
+check_exact() {
+  local desc="$1" expected_exit="$2"
+  shift 2
+  local expected=()
+  while [ "$1" != "--" ]; do
+    expected+=("$1")
+    shift
+  done
+  shift  # skip --
+
+  local tmpfile; tmpfile=$(mktemp)
+  _run "$@" >"$tmpfile" 2>&1
+  local exit_code=$?
+  local output; output=$(filter <"$tmpfile")
+  rm -f "$tmpfile"
+  local want; want=$(printf '%s\n' "${expected[@]}")
+
+  local ok=1
+  if [ "$exit_code" != "$expected_exit" ]; then
+    echo "FAIL [$desc]: expected exit $expected_exit, got $exit_code"
+    ok=0
+  fi
+  if [ "$output" != "$want" ]; then
+    echo "FAIL [$desc]: output differs (< expected, > got):"
+    diff <(echo "$want") <(echo "$output") | sed 's/^/     /'
     ok=0
   fi
   [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
@@ -386,7 +422,9 @@ check "list: unrecognized flag" 22 "ERROR: invalid flag --fakeflag" \
 # Pure wrong-position (no error) tests are in check_warns below.
 
 # missing option value
-check "list: --bucket missing value"         1 "--bucket: 1 required TEXT missing" \
+check_exact "list: --bucket missing value"   1 \
+  "--bucket: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
   bucket list --bucket
 check "list: --uid missing value"            1 "--uid: 1 required TEXT missing" \
   bucket list --uid
@@ -2719,11 +2757,20 @@ echo "=== the error names the flag even when a parent caught it ==="
 # caught by that hidden copy, and the error message names it. These rows pin
 # that name: without it the message reads ": 1 required TEXT missing".
 
-check "list: --object missing value is named"           1 "--object: 1 required TEXT missing" \
+check_exact "list: --object missing value is named" 1 \
+  "Warning: --object/-o is not a valid option for 'bucket list'" \
+  "--object: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
   bucket list --object
-check "list: --min-rewrite-size missing value is named" 1 "--min-rewrite-size: 1 required TEXT missing" \
+check_exact "list: --min-rewrite-size missing value is named" 1 \
+  "Warning: --min-rewrite-size is not a valid option for 'bucket list'" \
+  "--min-rewrite-size: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
   bucket list --min-rewrite-size
-check "bucket: --bucket missing value is named"         1 "--bucket: 1 required TEXT missing" \
+check_exact "bucket: --bucket missing value is named" 1 \
+  "Warning: --bucket/-b is not a valid option for 'bucket'" \
+  "--bucket: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
   bucket --bucket
 check "list: --num-shards non-integer is named"         22 "Could not convert: --num-shards = abc" \
   bucket list --num-shards abc
@@ -2733,6 +2780,60 @@ check "bucket: --max-entries non-integer is named"      22 "Could not convert: -
 # depended on this
 check "bucket: --tenant missing value is named"         1 "--tenant: 1 required TEXT missing" \
   bucket --tenant
+
+# ============================================================
+echo ""
+echo "=== an unrelated flag given last with no value is warned about ==="
+# ============================================================
+# CLI11 fails on such a flag before storing it, so the warning comes from the
+# token walk in normalize_cli11_tokens. These rows check the whole output, so
+# a wrong extra warning fails them too.
+
+check_exact "list: --num-shards missing value warns" 1 \
+  "Warning: --num-shards is not a valid option for 'bucket list'" \
+  "--num-shards: 1 required INT missing" \
+  "$RUN_HELP" -- \
+  bucket list --num-shards
+check_exact "list: -o missing value warns" 1 \
+  "Warning: --object/-o is not a valid option for 'bucket list'" \
+  "--object: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
+  bucket list -o
+check_exact "list: --num_shards missing value warns" 1 \
+  "Warning: --num_shards should be spelled --num-shards" \
+  "Warning: --num-shards is not a valid option for 'bucket list'" \
+  "--num-shards: 1 required INT missing" \
+  "$RUN_HELP" -- \
+  bucket list --num_shards
+check_exact "list: --num-shards given twice, last with no value, warns once" 1 \
+  "Warning: --num-shards is not a valid option for 'bucket list'" \
+  "--num-shards: 1 required INT missing" \
+  "$RUN_HELP" -- \
+  bucket --num-shards 5 list --num-shards
+check_exact "bucket: --num-shards missing value warns" 1 \
+  "Warning: --num-shards is not a valid option for 'bucket'" \
+  "--num-shards: 1 required INT missing" \
+  "$RUN_HELP" -- \
+  bucket --num-shards
+# --object takes --min-rewrite-size as its value, so only --object and the
+# trailing --num-shards are warned about
+check_exact "list: a flag taken as a value is not warned about" 1 \
+  "Warning: --object/-o is not a valid option for 'bucket list'" \
+  "Warning: --num-shards is not a valid option for 'bucket list'" \
+  "--num-shards: 1 required INT missing" \
+  "$RUN_HELP" -- \
+  bucket list --object --min-rewrite-size --num-shards
+# controls: no warning
+# the command owns the flag, only its value is missing
+check_exact "list: -b missing value, no warning" 1 \
+  "--bucket: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
+  bucket list -b
+# a real root global is valid for every command
+check_exact "list: --tenant missing value, no warning" 1 \
+  "--tenant: 1 required TEXT missing" \
+  "$RUN_HELP" -- \
+  bucket list --tenant
 
 # ============================================================
 echo ""
