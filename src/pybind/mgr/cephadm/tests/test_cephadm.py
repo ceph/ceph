@@ -157,6 +157,11 @@ def noout_call(action: str, who: list):
                       'who': who, 'format': 'json'})
 
 
+def osd_daemons(hostname: str, *osd_ids: int) -> List[DaemonDescription]:
+    return [DaemonDescription(daemon_type='osd', daemon_id=str(i), hostname=hostname)
+            for i in osd_ids]
+
+
 @contextmanager
 def maintenance_host(cephadm_module: CephadmOrchestrator, hostname: str = 'host1',
                      daemons: Tuple[str, ...] = ('osd.0',)):
@@ -2547,11 +2552,71 @@ class TestCephadm(object):
             remote.assert_not_called()
             assert not host['status']
             assert 'maintenance_noout' not in host
-            assert mon.call_args_list == [noout_call('set', ['host1']), noout_call('unset', ['host1'])]
+            assert mon.call_args_list == [noout_call('set', ['osd.0']), noout_call('unset', ['osd.0'])]
 
-    @pytest.mark.parametrize("stop", ['success', 'failed - disable the target', 'timeout'])
-    def test_maintenance_keeps_noout_until_exit(self, cephadm_module, stop):
+    def test_maintenance_resumes_interrupted_entry(self, cephadm_module):
+        with maintenance_host(cephadm_module, daemons=('osd.0', 'osd.1')) as (host, _, mon):
+            host['maintenance_noout'] = [0]  # Previous attempt already flagged osd.0.
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'osds': [{'osd': i, 'state': ['up', 'noout']} for i in (0, 2)],
+            })
+
+            def check_persisted_before_set(cmd):
+                stored = json.loads(cephadm_module.get_store('inventory'))
+                assert stored['host1']['maintenance_noout'] == [0, 1]
+                return 0, '', ''
+
+            mon.side_effect = check_persisted_before_set
+            assert not cephadm_module.enter_host_maintenance('host1').exception_str
+            mon.side_effect = None
+            assert not cephadm_module.exit_host_maintenance('host1').exception_str
+            targets = ['osd.0', 'osd.1']
+            assert mon.call_args_list == [noout_call('set', targets), noout_call('unset', targets)]
+
+    def test_get_host_osd_ids(self, cephadm_module: CephadmOrchestrator):
+        daemons = osd_daemons('host1', 3, 1) + [
+            DaemonDescription(daemon_type='osd', daemon_id='x', hostname='host1'),
+            DaemonDescription(daemon_type='osd', daemon_id=None, hostname='host1'),
+        ]
+        with mock.patch("cephadm.module.HostCache.get_daemons_by_type", return_value=daemons):
+            assert cephadm_module._get_host_osd_ids('host1') == [1, 3]
+
+    def test_maintenance_uses_refreshed_osds_on_enter_and_recorded_osds_on_exit(self, cephadm_module):
+        hostname = 'host1.example.com'
+        daemons = osd_daemons(hostname, 0)
+        with maintenance_host(cephadm_module, hostname) as (host, _, mon):
+            with mock.patch("cephadm.module.HostCache.get_daemons_by_type", return_value=daemons), \
+                    mock.patch("cephadm.serve.CephadmServe._refresh_host_daemons",
+                               side_effect=lambda h: daemons.extend(osd_daemons(h, 2))):
+                assert not cephadm_module.enter_host_maintenance(hostname).exception_str
+                assert host['maintenance_noout'] == [0, 2]
+                daemons.extend(osd_daemons(hostname, 3))
+                assert not cephadm_module.exit_host_maintenance(hostname).exception_str
+            targets = ['osd.0', 'osd.2']
+            assert mon.call_args_list == [noout_call('set', targets), noout_call('unset', targets)]
+            assert not host['status']
+            assert 'maintenance_noout' not in host
+
+    def test_maintenance_refresh_failure_requires_override(self, cephadm_module):
         with maintenance_host(cephadm_module) as (host, remote, mon):
+            with mock.patch("cephadm.serve.CephadmServe._refresh_host_daemons",
+                            return_value='host unreachable'):
+                with pytest.raises(OrchestratorError, match='Unable to refresh the daemons on host1'):
+                    cephadm_module.enter_host_maintenance('host1')
+                mon.assert_not_called()
+                remote.assert_not_called()
+                assert not host['status']
+                assert not cephadm_module.enter_host_maintenance(
+                    'host1', force=True, yes_i_really_mean_it=True).exception_str
+                assert mon.call_args_list == [noout_call('set', ['osd.0'])]
+
+    @pytest.mark.parametrize("owned", [[0], []])
+    @pytest.mark.parametrize("stop", ['success', 'failed - disable the target', 'timeout'])
+    def test_maintenance_clears_only_owned_flags_after_exit(self, cephadm_module, owned, stop):
+        with maintenance_host(cephadm_module, daemons=tuple(f'osd.{i}' for i in (*owned, 1))) as (host, remote, mon):
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'osds': [{'osd': 1, 'state': ['up', 'noout']}],
+            })
             if stop == 'success':
                 assert not cephadm_module.enter_host_maintenance('host1').exception_str
             else:
@@ -2562,10 +2627,42 @@ class TestCephadm(object):
                     cephadm_module.enter_host_maintenance('host1')
                 remote.side_effect = success
             assert host['status'] == 'maintenance'
-            assert mon.call_args_list == [noout_call('set', ['host1'])]
+            assert host['maintenance_noout'] == owned
+            targets = [f'osd.{i}' for i in owned]
+            assert mon.call_args_list == ([noout_call('set', targets)] if targets else [])
             mon.reset_mock()
             assert not cephadm_module.exit_host_maintenance('host1').exception_str
+            assert mon.call_args_list == ([noout_call('unset', targets)] if targets else [])
+
+    def test_maintenance_exit_without_record(self, cephadm_module):
+        hostname = 'host1.example.com'
+        with maintenance_host(cephadm_module, hostname) as (host, _, mon):
+            host['status'] = 'maintenance'  # Older versions flagged the short hostname.
+            assert not cephadm_module.exit_host_maintenance(hostname).exception_str
             assert mon.call_args_list == [noout_call('unset', ['host1'])]
+
+    @pytest.mark.parametrize("offline", [False, True])
+    def test_forced_exit_reports_remaining_noout(self, cephadm_module, offline):
+        with maintenance_host(cephadm_module) as (host, _, mon):
+            host.update(status='maintenance', maintenance_noout=[0, 1])
+            if offline:
+                cephadm_module.offline_hosts.add('host1')
+                reason = 'The host is offline'
+            else:
+                mon.return_value = (-5, '', 'mon unavailable')
+                with pytest.raises(OrchestratorError, match='Unable to unset noout'):
+                    cephadm_module.exit_host_maintenance('host1')
+                assert host['status'] == 'maintenance'
+                assert host['maintenance_noout'] == [0, 1]
+                mon.reset_mock()
+                reason = 'Unsetting noout failed (rc=-5: mon unavailable)'
+            retval = cephadm_module.exit_host_maintenance('host1', force=True, offline=offline)
+            assert not retval.exception_str
+            assert mon.call_args_list == ([] if offline else [noout_call('unset', ['osd.0', 'osd.1'])])
+            assert not host['status']
+            assert 'maintenance_noout' not in host
+            assert reason in retval.result
+            assert 'ceph osd unset-group noout osd.0 osd.1' in retval.result
 
     def test_maintenance_disables_then_enables_nvmeof_gateway(self, cephadm_module):
         daemon_id = 'pool1.grp1.host1.abcd'

@@ -20,6 +20,16 @@
   with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
   when running custom-built images targeting an older CPU generation.
 
+* Cephadm: ``ceph orch host maintenance enter`` now sets the ``noout`` flag on
+  each OSD of the host instead of on the host's CRUSH bucket, so it no longer
+  fails when the bucket is not named after the short hostname. As a result,
+  ``ceph health detail`` lists every OSD of a host in maintenance under the
+  ``OSD_FLAGS`` section instead of the host itself. ``noout`` flags that were
+  set before entering maintenance are no longer removed on exit. If stopping
+  the host's daemons fails, the host is now kept in maintenance with the
+  ``noout`` flags set, so that ``ceph orch host maintenance exit`` can bring
+  it back.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
