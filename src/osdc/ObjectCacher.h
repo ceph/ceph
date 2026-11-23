@@ -454,14 +454,13 @@ class ObjectCacher {
 
   bool read_gate = false;
   alignas(64) std::atomic<bool> gate_closed{false};
-  // the readers inside the read gate, counted per CPU (mod GATE_SLOTS) so
-  // that readers on different CPUs do not pass one cache line around;
-  // whoever shuts the gate waits for all of them
-  static constexpr unsigned GATE_SLOTS = 32;
+  // the readers inside the read gate, counted per CPU so that readers on
+  // different CPUs do not pass one cache line around; whoever shuts the
+  // gate waits for all of them
   struct alignas(64) GateSlot {
     std::atomic<uint32_t> n{0};
   };
-  GateSlot gate_readers[GATE_SLOTS];
+  ceph::PerCpuSlots<GateSlot> gate_readers{32};
   bool gate_has_readers() const {
     for (auto& g : gate_readers) {
       if (g.n.load(std::memory_order_seq_cst) != 0)
@@ -474,8 +473,7 @@ class ObjectCacher {
   struct alignas(64) HitSlot {
     std::atomic<uint64_t> bytes_read{0}, bytes_hit{0}, ops_hit{0};
   };
-  static constexpr unsigned HIT_SLOTS = 64;
-  HitSlot hit_slots[HIT_SLOTS];
+  ceph::PerCpuSlots<HitSlot> hit_slots{64};
   void fold_hit_slots();
   ceph::timespan max_dirty_age;
   bool cfg_block_writes_upfront;
@@ -734,6 +732,12 @@ class ObjectCacher {
   void enable_read_gate() {
     read_gate = true;
   }
+  // how many per-CPU slots its counts use (see ceph::percpu_slots()):
+  // before start()
+  void set_percpu_slots(unsigned want) {
+    gate_readers.resize(want);
+    hit_slots.resize(want);
+  }
   // tuning, may be changed at any time
   void set_max_woken_writers(uint64_t n) {
     max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);
@@ -813,8 +817,7 @@ private:
   // the one entered by even if the thread moves to another CPU, or -1
   // when the gate is shut
   int gate_enter() {
-    int cpu = ceph::current_cpu();
-    int slot = (cpu < 0 ? 0 : cpu) % GATE_SLOTS;
+    int slot = int(ceph::cpu_index() & gate_readers.mask());
     gate_readers[slot].n.fetch_add(1, std::memory_order_seq_cst);
     if (gate_closed.load(std::memory_order_seq_cst)) {
       gate_readers[slot].n.fetch_sub(1, std::memory_order_release);

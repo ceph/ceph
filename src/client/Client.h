@@ -1524,6 +1524,7 @@ protected:
   // (client_oc_read_gate_retries)
   std::atomic<unsigned> read_gate_retries{4};
   void _apply_tuning();
+  unsigned percpu_slots = 0;   // client_percpu_slots (0: each default)
 
   class OCScope {
   public:
@@ -2761,10 +2762,9 @@ private:
     FhStripeLock lock;   // a leaf lock
     std::set<Fh*> fhs;
   };
-  static constexpr unsigned FH_STRIPES = 64;
-  FhStripe fh_stripes[FH_STRIPES];
+  ceph::PerCpuSlots<FhStripe> fh_stripes{64};   // not by CPU: by Fh
   FhStripe& fh_stripe(Fh *f) {
-    return fh_stripes[(reinterpret_cast<uintptr_t>(f) >> 6) % FH_STRIPES];
+    return fh_stripes[reinterpret_cast<uintptr_t>(f) >> 6];
   }
   void ll_fh_add(Fh *f) {
     auto& st = fh_stripe(f);
@@ -2841,13 +2841,13 @@ private:
   class ShardedCounter {
   public:
     void inc() {
-      slots[slot()].v.fetch_add(1, std::memory_order_relaxed);
+      slots.here().v.fetch_add(1, std::memory_order_relaxed);
     }
     // for a count that also goes down (a gauge): one slot alone may wrap
     // below zero, as a thread may go down on another CPU than it went up
     // on; the sum does not
     void dec() {
-      slots[slot()].v.fetch_sub(1, std::memory_order_relaxed);
+      slots.here().v.fetch_sub(1, std::memory_order_relaxed);
     }
     uint64_t get() const {
       uint64_t n = 0;
@@ -2855,22 +2855,16 @@ private:
         n += s.v.load(std::memory_order_relaxed);
       return n;
     }
+    // client_percpu_slots, before anyone counts
+    void resize(unsigned want) {
+      slots.resize(want);
+    }
   private:
-    static constexpr unsigned NSLOTS = 64;
     struct alignas(64) Slot {
       std::atomic<uint64_t> v{0};
     };
-    Slot slots[NSLOTS];
-  public:
-    // a slot for this thread: by CPU, so concurrent threads rarely share
-    static unsigned slot() {
-#ifdef __linux__
-      int cpu = ceph::current_cpu();
-      if (cpu >= 0)
-        return (unsigned)cpu % NSLOTS;
-#endif
-      return std::hash<std::thread::id>{}(std::this_thread::get_id()) % NSLOTS;
-    }
+    // a slot per CPU, so concurrent threads rarely share one
+    ceph::PerCpuSlots<Slot> slots{64};
   };
   ShardedCounter cap_hits;
   ShardedCounter cap_misses;
@@ -2921,10 +2915,9 @@ private:
     ceph::spinlock lock;
     IoStats s;
   };
-  static constexpr unsigned IO_STAT_SLOTS = 64;
-  IoStatSlot io_stat_slots[IO_STAT_SLOTS];
+  ceph::PerCpuSlots<IoStatSlot> io_stat_slots{64};
   IoStatSlot& io_stat_slot() {
-    return io_stat_slots[ShardedCounter::slot() % IO_STAT_SLOTS];
+    return io_stat_slots.here();
   }
   IoStats get_io_stats();
   void update_io_stat_logger();

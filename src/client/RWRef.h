@@ -147,6 +147,15 @@ struct RWRefState {
     }
     virtual ~RWRefState() {}
 
+    // client_percpu_slots, before any reader or writer comes
+    void resize(unsigned want) {
+      uint64_t n = 0;
+      for (auto& s : slots)
+        n += s.n.load();
+      slots.resize(want);
+      slots[0].n = n;
+    }
+
   private:
     /*
      * Readers run without the lock: a reader adds itself to the count of
@@ -159,14 +168,8 @@ struct RWRefState {
      * per call.  A reader leaves by the slot it entered by, as it may
      * have moved to another CPU meanwhile.
      */
-    static constexpr unsigned SLOTS = 32;
-    static unsigned this_slot() {
-#ifdef __linux__
-      int cpu = ceph::current_cpu();
-      if (cpu >= 0)
-        return (unsigned)cpu % SLOTS;
-#endif
-      return 0;
+    unsigned this_slot() const {
+      return ceph::cpu_index() & slots.mask();
     }
     void get_reader(unsigned slot) {
       slots[slot].n.fetch_add(1);
@@ -199,7 +202,7 @@ struct RWRefState {
     struct alignas(64) Slot {
       std::atomic<uint64_t> n{0};
     };
-    Slot slots[SLOTS];
+    ceph::PerCpuSlots<Slot> slots{32};
     std::atomic<int> waiters = 0;
 };
 

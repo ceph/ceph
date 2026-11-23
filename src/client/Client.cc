@@ -450,6 +450,19 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   force_lazyio = cct->_conf.get_val<bool>("client_force_lazyio");
   quota_enabled = cct->_conf.get_val<bool>("client_quota");
 
+  // per-CPU slot counts: each structure's default, capped to the CPUs,
+  // unless client_percpu_slots sets one for all; nobody uses them yet
+  percpu_slots = cct->_conf.get_val<uint64_t>("client_percpu_slots");
+  if (percpu_slots) {
+    cap_hits.resize(percpu_slots);
+    cap_misses.resize(percpu_slots);
+    sync_in_flight.resize(percpu_slots);
+    io_stat_slots.resize(percpu_slots);
+    fh_stripes.resize(percpu_slots);
+    mount_state.resize(percpu_slots);
+    initialize_state.resize(percpu_slots);
+  }
+
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -496,6 +509,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
                                   true));
     // cached reads take the read gate, not oc_lock (see _read_fast())
     sh->oc->enable_read_gate();
+    if (percpu_slots)
+      sh->oc->set_percpu_slots(percpu_slots);
     oc_group.push_back(sh->oc.get());
     oc_shards.push_back(std::move(sh));
   }

@@ -2103,13 +2103,7 @@ int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
   gate_exit(slot);
   if (r < 0)
     return r;
-  unsigned cpu = 0;
-#ifdef __linux__
-  int c = ceph::current_cpu();
-  if (c >= 0)
-    cpu = c;
-#endif
-  auto& hs = hit_slots[cpu % HIT_SLOTS];
+  auto& hs = hit_slots.here();
   hs.bytes_read.fetch_add(ex.length, std::memory_order_relaxed);
   hs.bytes_hit.fetch_add(bh_len, std::memory_order_relaxed);
   hs.ops_hit.fetch_add(1, std::memory_order_relaxed);

@@ -225,6 +225,26 @@ options:
   - client_oc
   - client_oc_size
   - client_oc_max_dirty
+- name: client_percpu_slots
+  type: uint
+  level: dev
+  desc: Per-CPU slots of the client's contended counts
+  long_desc: Counts that threads on many CPUs change at once (cap hits, I/O
+    statistics, the mount state's readers, the object cache's read gate and
+    hits) and the open file table are split into slots, one per logical
+    CPU (hardware thread or vCPU) modulo their number, each on its own
+    cache line.  0 gives each its default (32 or 64) but no more than the
+    machine's CPUs; any other value is used for all of them, rounded up to
+    a power of two.  More slots spread the
+    counts further; a count's reader or a writer of the read gate then
+    looks at more cache lines.
+  default: 0
+  min: 0
+  max: 4096
+  services:
+  - mds_client
+  flags:
+  - startup
 - name: client_oc_max_woken_writers
   type: uint
   level: dev
