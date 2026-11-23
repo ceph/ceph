@@ -33,7 +33,7 @@ Create a Block Device User
 
 Unless otherwise specified, the ``rbd`` command uses the Ceph user ID ``admin``
 to access the Ceph cluster. The ``admin`` Ceph user ID allows full
-administrative access to the cluster. We recommend that you acess the Ceph
+administrative access to the cluster. We recommend that you access the Ceph
 cluster with a Ceph user ID that has fewer permissions than the ``admin`` Ceph
 user ID does. We call this non-``admin`` Ceph user ID a "block device user" or
 "CephX user".
