@@ -274,13 +274,23 @@ options:
   type: int
   level: advanced
   desc: Restrict scrubbing to this hour of the day or later
-  long_desc: This restricts scrubbing to this hour of the day or later. Use osd_scrub_begin_hour
-    = 0 and osd_scrub_end_hour = 0 to allow scrubbing the entire day. Along with osd_scrub_end_hour
-    they define a time window, only in which will periodic scrubs be initiated.
-  fmt_desc: This restricts scrubbing to this hour of the day or later. Use ``osd_scrub_begin_hour
-    = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing the entire day.  Along
-    with ``osd_scrub_end_hour`` they define a time window, only in which will periodic
-    scrubs be initiated.
+  long_desc: This restricts scrubbing to this hour of the day or later. Along with
+    osd_scrub_end_hour, it defines a time window in which periodic scrubs can be
+    automatically initiated, from the start of osd_scrub_begin_hour until the start of
+    osd_scrub_end_hour. If osd_scrub_begin_hour is greater than osd_scrub_end_hour, the
+    window wraps past midnight; for example, 22 and 6 allow scrubs to start from 22:00
+    until 06:00. If the two values are equal, as with the default of 0 for both, scrubs
+    can start at any hour. Hours are in the local time of the OSD process, which is UTC
+    by default for OSDs that cephadm deploys.
+  fmt_desc: This restricts scrubbing to this hour of the day or later. Along with
+    ``osd_scrub_end_hour``, it defines a time window in which periodic scrubs can be
+    automatically initiated, from the start of ``osd_scrub_begin_hour`` until the start
+    of ``osd_scrub_end_hour``. If ``osd_scrub_begin_hour`` is greater than
+    ``osd_scrub_end_hour``, the window wraps past midnight; for example,
+    ``osd_scrub_begin_hour = 22`` and ``osd_scrub_end_hour = 6`` allow scrubs to start
+    from 22:00 until 06:00. If the two values are equal, as with the default of ``0``
+    for both, scrubs can start at any hour. Hours are in the local time of the OSD
+    process, which is UTC by default for OSDs that cephadm deploys.
   default: 0
   see_also:
   - osd_scrub_end_hour
@@ -291,14 +301,23 @@ options:
   type: int
   level: advanced
   desc: Restrict scrubbing to hours of the day earlier than this
-  long_desc: This restricts scrubbing to the hours earlier than this. Use osd_scrub_begin_hour
-    = 0 and osd_scrub_end_hour = 0 to allow scrubbing for the entire day. Along with
-    osd_scrub_begin_hour, they define a time window, only in which can periodic scrubs
-    be automatically initiated.
-  fmt_desc: This restricts scrubbing to the hours earlier than this. Use ``osd_scrub_begin_hour
-    = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing for the entire day.  Along
-    with ``osd_scrub_begin_hour``, they define a time window, only in which can periodic
-    scrubs be automatically initiated.
+  long_desc: This restricts scrubbing to the hours earlier than this. Along with
+    osd_scrub_begin_hour, it defines a time window in which periodic scrubs can be
+    automatically initiated, from the start of osd_scrub_begin_hour until the start of
+    osd_scrub_end_hour. If osd_scrub_begin_hour is greater than osd_scrub_end_hour, the
+    window wraps past midnight; for example, 22 and 6 allow scrubs to start from 22:00
+    until 06:00. If the two values are equal, as with the default of 0 for both, scrubs
+    can start at any hour. Hours are in the local time of the OSD process, which is UTC
+    by default for OSDs that cephadm deploys.
+  fmt_desc: This restricts scrubbing to the hours earlier than this. Along with
+    ``osd_scrub_begin_hour``, it defines a time window in which periodic scrubs can be
+    automatically initiated, from the start of ``osd_scrub_begin_hour`` until the start
+    of ``osd_scrub_end_hour``. If ``osd_scrub_begin_hour`` is greater than
+    ``osd_scrub_end_hour``, the window wraps past midnight; for example,
+    ``osd_scrub_begin_hour = 22`` and ``osd_scrub_end_hour = 6`` allow scrubs to start
+    from 22:00 until 06:00. If the two values are equal, as with the default of ``0``
+    for both, scrubs can start at any hour. Hours are in the local time of the OSD
+    process, which is UTC by default for OSDs that cephadm deploys.
   default: 0
   see_also:
   - osd_scrub_begin_hour
@@ -310,13 +329,24 @@ options:
   level: advanced
   desc: Restrict scrubbing to this day of the week or later
   long_desc: This restricts scrubbing to this day of the week or later. 0 = Sunday,
-    1 = Monday, etc. Use osd_scrub_begin_week_day = 0 and osd_scrub_end_week_day =
-    0 to allow scrubbing for the entire week. Along with osd_scrub_end_week_day, they
-    define a time window in which periodic scrubs can be automatically initiated.
-  fmt_desc: This restricts scrubbing to this day of the week or later. 0  = Sunday,
-    1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0`` and ``osd_scrub_end_week_day
-    = 0`` to allow scrubbing for the entire week. Along with ``osd_scrub_end_week_day``,
-    they define a time window in which periodic scrubs can be automatically initiated.
+    1 = Monday, etc. Along with osd_scrub_end_week_day, it defines a time window in
+    which periodic scrubs can be automatically initiated, from the start of
+    osd_scrub_begin_week_day until the start of osd_scrub_end_week_day. If
+    osd_scrub_begin_week_day is greater than osd_scrub_end_week_day, the window wraps
+    past Saturday; for example, 5 and 1 allow scrubs to start from Friday through Sunday.
+    If the two values are equal, as with the default of 0 for both, scrubs can start on
+    any day. A scrub can start only when both the day and the hour are within their
+    windows, in the local time of the OSD process.
+  fmt_desc: This restricts scrubbing to this day of the week or later. 0 = Sunday,
+    1 = Monday, etc. Along with ``osd_scrub_end_week_day``, it defines a time window in
+    which periodic scrubs can be automatically initiated, from the start of
+    ``osd_scrub_begin_week_day`` until the start of ``osd_scrub_end_week_day``. If
+    ``osd_scrub_begin_week_day`` is greater than ``osd_scrub_end_week_day``, the window
+    wraps past Saturday; for example, ``osd_scrub_begin_week_day = 5`` and
+    ``osd_scrub_end_week_day = 1`` allow scrubs to start from Friday through Sunday. If
+    the two values are equal, as with the default of ``0`` for both, scrubs can start on
+    any day. A scrub can start only when both the day and the hour are within their
+    windows, in the local time of the OSD process.
   default: 0
   see_also:
   - osd_scrub_end_week_day
@@ -328,13 +358,24 @@ options:
   level: advanced
   desc: Restrict scrubbing to days of the week earlier than this
   long_desc: This restricts scrubbing to days of the week earlier than this. 0 = Sunday,
-    1 = Monday, etc. Use osd_scrub_begin_week_day = 0 and osd_scrub_end_week_day =
-    0 to allow scrubbing for the entire week. Along with osd_scrub_begin_week_day,
-    they define a time window, in which periodic scrubs can be automatically initiated.
+    1 = Monday, etc. Along with osd_scrub_begin_week_day, it defines a time window in
+    which periodic scrubs can be automatically initiated, from the start of
+    osd_scrub_begin_week_day until the start of osd_scrub_end_week_day. If
+    osd_scrub_begin_week_day is greater than osd_scrub_end_week_day, the window wraps
+    past Saturday; for example, 5 and 1 allow scrubs to start from Friday through Sunday.
+    If the two values are equal, as with the default of 0 for both, scrubs can start on
+    any day. A scrub can start only when both the day and the hour are within their
+    windows, in the local time of the OSD process.
   fmt_desc: This restricts scrubbing to days of the week earlier than this. 0 = Sunday,
-    1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0`` and ``osd_scrub_end_week_day
-    = 0`` to allow scrubbing for the entire week. Along with ``osd_scrub_begin_week_day``,
-    they define a time window, in which periodic scrubs can be automatically initiated.
+    1 = Monday, etc. Along with ``osd_scrub_begin_week_day``, it defines a time window in
+    which periodic scrubs can be automatically initiated, from the start of
+    ``osd_scrub_begin_week_day`` until the start of ``osd_scrub_end_week_day``. If
+    ``osd_scrub_begin_week_day`` is greater than ``osd_scrub_end_week_day``, the window
+    wraps past Saturday; for example, ``osd_scrub_begin_week_day = 5`` and
+    ``osd_scrub_end_week_day = 1`` allow scrubs to start from Friday through Sunday. If
+    the two values are equal, as with the default of ``0`` for both, scrubs can start on
+    any day. A scrub can start only when both the day and the hour are within their
+    windows, in the local time of the OSD process.
   default: 0
   see_also:
   - osd_scrub_begin_week_day
