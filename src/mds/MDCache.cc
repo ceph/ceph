@@ -10173,7 +10173,7 @@ void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
     // the requesting mds holds the stray dentry until it gets a reply,
     // see Server::handle_client_reply()
     if (mdr->client_request->get_op() == CEPH_MDS_OP_RENAME) {
-      auto reply = make_message<MClientReply>(*mdr->client_request, -EAGAIN);
+      auto reply = ceph::make_message<MClientReply>(*mdr->client_request, -EAGAIN);
       mds->send_message(reply, mdr->client_request->get_connection());
     }
   }
