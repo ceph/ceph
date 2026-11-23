@@ -14,6 +14,7 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
+#include <seastar/core/semaphore.hh>
 #include <seastar/util/defer.hh>
 
 #include "include/ceph_assert.h"
@@ -973,9 +974,37 @@ public:
    * submit_transaction
    *
    * Atomically submits transaction to persistence
+   *
+   * reserved: the usage the caller already reserved through
+   * reserve_writer_usage() before taking the writer gate. The submit then
+   * never waits for space: what the reservation doesn't cover is reserved
+   * only if available right away, otherwise it is overcommitted. Without
+   * it, the submit reserves and may wait for background work, which a
+   * holder of the writer gate must not do (see writer_gate_t).
    */
   using submit_transaction_iertr = base_iertr;
-  submit_transaction_iertr::future<> submit_transaction(Transaction &);
+  submit_transaction_iertr::future<> submit_transaction(
+    Transaction &,
+    const io_usage_t *reserved = nullptr);
+
+  /**
+   * reserve_writer_usage
+   *
+   * Reserves the space a writer will consume, before it takes the writer
+   * gate. May wait for background reclamation, which needs the gate, so it
+   * must not be called while holding it. Reservations are serialized, so
+   * at most one writer waits for space at a time. Release with
+   * release_writer_usage() once the transaction is done.
+   */
+  seastar::future<> reserve_writer_usage(io_usage_t usage) {
+    return seastar::with_semaphore(reserve_lock, 1, [this, usage] {
+      return epm->reserve_projected_usage(usage);
+    });
+  }
+
+  void release_writer_usage(const io_usage_t &usage) {
+    epm->release_projected_usage(usage);
+  }
 
   /**
    * flush
@@ -992,6 +1021,10 @@ public:
 
   shard_stats_t& get_shard_stats() {
     return shard_stats;
+  }
+
+  writer_gate_t& get_writer_gate() final {
+    return writer_gate;
   }
 
   /// weak transaction should be type READ
@@ -1455,6 +1488,15 @@ private:
   bool full_extent_integrity_check = true;
 
   shard_stats_t& shard_stats;
+
+  /// Single writer per shard, see writer_gate_t
+  writer_gate_t writer_gate;
+
+  /// Serializes reserve_writer_usage()
+  seastar::semaphore reserve_lock{1};
+
+  /// Logged once: a writer committed without holding the writer gate
+  bool warned_ungated_commit = false;
 
   bool can_drop_backref() const {
     return cache->can_drop_backref();

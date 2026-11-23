@@ -52,6 +52,8 @@ enum class op_type_t : uint8_t {
 
 enum class txn_stage_t : uint8_t {
     THROTTLER_WAIT = 0, // waiting for a throttler slot
+    WRITER_RESERVE,    // reserving projected usage before the writer gate
+    WRITER_GATE_WAIT,  // waiting for the writer gate (other writers, background)
     BUILD,             // building the transaction (_do_transaction_step loop)
     BUILD_GET_ONODE,   // onode_manager get/get_or_create calls within BUILD
     SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)

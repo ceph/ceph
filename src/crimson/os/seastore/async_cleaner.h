@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <optional>
+
 #include <boost/intrusive/set.hpp>
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/metrics_types.hh>
+#include <seastar/core/semaphore.hh>
 
 #include "common/ceph_time.h"
 
@@ -287,6 +290,66 @@ private:
 std::ostream &operator<<(std::ostream &, const segments_info_t &);
 
 /**
+ * writer_gate_t
+ *
+ * Single writer per shard. Every transaction that writes holds the gate
+ * from creation until it commits: client batches, write_meta, mkfs, and
+ * the background transactions (trim alloc, trim dirty, cleaner, promote,
+ * demote). So no two writing transactions are ever in flight on a shard
+ * together. READ and weak transactions never take it.
+ *
+ * Deadlock rule: a gate holder must never wait for background work, since
+ * background transactions need the gate to make progress. Client writers
+ * therefore reserve their projected usage before taking the gate, see
+ * TransactionManager::reserve_writer_usage().
+ *
+ * The gate is FIFO, so a background transaction delays the client batches
+ * queued behind it for as long as it holds the gate.
+ *
+ * TODO: allocation retries (wait_background() after eagain from an
+ *       allocation) still wait while holding the gate.
+ * TODO: background transactions hold the gate across their disk reads
+ *       (cleaner, promote/demote) and across up to
+ *       max_backref_bytes_per_cycle of backref merging (trim alloc).
+ */
+class writer_gate_t {
+public:
+  using units_t = std::optional<seastar::semaphore_units<>>;
+
+  static bool is_writer(Transaction::src_t src, bool is_weak) {
+    return !is_weak && src != Transaction::src_t::READ;
+  }
+
+  seastar::future<seastar::semaphore_units<>> acquire() {
+    return seastar::get_units(sem, 1);
+  }
+
+  /// Takes the gate for a writer, a no-op for READ and weak transactions
+  seastar::future<units_t> maybe_acquire(
+      Transaction::src_t src, bool is_weak) {
+    if (!is_writer(src, is_weak)) {
+      return seastar::make_ready_future<units_t>(std::nullopt);
+    }
+    return acquire().then([](auto units) {
+      return units_t(std::move(units));
+    });
+  }
+
+  /// t holds the gate from now until it commits
+  void set_holder(const Transaction &t) {
+    holder = t.get_trans_id();
+  }
+
+  bool is_held_by(const Transaction &t) const {
+    return holder == t.get_trans_id();
+  }
+
+private:
+  seastar::semaphore sem{1};
+  transaction_id_t holder = TRANS_ID_NULL;
+};
+
+/**
  * Callback interface for querying extents and operating on transactions.
  */
 class ExtentCallbackInterface {
@@ -294,6 +357,9 @@ public:
   virtual ~ExtentCallbackInterface() = default;
 
   virtual shard_stats_t& get_shard_stats() = 0;
+
+  /// The shard writer gate, see writer_gate_t
+  virtual writer_gate_t& get_writer_gate() = 0;
 
   /// Creates empty transaction
   /// weak transaction should be type READ
@@ -303,7 +369,8 @@ public:
     cache_hint_t cache_hint = CACHE_HINT_TOUCH,
     bool is_weak=false) = 0;
 
-  /// Creates empty transaction with interruptible context
+  /// Creates empty transaction with interruptible context.
+  /// A writing transaction holds the writer gate, see writer_gate_t.
   template <typename Func>
   auto with_transaction_intr(
       Transaction::src_t src,
@@ -451,17 +518,37 @@ private:
       const char* name,
       cache_hint_t cache_hint,
       Func &&f) {
-    return seastar::do_with(
-      create_transaction(src, name, cache_hint, IsWeak),
-      [f=std::forward<Func>(f)](auto &ref_t) mutable {
-        return with_trans_intr(
-          *ref_t,
-          [f=std::forward<Func>(f)](auto& t) mutable {
-            return f(t);
+    auto run = [this, src, name, cache_hint,
+                f=std::forward<Func>(f)]() mutable {
+      return seastar::do_with(
+        create_transaction(src, name, cache_hint, IsWeak),
+        [this, f=std::move(f)](auto &ref_t) mutable {
+          if (writer_gate_t::is_writer(ref_t->get_src(), IsWeak)) {
+            get_writer_gate().set_holder(*ref_t);
           }
-        );
-      }
-    );
+          return with_trans_intr(
+            *ref_t,
+            [f=std::move(f)](auto& t) mutable {
+              return f(t);
+            }
+          );
+        }
+      );
+    };
+    // A writer takes the gate before its transaction is created and keeps
+    // it until the transaction is done. The wait is wrapped in the errorator
+    // of the result, so the returned future type is unchanged.
+    using ret_t = decltype(run());
+    using ertr_t = typename seastar::futurize<ret_t>::errorator_type;
+    return ertr_t::make_errorator_future(
+      get_writer_gate().maybe_acquire(src, IsWeak)
+    ).safe_then([run=std::move(run)](auto units) mutable {
+      return seastar::do_with(
+        std::move(units),
+        [run=std::move(run)](auto &) mutable {
+          return run();
+        });
+    });
   }
 };
 

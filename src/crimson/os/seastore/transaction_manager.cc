@@ -664,7 +664,8 @@ TransactionManager::relocate_shadow_extent(
 
 TransactionManager::submit_transaction_iertr::future<>
 TransactionManager::submit_transaction(
-  Transaction &t)
+  Transaction &t,
+  const io_usage_t *reserved)
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
   SUBDEBUGT(seastore_t, "start, entering reserve_projected_usage", t);
@@ -675,6 +676,43 @@ TransactionManager::submit_transaction(
 
   auto dispatch_result = epm->dispatch_delayed_extents(t);
   auto projected_usage = dispatch_result.usage;
+  if (reserved) {
+    // The caller reserved before taking the writer gate and must not wait
+    // for space now. Cover what its estimate missed only if it is available
+    // right away. Otherwise overcommit, relying on the headroom between the
+    // thresholds at which reservations block and the journal or device being
+    // actually full (e.g. with RBM, max_journal_bytes is half the journal).
+    auto excess = [](std::size_t used, std::size_t have) {
+      return used > have ? used - have : 0;
+    };
+    io_usage_t extra;
+    extra.inline_usage =
+      excess(projected_usage.inline_usage, reserved->inline_usage);
+    extra.cleaner_usage.main_usage = excess(
+      projected_usage.cleaner_usage.main_usage,
+      reserved->cleaner_usage.main_usage);
+    extra.cleaner_usage.cold_ool_usage = excess(
+      projected_usage.cleaner_usage.cold_ool_usage,
+      reserved->cleaner_usage.cold_ool_usage);
+    bool has_extra = extra.inline_usage ||
+      extra.cleaner_usage.main_usage ||
+      extra.cleaner_usage.cold_ool_usage;
+    if (has_extra && !epm->try_reserve_projected_usage(extra)) {
+      SUBWARNT(seastore_t, "overcommit {}: projected {} exceeds reserved {}",
+               t, extra, projected_usage, *reserved);
+      has_extra = false;
+    }
+    t.get_phase_durations().reserve +=
+      std::chrono::steady_clock::now() - reserve_start;
+    auto release_extra = seastar::defer([this, extra, has_extra] {
+      if (has_extra) {
+        epm->release_projected_usage(extra);
+      }
+    });
+    co_await do_submit_transaction(t, std::move(dispatch_result));
+    co_return;
+  }
+
   SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
   co_await trans_intr::make_interruptible(
     epm->reserve_projected_usage(
@@ -789,6 +827,13 @@ TransactionManager::do_submit_transaction(
   std::optional<journal_seq_t> trim_alloc_to)
 {
   LOG_PREFIX(TransactionManager::do_submit_transaction);
+  if (unlikely(!writer_gate.is_held_by(tref) && !warned_ungated_commit)) {
+    // Every writer should hold the writer gate, see writer_gate_t. Logged
+    // once, as tests and tools submit their own transactions directly.
+    warned_ungated_commit = true;
+    SUBERRORT(seastore_t, "committing without the writer gate, src={}",
+              tref, tref.get_src());
+  }
   SUBDEBUGT(seastore_t, "start, entering ool_writes", tref);
   co_await trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.ool_writes_and_lba_updates)
