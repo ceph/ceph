@@ -44,7 +44,7 @@ function TEST_copy_from_unmigrated_object() {
     # no PG can migrate, so src stays in the source pool
     ceph osd set norecover || return 1
     ceph osd set nobackfill || return 1
-    ceph osd pool migrate cfpool --pool_type replicated || return 1
+    ceph osd pool migrate cfpool --pool_type replicated --yes-i-really-mean-it || return 1
 
     rados -p cfpool get src $dir/got || return 1
     cmp $dir/src $dir/got || return 1

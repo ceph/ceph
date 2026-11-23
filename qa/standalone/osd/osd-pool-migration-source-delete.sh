@@ -55,7 +55,7 @@ function TEST_source_delete_waits_for_lock() {
     # the first object copied is read-locked for 2 seconds when its copy
     # completes
     ceph tell osd.\* config set osd_debug_pool_migration_hold_source_delete 2 || return 1
-    ceph osd pool migrate held --pool_type replicated || return 1
+    ceph osd pool migrate held --pool_type replicated --yes-i-really-mean-it || return 1
     wait_for_migration held || return 1
     grep -q "injecting a read" $dir/osd.*.log || return 1
     for i in $(seq 1 4) ; do

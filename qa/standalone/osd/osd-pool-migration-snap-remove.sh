@@ -75,7 +75,7 @@ function TEST_snap_removed_again_after_migration() {
     ceph osd pool create snaprm 4 4 replicated || return 1
     wait_for_clean || return 1
 
-    ceph osd pool migrate snaprm --pool_type replicated || return 1
+    ceph osd pool migrate snaprm --pool_type replicated --yes-i-really-mean-it || return 1
     wait_for_migration snaprm || return 1
     local first_target=$(pool_id snaprm)
 
@@ -87,7 +87,7 @@ function TEST_snap_removed_again_after_migration() {
     done
     test "$(snaps_to_trim $first_target)" = "[]" || return 1
 
-    ceph osd pool migrate snaprm --pool_type replicated || return 1
+    ceph osd pool migrate snaprm --pool_type replicated --yes-i-really-mean-it || return 1
     remove_self_managed_snap snaprm $snap || return 1
     test "$(snaps_to_trim $first_target)" = "[]" || return 1
     test "$(snaps_to_trim $(pool_id snaprm))" = "[]" || return 1

@@ -1421,8 +1421,11 @@ Usage::
 Subcommand ``migrate`` migrates a pool's RADOS objects to a new pool. The new
 pool acquires the original pool's user-visible name. The original pool is
 renamed automatically and is by default not displayed to the user. It takes the
-parameters of ``create``. With none, the new pool takes the parameters of the
-original pool, its zones included.
+parameters of ``create``, and those not given take their defaults, as for
+``create``. ``--inherit-params``, which takes no other parameter, instead gives
+the new pool every setting of the original pool, its zones included. A
+migration to the layout that the pool already has needs
+``--yes-i-really-mean-it``.
 
 Usage::
 

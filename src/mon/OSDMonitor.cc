@@ -9349,6 +9349,29 @@ int OSDMonitor::check_pg_num(int64_t pool,
   return 0;
 }
 
+// the settings of a pool that 'osd pool create' does not take, for
+// 'osd pool migrate --inherit-params'
+static void inherit_pool_settings(const pg_pool_t &src, pg_pool_t &p)
+{
+  constexpr uint64_t state_flags = pg_pool_t::FLAG_FULL |
+    pg_pool_t::FLAG_INCOMPLETE_CLONES | pg_pool_t::FLAG_FULL_QUOTA |
+    pg_pool_t::FLAG_NEARFULL | pg_pool_t::FLAG_BACKFILLFULL |
+    pg_pool_t::FLAG_SELFMANAGED_SNAPS | pg_pool_t::FLAG_POOL_SNAPS |
+    pg_pool_t::FLAG_CREATING;
+  p.flags = (p.flags & state_flags) | (src.flags & ~state_flags);
+  p.min_size = src.min_size;
+  p.stripe_width = src.stripe_width;
+  p.nonprimary_shards = src.nonprimary_shards;
+  p.peering_crush_bucket_count = src.peering_crush_bucket_count;
+  p.peering_crush_bucket_barrier = src.peering_crush_bucket_barrier;
+  p.peering_crush_mandatory_member = src.peering_crush_mandatory_member;
+  p.peering_crush_bucket_target = src.peering_crush_bucket_target;
+  p.quota_max_bytes = src.quota_max_bytes;
+  p.quota_max_objects = src.quota_max_objects;
+  p.opts = src.opts;
+  p.application_metadata = src.application_metadata;
+}
+
 /**
  * @param name The name of the new pool
  * @param crush_rule The crush rule to use. If <0, will use the system default
@@ -9402,7 +9425,8 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const std::optional<int64_t> source_pool_id,
                                  bool enable_ec_optimizations,
                                  ostream *ss,
-                                 const string& rule_defaults)
+                                 const string& rule_defaults,
+                                 bool inherit_params)
 {
   if (crimson && pg_autoscale_mode.empty()) {
     // default pg_autoscale_mode to off for crimson, we'll error out below if
@@ -9838,6 +9862,9 @@ int OSDMonitor::prepare_new_pool(string& name,
     // client view of the migration state cannot synthesize a spurious -ENOENT.
     spi->set_last_force_op_resend(pending_inc.epoch);
     pi->set_last_force_op_resend(pending_inc.epoch);
+    if (inherit_params) {
+      inherit_pool_settings(*sp, *pi);
+    }
 
     spi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
@@ -16442,8 +16469,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // the named pool is the target of a migration already
     bool migrating_to = false;
 
-    // a migration with no parameters gives the target the source pool's
-    // settings, its zones and replica among them
+    // a migration takes its arguments and the defaults, as a new pool does;
+    // --inherit-params, on its own, gives the target the source pool's
+    // settings instead, its zones and replica among them
     bool migrate_no_params = false;
     if (is_migrate) {
       migrate_no_params = std::ranges::none_of(
@@ -16455,6 +16483,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           "zone_failure_domain", "osd_failure_domain", "replica", "class",
           "min_size", "crush_rule", "pg_autoscale_mode", "no_class"},
         [&cmdmap](const char *arg) { return cmdmap.contains(arg); });
+    }
+    const bool inherit_params =
+      is_migrate && cmd_getval_or<bool>(cmdmap, "inherit_params", false);
+    if (inherit_params && !migrate_no_params) {
+      ss << "--inherit-params cannot be combined with other pool parameters";
+      err = -EINVAL;
+      goto reply_no_propose;
     }
 
     if (is_migrate) {
@@ -16534,10 +16569,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
 
       const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
-      // the monitors run a command again, as after an election: a
-      // migration with no parameters leaves a pool that is being migrated
-      // as it is
-      if (src->is_migration_target() && migrate_no_params) {
+      // the monitors run a command again, as after an election:
+      // --inherit-params leaves a pool that is being migrated as it is
+      if (src->is_migration_target() && inherit_params) {
         ss << "pool '" << poolstr << "' is already being migrated";
         err = 0;
         goto reply_no_propose;
@@ -16602,13 +16636,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     // A migration's target is built from the arguments and the defaults, as
-    // a new pool is, or with no arguments from the source pool's parameters
+    // a new pool is, or with --inherit-params from the source pool's parameters
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
     if (is_migrate) {
       source_pool_id = migrating_to ? pool_id : migrate_pool_id;
       source_pool = &std::as_const(*this).get_pg_pool(*source_pool_id);
-      if (migrate_no_params) {
+      if (inherit_params) {
         pool_type_str = source_pool->get_type_name();
         pg_num_min = source_pool->get_pg_num_min();
         pg_num_max = source_pool->get_pg_num_max();
@@ -16653,7 +16687,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmdmap_t args = cmdmap;
     int64_t expected_num_objects = cmd_getval_or<int64_t>(
       cmdmap, "expected_num_objects",
-      migrate_no_params ? source_pool->expected_num_objects : 0);
+      inherit_params ? source_pool->expected_num_objects : 0);
     if (string positional_rule;
         pool_type == pg_pool_t::TYPE_REPLICATED &&
         cmd_getval(cmdmap, "erasure_code_profile", positional_rule) &&
@@ -16704,7 +16738,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
     apply_command_line(params, args);
-    if (migrate_no_params) {
+    if (inherit_params) {
       params = pool_create_params_of(
         load_pool_defaults(g_conf()), *source_pool, *osdmap.crush,
         source_pool->is_erasure() ?
@@ -16779,10 +16813,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    // For osd pool migrate with no parameters: the new pool is a full copy of
-    // the source pool, so the migration would be pointless.  Warn the user and
-    // require --yes-i-really-mean-it to proceed.
-    if (migrate_no_params && !confirm) {
+    // A migration to the layout the pool has moves every object for nothing
+    // but a new pool id; --inherit-params asks for that, anything else has to
+    // be confirmed.
+    if (is_migrate && !inherit_params && !confirm &&
+        pool_has_layout(*source_pool, poolstr, params, args,
+                        enable_ec_optimizations, zone_failure_domain, root,
+                        osd_failure_domain, device_class, repl_size,
+                        replica)) {
       ss << "The target pool would be identical to the source pool '" << poolstr << "'. "
          << "No migration is necessary. If you still want to perform this pointless migration, "
          << "add the --yes-i-really-mean-it flag.";
@@ -16897,7 +16935,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int64_t fast_read_param = cmd_getval_or<int64_t>(
-      cmdmap, "fast_read", migrate_no_params ? source_pool->fast_read : -1);
+      cmdmap, "fast_read", inherit_params ? source_pool->fast_read : -1);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
@@ -16906,9 +16944,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     const int64_t min_size = params.is_given("min_size") ? params.min_size : 0;
     int64_t target_size_bytes =
-      migrate_no_params ? source_pool->get_target_size_bytes() : 0;
+      inherit_params ? source_pool->get_target_size_bytes() : 0;
     double target_size_ratio =
-      migrate_no_params ? source_pool->get_target_size_ratio() : 0.0;
+      inherit_params ? source_pool->get_target_size_ratio() : 0.0;
     cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
     cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
     const string pg_autoscale_mode =
@@ -16950,7 +16988,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = prepare_pool_migration_names(
         migrate_pool_id, source_pool_name, poolstr, params,
         erasure_code_profile, zone_failure_domain, root, osd_failure_domain,
-        device_class, migrate_no_params, &crush_rule, &ss);
+        device_class, inherit_params, &crush_rule, &ss);
       if (err == -EAGAIN) {
         goto wait;
       }
@@ -16973,7 +17011,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                            force_create,
                            source_pool_id,
                            enable_ec_optimizations,
-                           &ss, rule_from_defaults(params));
+                           &ss, rule_from_defaults(params), inherit_params);
     if (err < 0) {
       switch(err) {
       case -EEXIST:

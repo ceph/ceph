@@ -100,7 +100,7 @@ function migrate_reporting_to_mon_a() {
     # no PG can migrate until recovery is allowed again
     ceph osd set norecover || return 1
     ceph osd set nobackfill || return 1
-    ceph osd pool migrate src --pool_type replicated --pg_num 4 || return 1
+    ceph osd pool migrate src --pool_type replicated --pg_num 4 --yes-i-really-mean-it || return 1
     wait_for_leader a || return 1
     if [ $trigger = yes ] ; then
         strand_pending_source_pool_on_mon_a $dir || return 1
