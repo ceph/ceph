@@ -723,9 +723,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       }
     } /* checksum_mode */
      
-    rgw::sal::RGWRestoreStatus restore_status;
     auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
-    if (r_iter != attrs.end()) {
+    if (r_iter != attrs.end()) try {
+      rgw::sal::RGWRestoreStatus restore_status;
       bufferlist rbl = r_iter->second;
       auto iter = rbl.cbegin();
       decode(restore_status, iter);
@@ -763,6 +763,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
           }
         }
       }
+    } catch (const buffer::error&) {
+      // a damaged restore attribute must not abort the request (and with it
+      // the whole gateway); serve the object without the x-amz-restore header
+      ldpp_dout(this, 0) << "ERROR: failed to decode the restore status of "
+                         << s->object << ", omitting x-amz-restore" << dendl;
     }
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
