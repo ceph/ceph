@@ -176,6 +176,39 @@ bool JSONParser::parse_file(const std::filesystem::path file_name)
 
 /* JSONFormattable */
 
+namespace {
+
+JSONFormattable default_formattable;
+
+} // anonymous namespace
+
+// Missing keys and indexes share one fallback across all translation units:
+JSONFormattable& JSONFormattable::operator[](const std::string& name)
+{
+  if (const auto i = obj.find(name); i != obj.end()) {
+    return i->second;
+  }
+  return default_formattable;
+}
+
+const JSONFormattable& JSONFormattable::operator[](const std::string& name) const
+{
+  if (const auto i = obj.find(name); i != obj.end()) {
+    return i->second;
+  }
+  return default_formattable;
+}
+
+JSONFormattable& JSONFormattable::operator[](size_t index)
+{
+  return index >= arr.size() ? default_formattable : arr[index];
+}
+
+const JSONFormattable& JSONFormattable::operator[](size_t index) const
+{
+  return index >= arr.size() ? default_formattable : arr[index];
+}
+
 bool JSONFormattable::val_bool() const {
   return (boost::iequals(value.str, "true") ||
           boost::iequals(value.str, "1") ||

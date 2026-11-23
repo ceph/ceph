@@ -24,6 +24,19 @@
 
 using namespace std;
 
+const JSONFormattable* missing_formattable_from_other_file(const JSONFormattable& value);
+
+TEST(formattable, shared_missing_value)
+{
+  JSONFormattable value;
+  const JSONFormattable& const_value = value;
+  const auto* missing = missing_formattable_from_other_file(value);
+  EXPECT_EQ(missing, &value["missing"]);
+  EXPECT_EQ(missing, &const_value["missing"]);
+  EXPECT_EQ(missing, &value[0]);
+  EXPECT_EQ(missing, &const_value[0]);
+}
+
 
 static void get_jf(const string& s, JSONFormattable *f)
 {

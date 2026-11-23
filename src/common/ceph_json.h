@@ -1494,28 +1494,6 @@ public:
 };
 WRITE_CLASS_ENCODER(JSONFormattable)
 
-static inline JSONFormattable default_formattable;
-
-// Note that this does NOT have the same semantics as an STL container:
-inline JSONFormattable& JSONFormattable::operator[](const std::string& name) {
-	if (const auto i = obj.find(name); end(obj) != i)
-	 return i->second;
-	
-	return default_formattable;
-}
-
-inline const JSONFormattable& JSONFormattable::operator[](const std::string& name) const {
-	return const_cast<JSONFormattable *>(this)->operator[](name);
-}
-
-inline JSONFormattable& JSONFormattable::operator[](size_t index) {
-	return index >= arr.size() ? default_formattable : arr[index];
-}
-
-inline const JSONFormattable& JSONFormattable::operator[](size_t index) const {
-	return const_cast<JSONFormattable *>(this)->operator[](index);
-}
-
 inline void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
 {
   v.encode_json(name, f);
