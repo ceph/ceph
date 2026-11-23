@@ -390,3 +390,95 @@ TEST_CASE("inferred results retain temporary point owners and support clipping")
     CHECK(clipped[0] == rows[0]);
     CHECK(clipped[1] == query::closed_open(8, 11));
 }
+
+TEST_CASE("streamed retention unwinds partial intervals and rejects capacity before point copies")
+{
+    using fragile_query = iv::query<iv::comparison_domain<fragile_point>>;
+    const auto source = fragile_query::closed(fragile_point {1}, fragile_point {8}) ^
+                        fragile_query::closed(fragile_point {5}, fragile_point {12});
+    const auto live_before = fragile_point::live;
+
+    for (int budget = 0; budget != 4; ++budget) {
+        fragile_point::copy_budget = budget;
+        CHECK_THROWS_AS(iv::compile_intervals(source), std::runtime_error);
+        CHECK(fragile_point::live == live_before);
+        fragile_point::copy_budget = budget;
+        CHECK_THROWS_AS(iv::compile_intervals(source, iv::dynamic_storage), std::runtime_error);
+        CHECK(fragile_point::live == live_before);
+    }
+
+    fragile_point::copy_budget = 2;
+    CHECK_THROWS_AS(iv::compile_intervals<1>(source), std::length_error);
+    CHECK(fragile_point::live == live_before);
+    fragile_point::copy_budget = 0;
+    CHECK_THROWS_AS(iv::compile_intervals<0>(source), std::length_error);
+    CHECK(fragile_point::live == live_before);
+
+    fragile_point::copy_budget = 4;
+    CHECK(iv::compile_intervals(source).size() == 2);
+    CHECK(fragile_point::live == live_before);
+    fragile_point::copy_budget = 4;
+    CHECK(iv::compile_intervals(source, iv::dynamic_storage).size() == 2);
+    CHECK(fragile_point::live == live_before);
+    fragile_point::copy_budget = -1;
+}
+
+TEST_CASE("raw reservation and transfer release prefixes after endpoint-copy refusal")
+{
+    using fragile_query = iv::query<iv::comparison_domain<fragile_point>>;
+    const std::array raw {fragile_query::closed(fragile_point {8}, fragile_point {9}),
+                          fragile_query::closed(fragile_point {1}, fragile_point {3}),
+                          fragile_query::closed(fragile_point {2}, fragile_point {4})};
+    const auto live_before = fragile_point::live;
+    const auto inspect = [&](auto&& compile) {
+        unsigned successes = 0;
+        unsigned refusals = 0;
+        for (int budget = 0; budget != 17; ++budget) {
+            fragile_point::copy_budget = budget;
+            try
+             {
+                const auto retained = compile();
+                REQUIRE(retained.size() == 2);
+                CHECK(retained[0].lower().key().value == 1);
+                CHECK(retained[0].upper().key().value == 4);
+                CHECK(retained[1].lower().key().value == 8);
+                CHECK(retained[1].upper().key().value == 9);
+                ++successes;
+             }
+            catch (const std::runtime_error&)
+             {
+                ++refusals;
+             }
+            fragile_point::copy_budget = -1;
+            CHECK(fragile_point::live == live_before);
+            CHECK(raw[0].lower().key().value == 8);
+            CHECK(raw[1].upper().key().value == 3);
+        }
+        CHECK(successes != 0);
+        CHECK(refusals != 0);
+    };
+    inspect([&] { return iv::compile_intervals(raw); });
+    inspect([&] { return iv::compile_intervals(raw, iv::dynamic_storage); });
+    inspect([&] { return iv::compile_intervals<2>(raw); });
+    CHECK_THROWS_AS(iv::compile_intervals<1>(raw), std::length_error);
+    CHECK(fragile_point::live == live_before);
+}
+
+TEST_CASE("raw reservation preserves nonassignable points and normalized-output limits")
+{
+    using immutable_query = iv::query<immutable_domain>;
+    const std::array raw {immutable_query::closed(immutable_point {8}, immutable_point {9}),
+                          immutable_query::closed(immutable_point {1}, immutable_point {3}),
+                          immutable_query::closed(immutable_point {2}, immutable_point {4})};
+    const auto automatic = iv::compile_intervals(raw);
+    const auto limited = iv::compile_intervals<2>(raw);
+    const auto dynamic = iv::compile_intervals(raw, iv::dynamic_storage);
+    REQUIRE(automatic.size() == 2);
+    REQUIRE(limited.size() == 2);
+    REQUIRE(dynamic.size() == 2);
+    CHECK(automatic[0].lower().key().value == 1);
+    CHECK(automatic[0].upper().key().value == 4);
+    CHECK(limited[1].lower().key().value == 8);
+    CHECK(dynamic[1].upper().key().value == 9);
+    CHECK_THROWS_AS(iv::compile_intervals<1>(raw), std::length_error);
+}
