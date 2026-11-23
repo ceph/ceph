@@ -129,7 +129,7 @@ For rpm based instructions execute the following commands:
           # Additional API configuration options are as follows, defaults shown.
           # api_user = admin
           # api_password = admin
-          # api_port = 5001
+          # api_port = 5000
           # trusted_ip_list = 192.168.0.10,192.168.0.11
 
       .. note::
