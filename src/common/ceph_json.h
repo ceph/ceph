@@ -1294,7 +1294,7 @@ void encode_json(const char *name, const ceph_json::detail::json_val_seq auto& v
 {
   f->open_array_section(name);
    std::ranges::for_each(val, [&f](const auto &obj) {
-		 ::encode_json("obj", obj, f);
+    encode_json("obj", obj, f);
   		});
   f->close_section();
 }
@@ -1304,8 +1304,8 @@ void encode_json(const char *name, const ceph_json::detail::json_mapped_kv_seq a
   f->open_array_section(name);
    std::ranges::for_each(val, [&f](const auto& kv) {
 		    f->open_object_section("entry");
-		     ::encode_json("key", kv.first, f);
-		     ::encode_json("val", kv.second, f);
+		     encode_json("key", kv.first, f);
+		     encode_json("val", kv.second, f);
 		    f->close_section();
 		});
   f->close_section();

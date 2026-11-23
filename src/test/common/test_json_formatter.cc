@@ -22,6 +22,7 @@
 #include "common/JSONFormatter.h"
 #include "common/StackStringStream.h"
 
+#include <compare>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -221,6 +222,20 @@ TEST(formatter, malformed_input_as_string) {
   ASSERT_TRUE(parser.parse(garbage_at_end));
   }
 }*/
+
+namespace json_test_codec {
+
+struct record {
+  int id;
+  auto operator<=>(const record&) const = default;
+};
+
+void encode_json(const char *name, const record& value, ceph::Formatter *f)
+{
+  f->dump_string(name, "custom:" + std::to_string(value.id));
+}
+
+} // namespace json_test_codec
 
 namespace {
 
@@ -768,4 +783,20 @@ TEST(formatter, ceph_json_encode_decode_compatibility)
   EXPECT_EQ(input.enabled, output.enabled);
   EXPECT_EQ(input.values, output.values);
   EXPECT_EQ(input.by_name, output.by_name);
+}
+
+TEST(formatter, ceph_json_container_custom_encoders)
+{
+  const vector<json_test_codec::record> sequence {{7}, {9}};
+  const map<json_test_codec::record, json_test_codec::record> mapping {{{1}, {7}}};
+  JSONFormatter formatter;
+  formatter.open_object_section("root");
+  encode_json("sequence", sequence, &formatter);
+  encode_json("mapping", mapping, &formatter);
+  formatter.close_section();
+
+  ostringstream out;
+  formatter.flush(out);
+  EXPECT_EQ(R"({"sequence":["custom:7","custom:9"],)"
+            R"("mapping":[{"key":"custom:1","val":"custom:7"}]})", out.str());
 }
