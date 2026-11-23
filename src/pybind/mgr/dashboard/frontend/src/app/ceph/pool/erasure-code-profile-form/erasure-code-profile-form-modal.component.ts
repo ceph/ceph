@@ -63,6 +63,7 @@ export class ErasureCodeProfileFormModalComponent
   dCalc: boolean;
   lrcGroups: number;
   lrcMultiK: number;
+  profile: ErasureCodeProfile;
   private rootControl = new FormControl(null);
 
   public CrushFailureDomains = CrushFailureDomains;
@@ -437,13 +438,17 @@ export class ErasureCodeProfileFormModalComponent
           this.plugins = plugins;
           this.names = names;
           this.preValidateNumericInputFields();
-          this.cdr.detectChanges();
 
           if (this.plugins.includes(this.PLUGIN.ISA)) {
             this.setIsaDefaults();
           } else if (this.plugins.includes(this.PLUGIN.JERASURE)) {
             this.setJerasureDefaults();
           }
+
+          if (this.profile) {
+            this.initEditProfile(this.profile);
+          }
+          this.cdr.detectChanges();
         }
       );
   }
@@ -459,6 +464,22 @@ export class ErasureCodeProfileFormModalComponent
       control.markAsDirty();
     });
     kml[1].updateValueAndValidity(); // Update validity of k, m, c, d and l
+  }
+
+  private initEditProfile(profile: ErasureCodeProfile) {
+    this.form.silentSet('name', profile.name);
+    this.plugin = profile.plugin;
+    this.form.silentSet('plugin', profile.plugin);
+
+    if (profile.k !== undefined) {
+      this.form.silentSet('k', profile.k);
+    }
+    if (profile.m !== undefined) {
+      this.form.silentSet('m', profile.m);
+    }
+
+    this.form.get('k').disable();
+    this.form.get('m').disable();
   }
 
   onSubmit() {

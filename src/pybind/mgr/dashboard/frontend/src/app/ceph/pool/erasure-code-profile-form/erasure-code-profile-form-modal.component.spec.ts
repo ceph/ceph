@@ -120,6 +120,25 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should initialize an existing profile with read-only k and m values', () => {
+    component.profile = {
+      name: 'existing-profile',
+      plugin: 'isa',
+      k: 8,
+      m: 4,
+      'crush-failure-domain': 'rack'
+    };
+
+    component.ngOnInit();
+
+    expect(component.form.getValue('name')).toBe('existing-profile');
+    expect(component.form.getValue('plugin')).toBe('isa');
+    expect(component.form.getValue('k')).toBe(8);
+    expect(component.form.getValue('m')).toBe(4);
+    expect(component.form.get('k').disabled).toBe(true);
+    expect(component.form.get('m').disabled).toBe(true);
+  });
+
   it('calls listing to get ecps on ngInit', () => {
     expect(ecpService.getInfo).toHaveBeenCalled();
     expect(component.names.length).toBe(2);
