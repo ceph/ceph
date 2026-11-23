@@ -1337,8 +1337,12 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->quota = st->quota;
       in->dir_pin = st->dir_pin;
     }
-    // move me if/when version reflects fragtree changes.
-    if (in->dirfragtree != st->dirfragtree) {
+    // The fragtree has no version. Take it only from the auth of the inode:
+    // a rank that holds other dirfrags of this directory can have a coarser
+    // tree, and replacing ours with it drops the fragmap entries of the
+    // finer dirfrags. update_dir_dist() corrects the leaf a reply is about.
+    if ((new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) &&
+        in->dirfragtree != st->dirfragtree) {
       in->dirfragtree = st->dirfragtree;
       _fragmap_remove_non_leaves(in);
     }
