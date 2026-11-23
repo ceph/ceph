@@ -3380,6 +3380,25 @@ TEST(MOSDOpReply, core_hint_regardless_of_features)
   EXPECT_EQ(*decoded->get_core_hint(), (osd_core_hint_t{3, 6810}));
 }
 
+// a peer without NEW_OSDOPREPLY_ENCODING gets a v6 reply: the trailing hint
+// is there, but it is not part of v6, and is not decoded
+TEST(MOSDOpReply, v6_reply_ignores_the_hint)
+{
+  auto reply = ceph::make_message<MOSDOpReply>();
+  reply->set_tid(42);
+  reply->set_result(-2);
+  reply->set_reply_versions(eversion_t(5, 7), 7);
+  reply->set_core_hint(osd_core_hint_t{3, 6810});
+  auto decoded = reply_roundtrip(
+    reply, CEPH_FEATURES_ALL & ~CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING);
+  EXPECT_EQ(decoded->get_header().version, 6);
+  EXPECT_EQ(decoded->get_tid(), 42u);
+  EXPECT_EQ(decoded->get_result(), -2);
+  EXPECT_EQ(decoded->get_replay_version(), eversion_t(5, 7));
+  EXPECT_EQ(decoded->get_user_version(), 7u);
+  EXPECT_FALSE(decoded->get_core_hint().has_value());
+}
+
 // a v8 decoder reads a v9 reply: all of it but the trailing hint
 TEST(MOSDOpReply, v9_read_as_v8)
 {
