@@ -86,7 +86,7 @@ do that using its unique ID, or various other attributes to identify it:
     
     # These all work
     ceph tell mds.0 client evict id=4305
-    ceph tell mds.0 client evict client_metadata.=4305
+    ceph tell mds.0 client evict client_metadata.hostname=senta04
 
 
 Advanced: Un-blocklisting a client
