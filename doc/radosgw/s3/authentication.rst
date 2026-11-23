@@ -35,6 +35,45 @@ Please refer to the official documentation in `Authenticating Requests (AWS Sign
 
 .. note:: While v2 signatures have been deprecated in AWS, RGW continues to support them.
 
+.. _radosgw-s3-presigned-urls:
+
+Presigned URLs
+^^^^^^^^^^^^^^
+
+RGW supports presigned URLs, which carry the signature in the query string
+instead of in an ``Authorization`` header. Anyone who has a presigned URL can
+make the one request that it was signed for, until the URL expires, without
+having the credentials. Most S3 clients and AWS SDKs can generate presigned
+URLs. For example, the following AWS CLI command generates a URL that is valid
+for one hour:
+
+.. prompt:: bash $
+
+   aws s3 presign s3://<bucket>/<object> --expires-in 3600 --endpoint-url <rgw_url>
+
+RGW supports presigned URLs with both signature versions:
+
+- **Signature v4**: The query string carries ``X-Amz-Algorithm``,
+  ``X-Amz-Credential``, ``X-Amz-Date``, ``X-Amz-Expires``,
+  ``X-Amz-SignedHeaders``, and ``X-Amz-Signature``. ``X-Amz-Expires`` is the
+  number of seconds for which the URL is valid, from 1 to 604800 (seven days).
+  See `Authenticating Requests: Using Query Parameters (AWS Signature Version
+  4)`_.
+- **Signature v2**: The query string carries ``AWSAccessKeyId``, ``Expires``,
+  and ``Signature``. ``Expires`` is the time at which the URL expires, in
+  seconds since the epoch.
+
+RGW rejects a request made with a presigned URL after the URL has expired.
+
+To make RGW reject every request that uses a presigned URL, set
+:confval:`rgw_s3_auth_disable_signature_url` to ``true``:
+
+.. confval:: rgw_s3_auth_disable_signature_url
+
+.. warning:: In Tentacle, this option also makes RGW reject every request that
+   is signed in the ``Authorization`` header, so turning it on locks out S3
+   clients that don't use presigned URLs as well.
+
 Authentication against OpenStack Keystone
 -----------------------------------------
 
@@ -219,3 +258,4 @@ policies rather than S3 ACLs when possible.
 
 .. _Authenticating Requests (AWS Signature Version 4): https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
 .. _Authenticating requests (AWS signature version 2): https://docs.aws.amazon.com/AmazonS3/latest/userguide/auth-request-sig-v2.html
+.. _Authenticating Requests\: Using Query Parameters (AWS Signature Version 4): https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html
