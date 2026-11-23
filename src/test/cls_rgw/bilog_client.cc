@@ -414,6 +414,78 @@ TEST_CASE("Ordinary bucket completions permit terminal pages without a continuat
     }
 }
 
+TEST_CASE("Initial bucket completions retain retry validation and failure publication",
+          "[rgw][cls][bucket-list][continuation]")
+{
+    for (const auto& start : {cls_rgw_obj_key {}, cls_rgw_obj_key {"", std::string(80, 'i')}}) {
+        auto schedule = [&](auto& output, int& status) {
+            librados::ObjectReadOperation operation;
+            auto submitted = start;
+            cls_rgw_bucket_list_op(operation, submitted, {}, {}, 1, true, output, status);
+            submitted = {"changed", "changed-instance"};
+            rgw_cls_list_op expected;
+            expected.start_obj = start;
+            expected.num_entries = 1;
+            expected.list_versions = true;
+            CHECK(request_bytes.contents_equal(canonical(expected)));
+        };
+        for (unsigned shape = 0; shape < 6; ++shape) {
+            auto output = bucket_response();
+            const auto preserved = canonical(output);
+            int status = 123;
+            schedule(output, status);
+            auto reply = bucket_response();
+            reply.dir.m.clear();
+            if (shape == 1) {
+                reply.marker = {};
+            }
+            if (shape == 2) {
+                reply.marker = {"", "instance"};
+            }
+            if (shape == 3) {
+                reply.is_truncated = false;
+            }
+            if (shape == 4) {
+                reply.dir.m = output.dir.m;
+            }
+            auto input = canonical(reply);
+            if (shape == 5) {
+                bytes truncated;
+                truncated.substr_of(input, 0, input.length() - 1);
+                input = std::move(truncated);
+            }
+            complete(RGWBIAdvanceAndRetryError, std::move(input));
+            if (shape == 0) {
+                CHECK(status == RGWBIAdvanceAndRetryError);
+                CHECK(canonical(output).contents_equal(canonical(reply)));
+            }
+            if (shape != 0) {
+                CHECK(status == -EIO);
+                CHECK(canonical(output).contents_equal(preserved));
+            }
+        }
+        for (const int result : {0, 7, -EAGAIN}) {
+            auto output = bucket_response();
+            const auto preserved = canonical(output);
+            int status = 123;
+            schedule(output, status);
+            auto reply = bucket_response();
+            reply.marker = {};
+            reply.is_truncated = false;
+            complete(result, canonical(reply));
+            CHECK(status == result);
+            CHECK(canonical(output).contents_equal(result < 0 ? preserved : canonical(reply)));
+        }
+        auto output = bucket_response();
+        const auto preserved = canonical(output);
+        int status = 123;
+        schedule(output, status);
+        complete(0, canonical(output), true);
+        CHECK(status == -ENOMEM);
+        CHECK(canonical(output).contents_equal(preserved));
+    }
+}
+
 TEST_CASE("Index stat and timeout clients encode borrowed native arguments", "[rgw][cls][stats]")
 {
     for (const bool absolute : {false, true}) {

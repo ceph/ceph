@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <algorithm>
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
@@ -448,4 +449,43 @@ TEST_CASE("Account resource list keeps fetched marker prefix filtering corruptio
     state.values["b"].clear();
     state.values["b"].append("corrupt", 7);
     CHECK(invoke(state, "account_resource_list", list) == -EIO);
+}
+
+TEST_CASE("Unfiltered resource pages retain values continuation and the fetched row cap",
+          "[rgw][cls][user]")
+{
+    for (const unsigned count : {0u, 1u, 128u, 1001u}) {
+        storage state;
+        for (unsigned index = 0; index < count; ++index) {
+            const auto name = std::to_string(1000000 + index);
+            state.values[name] = canonical(resource(name, index % 2 ? "" : "/path/"));
+        }
+        cls_user_account_resource_list_op request;
+        request.max_entries = 0xFFFFFFFF;
+        REQUIRE(invoke(state, "account_resource_list", request) == 0);
+        const auto reply = decoded<cls_user_account_resource_list_ret>(state.reply);
+        REQUIRE(reply.entries.size() == std::min(count, 1000u));
+        for (unsigned index = 0; index < reply.entries.size(); ++index) {
+            const auto expected = resource(std::to_string(1000000 + index), index % 2 ? "" : "/path/");
+            CHECK(canonical(reply.entries[index]).contents_equal(canonical(expected)));
+        }
+        CHECK(reply.truncated == (count > 1000));
+        CHECK(reply.marker == (count ? std::to_string(1000000 + reply.entries.size() - 1) : ""));
+        if (reply.truncated) {
+            request.marker = reply.marker;
+            REQUIRE(invoke(state, "account_resource_list", request) == 0);
+            const auto tail = decoded<cls_user_account_resource_list_ret>(state.reply);
+            REQUIRE(tail.entries.size() == 1);
+            CHECK(tail.entries.front().name == "1001000");
+            CHECK(tail.marker == "1001000");
+            CHECK_FALSE(tail.truncated);
+        }
+    }
+    storage corrupt;
+    corrupt.values["a"] = canonical(resource("A"));
+    corrupt.values["b"].append("corrupt", 7);
+    cls_user_account_resource_list_op request;
+    request.max_entries = 1000;
+    CHECK(invoke(corrupt, "account_resource_list", request) == -EIO);
+    CHECK(corrupt.reply.length() == 0);
 }

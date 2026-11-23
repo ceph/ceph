@@ -77,6 +77,21 @@ public:
 
 };
 
+int decode_bucket_list_reply(const int result, const bufferlist& bytes,
+                             bucket_datum::reply& output, const cls_rgw_obj_key* start_obj)
+{
+  static_assert(std::is_nothrow_move_assignable_v<bucket_datum::reply>);
+  auto candidate = bucket_datum::decode_reply<bucket_datum::flat_entries>(bytes);
+  if (result == RGWBIAdvanceAndRetryError &&
+      (!candidate.is_truncated || !candidate.dir.m.empty() || candidate.marker.empty() ||
+       (start_obj && candidate.marker == *start_obj))) {
+    return -EIO;
+  }
+  output = std::move(candidate);
+
+  return result;
+}
+
 // These synchronous clients publish a complete value and map only buffer errors to -EIO.
 template <typename ValueT, typename DecodeT>
 int decode_value(const bufferlist& input, ValueT& output, DecodeT&& decode)
@@ -188,18 +203,18 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 {
   auto in = bucket_datum::encode_request(start_obj, filter_prefix, delimiter,
                                          num_entries, list_versions);
-  op.exec(method::bucket_list, in, new reply_completion {result, status,
-    [start_obj](const int result, const ceph::buffer::list& bytes, bucket_datum::reply& output) {
-      static_assert(std::is_nothrow_move_assignable_v<bucket_datum::reply>);
-      auto candidate = bucket_datum::decode_reply<bucket_datum::flat_entries>(bytes);
-      if (result == RGWBIAdvanceAndRetryError &&
-          (!candidate.is_truncated || !candidate.dir.m.empty() || candidate.marker.empty() ||
-           candidate.marker == start_obj)) {
-        return -EIO;
-      }
-      output = std::move(candidate);
+  // A usable retry marker cannot equal an empty-name start key:
+  if (start_obj.empty()) {
+    op.exec(method::bucket_list, in, new reply_completion {result, status,
+      [](const int result, const bufferlist& bytes, bucket_datum::reply& output) {
+        return decode_bucket_list_reply(result, bytes, output, nullptr);
+      }});
 
-      return result;
+    return;
+  }
+  op.exec(method::bucket_list, in, new reply_completion {result, status,
+    [start_obj = start_obj](const int result, const bufferlist& bytes, bucket_datum::reply& output) {
+      return decode_bucket_list_reply(result, bytes, output, &start_obj);
     }});
 }
 

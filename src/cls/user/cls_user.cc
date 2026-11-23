@@ -635,6 +635,10 @@ static int cls_account_resource_list(cls_method_context_t hctx,
   }
 
   cls::rgw::user_datum::resource_list_reply ret;
+  // Without a path filter every fetched resource will be included:
+  if (op.path_prefix.empty()) {
+    ret.entries.reserve(entries.size());
+  }
 
   // copy matching decoded omap values into a vector
   for (auto& [key, bl] : entries) {
