@@ -2711,44 +2711,56 @@ private:
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   std::unordered_map<int, Fh*> fd_map;
-  // The Fhs handed out by the ll_ API and not closed yet (changed under
-  // client_lock too), in stripes by address, each under its own lock, a
-  // leaf lock, so the data path can check an Fh without client_lock, and
-  // threads checking different Fhs do not share one lock's cache line.
-  // A stripe changes on open/close only; the checks take it shared.
-  // A stripe's lock is held for a set lookup or change only, and taken on
-  // every open and close and every data-path call: a reader-writer
-  // spinlock of one word, which costs readers one atomic add and writers
-  // one compare-and-swap, where a pthread rwlock cost a library call and
-  // several atomics each way.
+  // The Fhs handed out by the ll_ API and not closed yet, in stripes by
+  // address, each under its own lock, a leaf lock, so the data path can
+  // check an Fh without client_lock, and threads checking different Fhs
+  // do not share one lock's cache line.  A stripe changes on open/close
+  // only; the checks take it shared.  A stripe's lock is held for a set
+  // lookup or change only, and taken on every open and close and every
+  // data-path call: a reader-writer lock of one word, which costs readers
+  // one atomic add and writers one compare-and-swap, where a pthread
+  // rwlock cost a library call and several atomics each way.  It spins a
+  // little and then sleeps on the word.
   class FhStripeLock {
   public:
     void lock() {
-      uint32_t e = 0;
-      while (!s.compare_exchange_weak(e, WRITER, std::memory_order_acquire,
-                                      std::memory_order_relaxed)) {
-        do {
+      for (unsigned n = 0; ; n++) {
+        uint32_t e = 0;
+        if (s.compare_exchange_weak(e, WRITER, std::memory_order_acquire,
+                                    std::memory_order_relaxed))
+          return;
+        if (n < SPINS)
           pause();
-        } while (s.load(std::memory_order_relaxed) != 0);
-        e = 0;
+        else
+          sleep([](uint32_t v) { return v != 0; });
       }
     }
     void unlock() {
-      s.fetch_sub(WRITER, std::memory_order_release);
+      s.fetch_sub(WRITER, std::memory_order_seq_cst);
+      wake();
     }
     void lock_shared() {
-      while (s.fetch_add(READER, std::memory_order_acquire) & WRITER) {
+      for (unsigned n = 0; ; n++) {
+        if (!(s.fetch_add(READER, std::memory_order_acquire) & WRITER))
+          return;
         s.fetch_sub(READER, std::memory_order_relaxed);
-        do {
+        if (n < SPINS)
           pause();
-        } while (s.load(std::memory_order_relaxed) & WRITER);
+        else
+          sleep([](uint32_t v) { return v & WRITER; });
       }
     }
     void unlock_shared() {
-      s.fetch_sub(READER, std::memory_order_release);
+      s.fetch_sub(READER, std::memory_order_seq_cst);
+      wake();
     }
   private:
     static constexpr uint32_t WRITER = 1, READER = 2;
+    // Spin a little, then sleep on the word: with more threads than CPUs
+    // the holder may be preempted, and spinning (or yielding) on would
+    // burn the CPU it needs (s35: 6.6 ms of CPU per open+close at 1024
+    // threads).
+    static constexpr unsigned SPINS = 64;
     static void pause() {
 #if defined(__x86_64__) || defined(__i386__)
       __builtin_ia32_pause();
@@ -2756,15 +2768,37 @@ private:
       asm volatile("yield");
 #endif
     }
+    // A sleeper counts itself in @waiters before it reads the word, and
+    // an unlock changes the word before it reads @waiters (all seq_cst):
+    // either the unlock sees the sleeper and wakes it, or the sleeper
+    // sees the word changed and does not sleep (wait() compares).
+    template <typename Busy>
+    void sleep(Busy busy) {
+      waiters.fetch_add(1, std::memory_order_seq_cst);
+      uint32_t v = s.load(std::memory_order_seq_cst);
+      if (busy(v))
+        s.wait(v, std::memory_order_relaxed);
+      waiters.fetch_sub(1, std::memory_order_relaxed);
+    }
+    void wake() {
+      if (waiters.load(std::memory_order_seq_cst))
+        s.notify_all();
+    }
     std::atomic<uint32_t> s{0};
+    std::atomic<uint32_t> waiters{0};
   };
   struct alignas(64) FhStripe {
     FhStripeLock lock;   // a leaf lock
     std::set<Fh*> fhs;
   };
   ceph::PerCpuSlots<FhStripe> fh_stripes{64};   // not by CPU: by Fh
+  // by a hash of the address: the low bits of heap addresses of one size
+  // are mostly the same (an allocator's size class), and a thread tends to
+  // get back the Fh it just freed, so bits of the address alone would put
+  // most Fhs, and each thread's, in a few stripes
   FhStripe& fh_stripe(Fh *f) {
-    return fh_stripes[reinterpret_cast<uintptr_t>(f) >> 6];
+    uint64_t a = reinterpret_cast<uintptr_t>(f);
+    return fh_stripes[(a * 0x9e3779b97f4a7c15ull) >> 40];
   }
   void ll_fh_add(Fh *f) {
     auto& st = fh_stripe(f);
