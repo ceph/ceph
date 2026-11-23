@@ -477,7 +477,12 @@ migrated to, and fails otherwise.
 .. _pool_migration_clients:
 
 Every client must be able to follow a pool migration. Clients of earlier
-releases can't, and Linux kernel clients can't until they gain the feature.
+releases can't: ``ceph-fuse``, ``rbd``, QEMU and anything else built on the
+``librados`` or ``librbd`` of a release before ``vampire``; Linux kernel
+clients can't until they gain the feature. Upgrading the packages is not
+enough: each such process must be restarted on the new libraries, and for a
+virtual machine that means restarting or live-migrating the QEMU process,
+not rebooting the guest.
 
 Before a pool can be migrated, the cluster must require clients of the first
 release that can follow one (see :ref:`require_min_compat_client`):
@@ -493,7 +498,7 @@ feature of that release.
 can't follow a migration is connected, and names them.
 
 Once the cluster requires clients of that release, the Monitors and OSDs refuse
-clients and MDSs that can't follow a migration, after a migration too: a client that
+clients and MDSes that can't follow a migration, after a migration too: a client that
 still holds a migrated pool's old id cannot follow the redirect to it. The
 requirement cannot be lowered below that release again.
 
