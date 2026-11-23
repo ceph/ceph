@@ -1366,7 +1366,7 @@ protected:
   std::array<SessionLive, SESSION_LIVE_SLOTS> session_live;
   void publish_session(const MetaSession *s, bool closed = false);
   template <typename F>
-  bool _ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
+  int _ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
 		       const UserPerm& perms, Inode **out, F&& fill);
   bool _ll_put_fast(Inode *in, bool *last);
   bool _ll_open_fast(Inode *in, int flags, Fh **fhp, const UserPerm& perms);
