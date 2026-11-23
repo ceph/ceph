@@ -645,6 +645,7 @@
     (submitActionEvent)="onSubmit()"
     [form]="form"
     [modalForm]="true"
+    [showSubmit]="!profile"
     [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
   >
   </cd-form-button-panel>

@@ -120,7 +120,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should initialize an existing profile with read-only k and m values', () => {
+  it('should initialize an existing profile with read-only name, k and m values', () => {
     component.profile = {
       name: 'existing-profile',
       plugin: 'isa',
@@ -131,10 +131,12 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
     component.ngOnInit();
 
+    expect(component.action).toBe('View');
     expect(component.form.getValue('name')).toBe('existing-profile');
     expect(component.form.getValue('plugin')).toBe('isa');
     expect(component.form.getValue('k')).toBe(8);
     expect(component.form.getValue('m')).toBe(4);
+    expect(component.form.get('name').disabled).toBe(true);
     expect(component.form.get('k').disabled).toBe(true);
     expect(component.form.get('m').disabled).toBe(true);
   });

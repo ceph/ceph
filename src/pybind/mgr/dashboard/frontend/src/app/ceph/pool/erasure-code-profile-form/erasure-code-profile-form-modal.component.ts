@@ -446,7 +446,7 @@ export class ErasureCodeProfileFormModalComponent
           }
 
           if (this.profile) {
-            this.initEditProfile(this.profile);
+            this.initViewProfile(this.profile);
           }
           this.cdr.detectChanges();
         }
@@ -466,7 +466,8 @@ export class ErasureCodeProfileFormModalComponent
     kml[1].updateValueAndValidity(); // Update validity of k, m, c, d and l
   }
 
-  private initEditProfile(profile: ErasureCodeProfile) {
+  private initViewProfile(profile: ErasureCodeProfile) {
+    this.action = this.actionLabels.VIEW;
     this.form.silentSet('name', profile.name);
     this.plugin = profile.plugin;
     this.form.silentSet('plugin', profile.plugin);
@@ -478,6 +479,7 @@ export class ErasureCodeProfileFormModalComponent
       this.form.silentSet('m', profile.m);
     }
 
+    this.form.get('name').disable();
     this.form.get('k').disable();
     this.form.get('m').disable();
   }

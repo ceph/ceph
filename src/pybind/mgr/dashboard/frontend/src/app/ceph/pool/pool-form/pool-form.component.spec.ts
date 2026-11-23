@@ -27,6 +27,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { Pool, PoolType } from '../pool';
+import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { PoolModule } from '../pool.module';
 import { PoolFormComponent } from './pool-form.component';
 
@@ -1122,6 +1123,17 @@ describe('PoolFormComponent', () => {
         ['Durability estimator (c)', 2],
         ['Crush failure domain', 'host']
       ]);
+    });
+
+    it('should open the selected profile in view mode', () => {
+      const modalCdsService = TestBed.inject(ModalCdsService);
+      spyOn(modalCdsService, 'show').and.returnValue({ submitAction: of() } as any);
+
+      component.viewErasureCodeProfile();
+
+      expect(modalCdsService.show).toHaveBeenCalledWith(ErasureCodeProfileFormModalComponent, {
+        profile: component.selectedEcp
+      });
     });
 
     it('should select the newly created profile', () => {
