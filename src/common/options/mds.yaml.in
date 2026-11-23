@@ -831,6 +831,45 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_read_phase_threads
+  type: uint
+  level: dev
+  desc: worker threads that serve plain reads in parallel (0 = off)
+  long_desc: >
+    When non-zero, the MDS queues GETATTR and LOOKUP requests of cached
+    inodes and serves each queued batch in parallel, on this many worker
+    threads plus the dispatch thread, while holding mds_lock so that no
+    other request runs.  A request that cannot be served without changing
+    lock state goes the normal way.  Experimental.
+  default: 0
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_read_phase_min_per_worker
+  type: uint
+  level: dev
+  desc: requests per worker thread in a read phase batch
+  long_desc: >
+    A read phase batch is split over one thread per this many requests,
+    at most mds_read_phase_threads + 1; a batch smaller than twice this is
+    served on the dispatch thread alone, without waking any worker.
+  default: 8
+  min: 1
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_read_phase_max_batch
+  type: uint
+  level: dev
+  desc: most reads queued before the parallel read phase runs them
+  default: 64
+  min: 1
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_allow_batched_ops
   type: bool
   level: advanced

@@ -14,6 +14,7 @@
  */
 
 #include "MDSRank.h"
+#include "MDSReadPhase.h"
 #include "osdc/Journaler.h"
 
 #include <typeinfo>
@@ -532,6 +533,12 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  if (auto n = g_conf().get_val<uint64_t>("mds_read_phase_threads"); n > 0) {
+    read_phase = std::make_unique<MDSReadPhase>(this, n);
+    read_phase->set_max_batch(g_conf().get_val<uint64_t>("mds_read_phase_max_batch"));
+    read_phase->set_min_per_worker(g_conf().get_val<uint64_t>("mds_read_phase_min_per_worker"));
+  }
+
   quiesce_db_manager.reset(new QuiesceDbManager());
 
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
@@ -719,6 +726,15 @@ void MDSRankDispatcher::tick()
 
   heartbeat_reset();
 
+  // reads queued by ms_dispatch normally run before the next message; this
+  // only catches a batch left behind
+  if (read_phase) {
+    read_phase->flush_late();
+    read_phase->log_stats();
+  }
+  // requests the read phase serves never reach _dispatch()
+  update_mlogger();
+
   /* mds_lock accounting is cumulative in the mutex itself; fold it into the
    * perf counters here rather than on every acquisition. */
   phase_tracker.update_lock_stats();
@@ -828,6 +844,9 @@ void MDSRankDispatcher::shutdown()
   dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
 
   g_conf().remove_observer(this);
+
+  if (read_phase)
+    read_phase->shutdown();
 
   timer.shutdown();
 
@@ -4250,6 +4269,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_op_history_duration",
     "mds_op_history_size",
     "mds_op_log_threshold",
+    "mds_read_phase_max_batch",
+    "mds_read_phase_min_per_worker",
     "mds_recall_max_decay_rate",
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",
@@ -4273,6 +4294,12 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   // XXX with or without mds_lock!
   dout(2) << __func__ << ": " << changed << dendl;
 
+  if (changed.count("mds_read_phase_min_per_worker") && read_phase) {
+    read_phase->set_min_per_worker(conf.get_val<uint64_t>("mds_read_phase_min_per_worker"));
+  }
+  if (changed.count("mds_read_phase_max_batch") && read_phase) {
+    read_phase->set_max_batch(conf.get_val<uint64_t>("mds_read_phase_max_batch"));
+  }
   if (changed.count("mds_heartbeat_reset_grace")) {
     _heartbeat_reset_grace = conf.get_val<uint64_t>("mds_heartbeat_reset_grace");
   }
