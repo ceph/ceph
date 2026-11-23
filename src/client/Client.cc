@@ -18651,6 +18651,97 @@ int Client::ll_fsyncdir(dir_result_t *dirp)
   return _fsync(dirp->inode.get(), false);
 }
 
+/*
+ * Open @in without client_lock when that changes nothing the MDS sees,
+ * as the kernel client does: a plain file, opened without O_TRUNC, whose
+ * caps cover the open and which is open in this mode already, so what we
+ * want from the MDS (Inode::caps_file_wanted()) stays the same and there
+ * is nothing for check_caps() to send.  Not for fscrypt files, nor when
+ * an auth cap may deny the open by its path (cap_auths_allow_all) or a
+ * delegation was ever asked for (they are broken on open).  Returns
+ * false, with nothing done, when any of that does not hold: the caller
+ * goes through _open().
+ */
+bool Client::_ll_open_fast(Inode *in, int flags, Fh **fhp,
+			   const UserPerm& perms)
+{
+  // the file type and the snapid never change
+  if (!in->is_file() || in->snapid != CEPH_NOSNAP)
+    return false;
+  if (flags & (O_TRUNC | O_CREAT | O_DIRECTORY))
+    return false;
+  if (!cap_auths_allow_all.load(std::memory_order_relaxed) ||
+      deleg_used.load(std::memory_order_acquire))
+    return false;
+  bool check_perms = should_check_perms();
+  if (check_perms && acl_type != NO_ACL && perms.uid() != 0)
+    return false;
+
+  int cflags = ceph_flags_sys2wire(flags);
+  if (force_lazyio.load(std::memory_order_relaxed))
+    cflags |= CEPH_O_LAZY;
+  int cmode = ceph_flags_to_mode(cflags);
+  if (cmode <= CEPH_FILE_MODE_PIN || cmode >= CEPH_FILE_MODE_NUM)
+    return false;
+  int want = ceph_caps_for_mode(cmode);
+  // may_open() without ACLs (or for root), from the caps alone
+  unsigned access = 0;
+  if ((flags & O_ACCMODE) == O_WRONLY)
+    access = CLIENT_MAY_WRITE;
+  else if ((flags & O_ACCMODE) == O_RDWR)
+    access = CLIENT_MAY_READ | CLIENT_MAY_WRITE;
+  else if ((flags & O_ACCMODE) == O_RDONLY)
+    access = CLIENT_MAY_READ;
+
+  {
+    std::scoped_lock il(in->lock);
+    if (in->is_encrypted() || in->is_fscrypt_enabled())
+      return false;
+    if (!in->caps_issued_mask(want, false, false))
+      return false;
+    if (check_perms &&
+	(!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED, true, false) ||
+	 (perms.uid() != 0 && !in->check_mode(perms, access))))
+      return false;
+    if (!in->get_open_ref_fast(cmode))
+      return false;
+    *fhp = _create_fh(in, flags, cmode, perms);
+  }
+  ll_fh_add(*fhp);
+  ldout(cct, 20) << __func__ << " " << in->ino << " mode " << cmode << dendl;
+  return true;
+}
+
+/*
+ * Close @fh without client_lock when it is not the file's last open in
+ * its mode (the last one flushes and gives caps back, see _release_fh()),
+ * and it holds no file locks.  Returns false, with nothing done,
+ * otherwise.
+ */
+bool Client::_ll_release_fast(Fh *fh, int *r)
+{
+  Inode *in = fh->inode.get();
+  if (!in->is_file() || in->snapid != CEPH_NOSNAP)
+    return false;
+  if (deleg_used.load(std::memory_order_acquire))
+    return false;
+  {
+    std::scoped_lock il(in->lock);
+    if (in->is_encrypted() || in->is_fscrypt_enabled())
+      return false;
+    if (fh->has_any_filelocks())
+      return false;
+    if (!in->put_open_ref_fast(fh->mode))
+      return false;
+    // writeback errors are set on the Fh under lock (set_async_err())
+    *r = fh->take_async_err();
+  }
+  ll_fh_remove(fh);
+  ldout(cct, 20) << __func__ << " " << fh << " on " << in->ino << " = " << *r << dendl;
+  _put_fh(fh);
+  return true;
+}
+
 int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
 {
   ceph_assert(!(flags & O_CREAT));
@@ -18665,6 +18756,13 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
   tout(cct) << "ll_open" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
+
+  if (fhp && _ll_open_fast(in, flags, fhp, perms)) {
+    tout(cct) << (uintptr_t)*fhp << std::endl;
+    ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) <<
+      " = 0 (" << *fhp << ")" << dendl;
+    return 0;
+  }
 
   std::scoped_lock lock(client_lock);
 
@@ -19730,6 +19828,10 @@ int Client::ll_release(Fh *fh)
   tout(cct) << __func__ << " (fh)" << std::endl;
   tout(cct) << (uintptr_t)fh << std::endl;
 
+  int r;
+  if (_ll_release_fast(fh, &r))
+    return r;
+
   std::scoped_lock lock(client_lock);
 
   ll_fh_remove(fh);
@@ -19799,6 +19901,7 @@ int Client::ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv)
     return -ENOTCONN;
 
   std::scoped_lock lock(client_lock);
+  deleg_used.store(true, std::memory_order_release);
 
   Inode *inode = fh->inode.get();
 

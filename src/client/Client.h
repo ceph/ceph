@@ -1127,7 +1127,8 @@ public:
     --opened_files;
   }
   std::pair<uint64_t, uint64_t> get_opened_files_rates() {
-    return std::make_pair(opened_files, inode_map.size());
+    return std::make_pair(opened_files.load(std::memory_order_relaxed),
+			  inode_map.size());
   }
 
   void inc_pinned_icaps() {
@@ -1147,7 +1148,8 @@ public:
     --opened_inodes;
   }
   std::pair<uint64_t, uint64_t> get_opened_inodes_rates() {
-    return std::make_pair(opened_inodes, inode_map.size());
+    return std::make_pair(opened_inodes.load(std::memory_order_relaxed),
+			  inode_map.size());
   }
 
   void set_is_fuse() {
@@ -1367,6 +1369,8 @@ protected:
   bool _ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
 		       const UserPerm& perms, Inode **out, F&& fill);
   bool _ll_put_fast(Inode *in, bool *last);
+  bool _ll_open_fast(Inode *in, int flags, Fh **fhp, const UserPerm& perms);
+  bool _ll_release_fast(Fh *fh, int *r);
   void _put_cap_ref_last(Inode *in, int last);
   bool _read_fast(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
                   int *pr, bool nowait = false);
@@ -2656,6 +2660,9 @@ private:
   }
 
   uint32_t deleg_timeout = 0;
+  // set (for good) once a delegation was asked for: the open and close
+  // fast paths, which do not break or return delegations, stop then
+  std::atomic<bool> deleg_used = false;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
   client_remount_callback_t remount_cb = nullptr;
@@ -2907,9 +2914,10 @@ private:
   ShardedCounter cap_misses;
   ShardedCounter sync_in_flight;
 
-  uint64_t opened_files = 0;
+  // the open and close fast paths change them without client_lock
+  std::atomic<uint64_t> opened_files = 0;
   uint64_t pinned_icaps = 0;
-  uint64_t opened_inodes = 0;
+  std::atomic<uint64_t> opened_inodes = 0;
 
   // The read/write I/O statistics (latency, size): every I/O adds to
   // them, with or without client_lock.  Each adds to the slot of its CPU
@@ -2977,8 +2985,9 @@ private:
 
   std::vector<MDSCapAuth> cap_auths;
   // whether no auth cap can deny an access (mds_check_access() would
-  // return 0 for every path and mask), which spares open() the path
-  bool cap_auths_allow_all = true;
+  // return 0 for every path and mask), which spares open() the path;
+  // the open fast path reads it without client_lock
+  std::atomic<bool> cap_auths_allow_all = true;
 
   feature_bitset_t myfeatures;
 

@@ -184,7 +184,7 @@ void Inode::print(std::ostream& out) const
       << " ll_ref=" << ll_ref.load()
       << " cap_refs=" << cap_refs
       << " fast_rd_refs=" << fast_rd_refs.load(std::memory_order_relaxed)
-      << " open=" << open_by_mode
+      << " open=" << open_by_mode_str()
       << " mode=" << oct << mode << dec
       << " size=" << size << "/" << max_size
       << " nlink=" << nlink
@@ -323,11 +323,11 @@ void Inode::get_open_ref(int mode)
 {
   {
     std::scoped_lock l(lock);
+    ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
     client->inc_opened_files();
-    if (open_by_mode[mode] == 0) {
+    if (open_by_mode[mode].fetch_add(1, std::memory_order_relaxed) == 0) {
       client->inc_opened_inodes();
     }
-    open_by_mode[mode]++;
   }
   // may wait for delegations to come back: never with Inode::lock held
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
@@ -336,15 +336,40 @@ void Inode::get_open_ref(int mode)
 bool Inode::put_open_ref(int mode)
 {
   std::scoped_lock l(lock);
-  //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-  auto& ref = open_by_mode.at(mode);
-  ceph_assert(ref > 0);
+  ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+  int was = open_by_mode[mode].fetch_sub(1, std::memory_order_relaxed);
+  ceph_assert(was > 0);
   client->dec_opened_files();
-  if (--ref == 0) {
+  if (was == 1) {
     client->dec_opened_inodes();
     return true;
   }
   return false;
+}
+
+bool Inode::get_open_ref_fast(int mode)
+{
+  ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+  // the count crosses zero under lock only, which we hold
+  auto& c = open_by_mode[mode];
+  int n = c.load(std::memory_order_relaxed);
+  if (n == 0)
+    return false;
+  c.store(n + 1, std::memory_order_relaxed);
+  client->inc_opened_files();
+  return true;
+}
+
+bool Inode::put_open_ref_fast(int mode)
+{
+  ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+  auto& c = open_by_mode[mode];
+  int n = c.load(std::memory_order_relaxed);
+  if (n <= 1)
+    return false;
+  c.store(n - 1, std::memory_order_relaxed);
+  client->dec_opened_files();
+  return true;
 }
 
 void Inode::get_cap_ref(int cap)
@@ -542,8 +567,8 @@ int Inode::caps_file_wanted()
 int Inode::_caps_file_wanted() const
 {
   int want = 0;
-  for (const auto &[mode, cnt] : open_by_mode)
-    if (cnt) {
+  for (int mode = 0; mode < CEPH_FILE_MODE_NUM; ++mode)
+    if (open_by_mode[mode].load(std::memory_order_relaxed)) {
       want |= ceph_caps_for_mode(mode);
 
 #if defined(__linux__)
@@ -755,12 +780,15 @@ void Inode::dump(Formatter *f) const
   }
 
   // open
-  if (!open_by_mode.empty()) {
+  if (open_count()) {
     f->open_array_section("open_by_mode");
-    for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
+    for (int mode = 0; mode < CEPH_FILE_MODE_NUM; ++mode) {
+      int refs = open_by_mode[mode].load(std::memory_order_relaxed);
+      if (!refs)
+	continue;
       f->open_object_section("ref");
-      f->dump_int("mode", p->first);
-      f->dump_int("refs", p->second);
+      f->dump_int("mode", mode);
+      f->dump_int("refs", refs);
       f->close_section();
     }
     f->close_section();

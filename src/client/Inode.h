@@ -4,6 +4,7 @@
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
+#include <array>
 #include <memory>
 #include <numeric>
 
@@ -138,7 +139,7 @@ struct Inode : RefCountedObject {
    * Inode::lock protects the state the file data path (ll_read and
    * friends) uses without Client::client_lock:
    *
-   *   caps (and each Cap's issued/implemented), open_by_mode, flags,
+   *   caps (and each Cap's issued/implemented), flags,
    *   size, max_size, truncate_seq/truncate_size, layout, pool_perm_ok,
    *   the attributes getattr returns (mode, uid, gid, nlink, rdev, atime,
    *   btime, time_warp_seq, dirstat, rstat), dirty_caps,
@@ -153,6 +154,11 @@ struct Inode : RefCountedObject {
    *   cap_refs, fhs
    *     the data path changes them under lock alone: read and change
    *     them under lock only.
+   *
+   *   open_by_mode
+   *     a count crosses zero under client_lock and lock; one that stays
+   *     above zero may change under lock alone (Client::_ll_open_fast()):
+   *     read whether a count is zero under either, its value under lock.
    *
    * Lock order: Client::client_lock -> Inode::lock -> Client::oc_lock.
    * Never hold two Inode::locks.  The lock is recursive, so the helpers
@@ -411,8 +417,11 @@ struct Inode : RefCountedObject {
   InodeRef snapdir_parent;  // only if we are a snapdir inode
   std::map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
-  //int open_by_mode[CEPH_FILE_MODE_NUM];
-  std::map<int,int> open_by_mode;
+  // opens by mode: a count crosses zero under client_lock and lock, as
+  // it changes what we want from the MDS; one that stays above zero may
+  // change under lock alone (Client::_ll_open_fast()), so a reader under
+  // client_lock alone may only ask whether a count is zero
+  std::array<std::atomic<int>, CEPH_FILE_MODE_NUM> open_by_mode{};
   std::map<int,int> cap_refs;
   // Fr + Fc refs that cached reads (Client::_read_fast()) hold, one each
   // per reader, counted apart from cap_refs so that the readers of a file
@@ -539,6 +548,11 @@ struct Inode : RefCountedObject {
   // CAPS --------
   void get_open_ref(int mode);
   bool put_open_ref(int mode);
+  // another open or close in a mode the file is open in already, which
+  // changes nothing the MDS sees: false, with nothing done, if the count
+  // would cross zero.  Under lock.
+  bool get_open_ref_fast(int mode);
+  bool put_open_ref_fast(int mode);
 
   void get_cap_ref(int cap);
   int cap_ref_count(int c) {
@@ -611,18 +625,32 @@ struct Inode : RefCountedObject {
   void mark_caps_clean();
 private:
   // how many opens for write on this Inode?
-  long open_count_for_write()
+  long open_count_for_write() const
   {
-    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
-		  open_by_mode[CEPH_FILE_MODE_WR]);
+    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR].load(std::memory_order_relaxed) +
+		  open_by_mode[CEPH_FILE_MODE_WR].load(std::memory_order_relaxed));
   };
 
+  // as the map this was printed: {mode=refs,...}, the counts that are not 0
+  std::string open_by_mode_str() const {
+    std::string s = "{";
+    for (int mode = 0; mode < CEPH_FILE_MODE_NUM; ++mode) {
+      int refs = open_by_mode[mode].load(std::memory_order_relaxed);
+      if (!refs)
+	continue;
+      if (s.size() > 1)
+	s += ",";
+      s += std::to_string(mode) + "=" + std::to_string(refs);
+    }
+    return s + "}";
+  }
   // how many opens of any sort on this inode?
-  long open_count()
+  long open_count() const
   {
-    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
-				  [] (int value, const std::map<int, int>::value_type& p)
-                   { return value + p.second; });
+    long n = 0;
+    for (const auto& c : open_by_mode)
+      n += c.load(std::memory_order_relaxed);
+    return n;
   };
 
   void break_deleg(bool skip_read);
