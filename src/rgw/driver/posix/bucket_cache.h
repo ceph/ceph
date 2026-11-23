@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <lmdb.h>
+#include <map>
 #include <memory>
 #include <tuple>
 #include <vector>
@@ -19,7 +20,6 @@
 #include "common/cohort_lru.h"
 #include "include/scope_guard.h"
 #include "lmdb-safe.hh"
-#include "zpp_bits.h"
 #include "notify.h"
 #include <stdint.h>
 #include <time.h> // struct timespec
@@ -382,264 +382,232 @@ public:
       return result;
     } /* get_bucket */
 
-  static inline std::string concat_key(const rgw_obj_index_key& k) {
-    std::string k_str;
-    k_str.reserve(k.name.size() + k.instance.size());
-    k_str += k.name;
-    k_str += k.instance;
-    return k_str;
+  static std::string make_cache_key(const rgw_obj_index_key& entry)
+  {
+    std::string key;
+    key.reserve(entry.name.size() + entry.instance.size() + 2);
+    // Sort versions by name first, even when one object name is a prefix
+    // of another. Escape embedded NULs so only the separator sorts first.
+    for (char byte : entry.name) {
+      key.push_back(byte);
+      if (byte == '\0') {
+        key.push_back('\1');
+      }
+    }
+    key.append(2, '\0');
+    key += entry.instance;
+    return key;
+  }
+
+  // LMDB limits keys to about 511 bytes. Store keys that reach that limit
+  // in groups keyed by their prefix so range scans retain S3 key order.
+  using EntryGroup = std::map<std::string, rgw_bucket_dir_entry>;
+
+  template <typename T>
+  static void put_value(LMDBSafe::MDBRWTransactionImpl& txn,
+                        MDB_dbi dbi, std::string_view key, const T& value)
+  {
+    bufferlist bl;
+    using ceph::encode;
+    encode(value, bl);
+    txn.put(dbi, key, bl.to_str());
+  }
+
+  template <typename T>
+  static void decode_value(std::string_view data, T* value)
+  {
+    bufferlist bl;
+    bl.append(data.data(), data.size());
+    auto iter = bl.cbegin();
+    using ceph::decode;
+    decode(*value, iter);
+  }
+
+  static void update_entry(LMDBSafe::MDBRWTransactionImpl& txn,
+                           BucketCacheEntry<D, B>* bucket,
+                           const std::string& key,
+                           const rgw_bucket_dir_entry* entry)
+  {
+    const auto max_key_size = size_t(mdb_env_get_maxkeysize(*bucket->env));
+    if (key.size() < max_key_size) {
+      if (entry) {
+        put_value(txn, bucket->dbi, key, *entry);
+      } else {
+        txn.del(bucket->dbi, key);
+      }
+      return;
+    }
+
+    std::string_view prefix(key.data(), max_key_size);
+    LMDBSafe::MDBOutVal data;
+    EntryGroup group;
+    if (txn.get(bucket->dbi, prefix, data) == MDB_SUCCESS) {
+      decode_value(data.get<std::string_view>(), &group);
+    }
+    if (entry) {
+      group.insert_or_assign(key, *entry);
+    } else {
+      group.erase(key);
+    }
+    if (group.empty()) {
+      txn.del(bucket->dbi, prefix);
+    } else {
+      put_value(txn, bucket->dbi, prefix, group);
+    }
   }
 
   int fill(const DoutPrefixProvider* dpp, BucketCacheEntry<D, B>* bucket,
-	    B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
+           B* sal_bucket, uint32_t flags, optional_yield y) /* assert: LOCKED */
   {
-      auto txn = bucket->env->getRWTransaction();
-
-      /* instruct the bucket provider to enumerate all entries,
-       * in any order */
-      auto rc = sal_bucket->fill_cache(dpp, y,
-	[&](const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& bde) -> int {
-	  auto concat_k = concat_key(bde.key);
-	  std::string ser_data;
-	  zpp::bits::out out(ser_data);
-	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-          auto errc =
-              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                  bde.meta.owner_display_name, bde.meta.accounted_size,
-                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                  bde.flags);
-	  /*std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
-	    << std::endl;*/
-	  if (errc.code != std::errc{0}) {
-	    abort();
-	    return 0; // XXX non-zero return?
-	  }
-	  txn->put(bucket->dbi, concat_k, ser_data);
-	  //std::cout << fmt::format("{} {}", __func__, bde.key.name) << '\n';
-	  return 0;
-	});
-
-      txn->commit();
-      bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;
-      un->add_watch(bucket->name, bucket);
+    const auto max_key_size = size_t(mdb_env_get_maxkeysize(*bucket->env));
+    std::map<std::string, EntryGroup> groups;
+    auto txn = bucket->env->getRWTransaction();
+    const auto rc = sal_bucket->fill_cache(dpp, y,
+        [&](const DoutPrefixProvider*, rgw_bucket_dir_entry& entry) {
+          auto key = make_cache_key(entry.key);
+          if (key.size() < max_key_size) {
+            put_value(*txn, bucket->dbi, key, entry);
+          } else {
+            auto prefix = key.substr(0, max_key_size);
+            groups[std::move(prefix)].insert_or_assign(std::move(key), std::move(entry));
+          }
+          return 0;
+        });
+    if (rc < 0) {
       return rc;
-    } /* fill */
+    }
+    for (const auto& [prefix, group] : groups) {
+      put_value(*txn, bucket->dbi, prefix, group);
+    }
+    txn->commit();
+    bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;
+    un->add_watch(bucket->name, bucket);
+    return 0;
+  }
 
   int list_bucket(const DoutPrefixProvider* dpp, optional_yield y, B* sal_bucket,
-		  std::string marker, list_bucket_each_t each_func) {
-
+                  std::string marker, list_bucket_each_t each_func)
+  {
     using namespace LMDBSafe;
 
-    int rc __attribute__((unused)) = 0;
-    GetBucketResult gbr =
-      get_bucket(dpp, sal_bucket->get_name(),
-		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
-    auto [b /* BucketCacheEntry */, flags] = gbr;
-    if (b /* XXX again, can this fail? */) {
-      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
-      unique_lock ulk{b->mtx, std::adopt_lock};
-      if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
-	/* bulk load into lmdb cache */
-	rc = fill(dpp, b, sal_bucket, FLAG_NONE, y);
+    auto [b, flags] = get_bucket(dpp, sal_bucket->get_name(),
+                                 FLAG_LOCK | FLAG_CREATE);
+    if (!b) {
+      return 0;
+    }
+    auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+    unique_lock ulk{b->mtx, std::adopt_lock};
+    if (!(b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
+      const int ret = fill(dpp, b, sal_bucket, FLAG_NONE, y);
+      if (ret < 0) {
+        return ret;
       }
-      /* display them */
-      ulk.unlock();
-      /*! LOCKED */
+    }
 
-      auto txn = b->env->getROTransaction();
-      auto cursor=txn->getCursor(b->dbi);
-      MDBOutVal key, data;
-      bool again{true};
-
-      const auto proc_result = [&]() {
-	zpp::bits::errc errc{};
-	rgw_bucket_dir_entry bde{};
-	/* XXX we may not need to recover the cache key */
-	std::string_view svk __attribute__((unused)) =
-	  key.get<string_view>(); // {name, instance, [ns]}
-	std::string_view svv = data.get<string_view>();
-	std::string ser_v{svv};
-	zpp::bits::in in_v(ser_v);
-	struct timespec ts;
-        errc = in_v(
-            bde.key.name, bde.key.instance, /* bde.key.ns, */
-            bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-            bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-            bde.meta.owner_display_name, bde.meta.accounted_size,
-            bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-            bde.flags);
-	if (errc.code != std::errc{0}) {
-	  abort();
-	}
-	bde.meta.mtime = ceph::real_clock::from_timespec(ts);
-	again = each_func(bde);
-      };
-
-      if (! marker.empty()) {
-	MDBInVal k(marker);
-	auto rc = cursor.lower_bound(k, key, data);
-	if (rc == MDB_NOTFOUND) {
-	  /* no key sorts after k/marker, so there is nothing to do */
-	  return 0;
-	}
-	proc_result();
+    const auto max_key_size = size_t(mdb_env_get_maxkeysize(*b->env));
+    auto txn = b->env->getROTransaction();
+    ulk.unlock();
+    auto cursor = txn->getCursor(b->dbi);
+    MDBOutVal key, data;
+    int ret = marker.empty()
+        ? cursor.get(key, data, MDB_FIRST)
+        : cursor.lower_bound(std::string_view(marker).substr(0, max_key_size),
+                             key, data);
+    for (; ret == MDB_SUCCESS; ret = cursor.get(key, data, MDB_NEXT)) {
+      const auto value = data.get<std::string_view>();
+      if (key.get<std::string_view>().size() < max_key_size) {
+        rgw_bucket_dir_entry entry;
+        decode_value(value, &entry);
+        if (!each_func(entry)) {
+          break;
+        }
       } else {
-	/* position at start of index */
-	auto rc = cursor.get(key, data, MDB_FIRST);
-	if (rc == MDB_NOTFOUND) {
-	  /* no initial key */
-	  return 0;
-	}
-	if (rc == MDB_SUCCESS) {
-	  proc_result();
-	}
+        EntryGroup group;
+        decode_value(value, &group);
+        for (auto it = group.lower_bound(marker); it != group.end(); ++it) {
+          if (!each_func(it->second)) {
+            return 0;
+          }
+        }
       }
-      while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
-	if (!again) {
-	  return 0;
-	}
-	proc_result();
-      }
-    } /* b */
-
+    }
     return 0;
-  } /* list_bucket */
+  }
 
   int notify(const std::string& bname, void* opaque,
-	     const std::vector<Notifiable::Event>& evec) override {
+             const std::vector<Notifiable::Event>& evec) override
+  {
+    using EventType = Notifiable::EventType;
 
-    using namespace LMDBSafe;
+    auto [b, flags] = get_bucket(nullptr, bname, FLAG_LOCK);
+    if (!b) {
+      return 0;
+    }
+    auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+    unique_lock ulk{b->mtx, std::adopt_lock};
+    if (b->name != bname || (opaque && b != opaque) ||
+        !(b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
+      return 0;
+    }
 
-    int rc{0};
-    GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B>::FLAG_LOCK);
-    auto [b /* BucketCacheEntry */, flags] = gbr;
-    if (b) {
-      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
-      unique_lock ulk{b->mtx, std::adopt_lock};
-      if ((b->name != bname) ||
-	  (opaque && (b != opaque)) ||
-	  (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED))) {
-	/* do nothing */
-	return 0;
+    auto txn = b->env->getRWTransaction();
+    for (const auto& ev : evec) {
+      if (ev.type == EventType::INVALIDATE ||
+          (ev.name && driver->listing_name_needs_rescan(*ev.name))) {
+        // A hashed filename cannot be decoded after a remove event.
+        mdb_drop(*txn, b->dbi, 0);
+        txn->commit();
+        b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+        return 0;
       }
-      ulk.unlock();
-      auto txn = b->env->getRWTransaction();
-      for (const auto& ev : evec) {
-	using EventType = Notifiable::EventType;
-	/*
-	std::string_view nil{""};
-	std::cout << fmt::format("notify {} {}!",
-				 ev.name ? *ev.name : nil,
-				 uint32_t(ev.type))
-				 << std::endl; */
-	switch (ev.type)
-	{
-	case EventType::ADD:
-	{
-	  rgw_bucket_dir_entry bde{};
-	  bde.key.name = *ev.name;
-	  /* XXX will need work (if not straight up magic) to have
-	   * side loading support instance and ns */
-	  auto concat_k = concat_key(bde.key);
-	  rc = driver->mint_listing_entry(b->name, bde);
-	  std::string ser_data;
-	  zpp::bits::out out(ser_data);
-	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-          auto errc =
-              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-                  bde.meta.owner_display_name, bde.meta.accounted_size,
-                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-                  bde.flags);
-	  if (errc.code != std::errc{0}) {
-	    abort();
-	  }
-	  txn->put(b->dbi, concat_k, ser_data);
-	}
-	  break;
-	case EventType::REMOVE:
-	{
-	  auto& ev_name = *ev.name;
-	  txn->del(b->dbi, ev_name);
-	}
-	  break;
-	[[unlikely]] case EventType::INVALIDATE:
-	{
-	  /* yikes, cache blown */
-	  ulk.lock();
-	  mdb_drop(*txn, b->dbi, 0);
-	  txn->commit();
-	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
-	  ulk.unlock();
-	  return 0; /* don't process any more events in this batch */
-	}
-	  break;
-	default:
-	  /* unknown event */
-	  break;
-	}
-      } /* all events */
-      txn->commit();
-    } /* b */
-    return rc;
-  } /* notify */
-  
-  int add_entry(const DoutPrefixProvider* dpp, std::string bname, rgw_bucket_dir_entry bde) {
-    using namespace LMDBSafe;
-
-    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
-    auto [b /* BucketCacheEntry */, flags] = gbr;
-    if (b) {
-      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
-      unique_lock ulk{b->mtx, std::adopt_lock};
-      ulk.unlock();
-
-      auto txn = b->env->getRWTransaction();
-      auto concat_k = concat_key(bde.key);
-      std::string ser_data;
-      zpp::bits::out out(ser_data);
-      struct timespec ts {
-        ceph::real_clock::to_timespec(bde.meta.mtime)
-      };
-      auto errc =
-          out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-              bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
-              bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
-              bde.meta.owner_display_name, bde.meta.accounted_size,
-              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
-              bde.flags);
-      if (errc.code != std::errc{0}) {
-        abort();
+      if (!ev.name || ev.name->starts_with('.')) {
+        continue;
       }
-      txn->put(b->dbi, concat_k, ser_data);
 
-      txn->commit();
-    } /* b */
-
+      if (ev.type == EventType::ADD) {
+        rgw_bucket_dir_entry entry;
+        entry.key.name = *ev.name;
+        if (driver->mint_listing_entry(b->name, entry) == 0) {
+          update_entry(*txn, b, make_cache_key(entry.key), &entry);
+        }
+      } else if (ev.type == EventType::REMOVE) {
+        auto key = make_cache_key(driver->listing_key_from_filename(*ev.name));
+        update_entry(*txn, b, key, nullptr);
+      }
+    }
+    txn->commit();
     return 0;
-  } /* add_entry */
+  }
 
-  int remove_entry(const DoutPrefixProvider* dpp, std::string bname, cls_rgw_obj_key key) {
-    using namespace LMDBSafe;
-
-    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
-    auto [b /* BucketCacheEntry */, flags] = gbr;
+  int add_entry(const DoutPrefixProvider* dpp, std::string bname, rgw_bucket_dir_entry bde)
+  {
+    auto [b, flags] = get_bucket(dpp, bname, FLAG_LOCK);
     if (b) {
       auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
       unique_lock ulk{b->mtx, std::adopt_lock};
-      ulk.unlock();
-
-      auto txn = b->env->getRWTransaction();
-      auto concat_k = concat_key(key);
-      txn->del(b->dbi, concat_k);
-      txn->commit();
-    } /* b */
-
+      if (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED) {
+        auto txn = b->env->getRWTransaction();
+        update_entry(*txn, b, make_cache_key(bde.key), &bde);
+        txn->commit();
+      }
+    }
     return 0;
-  } /* remove_entry */
+  }
+
+  int remove_entry(const DoutPrefixProvider* dpp, std::string bname, cls_rgw_obj_key key)
+  {
+    auto [b, flags] = get_bucket(dpp, bname, FLAG_LOCK);
+    if (b) {
+      auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+      unique_lock ulk{b->mtx, std::adopt_lock};
+      if (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED) {
+        auto txn = b->env->getRWTransaction();
+        update_entry(*txn, b, make_cache_key(key), nullptr);
+        txn->commit();
+      }
+    }
+    return 0;
+  }
 
   int invalidate_bucket(const DoutPrefixProvider* dpp, std::string bname) {
     using namespace LMDBSafe;
@@ -655,8 +623,6 @@ public:
       txn->commit();
       b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 
-      ulk.unlock();
-      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;

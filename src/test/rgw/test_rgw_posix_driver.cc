@@ -12,6 +12,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <algorithm>
+#include <limits.h>
 #include "rgw_sal_posix.h"
 #include <gtest/gtest.h>
 #include <iostream>
@@ -1485,6 +1487,65 @@ TEST_F(POSIXObjectTest, ObjectRead)
   EXPECT_EQ(write_data, bl);
 }
 
+TEST_F(POSIXObjectTest, LongObjectKeys)
+{
+  const std::string prefix(511, 'k');
+  const auto first = prefix + std::string(513, 'a');
+  const auto second = prefix + std::string(513, 'b');
+  const std::string boundary(255, 'x');
+  const std::string dot_key = "._" + std::string(1022, 'd');
+  std::string utf8;
+  for (int i = 0; i < 512; ++i) {
+    utf8 += "\xc3\xa9";
+  }
+
+  auto list = [&](const rgw_obj_key& marker, int max) {
+    rgw::sal::Bucket::ListParams params;
+    params.marker = marker;
+    rgw::sal::Bucket::ListResults results;
+    EXPECT_EQ(0, bucket->list(env->dpp, params, max, results, null_yield));
+    return results;
+  };
+
+  // Exercise updates to an already-populated cache as well as a full scan.
+  ASSERT_EQ(1u, list({}, 100).objs.size());
+  for (const auto& key : {second, boundary, prefix, first, dot_key, utf8}) {
+    SCOPED_TRACE(key.size());
+    write_size = 0;
+    write_data.clear();
+    write_object(key);
+    auto fresh = bucket->get_object(rgw_obj_key(key));
+    auto reader = fresh->get_read_op();
+    ASSERT_EQ(0, reader->prepare(null_yield, env->dpp));
+    ASSERT_EQ(write_size, fresh->get_size());
+    bufferlist data;
+    Read_CB cb(&data);
+    ASSERT_EQ(0, reader->iterate(env->dpp, 0, write_size - 1, &cb, null_yield));
+    EXPECT_EQ(write_data, data);
+  }
+
+  EXPECT_EQ(0, driver->get_bucket_cache()->invalidate_bucket(env->dpp, testname));
+  const auto all = list({}, 100);
+  ASSERT_EQ(7u, all.objs.size());
+  EXPECT_EQ(dot_key, all.objs.front().key.name);
+  EXPECT_EQ(utf8, all.objs.back().key.name);
+
+  auto page = list(rgw_obj_key(prefix), 1);
+  ASSERT_EQ(1u, page.objs.size());
+  EXPECT_EQ(first, page.objs.front().key.name);
+  EXPECT_TRUE(page.is_truncated);
+  page = list(page.next_marker, 1);
+  ASSERT_EQ(1u, page.objs.size());
+  EXPECT_EQ(second, page.objs.front().key.name);
+
+  auto first_object = bucket->get_object(rgw_obj_key(first));
+  auto remove = first_object->get_delete_op();
+  ASSERT_EQ(0, remove->delete_obj(env->dpp, null_yield, 0));
+  page = list(rgw_obj_key(prefix), 1);
+  ASSERT_EQ(1u, page.objs.size());
+  EXPECT_EQ(second, page.objs.front().key.name);
+}
+
 TEST_F(POSIXObjectTest, ObjectDelete)
 {
   sf::path tp{bp / "root" / testname / testname};
@@ -1654,7 +1715,8 @@ public:
     POSIXBucketTest::TearDown();
   }
 
-  int write_part(rgw::sal::MultipartUpload* upload, int part_num) {
+  int write_part(rgw::sal::MultipartUpload* upload, int part_num,
+                 size_t chunk_size = 0) {
     std::unique_ptr<rgw::sal::Writer> writer;
     rgw_placement_rule placement;
     std::string part_name = "part-" + fmt::format("{:0>5}", part_num);
@@ -1668,9 +1730,14 @@ public:
     EXPECT_EQ(ret, 0);
 
     int ofs{0};
+    const std::string payload(chunk_size, '0' + part_num);
     for (int i = 0; i < 4; ++i) {
       bufferlist bl;
-      encode(testname + part_name, bl);
+      if (payload.empty()) {
+        encode(testname + part_name, bl);
+      } else {
+        bl.append(payload);
+      }
       int len = bl.length();
 
       write_data.append(bl);
@@ -1698,13 +1765,14 @@ public:
 
     return ofs;
   }
-  uint64_t create_MPObj(rgw::sal::MultipartUpload* upload, std::string name) {
+  uint64_t create_MPObj(rgw::sal::MultipartUpload* upload, std::string name,
+                        size_t chunk_size = 0) {
     std::map<int, std::string> parts;
     int part_count{4};
     uint64_t write_size{0};
 
     for (int i = 1; i <= part_count; ++i) {
-      write_size += write_part(upload, i);
+      write_size += write_part(upload, i, chunk_size);
       parts[i] = "part-" + fmt::format("{:0>5}", i);
     }
 
@@ -1726,11 +1794,13 @@ public:
     EXPECT_EQ(write_size, ofs);
     EXPECT_EQ(write_size, accounted_size);
 
-    for (int i = 1; i <= part_count; ++i) {
-      std::string part_name = "part-" + fmt::format("{:0>5}", i);
-      sf::path tp{bp / "root" / testname / name / part_name};
-      EXPECT_TRUE(sf::exists(tp));
-      EXPECT_TRUE(sf::is_regular_file(tp));
+    if (url_encode(name, true).size() <= NAME_MAX) {
+      for (int i = 1; i <= part_count; ++i) {
+        std::string part_name = "part-" + fmt::format("{:0>5}", i);
+        sf::path tp{bp / "root" / testname / name / part_name};
+        EXPECT_TRUE(sf::exists(tp));
+        EXPECT_TRUE(sf::is_regular_file(tp));
+      }
     }
 
     return write_size;
@@ -1804,6 +1874,48 @@ TEST_F(POSIXMPObjectTest, MPUploadRead)
   ret = read_op->iterate(env->dpp, 0, write_size, &cb, null_yield);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(write_data, bl);
+}
+
+TEST_F(POSIXMPObjectTest, MultipartLongKey)
+{
+  const auto key = std::string(500, 'a') + "/" + std::string(513, 'b') + "/model.pkl";
+  ASSERT_EQ(1024u, key.size());
+  auto upload = bucket->get_multipart_upload(key);
+  ASSERT_EQ(key, upload->get_key());
+  const auto upload_id = upload->get_upload_id();
+  rgw_placement_rule placement;
+  placement.name = "default-placement";
+  Attrs attrs;
+  ASSERT_EQ(0, upload->init(env->dpp, null_yield, acl_owner, placement, attrs));
+  upload.reset();
+
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(0, bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+                                       nullptr, &truncated, null_yield));
+  EXPECT_FALSE(truncated);
+  EXPECT_TRUE(std::ranges::any_of(uploads, [&](const auto& candidate) {
+    return candidate->get_key() == key && candidate->get_upload_id() == upload_id;
+  }));
+
+  upload = bucket->get_multipart_upload(key, upload_id);
+  const auto size = create_MPObj(upload.get(), key, 5 * 1024 * 1024 / 4);
+  ASSERT_EQ(20u * 1024 * 1024, size);
+  auto object = bucket->get_object(rgw_obj_key(key));
+  auto reader = object->get_read_op();
+  ASSERT_EQ(0, reader->prepare(null_yield, env->dpp));
+  ASSERT_EQ(size, object->get_size());
+  bufferlist data;
+  Read_CB cb(&data);
+  ASSERT_EQ(0, reader->iterate(env->dpp, 0, size - 1, &cb, null_yield));
+  EXPECT_EQ(write_data, data);
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(0, bucket->list(env->dpp, params, 100, results, null_yield));
+  ASSERT_EQ(1u, results.objs.size());
+  EXPECT_EQ(key, results.objs.front().key.name);
 }
 
 TEST_F(POSIXMPObjectTest, MPUploadCopy)
@@ -2107,6 +2219,41 @@ TEST_F(POSIXVerObjectTest, url_encode)
   EXPECT_TRUE(sf::is_regular_file(op1));
 }
 
+
+TEST_F(POSIXVerObjectTest, LongVersionedKey)
+{
+  const auto prefix = std::string(1017, 'v') + "/model";
+  const auto key = prefix + "-";
+  ASSERT_EQ(1024u, key.size());
+  auto prefix_object = write_version(prefix);
+  auto first = write_version(key);
+  ASSERT_FALSE(first->get_instance().empty());
+  auto second = write_version(key);
+  ASSERT_NE(first->get_instance(), second->get_instance());
+
+  auto current = bucket->get_object(rgw_obj_key(key));
+  ASSERT_EQ(0, current->get_obj_attrs(null_yield, env->dpp));
+  EXPECT_EQ(second->get_instance(), current->get_instance());
+
+  auto old = bucket->get_object(rgw_obj_key(key, first->get_instance()));
+  ASSERT_EQ(0, old->get_obj_attrs(null_yield, env->dpp));
+  EXPECT_EQ(first->get_instance(), old->get_instance());
+
+  rgw::sal::Bucket::ListParams params;
+  params.list_versions = true;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(0, bucket->list(env->dpp, params, 100, results, null_yield));
+  ASSERT_EQ(3u, results.objs.size());
+  EXPECT_EQ(prefix_object->get_key(), rgw_obj_key(results.objs[0].key));
+  EXPECT_EQ(second->get_key(), rgw_obj_key(results.objs[1].key));
+  EXPECT_EQ(first->get_key(), rgw_obj_key(results.objs[2].key));
+
+  params.marker = second->get_key();
+  results = {};
+  ASSERT_EQ(0, bucket->list(env->dpp, params, 100, results, null_yield));
+  ASSERT_EQ(1u, results.objs.size());
+  EXPECT_EQ(first->get_key(), rgw_obj_key(results.objs.front().key));
+}
 
 TEST_F(POSIXVerObjectTest, BucketListV)
 {
