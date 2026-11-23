@@ -367,7 +367,7 @@ TEST_F(PoolParamsTest, CopiesPerZone) {
   EXPECT_EQ(2, with({{"replica", int64_t(2)}}).copies_per_zone());
 }
 
-// A copy of a pool, as ceph osd pool migrate with no parameters makes it
+// A copy of a pool, as ceph osd pool migrate --inherit-params makes it
 
 // Test a copy of a replicated pool of one zone has its size and PG settings,
 // the default min_size and no rule, for a copy of the rule of its own

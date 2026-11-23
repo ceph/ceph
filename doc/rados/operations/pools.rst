@@ -444,23 +444,38 @@ while keeping the original pool name, run:
    ceph osd pool migrate {pool-name} [options]
 
 PGs in the source pool (renamed to ``.migrate-<n>``) will be migrated to the new
-pool. The new pool will inherit any configuration values from the source pool that 
-are not explicitly specified in the command. This can be used to perform 
-non-disruptive configuration changes that would not otherwise be possible, 
-such as moving all objects from a replicated pool to an erasure coded pool or
-moving objects to a pool that uses a different erasure code profile (including a
-different plugin). This makes it possible to change an erasure coded pool's profile,
-for example to change the plugin or change the k and m values, which cannot otherwise
-be changed in place.
+pool. This can be used to perform non-disruptive configuration changes that would
+not otherwise be possible, such as moving all objects from a replicated pool to an
+erasure coded pool or moving objects to a pool that uses a different erasure code
+profile (including a different plugin). This makes it possible to change an
+erasure coded pool's profile, for example to change the plugin or change the k
+and m values, which cannot otherwise be changed in place.
 
 ``ceph osd pool migrate`` takes the options of ``ceph osd pool create``,
-including ``--num_zones`` and the other options of pools over several zones. A
-migration with no options gives the new pool the source pool's ``num_zones``
-and ``replica`` as well.
+including ``--num_zones`` and the other options of pools over several zones.
+Options that are not given take their defaults, as they do for ``ceph osd pool
+create`` (see :ref:`pool-creation-defaults`), not the source pool's values: migrating an
+erasure coded pool with no options gives a replicated pool of the default size.
+A migration to the layout that the pool already has moves every object for
+nothing but a new pool id, so it is refused unless ``--yes-i-really-mean-it``
+is given.
+
+To copy every object to a new pool that keeps all of the source pool's
+settings, run:
+
+.. prompt:: bash $
+
+   ceph osd pool migrate {pool-name} --inherit-params
+
+The new pool then takes the source pool's layout, zones and replica included,
+and the settings that ``ceph osd pool create`` does not take: its flags,
+erasure code optimizations, ``min_size``, pool options, applications and
+quotas. This is usually needed only by support and by tests.
+``--inherit-params`` cannot be combined with any other pool option.
 
 The new pool shares a CRUSH rule or erasure code profile only if the command
 names it. Otherwise the new pool gets its own rule, named ``{pool-name}``: a
-copy of the source pool's rule for a migration with no options, or a new rule.
+copy of the source pool's rule for ``--inherit-params``, or a new rule.
 An erasure coded pool also gets its own profile, ``{pool-name}-k{k}-m{m}``, as
 ``ceph osd pool create`` gives one. The source pool's own rule and profile take
 the same suffix as the source pool, for example ``myrule.migrate-1``, unless
@@ -470,9 +485,9 @@ fails with ``EEXIST`` and changes nothing.
 
 ``ceph osd pool migrate`` can be run again, as the monitors do when an
 election interrupts it. On a pool that is already being migrated, a migration
-with no options succeeds without changing anything; one with options succeeds
-without changing anything if it asks for the layout that the pool is being
-migrated to, and fails otherwise.
+with ``--inherit-params`` succeeds without changing anything; any other
+succeeds without changing anything if it asks for the layout that the pool is
+being migrated to, and fails otherwise.
 
 .. _associate-pool-to-application:
 
