@@ -2803,7 +2803,30 @@ class CephadmUpgrade:
                 'value': SERVICE_CIPHER,
             })
         else:
-            logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
+            logger.info(
+                'Found mon/mgr/OSD/mds daemons still needing upgrade. '
+                'Service cipher not set'
+            )
+            is_filtered_upgrade = (
+                self.upgrade_state.daemon_types is not None
+                or self.upgrade_state.hosts is not None
+                or self.upgrade_state.services is not None
+                or self.upgrade_state.remaining_count is not None
+            )
+            if not is_filtered_upgrade:
+                logger.info(
+                    'Upgrade: Cannot mark complete, daemons still need upgrade: %s',
+                    still_needing_upgrade,
+                )
+                return
+            logger.info(
+                'Upgrade: filtered upgrade (daemon_types=%s hosts=%s services=%s '
+                'remaining_count=%s); marking complete without setting service cipher',
+                self.upgrade_state.daemon_types,
+                self.upgrade_state.hosts,
+                self.upgrade_state.services,
+                self.upgrade_state.remaining_count,
+            )
 
         # TODO: remove me when we're sure the entry this removes can't be
         # present. I think that's N+2 for the latest version we did an initial

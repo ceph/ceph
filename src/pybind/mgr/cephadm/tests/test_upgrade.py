@@ -3120,3 +3120,129 @@ def test_upgrade_nvmeof_not_safe_does_not_redeploy(
         daemon.name()
         not in cephadm_module.upgrade._nvmeof_disabled_daemons
     )
+
+
+def _mark_complete_daemons(pending: List[str]) -> List[DaemonDescription]:
+    # mon.a, osd.0, osd.1 and mds.fs.a; any name in ``pending`` is still on
+    # the old image, everything else is on the target image.
+    target_digest = 'new_image@repo_digest'
+    old_digest = 'old_image@repo_digest'
+    dds = []
+    for dtype, did in [('mon', 'a'), ('osd', '0'), ('osd', '1'), ('mds', 'fs.a')]:
+        digest = old_digest if f'{dtype}.{did}' in pending else target_digest
+        dds.append(DaemonDescription(
+            daemon_type=dtype,
+            daemon_id=did,
+            hostname='host1',
+            service_name='mds.fs' if dtype == 'mds' else None,
+            container_image_digests=[digest],
+            deployed_by=[digest],
+        ))
+    return dds
+
+
+def _service_cipher_set(check_mon_command: mock.MagicMock) -> bool:
+    return any(
+        c.args and c.args[0].get('prefix') == 'mon set'
+        and c.args[0].get('name') == 'auth_service_cipher'
+        for c in check_mon_command.call_args_list
+    )
+
+
+@pytest.mark.parametrize(
+    'filters, pending, expect_complete, expect_cipher',
+    [
+        # full upgrade, everything upgraded: set cipher, complete
+        pytest.param({}, [], True, True, id='full-all-upgraded'),
+        # full upgrade, daemons left behind: keep state, don't set cipher
+        pytest.param({}, ['osd.1'], False, False, id='full-daemons-pending'),
+        pytest.param({}, ['mon.a', 'mds.fs.a'], False, False,
+                     id='full-mon-mds-pending'),
+        # staggered wave done, other daemons left for later waves:
+        # complete the wave, don't set cipher
+        pytest.param({'daemon_types': ['mon']}, ['osd.0', 'osd.1'], True, False,
+                     id='staggered-daemon-types'),
+        pytest.param({'hosts': ['host2']}, ['osd.1'], True, False,
+                     id='staggered-hosts'),
+        pytest.param({'services': ['mon']}, ['osd.1'], True, False,
+                     id='staggered-services'),
+        pytest.param({'daemon_types': ['osd'], 'total_count': 1, 'remaining_count': 0},
+                     ['osd.1'], True, False, id='staggered-limit'),
+        # CRUSH bucket runs always carry daemon_types=['osd']
+        pytest.param({'daemon_types': ['osd'], 'crush_bucket_type': 'host',
+                      'crush_bucket_name': 'host1'},
+                     ['osd.1'], True, False, id='staggered-crush-bucket'),
+        # final staggered wave: everything upgraded, set cipher, complete
+        pytest.param({'daemon_types': ['osd', 'mds']}, [], True, True,
+                     id='staggered-final-wave'),
+    ],
+)
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '', ''))
+@mock.patch("cephadm.inventory.HostCache._get_daemons")
+def test_mark_upgrade_complete_full_vs_staggered(
+    _get_daemons: mock.MagicMock,
+    check_mon_command: mock.MagicMock,
+    filters: dict,
+    pending: List[str],
+    expect_complete: bool,
+    expect_cipher: bool,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # https://tracker.ceph.com/issues/81131 and
+    # https://tracker.ceph.com/issues/81620
+    target_digest = 'new_image@repo_digest'
+    _get_daemons.side_effect = lambda: iter(_mark_complete_daemons(pending))
+    cephadm_module.use_agent = False
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        'progress-id',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='99.99.99',
+        **filters,
+    )
+
+    with mock.patch.object(cephadm_module.upgrade, '_save_upgrade_state') as save:
+        cephadm_module.upgrade._mark_upgrade_complete([target_digest], 'target_image')
+
+    assert _service_cipher_set(check_mon_command) == expect_cipher
+    if expect_complete:
+        assert cephadm_module.upgrade.upgrade_state is None
+        save.assert_called_once()
+    else:
+        state = cephadm_module.upgrade.upgrade_state
+        assert state is not None
+        assert state.progress_id == 'progress-id'
+        save.assert_not_called()
+
+
+@mock.patch("cephadm.module.CephadmOrchestrator.daemon_is_self",
+            side_effect=lambda dtype, did: dtype == 'mgr' and did == 'x')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '', ''))
+@mock.patch("cephadm.inventory.HostCache._get_daemons")
+def test_mark_upgrade_complete_ignores_active_mgr_deployed_by_old_version(
+    _get_daemons: mock.MagicMock,
+    check_mon_command: mock.MagicMock,
+    _daemon_is_self: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # The active mgr runs the target image, but was deployed by an older mgr.
+    # _detect_need_upgrade flags it as need_upgrade_self; that must not block
+    # completion or the cipher change, since its image is already correct.
+    target_digest = 'new_image@repo_digest'
+    mgr = DaemonDescription(
+        daemon_type='mgr', daemon_id='x', hostname='host1',
+        container_image_digests=[target_digest],
+        deployed_by=['old_image@repo_digest'])
+    _get_daemons.side_effect = lambda: iter(_mark_complete_daemons([]) + [mgr])
+    cephadm_module.use_agent = False
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'progress-id', target_id='image_id',
+        target_digests=[target_digest], target_version='99.99.99')
+
+    with mock.patch.object(cephadm_module.upgrade, '_save_upgrade_state'):
+        cephadm_module.upgrade._mark_upgrade_complete([target_digest], 'target_image')
+
+    assert cephadm_module.upgrade.upgrade_state is None
+    assert _service_cipher_set(check_mon_command)
