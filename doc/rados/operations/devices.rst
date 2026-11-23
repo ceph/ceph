@@ -96,6 +96,22 @@ unrecoverable read errors). Other device types such as SAS and NVMe present a
 similar set of metrics (via slightly different standards).  All of these
 metrics can be collected by Ceph via the ``smartctl`` tool.
 
+Ceph collects health metrics for a device only when both of the following are
+true:
+
+- Ceph can identify the device. Ceph builds a device ID from the vendor, model,
+  and serial number that ``udev`` reports for the device. A device for which
+  ``udev`` reports no serial number, such as some virtual disks and some drives
+  behind RAID controllers, gets no device ID. ``ceph device ls`` does not list
+  it, and Ceph collects no metrics for it. Daemons that cephadm deploys read
+  the host's ``udev`` data through ``/run/udev``, which cephadm mounts into
+  their containers.
+- ``smartctl`` from ``smartmontools`` 7.0 or later is installed where the OSDs
+  and Monitors run. Ceph container images include it. For installations from
+  packages, the ``ceph-base`` package only recommends ``smartmontools``
+  (except on SUSE, where it is required), so install ``smartmontools`` yourself
+  if your package manager skips recommended packages.
+
 You can enable or disable health monitoring by running one of the following
 commands:
 
