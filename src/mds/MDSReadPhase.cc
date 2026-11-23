@@ -216,7 +216,18 @@ bool MDSReadPhase::resolve(Item &it)
  * Could the normal path take every rdlock this request needs without
  * changing any lock state, and would it let the client read the inode?
  * Anything else, including errors, goes to the normal path.
+ *
+ * The locks must also be stable.  The normal path moves a lock that is
+ * readable but unstable (a dentry lock still in XLOCKDONE after the mkdir
+ * that created it, ...) on to a stable state when it drops its rdlock;
+ * the read phase takes no rdlock, so it would leave such a lock where it
+ * is, and e.g. never get to issue a lease on that dentry.
  */
+static bool readable(const SimpleLock &l, client_t client)
+{
+  return l.is_stable() && l.can_rdlock(client);
+}
+
 bool MDSReadPhase::can_read(Item &it)
 {
   CInode *in = it.in;
@@ -228,7 +239,7 @@ bool MDSReadPhase::can_read(Item &it)
       in->last != CEPH_NOSNAP || in->is_under_quarantine() ||
       in->quiescelock.is_xlocked())
     return false;
-  if (!in->snaplock.can_rdlock(client))
+  if (!readable(in->snaplock, client))
     return false;
 
   int issued = 0;
@@ -236,22 +247,44 @@ bool MDSReadPhase::can_read(Item &it)
     issued = cap->issued();
   const int mask = it.req->head.args.getattr.mask;
   if ((mask & CEPH_CAP_LINK_SHARED) && !(issued & CEPH_CAP_LINK_EXCL) &&
-      !in->linklock.can_rdlock(client))
+      !readable(in->linklock, client))
     return false;
   if ((mask & CEPH_CAP_AUTH_SHARED) && !(issued & CEPH_CAP_AUTH_EXCL) &&
-      !in->authlock.can_rdlock(client))
+      !readable(in->authlock, client))
     return false;
   if ((mask & CEPH_CAP_XATTR_SHARED) && !(issued & CEPH_CAP_XATTR_EXCL) &&
-      !in->xattrlock.can_rdlock(client))
+      !readable(in->xattrlock, client))
     return false;
   if ((mask & CEPH_CAP_FILE_SHARED) && !(issued & CEPH_CAP_FILE_EXCL) &&
-      !in->filelock.can_rdlock(client))
+      !readable(in->filelock, client))
     return false;
 
   if (it.dn) {
+    // The parent goes into the reply without caps (another worker may be
+    // serving a request on it), so a client with no cap on the parent
+    // would never get one, and with no cap and no dentry lease it has to
+    // look the name up again every time it walks this path.  Let the
+    // normal path give it the cap, once.  The parent's caps can only be
+    // read if no worker changes them, i.e. it is no target in this batch.
+    if (!it.lease_ok)
+      return false;
+    Capability *dcap = it.diri->get_client_cap(client);
+    if (!dcap)
+      return false;
+    // Likewise when the normal path would add caps to the client's cap on
+    // the parent: it issues what the client wants or the inode likes, as
+    // far as the locks allow, and that is how a client gets Fs back on a
+    // directory whose filelock did not allow it when its cap was issued.
+    // Without Fs and without a dentry lease (none is issued when the
+    // filelock would allow Fs) it has to look every name up again.
+    int would = (dcap->wanted() | it.diri->get_caps_liked()) &
+      it.diri->get_caps_allowed_for_client(it.session, dcap,
+                                           &*it.diri->get_inode());
+    if (would & ~dcap->pending())
+      return false;
     if (it.dir->is_frozen() || it.dir->is_freezing() ||
-        !it.diri->snaplock.can_rdlock(client) ||
-        !it.dn->lock.can_rdlock(client))
+        !readable(it.diri->snaplock, client) ||
+        !readable(it.dn->lock, client))
       return false;
   }
 
