@@ -184,9 +184,21 @@ public:
     bool added = false;
     bool is_paddr_known = true;
   };
+  // Without a read set, a repeated access can't be told apart from the
+  // first one: report every access as added, so that the caller counts it
+  // as a cache hit and touches the extent in the LRU. A record-relative
+  // paddr is only known once the extent's io completes, the caller then
+  // touches it in step 2.
   maybe_add_readset_ret maybe_add_to_read_set(CachedExtentRef ref) {
+    assert(ref->is_stable());
+    assert(ref->get_paddr().is_absolute()
+           || ref->get_paddr().is_record_relative());
+    if (is_weak()) {
+      return {false, true /* meaningless */};
+    }
+    bool is_paddr_known = ref->get_paddr().is_absolute();
     reader_track(std::move(ref));
-    return {false, true};
+    return {true, is_paddr_known};
   }
 
   bool is_in_read_set(CachedExtentRef extent) const {
