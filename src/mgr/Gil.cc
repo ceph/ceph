@@ -25,7 +25,7 @@
 
 #include "Gil.h"
 
-static void assert_gil()
+void assert_gil()
 {
   /* Using PyGILState_Check() isn't appropriate:
    *
@@ -39,12 +39,17 @@ static void assert_gil()
    * "Note: If the current Python process has ever created a subinterpreter,
    * this function will always return 1."
    *
-   * Instead, use PyThreadState_Get() and use ts->thread_id to confirm that it's
-   * the right thread (ts->thread_id isn't necessarily stable, and may need to
-   * change in the future).  Once we no longer need to support python versions
-   * prior to 3.13, this can be PyThreadState_GetUnchecked().
+   * Instead, get the current thread state and use ts->thread_id to confirm
+   * that it's the right thread (ts->thread_id isn't necessarily stable, and
+   * may need to change in the future).  Use the unchecked getter:
+   * PyThreadState_Get() calls Py_FatalError() when there is no current thread
+   * state, so the assertion below would never report the caller.
    */
-  auto *ts = PyThreadState_Get();
+#if PY_VERSION_HEX >= 0x030D0000
+  auto *ts = PyThreadState_GetUnchecked();
+#else
+  auto *ts = _PyThreadState_UncheckedGet();
+#endif
   ceph_assert(ts != nullptr);
   ceph_assert(ts->thread_id == PyThread_get_thread_ident());
 }

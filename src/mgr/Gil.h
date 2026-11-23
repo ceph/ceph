@@ -23,6 +23,22 @@ typedef struct _ts PyThreadState;
 
 #include <pthread.h>
 
+/**
+ * Abort unless the calling thread holds the GIL.
+ */
+void assert_gil();
+
+/**
+ * Same, but only in builds with lock debugging (CEPH_DEBUG_MUTEX, on by
+ * default in Debug builds).  Not NDEBUG: Debian packages are built with
+ * CMAKE_BUILD_TYPE=None, which does not define it.
+ */
+inline void debug_assert_gil()
+{
+#ifdef CEPH_DEBUG_MUTEX
+  assert_gil();
+#endif
+}
 
 /**
  * Wrap PyThreadState to carry a record of which POSIX thread
