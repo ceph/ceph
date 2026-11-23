@@ -1357,7 +1357,7 @@ class JSONFormattable : public ceph::JSONFormatter {
 
   JSONObj::data_val value;
   std::vector<JSONFormattable> arr;
-  std::map<std::string, JSONFormattable, std::less<>> obj;
+  std::map<std::string, JSONFormattable> obj;
 
   std::vector<JSONFormattable *> enc_stack;
   JSONFormattable *cur_enc;
@@ -1433,7 +1433,7 @@ public:
     }
   }
 
-  const std::map<std::string, JSONFormattable, std::less<>> object() const noexcept { return obj; }
+  const std::map<std::string, JSONFormattable> object() const { return obj; }
 
   const std::vector<JSONFormattable>& array() const noexcept { return arr; }
 
@@ -1449,7 +1449,7 @@ public:
   long long val_long_long() const	  { return atoll(value.str.c_str()); }
   bool val_bool() const;
 
-  operator std::string() const noexcept	{ return value.str; }
+  operator std::string() const		{ return value.str; }
   explicit operator int() const		{ return val_int(); }
   explicit operator long() const	{ return val_long(); }
   explicit operator long long() const	{ return val_long_long(); }
@@ -1466,7 +1466,7 @@ public:
   bool exists(const std::string& name) const noexcept	{ return obj.contains(name); }
   bool exists(size_t index) const noexcept		{ return (index < arr.size()); }
 
-  bool find(const std::string& name, std::string *val) const noexcept {
+  bool find(const std::string& name, std::string *val) const {
 	if (auto i = obj.find(name); end(obj) != i)
 	 return (*val = i->second.val()), true;	
 

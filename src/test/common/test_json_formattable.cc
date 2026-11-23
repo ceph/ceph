@@ -19,6 +19,7 @@
 
 #include "common/ceph_json.h"
 
+#include <map>
 #include <sstream>
 
 using namespace std;
@@ -67,6 +68,26 @@ TEST(formattable, str3) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"1234bar56\" }", &f);
   ASSERT_EQ((string)f["foo"], "1234bar56");
+}
+
+TEST(formattable, object_and_value_access)
+{
+  const string value(256, 'x');
+  const string key = "foo";
+  JSONFormattable f;
+  get_jf("{\"foo\":\"" + value + "\"}", &f);
+  const map<string, JSONFormattable> members = f.object();
+  EXPECT_EQ(value, members.at(key).val());
+  EXPECT_EQ(value, static_cast<string>(f[key]));
+
+  string output;
+  EXPECT_TRUE(f.find(key, &output));
+  EXPECT_EQ(value, output);
+
+  // Allocating operations must propagate allocation failures:
+  static_assert(!noexcept(f.object()));
+  static_assert(!noexcept(static_cast<string>(f)));
+  static_assert(!noexcept(f.find(key, &output)));
 }
 
 TEST(formattable, int) {
