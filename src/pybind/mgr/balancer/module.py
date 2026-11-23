@@ -16,6 +16,7 @@ from mgr_module import CRUSHMap
 import datetime
 
 from .cli import BalancerCLICommand
+from . import weight_sets
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
@@ -70,6 +71,8 @@ class Plan(object):
         self.pools = pools
         self.osd_weights = {}
         self.compat_ws = {}
+        # pool name -> change to its weight-set
+        self.weight_set_changes: Dict[str, weight_sets.Change] = {}
         self.inc = osdmap.new_incremental()
         self.pg_status = {}
 
@@ -77,6 +80,11 @@ class Plan(object):
         return json.dumps(self.inc.dump(), indent=4, sort_keys=True)
 
     def show(self) -> str:
+        if self.weight_set_changes:
+            ls = []
+            for pool, change in sorted(self.weight_set_changes.items()):
+                ls += change.show(pool)
+            return '\n'.join(ls)
         return 'upmap plan'
 
 
@@ -109,6 +117,8 @@ class MsPlan(Plan):
         for osd, weight in self.compat_ws.items():
             ls.append('ceph osd crush weight-set reweight-compat %s %f' %
                       (osd, weight))
+        for pool, change in sorted(self.weight_set_changes.items()):
+            ls += change.show(pool)
         for osd, weight in self.osd_weights.items():
             ls.append('ceph osd reweight osd.%d %f' % (osd, weight))
         incdump = self.inc.dump()
@@ -306,6 +316,28 @@ class Module(MgrModule):
                desc='Balancer mode',
                default='upmap',
                enum_allowed=['none', 'crush-compat', 'upmap', 'read', 'upmap-read'],
+               runtime=True),
+        Option(name='crush_exact_weight_sets',
+               type='bool',
+               default=False,
+               desc='give pools weight-sets that correct the CRUSH multi-pick anomaly',
+               long_desc='With unequal CRUSH weights, CRUSH gives low-weight '
+                         'items more data than their share when a rule picks '
+                         'several items from a bucket. If set, in the upmap, '
+                         'read and upmap-read modes the balancer first gives '
+                         'each pool a weight-set, computed from the CRUSH '
+                         'weights, that removes that error, and then balances '
+                         'what is left as usual.',
+               runtime=True),
+        Option(name='crush_exact_weight_sets_positional',
+               type='bool',
+               default=True,
+               desc='use positional weight-sets for replicated pools',
+               long_desc='A positional weight-set also keeps the share of '
+                         'each position, the primary included, in proportion '
+                         'to the CRUSH weights; a flat one only the total. '
+                         'Flat weight-sets are always used for erasure coded '
+                         'pools and for rules that take a device class.',
                runtime=True),
         Option(name='sleep_interval',
                type='secs',
@@ -1078,6 +1110,13 @@ class Module(MgrModule):
                               'despite degraded (%f) / misplaced (%f) objects '
                               'to help recovery make progress',
                               degraded, misplaced)
+            if plan.mode in ('upmap', 'read', 'upmap-read') and \
+               self.get_module_option('crush_exact_weight_sets'):
+                # the PG mappings change with the weight-sets: do nothing
+                # else in a plan that changes them
+                r, detail = self.do_weight_sets(plan)
+                if r < 0 or plan.weight_set_changes:
+                    return r, detail
             if plan.mode == 'upmap':
                 return self.do_upmap(plan)
             elif plan.mode == 'crush-compat':
@@ -1176,6 +1215,47 @@ class Module(MgrModule):
             self.no_optimization_needed = True
             return -errno.EALREADY, msg
         return 0, ''
+
+    def do_weight_sets(self, plan: Plan) -> Tuple[int, str]:
+        """
+        Plan the weight-sets that correct the CRUSH multi-pick anomaly, for
+        the pools whose rule and weights call for one.
+        """
+        crush = plan.osdmap.get_crush()
+        crush_dump = crush.dump()
+        if CRUSHMap.have_default_choose_args(crush_dump):
+            detail = 'crush_exact_weight_sets: there is a compat weight-set ' \
+                     '(from crush-compat mode?); remove it with ' \
+                     '"ceph osd crush weight-set rm-compat" first'
+            self.log.warning(detail)
+            return -errno.EINVAL, detail
+        positional = cast(bool, self.get_module_option(
+            'crush_exact_weight_sets_positional'))
+        details = []
+        for pool in plan.osdmap_dump.get('pools', []):
+            name = pool['pool_name']
+            if plan.pools and name not in plan.pools:
+                continue
+            want, why = weight_sets.desired(
+                crush_dump, pool,
+                crush.solve_flat_weights,
+                crush.solve_positional_weights,
+                allow_positional=positional)
+            if want is None:
+                self.log.debug('pool %s: no weight-set: %s', name, why)
+                continue
+            change = weight_sets.change(crush_dump, pool['pool'], want)
+            if change is None:
+                self.log.debug('pool %s: %s weight-set is up to date',
+                               name, want.mode)
+                continue
+            plan.weight_set_changes[name] = change
+            details.append('%s weight-set for pool %s (%d osds)' %
+                           (change.mode, name, len(change.weights)))
+        detail = '; '.join(details)
+        if detail:
+            self.log.info('crush_exact_weight_sets: %s', detail)
+        return 0, detail
 
     def do_upmap(self, plan: Plan) -> Tuple[int, str]:
         self.log.debug('do_upmap')
@@ -1534,6 +1614,24 @@ class Module(MgrModule):
                 'weight': [weight],
             }), '')
             commands.append(result)
+
+        # per-pool weight-sets
+        for pool, change in sorted(plan.weight_set_changes.items()):
+            for cmd in change.commands(pool):
+                self.log.info('ceph %s', ' '.join(
+                    str(v) for v in cmd.values()))
+                result = CommandResult('')
+                self.send_command(result, 'mon', '',
+                                  json.dumps(dict(cmd, format='json')), '')
+                if cmd['prefix'] == 'osd crush weight-set reweight':
+                    commands.append(result)
+                    continue
+                # the weight-set has to exist before it is reweighted
+                r, outb, outs = result.wait()
+                if r != 0:
+                    self.log.error('Error on "%s" for pool %s: %s',
+                                   cmd['prefix'], pool, outs)
+                    return r, outs
 
         # new_weight
         reweightn = {}
