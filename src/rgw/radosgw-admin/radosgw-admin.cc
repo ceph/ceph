@@ -9478,15 +9478,18 @@ next:
 #endif
 
   if (opt_cmd == OPT::BUCKET_RM) {
-    if (!inconsistent_index) {
-      RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, true, false);
-    } else {
-      if (!yes_i_really_mean_it) {
-	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
-	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-	return 1;
-      }
-      RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, false, false);
+    if (inconsistent_index && !yes_i_really_mean_it) {
+      cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
+      << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return 1;
+    }
+    int r = RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(),
+                                            bypass_gc, !inconsistent_index, false);
+    if (r < 0) {
+      // a refused removal (non-empty bucket, foreign zonegroup) must not
+      // look like success to a script checking the exit status
+      cerr << "ERROR: could not remove bucket: " << cpp_strerror(-r) << std::endl;
+      return posix_errortrans(-r);
     }
   }
 

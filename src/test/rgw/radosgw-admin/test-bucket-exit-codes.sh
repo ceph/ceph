@@ -218,9 +218,10 @@ check_cluster "list: --bucket_id --hello_world (underscore, space form, value ta
 # it is rejected by name before its value is looked at
 check "list: unrecognized underscore flag rejected by name" 22 bucket list --banana_flag 1
 
-# valueless (binary) flag: underscore and dash spellings both succeed
-check_cluster "rm: --purge-objects (dash)" 0 -- bucket rm --bucket=no-such-bucket --purge-objects
-check_cluster "rm: --purge_objects (underscore)" 0 -- bucket rm --bucket=no-such-bucket --purge_objects
+# valueless (binary) flag: underscore and dash spellings both parse, and the
+# command then fails on the missing bucket
+check_cluster "rm: --purge-objects (dash)" 2 -- bucket rm --bucket=no-such-bucket --purge-objects
+check_cluster "rm: --purge_objects (underscore)" 2 -- bucket rm --bucket=no-such-bucket --purge_objects
 
 # Underscore spellings are accepted silently; the command still fails on the
 # integer value, so it runs cluster-free.
@@ -832,10 +833,11 @@ echo ""
 echo "=== bucket rm ==="
 # ============================================================
 
-# rm ignores the op's return value, so missing --bucket silently exits 0;
-# a cluster is needed to reach the op
-check_cluster "rm: missing --bucket (silent exit 0)" 0 -- bucket rm
-check_cluster "rm: --purge-objects before bucket, missing --bucket (silent exit 0)" 0 -- --purge-objects bucket rm
+# rm returns the op's error, so a missing --bucket exits 22 (EINVAL) and a
+# bucket that does not exist exits 2 (ENOENT); a cluster is needed to reach
+# the op
+check_cluster "rm: missing --bucket" 22 -- bucket rm
+check_cluster "rm: --purge-objects before bucket, missing --bucket" 22 -- --purge-objects bucket rm
 
 check "rm: stray after flags" 1 bucket rm --bucket mybucket strayarg
 check "rm: stray before bucket" 1 foo bucket rm --bucket mybucket
@@ -852,7 +854,7 @@ echo ""
 echo "=== bucket rm (remove alias) ==="
 # ============================================================
 
-check_cluster "remove: missing --bucket (silent exit 0)" 0 -- bucket remove
+check_cluster "remove: missing --bucket" 22 -- bucket remove
 check "remove: stray after flags" 1 bucket remove --bucket mybucket strayarg
 check "remove: stray before bucket" 1 foo bucket remove --bucket mybucket
 check "remove: stray between bucket and remove" 1 bucket extra remove --bucket mybucket
@@ -1238,22 +1240,22 @@ echo ""
 echo "=== bucket rm: flags out of position, and repeated flags (cluster) ==="
 # ============================================================
 
-check_cluster "rm: --bucket before bucket (nonexistent bucket, silent exit 0)" 0 -- --bucket nonexistent_test bucket rm
-check_cluster "rm: duplicate --bucket" 0 -- bucket rm --bucket foo --bucket nonexistent_test
+check_cluster "rm: --bucket before bucket (nonexistent bucket)" 2 -- --bucket nonexistent_test bucket rm
+check_cluster "rm: duplicate --bucket" 2 -- bucket rm --bucket foo --bucket nonexistent_test
 check_cluster "rm: duplicate --tenant" 22 -- bucket rm --bucket nonexistent_test --tenant foo --tenant bar
 
 # rm-specific flags out of position
-check_cluster "rm: --purge-objects before bucket" 0 -- --purge-objects bucket rm --bucket nonexistent_test
-check_cluster "rm: --bypass-gc before bucket" 0 -- --bypass-gc bucket rm --bucket nonexistent_test
+check_cluster "rm: --purge-objects before bucket" 2 -- --purge-objects bucket rm --bucket nonexistent_test
+check_cluster "rm: --bypass-gc before bucket" 2 -- --bypass-gc bucket rm --bucket nonexistent_test
 check_cluster "rm: --inconsistent-index before bucket" 1 -- --inconsistent-index bucket rm --bucket nonexistent_test
-check_cluster "rm: --yes-i-really-mean-it + --inconsistent-index before" 0 -- --yes-i-really-mean-it --inconsistent-index bucket rm --bucket nonexistent_test
+check_cluster "rm: --yes-i-really-mean-it + --inconsistent-index before" 2 -- --yes-i-really-mean-it --inconsistent-index bucket rm --bucket nonexistent_test
 check_cluster "rm: --tenant before bucket" 22 -- --tenant foo bucket rm --bucket nonexistent_test
-check_cluster "rm: --purge-objects between bucket and rm" 0 -- bucket --purge-objects rm --bucket nonexistent_test
-check_cluster "rm: duplicate --purge-objects" 0 -- bucket rm --bucket nonexistent_test --purge-objects --purge-objects
+check_cluster "rm: --purge-objects between bucket and rm" 2 -- bucket --purge-objects rm --bucket nonexistent_test
+check_cluster "rm: duplicate --purge-objects" 2 -- bucket rm --bucket nonexistent_test --purge-objects --purge-objects
 
 # rm: several flags out of position at once
-check_cluster "rm: --purge-objects + --bypass-gc before" 0 -- --purge-objects --bypass-gc bucket rm --bucket nonexistent_test
-check_cluster "rm: --bucket + --purge-objects before" 0 -- --bucket nonexistent_test --purge-objects bucket rm
+check_cluster "rm: --purge-objects + --bypass-gc before" 2 -- --purge-objects --bypass-gc bucket rm --bucket nonexistent_test
+check_cluster "rm: --bucket + --purge-objects before" 2 -- --bucket nonexistent_test --purge-objects bucket rm
 check_cluster "rm: --bucket + --tenant + --purge-objects before (exit 22)" 22 -- --bucket nonexistent_test --tenant foo --purge-objects bucket rm
 check_cluster "rm: 4 flags before the subcommand + inconsistent error" 1 -- --bucket nonexistent_test --purge-objects --bypass-gc --inconsistent-index bucket rm
 check_cluster "rm: pos + duplicate + tenant" 22 -- --bucket foo --tenant bar bucket rm --bucket nonexistent_test
@@ -1303,11 +1305,11 @@ check_cluster "check: --remove-bad=banana" 0 -- bucket check --remove-bad=banana
 check_cluster "check: --check-objects=banana" 0 -- bucket check --check-objects=banana
 # set -> locator path needs a bucket name -> exit 22 (same as bare/=true)
 check_cluster "check: --check-head-obj-locator=banana" 22 -- bucket check --check-head-obj-locator=banana
-check_cluster "rm: --purge-objects=banana" 0 -- bucket rm --purge-objects=banana
-check_cluster "rm: --bypass-gc=banana" 0 -- bucket rm --bypass-gc=banana
+check_cluster "rm: --purge-objects=banana" 22 -- bucket rm --purge-objects=banana
+check_cluster "rm: --bypass-gc=banana" 22 -- bucket rm --bypass-gc=banana
 # set -> corrupt-index guard fires (requires --yes-i-really-mean-it) -> exit 1
 check_cluster "rm: --inconsistent-index=banana" 1 -- bucket rm --inconsistent-index=banana
-check_cluster "rm: --yes-i-really-mean-it=banana" 0 -- bucket rm --yes-i-really-mean-it=banana
+check_cluster "rm: --yes-i-really-mean-it=banana" 22 -- bucket rm --yes-i-really-mean-it=banana
 
 # check: several flags out of position at once
 check_cluster "check: --fix + --remove-bad before" 0 -- --fix --remove-bad bucket check
@@ -1365,11 +1367,11 @@ echo ""
 echo "=== bucket remove alias: flags out of position, and repeated flags (cluster) ==="
 # ============================================================
 
-check_cluster "remove: --bucket before bucket" 0 -- --bucket nonexistent_test bucket remove
-check_cluster "remove: --purge-objects before bucket" 0 -- --purge-objects bucket remove --bucket nonexistent_test
+check_cluster "remove: --bucket before bucket" 2 -- --bucket nonexistent_test bucket remove
+check_cluster "remove: --purge-objects before bucket" 2 -- --purge-objects bucket remove --bucket nonexistent_test
 check_cluster "remove: --tenant before bucket" 22 -- --tenant foo bucket remove --bucket nonexistent_test
-check_cluster "remove: duplicate --bucket" 0 -- bucket remove --bucket foo --bucket nonexistent_test
-check_cluster "remove: --bucket + --purge-objects before" 0 -- --bucket nonexistent_test --purge-objects bucket remove
+check_cluster "remove: duplicate --bucket" 2 -- bucket remove --bucket foo --bucket nonexistent_test
+check_cluster "remove: --bucket + --purge-objects before" 2 -- --bucket nonexistent_test --purge-objects bucket remove
 check_cluster "remove: --inconsistent-index before (without yes)" 1 -- --inconsistent-index bucket remove --bucket nonexistent_test
 
 # ============================================================
@@ -1381,7 +1383,7 @@ echo "=== short flags in correct position (cluster) ==="
 check_cluster "list: -b correct position (nonexistent)" 2 -- bucket list -b nonexistent_test
 check_cluster "link: -b and -i correct position (nonexistent)" 2 -- bucket link -b nonexistent_test -i nonexistent_user_test
 check_cluster "unlink: -b and -i correct position (nonexistent)" 2 -- bucket unlink -b nonexistent_test -i nonexistent_user_test
-check_cluster "rm: -b correct position (nonexistent)" 0 -- bucket rm -b nonexistent_test
+check_cluster "rm: -b correct position (nonexistent)" 2 -- bucket rm -b nonexistent_test
 check_cluster "stats: -b correct position (nonexistent)" 2 -- bucket stats -b nonexistent_test
 check_cluster "check: -b correct position" 0 -- bucket check -b nonexistent_test
 
@@ -1764,8 +1766,9 @@ check "integration: buckets check (alias)" 1 buckets check
 # there is no bucket with that id
 check_cluster "integration: bucket stats --bucket-id nonexistent" 2 -- bucket stats --bucket-id nonexistent_id_test
 
-# --inconsistent-index + --yes-i-really-mean-it suppresses the warning and proceeds
-check_cluster "integration: rm --inconsistent-index --yes-i-really-mean-it (nonexistent)" 0 -- bucket rm --bucket nonexistent_test --inconsistent-index --yes-i-really-mean-it
+# --inconsistent-index + --yes-i-really-mean-it suppresses the warning and
+# proceeds to the bucket lookup, which fails
+check_cluster "integration: rm --inconsistent-index --yes-i-really-mean-it (nonexistent)" 2 -- bucket rm --bucket nonexistent_test --inconsistent-index --yes-i-really-mean-it
 
 # ============================================================
 echo ""
@@ -2035,6 +2038,22 @@ if [ "$_have_bucket" = "1" ]; then
 fi
 
 check_bucket "lifecycle: bucket rm --purge-objects (empty bucket)" 0 -- bucket rm --purge-objects --bucket "$_test_bucket"
+
+# Re-create with an object in it: rm without --purge-objects refuses to remove
+# a non-empty bucket and must say so in its exit code (ENOTEMPTY)
+if [ "$_have_bucket" = "1" ]; then
+  AWS_ACCESS_KEY_ID="$_access_key" \
+  AWS_SECRET_ACCESS_KEY="$_secret_key" \
+  aws --endpoint-url "$_rgw_endpoint" \
+    s3 mb "s3://$_test_bucket" >/dev/null 2>&1
+  echo hello | AWS_ACCESS_KEY_ID="$_access_key" \
+  AWS_SECRET_ACCESS_KEY="$_secret_key" \
+  aws --endpoint-url "$_rgw_endpoint" \
+    s3 cp - "s3://$_test_bucket/obj" >/dev/null 2>&1
+fi
+
+check_bucket "lifecycle: bucket rm (non-empty bucket, refused)" 39 -- bucket rm --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket rm --purge-objects (non-empty bucket)" 0 -- bucket rm --purge-objects --bucket "$_test_bucket"
 
 # Cleanup: remove the test user
 if cluster_running; then
