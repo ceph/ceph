@@ -4,6 +4,7 @@
 #include "MDSReadPhase.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 #include "Beacon.h"
 #include "CDentry.h"
@@ -291,10 +292,28 @@ bool MDSReadPhase::serve(Item &it, MDSReadPhaseCtx &ctx)
       it.dir->get_dist_spec(ds.dist, mds->get_nodeid());
     it.dir->encode_dirstat(bl, session->info, ds);
     encode(it.dn->get_name(), bl);
-    // no dentry lease: issuing one changes the session's lease list
+    // as Locker::issue_client_lease(); the lists it puts the lease on are
+    // shared, so that part is done after the phase
+    const client_t client = session->get_client();
     LeaseStat lstat;
     lstat.mask = 0;
     lstat.alternate_name = std::string(it.dn->get_alternate_name());
+    if (it.lease_ok &&
+        !it.diri->is_stray() &&
+        !it.diri->filelock.can_lease(client) &&
+        !(it.diri->get_client_cap_pending(client) &
+          (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) &&
+        it.dn->lock.can_lease(client)) {
+      ClientLease *l = it.dn->add_client_lease(session);
+      const int pool = 1;
+      utime_t ttl = ceph_clock_now();
+      ttl += mds->mdcache->client_lease_durations[pool];
+      ctx.leases.emplace_back(l, ttl);
+      lstat.mask = CEPH_LEASE_VALID | CEPH_LEASE_PRIMARY_LINK;
+      lstat.duration_ms =
+        (uint32_t)(1000 * mds->mdcache->client_lease_durations[pool]);
+      lstat.seq = ++l->seq;
+    }
     mds->locker->encode_lease(bl, session->info, lstat);
   } else {
     reply->head.is_dentry = 0;
@@ -330,6 +349,12 @@ void MDSReadPhase::apply(MDSReadPhaseCtx &ctx)
     mds->balancer->hit_inode(in, META_POP_IRD);
   for (Session *s : ctx.sessions)
     mds->sessionmap.hit_session(s);
+  for (CDentry *dn : ctx.lease_pins)
+    dn->get(CDentry::PIN_CLIENTLEASE);
+  for (auto &[l, ttl] : ctx.leases) {
+    l->session->touch_lease(l);
+    mds->mdcache->touch_client_lease(l, 1, ttl);
+  }
   ctx.clear();
 }
 
@@ -357,6 +382,15 @@ void MDSReadPhase::flush()
   }
 
   if (!items.empty()) {
+    // a LOOKUP may read its parent's caps (dentry lease) only if no worker
+    // changes them, i.e. the parent is no request's target in this batch
+    std::unordered_set<CInode*> targets;
+    for (auto &it : items)
+      targets.insert(it.in);
+    for (auto &it : items)
+      if (it.diri)
+        it.lease_ok = !targets.count(it.diri);
+
     const unsigned nworkers = std::clamp<unsigned>(
       items.size() / min_per_worker.load(), 1, ctxs.size());
     std::vector<std::vector<Item*>> parts(nworkers);
@@ -368,6 +402,7 @@ void MDSReadPhase::flush()
       ctxs[w].next_cap_id = mds->mdcache->last_cap_id + 1;
       mds->mdcache->last_cap_id += parts[w].size();
       ctxs[w].end_cap_id = mds->mdcache->last_cap_id + 1;
+      ctxs[w].lease_seq_lock = &lease_seq_lock;
     }
 
     auto work = [&](unsigned w) {

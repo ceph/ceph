@@ -96,6 +96,9 @@ private:
     CDir *dir = nullptr;      // LOOKUP only
     CDentry *dn = nullptr;    // LOOKUP only
     CInode *in = nullptr;     // target
+    // LOOKUP: the parent is no request's target in this batch, so its caps
+    // can be read to decide on a dentry lease
+    bool lease_ok = false;
     bool served = false;
   };
 
@@ -116,6 +119,7 @@ private:
 
   std::vector<MDSReadPhaseCtx> ctxs;   // one per worker, [0] = dispatch thread
   std::mutex snap_lock;                // SnapRealm snap trace caches
+  std::mutex lease_seq_lock;           // Session::lease_seq
 
   // worker pool
   std::vector<std::thread> threads;

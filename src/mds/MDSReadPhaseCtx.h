@@ -6,9 +6,16 @@
 #include <cstdint>
 #include <vector>
 
+#include <mutex>
+#include <utility>
+
+#include "include/utime.h"
+
+class CDentry;
 class CInode;
 class Capability;
 class Session;
+struct ClientLease;
 
 /*
  * Per-worker context of a parallel read phase (see MDSReadPhase).
@@ -34,6 +41,13 @@ struct MDSReadPhaseCtx {
   std::vector<CInode*> hits;
   // sessions served, for the session load counters
   std::vector<Session*> sessions;
+  // dentries that got their first client lease in this phase (to be pinned)
+  std::vector<CDentry*> lease_pins;
+  // leases issued or renewed, with their ttl: to be put on the session's and
+  // the cache's lease lists
+  std::vector<std::pair<ClientLease*, utime_t>> leases;
+  // guards Session::lease_seq, shared between workers
+  std::mutex *lease_seq_lock = nullptr;
 
   uint64_t alloc_cap_id();
 
@@ -42,6 +56,8 @@ struct MDSReadPhaseCtx {
     new_caps.clear();
     hits.clear();
     sessions.clear();
+    lease_pins.clear();
+    leases.clear();
   }
 
   // the context of the calling thread, if it is serving a read phase
