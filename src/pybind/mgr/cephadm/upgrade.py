@@ -1305,6 +1305,11 @@ class CephadmUpgrade:
         self.mgr.version_tracker.update_cluster_version_status(upgrade_state=self.upgrade_state, status=UpgradeStatus.STOPPED)
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
+        # cancel any in-flight background pre-pulls: they belong to the
+        # stopped upgrade, and the next `ceph orch upgrade start` must be
+        # able to start its own pulls right away instead of waiting for
+        # these to finish or time out
+        self.image_prepull.reset()
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
@@ -1350,6 +1355,14 @@ class CephadmUpgrade:
                     'count': 1,
                     'detail': [f'Unexpected exception occurred during upgrade process: {str(e)}'],
                 })
+                return False
+            if self.image_prepull.pending():
+                # a background pre-pull is in flight: _do_upgrade() only
+                # polled it and did no other work. Report "nothing was
+                # done" so the serve loop sleeps in _serve_sleep() (the
+                # pull's done-callback sets mgr.event and wakes the loop
+                # as soon as the pull finishes) instead of looping
+                # without a pause until then.
                 return False
             return True
         return False

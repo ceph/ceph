@@ -3164,10 +3164,11 @@ def test_inspect_info_matches_target_image_id():
     )
 
 
-def _prepull_state(cephadm_module: CephadmOrchestrator, hosts_done: Optional[List[str]] = None):
+def _prepull_state(cephadm_module: CephadmOrchestrator, hosts_done: Optional[List[str]] = None,
+                   progress_id: str = 'pid'):
     cephadm_module.upgrade.upgrade_state = UpgradeState(
         'quay.io/ceph/ceph:vtest',
-        'pid',
+        progress_id,
         target_id='sha256:targetdigest',
         target_digests=['quay.io/ceph/ceph@sha256:targetdigest'],
         target_version='19.2.0',
@@ -3670,6 +3671,167 @@ def test_pre_pull_failure_ignored_after_upgrade_replaced(
     assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
     assert cephadm_module.upgrade.upgrade_state is new_state
     assert cephadm_module.upgrade.upgrade_state.error in (None, '')
+
+
+@mock.patch('cephadm.module.CephadmOrchestrator.lookup_release_name', return_value='tentacle')
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_continue_upgrade_sleeps_while_pre_pull_in_flight(
+    _lookup_release_name: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade_prepull_image = True
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    # block the background pull until the test lets it finish, so the
+    # "pull is in flight" assertions below are deterministic
+    pull_started = threading.Event()
+    release_pull = threading.Event()
+
+    async def controlled_info(_self, image_name, host=None, timeout=None):
+        pull_started.set()
+        while not release_pull.is_set():
+            await asyncio.sleep(0.01)
+        return ('image_id', 'ceph version 19.2.0 (hash)', ['img@sha256:abc'])
+
+    prepull = cephadm_module.upgrade.image_prepull
+    with with_host(cephadm_module, 'test'), mock.patch(
+            'cephadm.serve.CephadmServe._get_container_image_info',
+            new=controlled_info), \
+            mock.patch.object(CephadmUpgrade, '_check_target_version', return_value='stop'):
+        # serve iteration 1: the first pull is started in the background and
+        # continue_upgrade() reports "nothing was done" so the serve loop
+        # sleeps instead of looping without a pause
+        assert cephadm_module.upgrade.continue_upgrade() is False
+        assert pull_started.wait(timeout=5)
+        assert prepull._first_pull_future is not None
+        assert not prepull._first_pull_future.done()
+
+        # pull still in flight: again "nothing was done" (this used to
+        # return True, which made the serve loop busy-spin for the whole
+        # pull)
+        assert cephadm_module.upgrade.continue_upgrade() is False
+
+        # once the pull finishes, its done-callback wakes the serve loop
+        # (the callback may fire a moment after the future completes)
+        cephadm_module.event.clear()
+        release_pull.set()
+        prepull._first_pull_future.result(timeout=5)
+        deadline = time.monotonic() + 5
+        while not cephadm_module.event.is_set() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert cephadm_module.event.is_set()
+
+        # the next serve iteration harvests the pull result and does work
+        # again (here: _check_target_version fails the upgrade)
+        assert cephadm_module.upgrade.continue_upgrade() is True
+        assert 'UPGRADE_EXCEPTION' not in cephadm_module.health_checks
+        assert cephadm_module.upgrade.upgrade_state.paused
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_upgrade_stop_cancels_in_flight_pre_pull(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    # block the pull until the test lets it finish, so the "batch is in
+    # flight" assertions below are deterministic
+    pull_started = threading.Event()
+    release_pull = threading.Event()
+
+    async def blocked_run(self, host, entity, command, args, image=None,
+                          no_fsid=None, error_ok=None, timeout=None, **kwargs):
+        pull_started.set()
+        while not release_pull.is_set():
+            await asyncio.sleep(0.01)
+        return ([_PULL_OK], [], 0)
+
+    upgrade = cephadm_module.upgrade
+    prepull = upgrade.image_prepull
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=blocked_run):
+        result = prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+        assert result is PrePullBatchResult.IN_PROGRESS
+        assert pull_started.wait(timeout=5)
+        stale_future = prepull._batch_future
+        assert stale_future is not None
+        assert not stale_future.done()
+
+        # `ceph orch upgrade stop` cancels the in-flight pull instead of
+        # letting it run to completion on hosts nobody asked for anymore
+        upgrade.upgrade_stop()
+
+    assert stale_future.cancelled()
+    assert prepull._batch_future is None
+    assert prepull._batch_origin is None
+    assert not prepull.pending()
+
+    # a following upgrade (new progress_id, even for the same image)
+    # starts its own pull right away instead of waiting for the
+    # abandoned one to finish or time out
+    _prepull_state(cephadm_module, progress_id='pid2')
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=_fake_pull()):
+        result = _poll_pre_pull(
+            prepull,
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+    assert result is PrePullBatchResult.COMPLETE
+    assert upgrade.upgrade_state.target_image_pre_pull_hosts == ['h1']
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_stop_cancels_in_flight_first_pull(
+    cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade_prepull_image = True
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    pull_started = threading.Event()
+
+    async def blocked_info(_self, image_name, host=None, timeout=None):
+        pull_started.set()
+        while True:
+            await asyncio.sleep(0.01)
+
+    prepull = cephadm_module.upgrade.image_prepull
+    with with_host(cephadm_module, 'test'):
+        with mock.patch('cephadm.serve.CephadmServe._get_container_image_info',
+                        new=blocked_info):
+            cephadm_module.upgrade._do_upgrade()  # starts the background first pull
+            assert pull_started.wait(timeout=5)
+            stale_future = prepull._first_pull_future
+            assert stale_future is not None
+            assert not stale_future.done()
+
+            cephadm_module.upgrade.upgrade_stop()
+
+        assert stale_future.cancelled()
+        assert prepull._first_pull_future is None
+        assert prepull._first_pull_origin is None
+        assert not prepull.pending()
+
+        # the next upgrade (same image, new progress_id) starts its own
+        # first pull immediately instead of waiting for the abandoned one
+        cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid2')
+        started_again = threading.Event()
+
+        async def counting_info(_self, image_name, host=None, timeout=None):
+            started_again.set()
+            return ('image_id', 'ceph version 19.2.0 (hash)', ['img@sha256:abc'])
+
+        with mock.patch('cephadm.serve.CephadmServe._get_container_image_info',
+                        new=counting_info):
+            cephadm_module.upgrade._do_upgrade()
+            # the pull runs on the background event loop: give it a moment
+            deadline = time.monotonic() + 5
+            while not started_again.is_set() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert started_again.is_set()
+        assert prepull._first_pull_future is not None
+        assert prepull._first_pull_future is not stale_future
 
 
 def _image_info_recording(timeouts: List[Optional[int]]):

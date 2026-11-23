@@ -3,7 +3,7 @@ import json
 import logging
 from concurrent.futures import Future
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Awaitable, Dict, List, Optional, Tuple
 
 from cephadm.serve import CephadmServe
 from orchestrator import DaemonDescription, OrchestratorError
@@ -33,11 +33,15 @@ class UpgradeImagePrePull:
 
     All pulls run as background tasks on the cephadm event loop. The serve
     thread only starts them and polls for results on later serve
-    iterations, so a slow pull never blocks the serve loop and ``ceph orch
-    upgrade pause/stop`` keep working while pulls are in flight. All
-    upgrade-state mutation (marking hosts done, failing the upgrade)
-    happens on the serve thread when results are harvested; the background
-    coroutines only collect per-host results.
+    iterations, so a slow pull never blocks the serve loop: while a pull
+    is in flight ``continue_upgrade()`` reports "nothing was done" so the
+    serve loop sleeps in ``_serve_sleep()``, and a done-callback on the
+    pull future sets ``mgr.event`` to wake it as soon as the pull
+    finishes. ``ceph orch upgrade pause`` keeps working while pulls are
+    in flight; ``ceph orch upgrade stop`` cancels them. All upgrade-state
+    mutation (marking hosts done, failing the upgrade) happens on the
+    serve thread when results are harvested; the background coroutines
+    only collect per-host results.
     """
 
     def __init__(self, upgrade: 'CephadmUpgrade') -> None:
@@ -85,6 +89,56 @@ class UpgradeImagePrePull:
 
     def all_hosts_done(self, hosts: List[str]) -> bool:
         return set(hosts).issubset(set(self.done_hosts()))
+
+    def pending(self) -> bool:
+        """True while a background pull is still in flight.
+
+        While this is the case ``_do_upgrade()`` only polled the pull and
+        did no other work, so ``continue_upgrade()`` reports "nothing was
+        done" and the serve loop sleeps in ``_serve_sleep()`` instead of
+        busy-looping until the pull finishes.
+        """
+        return ((self._first_pull_future is not None
+                 and not self._first_pull_future.done())
+                or (self._batch_future is not None
+                    and not self._batch_future.done()))
+
+    def reset(self) -> None:
+        """Cancel and forget any in-flight background pulls.
+
+        Called when an upgrade is stopped: the pulls belong to the stopped
+        upgrade and their results would be discarded anyway, so cancel
+        them instead of letting them run to completion. This also means a
+        following ``ceph orch upgrade start`` can begin its own pulls
+        right away instead of waiting for the abandoned ones to finish
+        or time out.
+        """
+        if self._first_pull_future is not None:
+            if not self._first_pull_future.done():
+                self._first_pull_future.cancel()
+            self._first_pull_future = None
+        self._first_pull_origin = None
+        self.first_pull_host = None
+        if self._batch_future is not None:
+            if not self._batch_future.done():
+                self._batch_future.cancel()
+            self._batch_future = None
+        self._batch_origin = None
+        self._batch_hosts = []
+
+    def _spawn(self, coro: Awaitable[Any]) -> Future:
+        """Start a background pull and wake the serve loop when it ends."""
+        future = self.mgr.event_loop.spawn(coro)
+        # _serve_sleep() waits on mgr.event: set it as soon as the pull
+        # finishes (or is cancelled) so the serve thread harvests the
+        # result without waiting out the full serve sleep interval. The
+        # callback runs on the event loop thread; Event.set() is safe to
+        # call from there.
+        future.add_done_callback(self._wake_serve_loop)
+        return future
+
+    def _wake_serve_loop(self, _future: Future) -> None:
+        self.mgr.event.set()
 
     def _origin(self) -> Optional[str]:
         st = self.upgrade.upgrade_state
@@ -181,7 +235,7 @@ class UpgradeImagePrePull:
             logger.info(
                 'Upgrade: registry pre-pull first pull using %d second '
                 'cephadm pull timeout', timeout)
-            self._first_pull_future = self.mgr.event_loop.spawn(
+            self._first_pull_future = self._spawn(
                 self._first_pull_async(self.first_pull_host, target_image, timeout))
             return None
         if not self._first_pull_future.done():
@@ -248,7 +302,7 @@ class UpgradeImagePrePull:
             self.upgrade.upgrade_info_str = (
                 f'Pre-pulling upgrade image on {len(hosts) - len(remaining) + len(batch)}/'
                 f'{len(hosts)} host(s)')
-            self._batch_future = self.mgr.event_loop.spawn(
+            self._batch_future = self._spawn(
                 self._pre_pull_batch_async(target_image, batch, self.pull_timeout_sec()))
             return PrePullBatchResult.IN_PROGRESS
 

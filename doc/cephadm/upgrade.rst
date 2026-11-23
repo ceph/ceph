@@ -92,12 +92,14 @@ upgrade is paused before any daemon is upgraded. Staggered upgrades
 pre-pull only on hosts in the current upgrade scope.
 
 Pulls never block the mgr's serve loop: each batch runs as a background
-task on the cephadm event loop and the serve loop polls for results, so
+task on the cephadm event loop and the serve loop polls for results (it
+sleeps between polls and is woken as soon as a pull finishes), so
 orchestration (host refresh, service deployment, health checks) keeps
-running and ``ceph orch upgrade pause`` and ``stop`` keep working while
-pulls are in flight. A batch whose upgrade was stopped, replaced or
-paused discards its results; after a resume the affected hosts are
-pulled again, which is cheap for images that are already present.
+running and ``ceph orch upgrade pause`` keeps working while pulls are
+in flight. ``ceph orch upgrade stop`` cancels in-flight pulls. A batch
+whose upgrade was replaced or paused in the meantime discards its
+results; after a resume the affected hosts are pulled again, which is
+cheap for images that are already present.
 
 Enable pre-pull:
 
