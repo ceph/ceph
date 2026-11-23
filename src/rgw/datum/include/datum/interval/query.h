@@ -1363,15 +1363,30 @@ public:
 
 public:
     template <boundary_view LowerT, boundary_view UpperT>
-
     constexpr void append(std::size_t slot, const LowerT& lower, const UpperT& upper)
+    {
+        append_with_reserve<0>(slot, lower, upper);
+    }
+
+private:
+    friend struct detail::canonical_access;
+
+    // Reserve only after a nonempty interval passes the existing admission checks:
+    template <std::size_t Reserve, boundary_view LowerT, boundary_view UpperT>
+    constexpr void append_with_reserve(std::size_t slot, const LowerT& lower, const UpperT& upper)
     {
         tick();
         if (detail::empty_bounds(lower, upper)) {
             return;
         }
         check_entries(1);
-        buffers.at(slot).push_back(query<DomainT>::between(lower, upper));
+        auto& values = buffers.at(slot);
+        if constexpr (Reserve != 0) {
+            if (std::empty(values)) {
+                values.reserve(Reserve);
+            }
+        }
+        values.push_back(query<DomainT>::between(lower, upper));
         ++retained;
     }
 
@@ -2455,9 +2470,10 @@ struct canonical_access final
         using domain_type = compilation_domain_t<RangeT>;
         workspace<domain_type> scratch;
         scratch.reset(1);
+        constexpr auto reserve = automatic_storage<RangeT>::fits ? component_bound_v<RangeT> : 0;
         for (const auto& value : std::ranges::ref_view {source}) {
             const auto bounds = detail::bounds_of(value);
-            scratch.append(0, bounds.lower(), bounds.upper());
+            scratch.template append_with_reserve<reserve>(0, bounds.lower(), bounds.upper());
         }
         detail::normalize_buffer(scratch, 0);
         auto values = scratch.take(0);
