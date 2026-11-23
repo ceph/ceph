@@ -225,6 +225,110 @@ options:
   - client_oc
   - client_oc_size
   - client_oc_max_dirty
+- name: client_oc_max_woken_writers
+  type: uint
+  level: dev
+  desc: Most writers throttled by client_oc_max_dirty woken at once
+  long_desc: When writeback frees room, the writers waiting for it are woken
+    as many as there is room for, but no more than this many that have not
+    written yet.  More let the writers fill the room faster; with thousands
+    of writers, too many queue for the cache's lock ahead of the writeback
+    completions that free it.
+  default: 32
+  min: 1
+  max: 65536
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_max_dirty
+  - client_oc_shards
+- name: client_oc_read_gate_retries
+  type: uint
+  level: dev
+  desc: Times a cached read retries the object cache's read gate
+  long_desc: A read of cached data goes through the object cache without its
+    lock unless a writer holds that lock; it then waits for the writer and
+    tries again this many times before it reads under the lock.
+  default: 4
+  min: 0
+  max: 1000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc
+- name: client_lock_max_spinners
+  type: int
+  level: dev
+  desc: Threads that may spin at once for a contended client lock
+  long_desc: A thread that finds an inode's or an object cache shard's lock
+    taken may spin for it a while (client_lock_spin_tries) before sleeping,
+    but only this many threads per lock at a time; the others sleep at once.
+    0 disables spinning.  It applies to every mount of the process.
+  default: 2
+  min: 0
+  max: 1024
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_lock_spin_tries
+- name: client_lock_spin_tries
+  type: int
+  level: dev
+  desc: Tries of a spinning thread for a contended client lock
+  long_desc: How many times a spinning thread tries an inode's or an object
+    cache shard's lock, pausing between tries, before it sleeps; also how
+    long a writer spins for the readers of an inode or of the read gate to
+    leave before it yields the CPU.  It applies to every mount of the
+    process.
+  default: 100
+  min: 0
+  max: 1000000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_lock_max_spinners
+- name: client_inode_lock_reader_slots
+  type: uint
+  level: dev
+  desc: Counts the readers of a hot inode are spread over
+  long_desc: Readers that share an inode's lock (getattr, cached reads,
+    lookups in a directory) count themselves in one count, until readers
+    from different threads have met there client_inode_lock_spread_after
+    times; then the inode gets this many counts on cache lines of their own,
+    picked by CPU, and its writers check them all.  It applies to inodes
+    spread after a change, in every mount of the process.
+  default: 16
+  min: 1
+  max: 1024
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_inode_lock_spread_after
+- name: client_inode_lock_spread_after
+  type: uint
+  level: dev
+  desc: Reader meetings after which an inode's readers are spread
+  long_desc: See client_inode_lock_reader_slots.  0 never spreads them.  It
+    applies to every mount of the process.
+  default: 64
+  min: 0
+  max: 1000000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_inode_lock_reader_slots
 - name: client_oc_max_dirty_age
   type: float
   level: advanced

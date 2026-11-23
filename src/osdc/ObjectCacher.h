@@ -542,7 +542,11 @@ class ObjectCacher {
   // taken the lock again yet (changed under the lock the waiters sleep
   // with: this cache's, or the group's)
   std::atomic<size_t> stat_nr_dirty_sleeping{0};
-  static constexpr uint64_t MAX_WOKEN_WRITEBACK_WAITERS = 32;
+  // no more writers waiting for writeback are woken at once than this
+  // (set_max_woken_writers())
+  std::atomic<uint64_t> max_woken_writers{32};
+  // how long gate_shut() spins for the readers to leave before yielding
+  std::atomic<int> gate_spin_tries{100};
 
   void verify_stats() const;
 
@@ -730,6 +734,13 @@ class ObjectCacher {
   void enable_read_gate() {
     read_gate = true;
   }
+  // tuning, may be changed at any time
+  void set_max_woken_writers(uint64_t n) {
+    max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);
+  }
+  void set_gate_spin_tries(int n) {
+    gate_spin_tries.store(std::max(n, 0), std::memory_order_relaxed);
+  }
   /**
    * Share the limits (max_size, max_dirty, target_dirty) with the other
    * members of @g, which all have the same limits and are all in @g: for
@@ -748,7 +759,7 @@ class ObjectCacher {
       return;
     gate_closed.store(true, std::memory_order_seq_cst);
     for (int spins = 0; gate_has_readers(); ++spins) {
-      if (spins > 100)
+      if (spins > gate_spin_tries.load(std::memory_order_relaxed))
         std::this_thread::yield();
     }
   }

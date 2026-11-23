@@ -57,13 +57,15 @@ std::atomic<uint32_t> *Inode::Lock::count_in()
 {
   Slots *sl = slots.load(std::memory_order_seq_cst);
   if (sl) {
-    auto c = &sl->slot[unsigned(ceph::current_cpu()) % nr_slots].n;
+    auto c = &sl->slot[unsigned(ceph::current_cpu()) % sl->n].n;
     c->fetch_add(1, std::memory_order_seq_cst);
     return c;
   }
-  if (readers.fetch_add(1, std::memory_order_seq_cst) != 0 &&
-      met.fetch_add(1, std::memory_order_relaxed) + 1 == spread_after) {
-    auto n = new Slots;
+  if (readers.fetch_add(1, std::memory_order_seq_cst) != 0) {
+    uint32_t after = spread_after.load(std::memory_order_relaxed);
+    if (after == 0 || met.fetch_add(1, std::memory_order_relaxed) + 1 != after)
+      return &readers;
+    auto n = new Slots(std::max(1u, spread_slots.load(std::memory_order_relaxed)));
     Slots *none = nullptr;
     if (!slots.compare_exchange_strong(none, n, std::memory_order_seq_cst))
       delete n;
@@ -76,8 +78,8 @@ bool Inode::Lock::no_readers() const
   if (readers.load(std::memory_order_seq_cst) != 0)
     return false;
   if (Slots *sl = slots.load(std::memory_order_seq_cst)) {
-    for (auto& s : sl->slot) {
-      if (s.n.load(std::memory_order_seq_cst) != 0)
+    for (unsigned i = 0; i < sl->n; i++) {
+      if (sl->slot[i].n.load(std::memory_order_seq_cst) != 0)
         return false;
     }
   }
@@ -101,7 +103,7 @@ void Inode::Lock::lock()
   // leave soon
   writer.store(true, std::memory_order_seq_cst);
   for (int spins = 0; !no_readers(); ++spins) {
-    if (spins > 100)
+    if (spins > Client::lock_spin_tries.load(std::memory_order_relaxed))
       std::this_thread::yield();
   }
   owner.store(self, std::memory_order_relaxed);

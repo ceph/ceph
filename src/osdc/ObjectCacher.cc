@@ -2138,7 +2138,7 @@ void ObjectCacher::_wake_writeback_waiters()
  * Room freed here may be what the waiters of another member of the group
  * wait for, which their own cache's changes would not wake them for: wake
  * as many of them as the group has room for (no more than
- * MAX_WOKEN_WRITEBACK_WAITERS), spread over the members.  Waking one of
+ * max_woken_writers), spread over the members.  Waking one of
  * each, to pass it on, made a chain of wake-ups where each small write
  * took a little of the room and woke the next: the writers came back too
  * slowly to keep the flushers busy.
@@ -2173,7 +2173,7 @@ void ObjectCacher::_wake_group_waiters()
   uint64_t avg = std::max<uint64_t>(1, t.waiting / t.waiters);
   uint64_t n = std::min<uint64_t>({(limit - t.dirty_tx) / avg,
                                    limit_bh - t.dirty_tx_bh,
-                                   MAX_WOKEN_WRITEBACK_WAITERS});
+                                   max_woken_writers.load(std::memory_order_relaxed)});
   n = std::max<uint64_t>(n, 1);
   // round robin over the other members, no more of each than wait there
   std::vector<uint64_t> wake(group->size(), 0);
@@ -2240,12 +2240,13 @@ void ObjectCacher::_wake_local_waiters()
   n = std::min<uint64_t>(n, bh_limit > used_bh ? bh_limit - used_bh : 0);
   n = std::max<uint64_t>(n, 1);
   // those woken already and not back yet take their share of it, and no
-  // more than MAX_WOKEN_WRITEBACK_WAITERS are let go at once
+  // more than max_woken_writers are let go at once
   uint64_t sleeping = std::min<uint64_t>(stat_nr_dirty_sleeping, waiters);
   uint64_t woken = waiters - sleeping;
-  if (n <= woken || woken >= MAX_WOKEN_WRITEBACK_WAITERS || !sleeping)
+  uint64_t max_woken = max_woken_writers.load(std::memory_order_relaxed);
+  if (n <= woken || woken >= max_woken || !sleeping)
     return;
-  n = std::min<uint64_t>({n - woken, MAX_WOKEN_WRITEBACK_WAITERS - woken,
+  n = std::min<uint64_t>({n - woken, max_woken - woken,
                           sleeping});
   _notify_writeback_waiters(n);
 }
@@ -2309,7 +2310,7 @@ ObjectCacher::Totals ObjectCacher::group_totals() const
  * Writers wait here while the dirty and in-flight data is over the limit.
  * A change of the cache's state that lifts the limit (counting what all
  * waiters wait to write) wakes as many of them as there is room for, but
- * never more than MAX_WOKEN_WRITEBACK_WAITERS that have not taken the
+ * never more than max_woken_writers that have not taken the
  * lock again yet, and each that goes passes on what room is left.  Waking
  * them all made them queue for the lock, and with thousands of writers
  * the writeback completions, which need the lock to lower the dirty data,

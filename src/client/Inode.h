@@ -4,6 +4,7 @@
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
+#include <memory>
 #include <numeric>
 
 #include "include/compat.h"
@@ -211,16 +212,17 @@ struct Inode : RefCountedObject {
     std::atomic<bool> writer{false};
     std::atomic<int> spinners{0};
     // the spread counts (see above), once readers met often enough
-    static constexpr unsigned nr_slots = 16;
     struct alignas(64) Slot {
       std::atomic<uint32_t> n{0};
     };
     struct Slots {
-      Slot slot[nr_slots];
+      explicit Slots(unsigned count)
+        : n(count), slot(std::make_unique<Slot[]>(count)) {}
+      const unsigned n;
+      std::unique_ptr<Slot[]> slot;
     };
     std::atomic<Slots*> slots{nullptr};
     std::atomic<uint32_t> met{0};  // readers that found another in readers
-    static constexpr uint32_t spread_after = 64;
     // the count this thread's shared hold went into: it leaves from the
     // same one (it holds one Inode::lock at most)
     static thread_local std::atomic<uint32_t> *my_count;
@@ -232,6 +234,12 @@ struct Inode : RefCountedObject {
   public:
     Lock() = default;
     ~Lock() { delete slots.load(std::memory_order_relaxed); }
+    // tuning, for every Inode::lock of the process (Client sets them from
+    // client_inode_lock_reader_slots and client_inode_lock_spread_after):
+    // how many counts a hot inode's readers are spread over, and after how
+    // many meetings (0: never); a change applies to inodes spread later
+    static inline std::atomic<unsigned> spread_slots{16};
+    static inline std::atomic<uint32_t> spread_after{64};
   };
   // Its own cache line: shared holders (getattr, cached reads of one
   // file) write its reader count twice per call, which would take the

@@ -1505,6 +1505,10 @@ protected:
   // the shards' ObjectCachers, which share the limits
   std::vector<ObjectCacher*> oc_group;
   OCShard& oc_shard(const Inode *in);
+  // how many times a cached read retries the read gate before oc_lock
+  // (client_oc_read_gate_retries)
+  std::atomic<unsigned> read_gate_retries{4};
+  void _apply_tuning();
 
   class OCScope {
   public:
@@ -1541,8 +1545,9 @@ public:
     // of threads on fewer CPUs more of them only take the CPU from the
     // holder they wait for
     if (spinners.fetch_add(1, std::memory_order_relaxed) <
-        max_lock_spinners) {
-      for (int i = 0; i < 100; i++) {
+        lock_max_spinners.load(std::memory_order_relaxed)) {
+      int tries = lock_spin_tries.load(std::memory_order_relaxed);
+      for (int i = 0; i < tries; i++) {
 #if defined(__x86_64__) || defined(__i386__)
         __builtin_ia32_pause();
 #elif defined(__aarch64__)
@@ -1557,7 +1562,11 @@ public:
     spinners.fetch_sub(1, std::memory_order_relaxed);
     m.lock();
   }
-  static constexpr int max_lock_spinners = 2;
+  // tuning, for the whole process (client_lock_max_spinners,
+  // client_lock_spin_tries): how many threads may spin for one lock at a
+  // time, and how many times each tries it before sleeping
+  static inline std::atomic<int> lock_max_spinners{2};
+  static inline std::atomic<int> lock_spin_tries{100};
   // whether this thread holds an oc_lock (is in an OCScope)
   static bool oc_lock_held() {
     return oc_scope != nullptr;

@@ -503,6 +503,25 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     for (auto& sh : oc_shards)
       sh->oc->set_budget_group(&oc_group);
   }
+  _apply_tuning();
+}
+
+// the lock and cache tuning options, at start and when they change
+void Client::_apply_tuning()
+{
+  const auto& conf = cct->_conf;
+  auto r = std::memory_order_relaxed;
+  lock_max_spinners.store(conf.get_val<int64_t>("client_lock_max_spinners"), r);
+  lock_spin_tries.store(conf.get_val<int64_t>("client_lock_spin_tries"), r);
+  Inode::Lock::spread_slots.store(
+    conf.get_val<uint64_t>("client_inode_lock_reader_slots"), r);
+  Inode::Lock::spread_after.store(
+    conf.get_val<uint64_t>("client_inode_lock_spread_after"), r);
+  read_gate_retries.store(conf.get_val<uint64_t>("client_oc_read_gate_retries"), r);
+  for (auto& sh : oc_shards) {
+    sh->oc->set_max_woken_writers(conf.get_val<uint64_t>("client_oc_max_woken_writers"));
+    sh->oc->set_gate_spin_tries(conf.get_val<int64_t>("client_lock_spin_tries"));
+  }
 }
 
 
@@ -12929,7 +12948,8 @@ bool Client::_read_fast(Fh *f, int64_t off, uint64_t len, bufferlist *bl,
   // would keep the others out in turn, and under load the gate would stay
   // shut for good.
   int r = sh.oc->read_hit(rd, &in->oset);
-  for (int tries = 0; r == -EBUSY && tries < 4; ++tries) {
+  unsigned retries = read_gate_retries.load(std::memory_order_relaxed);
+  for (unsigned tries = 0; r == -EBUSY && tries < retries; ++tries) {
     { std::lock_guard l(sh.oc_lock); }
     r = sh.oc->read_hit(rd, &in->oset);
   }
@@ -20832,10 +20852,16 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_force_lazyio",
     "client_fscrypt_as",
     "client_inject_write_delay_secs",
+    "client_inode_lock_reader_slots",
+    "client_inode_lock_spread_after",
+    "client_lock_max_spinners",
+    "client_lock_spin_tries",
     "client_mount_timeout",
     "client_oc_max_dirty",
     "client_oc_max_dirty_age",
     "client_oc_max_objects",
+    "client_oc_max_woken_writers",
+    "client_oc_read_gate_retries",
     "client_oc_size",
     "client_oc_target_dirty",
     "client_permissions",
@@ -20909,6 +20935,14 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_fscrypt_as")) {
     fscrypt_as = cct->_conf.get_val<bool>(
       "client_fscrypt_as");
+  }
+  if (changed.count("client_inode_lock_reader_slots") ||
+      changed.count("client_inode_lock_spread_after") ||
+      changed.count("client_lock_max_spinners") ||
+      changed.count("client_lock_spin_tries") ||
+      changed.count("client_oc_max_woken_writers") ||
+      changed.count("client_oc_read_gate_retries")) {
+    _apply_tuning();
   }
   if (changed.count("client_force_lazyio")) {
     force_lazyio = cct->_conf.get_val<bool>("client_force_lazyio");
