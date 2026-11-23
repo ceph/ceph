@@ -18,6 +18,51 @@
 #include "rgw_cuobj.h"
 
 namespace {
+TEST(CuObjRequestToken, NoHeaderUsesHttp)
+{
+  RGWEnv env;
+  boost::optional<const std::string&> token;
+  ASSERT_EQ(0, rgw::cuobj::get_request_token(env, token));
+  EXPECT_FALSE(token);
+}
+
+TEST(CuObjRequestToken, AcceptsEitherHeaderAndMatchingAliases)
+{
+  const std::string descriptor = "1234:4:1:0:1:0:0";
+  for (const char* header : {"HTTP_X_AMZ_RDMA_TOKEN", "HTTP_X_RDMA_INFO"}) {
+    RGWEnv env;
+    env.set(header, descriptor);
+    boost::optional<const std::string&> token;
+    ASSERT_EQ(0, rgw::cuobj::get_request_token(env, token));
+    ASSERT_TRUE(token);
+    EXPECT_EQ(*token, descriptor);
+    env.set("HTTP_X_AMZ_RDMA_TOKEN", descriptor);
+    env.set("HTTP_X_RDMA_INFO", descriptor);
+    ASSERT_EQ(0, rgw::cuobj::get_request_token(env, token));
+    ASSERT_TRUE(token);
+    EXPECT_EQ(*token, descriptor);
+  }
+}
+
+TEST(CuObjRequestToken, RejectsEmptyAndConflictingHeaders)
+{
+  for (const char* header : {"HTTP_X_AMZ_RDMA_TOKEN", "HTTP_X_RDMA_INFO"}) {
+    RGWEnv env;
+    env.set(header, "");
+    boost::optional<const std::string&> token;
+    EXPECT_EQ(-EINVAL, rgw::cuobj::get_request_token(env, token));
+    EXPECT_FALSE(token);
+    const char* other = std::string_view(header) == "HTTP_X_RDMA_INFO"
+        ? "HTTP_X_AMZ_RDMA_TOKEN" : "HTTP_X_RDMA_INFO";
+    env.set(other, "1234:4:1:0:1:0:0");
+    EXPECT_EQ(-EINVAL, rgw::cuobj::get_request_token(env, token));
+    EXPECT_FALSE(token);
+    env.set(header, "5678:4:1:0:1:0:0");
+    EXPECT_EQ(-EINVAL, rgw::cuobj::get_request_token(env, token));
+    EXPECT_FALSE(token);
+  }
+}
+
 enum class LibraryFailure { None, Missing, MissingSymbols };
 thread_local LibraryFailure library_failure = LibraryFailure::None;
 }

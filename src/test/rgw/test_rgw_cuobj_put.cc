@@ -39,6 +39,7 @@ struct FakeRdma {
   unsigned processes = 0;
   unsigned completes = 0;
   std::string stored;
+  std::string descriptor;
   std::vector<std::string> events;
 
   void reset() {
@@ -47,6 +48,7 @@ struct FakeRdma {
     process_error = complete_error = 0;
     acquisitions = reads = releases = prepares = processes = completes = 0;
     stored.clear();
+    descriptor.clear();
     events.clear();
     buffer.ptr = data.data();
     buffer.size = data.size();
@@ -176,6 +178,8 @@ protected:
   std::unique_ptr<req_state> state;
   std::unique_ptr<TestPut> op;
 
+  virtual const char* token_header() const { return "HTTP_X_AMZ_RDMA_TOKEN"; }
+
   void SetUp() override {
     rdma.reset();
     ASSERT_EQ(0, RGWCuObjServer::init(g_ceph_context));
@@ -183,7 +187,7 @@ protected:
     penv.site = site.get();
     ASSERT_EQ(0, client.init(g_ceph_context));
     client.env.set("REQUEST_METHOD", "PUT");
-    client.env.set("HTTP_X_AMZ_RDMA_TOKEN", "1234:4:1:0:1:0:0");
+    client.env.set(token_header(), "1234:4:1:0:1:0:0");
     state = std::make_unique<req_state>(g_ceph_context, penv, &client.env, 0);
     state->cio = &io;
     state->formatter = ceph::Formatter::create("xml");
@@ -227,6 +231,55 @@ protected:
     EXPECT_FALSE(rdma.buffer.in_use.load());
   }
 };
+
+class CuObjPutHeader : public CuObjPut,
+                      public ::testing::WithParamInterface<const char*> {
+  const char* token_header() const override { return GetParam(); }
+};
+
+TEST_P(CuObjPutHeader, EmptyHttpBodyStoresTheRdmaPayload)
+{
+  state->length = "0";
+  state->content_length = 0;
+  ASSERT_EQ(0, op->get_params(null_yield));
+  op->execute(null_yield);
+  ASSERT_EQ(0, op->get_ret());
+  EXPECT_EQ(rdma.descriptor, "1234:4:1:0:1:0:0");
+  EXPECT_EQ(rdma.reads, 1);
+  EXPECT_EQ(rdma.stored, "abcd");
+  EXPECT_EQ(state->obj_size, 4);
+  op->complete();
+  EXPECT_EQ(client.statuses, std::vector<int>({200}));
+  EXPECT_EQ(client.headers.at("x-amz-rdma-bytes-transferred"), "4");
+  EXPECT_EQ(rdma.events, std::vector<std::string>(
+      {"rdma_complete", "storage_complete", "http_status"}));
+}
+
+TEST_P(CuObjPutHeader, UnavailableCuObjectDoesNotAcceptAnEmptyPut)
+{
+  RGWCuObjServer::shutdown();
+  EXPECT_EQ(-ERR_INTERNAL_ERROR, op->get_params(null_yield));
+  EXPECT_EQ(rdma.reads, 0);
+  EXPECT_EQ(rdma.completes, 0);
+}
+
+TEST_P(CuObjPutHeader, EmptyTokenIsRejected)
+{
+  client.env.set(GetParam(), "");
+  EXPECT_EQ(-EINVAL, op->get_params(null_yield));
+  EXPECT_EQ(rdma.reads, 0);
+}
+
+TEST_P(CuObjPutHeader, ConflictingAliasesAreRejected)
+{
+  client.env.set("HTTP_X_AMZ_RDMA_TOKEN", "1234:4:1:0:1:0:0");
+  client.env.set("HTTP_X_RDMA_INFO", "5678:4:1:0:1:0:0");
+  EXPECT_EQ(-EINVAL, op->get_params(null_yield));
+  EXPECT_EQ(rdma.reads, 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(RequestHeaders, CuObjPutHeader,
+                        ::testing::Values("HTTP_X_AMZ_RDMA_TOKEN", "HTTP_X_RDMA_INFO"));
 
 class CuObjPutReadFailure : public CuObjPut,
                           public ::testing::WithParamInterface<ssize_t> {};
@@ -365,11 +418,12 @@ size_t RGWCuObjServer::parse_rdma_descriptor_size(const std::string&) {
 }
 ssize_t RGWCuObjServer::rdma_read_from_client(const std::string&, RDMABufEntry* buffer,
                                             uint64_t offset, size_t size,
-                                            const std::string&) {
+                                            const std::string& descriptor) {
   EXPECT_EQ(buffer, &rdma.buffer);
   EXPECT_EQ(offset, 0);
   EXPECT_EQ(size, rdma.descriptor_size);
   ++rdma.reads;
+  rdma.descriptor = descriptor;
   rdma.events.push_back("rdma_complete");
   return rdma.result;
 }

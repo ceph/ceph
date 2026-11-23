@@ -28,6 +28,7 @@ struct FakeRdma {
   size_t releases = 0;
   std::optional<ssize_t> result;
   std::string payload;
+  std::string descriptor;
   std::vector<std::string> events;
 
   void reset() {
@@ -39,6 +40,7 @@ struct FakeRdma {
     requested_size = writes = releases = 0;
     result.reset();
     payload.clear();
+    descriptor.clear();
     events.clear();
   }
 } rdma;
@@ -143,6 +145,57 @@ protected:
     EXPECT_EQ(client.headers.count("x-amz-rdma-bytes-transferred"), 0);
   }
 };
+
+class CuObjGetHeader : public CuObjGet,
+                      public ::testing::WithParamInterface<const char*> {
+  void SetUp() override {
+    CuObjGet::SetUp();
+    op->setup(4, false);
+    client.env.set(GetParam(), "1234:4:1:0:1:0:0");
+  }
+};
+
+TEST_P(CuObjGetHeader, RequestHeaderSelectsRdmaWithAnEmptyHttpResponse)
+{
+  ASSERT_EQ(0, op->get_params(null_yield));
+  ASSERT_EQ(0, data("abcd"));
+  EXPECT_TRUE(client.statuses.empty());
+  op->complete();
+  EXPECT_EQ(rdma.descriptor, "1234:4:1:0:1:0:0");
+  EXPECT_EQ(rdma.payload, "abcd");
+  EXPECT_EQ(rdma.writes, 1);
+  EXPECT_EQ(client.statuses, std::vector<int>({200}));
+  EXPECT_EQ(client.content_length, 0);
+  EXPECT_TRUE(client.body.empty());
+  EXPECT_EQ(client.headers.at("x-amz-rdma-bytes-transferred"), "4");
+  EXPECT_EQ(rdma.events, std::vector<std::string>(
+      {"rdma_complete", "http_status", "http_complete"}));
+}
+
+TEST_P(CuObjGetHeader, UnavailableCuObjectDoesNotFallBackToHttp)
+{
+  RGWCuObjServer::shutdown();
+  EXPECT_EQ(-ERR_INTERNAL_ERROR, op->get_params(null_yield));
+  EXPECT_EQ(rdma.writes, 0);
+}
+
+TEST_P(CuObjGetHeader, EmptyTokenIsRejected)
+{
+  client.env.set(GetParam(), "");
+  EXPECT_EQ(-EINVAL, op->get_params(null_yield));
+  EXPECT_EQ(rdma.writes, 0);
+}
+
+TEST_P(CuObjGetHeader, ConflictingAliasesAreRejected)
+{
+  client.env.set("HTTP_X_AMZ_RDMA_TOKEN", "1234:4:1:0:1:0:0");
+  client.env.set("HTTP_X_RDMA_INFO", "5678:4:1:0:1:0:0");
+  EXPECT_EQ(-EINVAL, op->get_params(null_yield));
+  EXPECT_EQ(rdma.writes, 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(RequestHeaders, CuObjGetHeader,
+                        ::testing::Values("HTTP_X_AMZ_RDMA_TOKEN", "HTTP_X_RDMA_INFO"));
 
 TEST_F(CuObjGet, SuccessWaitsForOperationAndRdmaCompletion)
 {
@@ -350,9 +403,11 @@ void RGWCuObjServer::release_buffer(RDMABufEntry* entry) {
   ++rdma.releases;
 }
 ssize_t RGWCuObjServer::rdma_write_to_client(const std::string&, RDMABufEntry* entry,
-                                           uint64_t, size_t size, const std::string&) {
+                                           uint64_t, size_t size,
+                                           const std::string& descriptor) {
   EXPECT_TRUE(rdma.events.empty());
   ++rdma.writes;
+  rdma.descriptor = descriptor;
   const ssize_t result = rdma.result.value_or(size);
   if (result > 0) {
     rdma.payload.assign(static_cast<char*>(entry->ptr), result);

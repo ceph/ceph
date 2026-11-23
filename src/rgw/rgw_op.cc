@@ -5123,7 +5123,11 @@ void RGWPutObj::execute(optional_yield y)
   // An RDMA token without a usable cuObject server was already rejected in
   // RGWPutObj_ObjStore_S3::get_params().
   if (cuobj_srv && cuobj_srv->is_available() && copy_source.empty()) {
-    auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+    boost::optional<const std::string&> rdma_token;
+    op_ret = rgw::cuobj::get_request_token(*s->info.env, rdma_token);
+    if (op_ret < 0) {
+      return;
+    }
     if (rdma_token) {
       rdma_descr = *rdma_token;
       rdma_put = true;

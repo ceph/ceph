@@ -64,6 +64,19 @@ Implementation
 * HEAD requests return metadata over HTTP and do not transfer object data.
   Requests without an RDMA token use the ordinary HTTP data path.
 
+RGW accepts the raw cuObject descriptor in either ``x-amz-rdma-token`` or
+``x-rdma-info``. The latter is used by NIXL's Dell accelerated S3 engine.
+Both names select the same RDMA PUT/GET path; the descriptor is not URL-encoded
+or wrapped in a query string. Empty values or conflicting values supplied in
+both headers return HTTP 400 ``InvalidArgument``. Either header requires an
+available cuObject server; RGW returns an error instead of falling back to an
+empty HTTP upload when cuObject is unavailable.
+
+Clients send PUT requests with an empty HTTP body; the payload size comes from
+the descriptor. GET responses deliver data through RDMA and have an empty
+HTTP body. Successful transfers include ``x-amz-rdma-reply`` and
+``x-amz-rdma-bytes-transferred`` response headers for either request header.
+
 Requirements
 ------------
 
