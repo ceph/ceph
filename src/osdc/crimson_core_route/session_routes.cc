@@ -54,6 +54,11 @@ hint_followed_t SessionRoutes::follow_hint(const spg_t& pgid,
   out.addr.set_port(hint.port);
 
   if (!core_cons.contains(hint.core)) {
+    if (core_cons.size() >= cfg.max_core_cons) {
+      // more cores than the OSD should have: kept on its current connection
+      out.what = hint_followed_t::what_t::too_many_cores;
+      return out;
+    }
     if (blocks.is_blocked(HostBlocks::host_of(out.addr), now)) {
       out.what = hint_followed_t::what_t::blocked;
       return out;

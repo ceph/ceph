@@ -36,6 +36,11 @@
  * completed (SessionRoutes::admit_core_con()). One not connected in time
  * is given up on, and its host is blocked for a while (HostBlocks).
  *
+ * Connection limit: a session keeps at most config_t::max_core_cons core
+ * connections (connecting or connected). Beyond it, a hint of a new core
+ * is ignored, and its PG stays on its current connection: guarding
+ * against an OSD hinting more cores than it has.
+ *
  * Turning the routing off at runtime: every PG's target is then the main
  * connection (config_t::enabled). A PG switches back as it would to a
  * core, once it drains; the core connections no PG uses any more are then
@@ -110,6 +115,9 @@ struct config_t {
   /// objecter_timeout: a keepalive probe not answered by then: the
   /// connection is given up on
   ceph::timespan probe_deadline = ceph::timespan::zero();
+  /// objecter_osd_core_max_connections: the most core connections of the
+  /// session (connecting or connected). Lowering it closes none
+  uint16_t max_core_cons = 128;
   /// (not an option) a route not used for that long, with no op in flight
   /// or awaited and no hold, is forgotten by the periodic check
   ceph::timespan route_idle_ttl = std::chrono::minutes(10);
@@ -230,6 +238,8 @@ struct hint_followed_t {
                      ///< main connection's), or no OSD address to use it on
     blocked,         ///< ignored: connecting to the core's host is blocked
     connect_failed,  ///< ignored: the connection could not be opened
+    too_many_cores,  ///< ignored: a new core, with the session's core
+                     ///< connections at their limit (config_t::max_core_cons)
     changed,         ///< the PG is hinted to a new core
   };
   what_t what = what_t::unchanged;
@@ -403,11 +413,12 @@ public:
   /// connection, whose address (and OSD instance) the core's listener is
   /// reached at, on the hinted port. A new connection to the core is
   /// opened with connect(), unless its host is blocked; a hint it is not
-  /// opened for is not recorded: a later one will try again. With the
-  /// routing off (config_t::enabled), hints are ignored: no connection
-  /// would be used. The first hint followed activates the session: the
-  /// ops for_each_op() visits are then accounted for as in flight on the
-  /// main connection
+  /// opened for is not recorded: a later one will try again. Neither is a
+  /// hint of a new core with the session's core connections at their
+  /// limit (config_t::max_core_cons). With the routing off
+  /// (config_t::enabled), hints are ignored: no connection would be used.
+  /// The first hint followed activates the session: the ops for_each_op()
+  /// visits are then accounted for as in flight on the main connection
   hint_followed_t follow_hint(const spg_t& pgid,
                               const osd_core_hint_t& hint,
                               const ConnectionRef& main_con,

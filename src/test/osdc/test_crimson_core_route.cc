@@ -275,6 +275,47 @@ TEST_F(SessionRoutesTest, HintWhileRoutingOffIsIgnored)
   EXPECT_EQ(1u, connect_calls);
 }
 
+TEST_F(SessionRoutesTest, HintOfANewCoreBeyondTheLimitIsIgnored)
+{
+  cfg.max_core_cons = 1;
+  hinted_and_connected();
+  ASSERT_EQ(1u, routes.num_core_cons());
+
+  // a new core, at the limit: pg2 stays on the main connection
+  auto out = follow(pg2, hint(other_core, other_port));
+  EXPECT_EQ(hint_followed_t::what_t::too_many_cores, out.what);
+  EXPECT_FALSE(out.opened);
+  EXPECT_EQ(1u, connect_calls);
+  EXPECT_EQ(1u, routes.num_core_cons());
+  EXPECT_EQ(nullptr, routes.route_of(pg2));
+  // pg keeps its route
+  EXPECT_EQ(std::optional<core_id_t>(core), route_of(pg).hinted_core);
+
+  // a core connected to already is followed
+  out = follow(pg2, hint(core));
+  EXPECT_EQ(hint_followed_t::what_t::changed, out.what);
+  EXPECT_FALSE(out.opened);
+  EXPECT_EQ(std::optional<core_id_t>(core), route_of(pg2).hinted_core);
+
+  // below the limit again, the new core connects
+  cfg.max_core_cons = 2;
+  out = follow(pg2, hint(other_core, other_port));
+  EXPECT_EQ(hint_followed_t::what_t::changed, out.what);
+  EXPECT_EQ(other_con, out.opened);
+  EXPECT_EQ(2u, routes.num_core_cons());
+}
+
+TEST_F(SessionRoutesTest, ConnectingCoresCountTowardsTheLimit)
+{
+  cfg.max_core_cons = 1;
+  // opened, not connected yet
+  follow(pg, hint(core));
+  ASSERT_TRUE(routes.is_connecting(core));
+  EXPECT_EQ(hint_followed_t::what_t::too_many_cores,
+            follow(pg2, hint(other_core, other_port)).what);
+  EXPECT_EQ(1u, connect_calls);
+}
+
 TEST_F(SessionRoutesTest, CoreIsRoutedToOnlyOnceAdmitted)
 {
   follow(pg, hint(core));
