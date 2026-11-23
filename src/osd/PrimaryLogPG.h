@@ -1248,6 +1248,9 @@ protected:
   PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   /// Error code that triggered quiesce (for logging and decision making)
   int pool_migration_quiesce_error_code = 0;
+  /// a suspended source resumes this long after its in-flight copies drain
+  bool pool_migration_resume_pending = false;
+  float pool_migration_resume_delay = 0;
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
@@ -1493,6 +1496,7 @@ protected:
   void stop_pool_migration_revoked();
   void stop_pool_migration_error(int error_code);
   void on_pool_migration_source_suspended() override;
+  bool pool_migration_resume_after_drain(float delay) override;
   void on_pool_migration_target_reserved(HBHandle *handle) override;
   void on_pool_migration_target_suspended(bool toofull) override;
 

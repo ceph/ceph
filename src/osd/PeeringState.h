@@ -456,6 +456,13 @@ public:
     virtual void on_recovery_cancelled() = 0;
     virtual void on_pool_migration_source_reserved() = 0;
     virtual void on_pool_migration_source_suspended() = 0;
+    /// A suspended source wants to resume after delay seconds. If copies are
+    /// still in flight, the listener drains them first, posts DoPoolMigration
+    /// itself once they are gone and returns true; otherwise it returns false
+    /// and the state machine schedules the resume.
+    virtual bool pool_migration_resume_after_drain(float delay) {
+      return false;
+    }
     virtual void on_pool_migration_target_reserved(HBHandle *handle) = 0;
     virtual void on_pool_migration_target_suspended(bool toofull) = 0;
 

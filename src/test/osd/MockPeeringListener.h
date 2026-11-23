@@ -409,6 +409,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     recovery_cancelled = true;
   }
 
+  bool pool_migration_resume_after_drain(float delay) override {
+    pool_migration_resume_delay = delay;
+    return pool_migration_drain_pending;
+  }
   void on_pool_migration_source_suspended() override {
     pool_migration_source_suspended = true;
   }
@@ -544,6 +548,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool backfill_suspended = false;
   bool recovery_cancelled = false;
   bool pool_migration_source_suspended = false;
+  bool pool_migration_drain_pending = false;   // copies in flight at a deferral
+  float pool_migration_resume_delay = -1;      // delay the state machine asked for
   bool pool_migration_source_reserved = false;
   bool pool_migration_target_release_reservation = false;
   bool pool_migration_target_reserved = false;

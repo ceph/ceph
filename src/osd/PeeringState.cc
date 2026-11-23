@@ -6685,13 +6685,14 @@ PeeringState::MigratingSource::react(const DeferPoolMigration &c)
   psdout(10) << "defer pool migration, retry delay " << c.delay << dendl;
   ps->state_set(PG_STATE_MIGRATION_WAIT);
   suspend_migration();
-
-  pl->schedule_event_after(
-    std::make_shared<PGPeeringEvent>(
-      ps->get_osdmap_epoch(),
-      ps->get_osdmap_epoch(),
-      DoPoolMigration()),
-    c.delay);
+  if (!pl->pool_migration_resume_after_drain(c.delay)) {
+    pl->schedule_event_after(
+      std::make_shared<PGPeeringEvent>(
+        ps->get_osdmap_epoch(),
+        ps->get_osdmap_epoch(),
+        DoPoolMigration()),
+      c.delay);
+  }
   return transit<NotMigrating>();
 }
 
@@ -6731,13 +6732,15 @@ PeeringState::MigratingSource::react(const PoolMigrationStoppedTooFull &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_TOOFULL);
   suspend_migration();
-
-  pl->schedule_event_after(
-    std::make_shared<PGPeeringEvent>(
-      ps->get_osdmap_epoch(),
-      ps->get_osdmap_epoch(),
-      DoPoolMigration()),
-    ps->cct->_conf.get_val<double>("osd_pool_migration_retry_interval"));
+  float delay = ps->cct->_conf.get_val<double>("osd_pool_migration_retry_interval");
+  if (!pl->pool_migration_resume_after_drain(delay)) {
+    pl->schedule_event_after(
+      std::make_shared<PGPeeringEvent>(
+        ps->get_osdmap_epoch(),
+        ps->get_osdmap_epoch(),
+        DoPoolMigration()),
+      delay);
+  }
   return transit<NotMigrating>();
 }
 
@@ -6747,6 +6750,9 @@ PeeringState::MigratingSource::react(const PoolMigrationStoppedRevoked &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_WAIT);
   suspend_migration();
+  if (pl->pool_migration_resume_after_drain(0)) {
+    return transit<NotMigrating>();
+  }
   return transit<WaitLocalPoolMigrationReserved>();
 }
 
