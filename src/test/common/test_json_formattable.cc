@@ -297,6 +297,29 @@ TEST(formattable, set_array) {
   ASSERT_EQ((string)f2[0]["field"], "xyz");
 }
 
+TEST(formattable, nested_array_paths) {
+  JSONFormattable f;
+  ASSERT_EQ(0, f.set("root[0]child[1]", "42"));
+  ASSERT_EQ(42, static_cast<int>(f["root"][0]["child"][1]));
+  ASSERT_EQ(0, f.erase("root[0]child[1]"));
+  ASSERT_FALSE(f["root"][0]["child"].exists(1));
+
+  ASSERT_EQ(0, f.set("root[+1]", "43"));
+  ASSERT_EQ(43, static_cast<int>(f["root"][1]));
+  ASSERT_EQ(0, f.set("root[ 0]", "44"));
+  ASSERT_EQ(44, static_cast<int>(f["root"][0]));
+}
+
+TEST(formattable, invalid_array_paths) {
+  for (const auto* path : {"root[bad]", "root[1bad]", "root[2147483648]",
+                           "root[999999999999999999999]", "root[0", "root[0]tail"}) {
+    SCOPED_TRACE(path);
+    JSONFormattable f;
+    ASSERT_EQ(-EINVAL, f.set(path, "42"));
+    ASSERT_EQ(-EINVAL, f.erase(path));
+  }
+}
+
 TEST(formattable, erase_array) {
   JSONFormattable f;
 

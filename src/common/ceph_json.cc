@@ -268,10 +268,8 @@ static int parse_entity(const string& s, vector<field_entity> *result)
       return 0;
     }
     if (next_arr > ofs) {
-
-      auto field = string_view(ofs + begin(s), next_arr - ofs + begin(s)); 
-
-      result->emplace_back(field_entity(field));
+      auto field = string_view(s).substr(ofs, next_arr - ofs);
+      result->emplace_back(field);
       ofs = next_arr;
     }
     size_t end_arr = s.find(']', next_arr + 1);
@@ -284,18 +282,16 @@ static int parse_entity(const string& s, vector<field_entity> *result)
     ofs = end_arr + 1;
 
     if (!index_str.empty()) {
-
-        int x;
-        if (auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
-         result->emplace_back(field_entity(x));
-        else
-         throw std::invalid_argument(fmt::format("{}", index_str));
-
-    } else {
-      field_entity f;
-      f.append = true;
-      result->emplace_back(f);
+      auto index = ceph_json::detail::parse_legacy_integer<int>(index_str);
+      if (!index) {
+        return -EINVAL;
+      }
+      result->emplace_back(*index);
+      continue;
     }
+    field_entity f;
+    f.append = true;
+    result->emplace_back(f);
   }
   return 0;
 }
