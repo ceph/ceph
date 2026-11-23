@@ -113,9 +113,12 @@ Kernel Version for Clients
      - Minimum kernel
      - Note
    * - RBD
-     - 5.3, or Enterprise Linux 8.2 (4.19 long-term at the very least)
+     - 5.3, or Enterprise Linux 8.2 (4.19 long-term at the very least).
+       From Tentacle, 5.11, or a distribution kernel that accepts the
+       ``ms_mode`` map option.
      - Older kernels need :ref:`CRUSH tunables <crush-map-tunables>` and
-       image features disabled on the cluster.
+       image features disabled on the cluster. From Tentacle,
+       ``rbd device map`` always passes ``ms_mode`` to the kernel.
    * - CephFS
      - See :ref:`kernel versions for CephFS <cephfs_which_kernel_version>`
      -
