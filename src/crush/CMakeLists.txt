@@ -6,6 +6,7 @@ set(crush_srcs
   CrushWrapper.cc
   CrushCompiler.cc
   CrushTester.cc
+  CrushWeightSolver.cc
   CrushLocation.cc)
 
 add_library(crush_objs OBJECT ${crush_srcs})
