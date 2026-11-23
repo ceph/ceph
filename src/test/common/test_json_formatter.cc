@@ -800,3 +800,73 @@ TEST(formatter, ceph_json_container_custom_encoders)
   EXPECT_EQ(R"({"sequence":["custom:7","custom:9"],)"
             R"("mapping":[{"key":"custom:1","val":"custom:7"}]})", out.str());
 }
+
+TEST(formatter, ceph_json_legacy_integer_strings)
+{
+  const auto check = []<typename IntegerT> {
+    for (const string_view text : {"42", "+42", " 42", "42 ", " \t+42\r\n", "0042", "-0"}) {
+      SCOPED_TRACE(text);
+      JSONFormatter formatter;
+      formatter.open_object_section("root");
+      encode_json("n", text, &formatter);
+      formatter.close_section();
+      ostringstream out;
+      formatter.flush(out);
+
+      JSONParser parser;
+      ASSERT_TRUE(parser.parse(out.str()));
+      IntegerT value {};
+      EXPECT_NO_THROW(JSONDecoder::decode_json("n", value, &parser, true));
+      EXPECT_EQ(text == "-0" ? IntegerT {} : IntegerT {42}, value);
+    }
+
+    for (const auto value : {numeric_limits<IntegerT>::min(), numeric_limits<IntegerT>::max()}) {
+      const string json = "{\"n\":\"" + to_string(value) + "\"}";
+      JSONParser parser;
+      ASSERT_TRUE(parser.parse(json));
+      IntegerT decoded {};
+      EXPECT_NO_THROW(JSONDecoder::decode_json("n", decoded, &parser, true));
+      EXPECT_EQ(value, decoded);
+    }
+
+    for (const string_view text : {"+", "+-1", "-+1", "+ 42", "42x", " "}) {
+      SCOPED_TRACE(text);
+      const string json = "{\"n\":\"" + string(text) + "\"}";
+      JSONParser parser;
+      ASSERT_TRUE(parser.parse(json));
+      IntegerT value {};
+      EXPECT_THROW(JSONDecoder::decode_json("n", value, &parser, true), JSONDecoder::err);
+    }
+  };
+  check.operator()<int>();
+  check.operator()<unsigned>();
+  check.operator()<long>();
+  check.operator()<unsigned long>();
+  check.operator()<long long>();
+  check.operator()<unsigned long long>();
+
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(R"({"n":"-1"})"));
+  unsigned long native {};
+  unsigned long long wide {};
+  EXPECT_NO_THROW(JSONDecoder::decode_json("n", native, &parser, true));
+  EXPECT_NO_THROW(JSONDecoder::decode_json("n", wide, &parser, true));
+  EXPECT_EQ(numeric_limits<unsigned long>::max(), native);
+  EXPECT_EQ(numeric_limits<unsigned long long>::max(), wide);
+
+  unsigned narrow {};
+  if constexpr (numeric_limits<unsigned long>::max() > numeric_limits<unsigned>::max()) {
+    EXPECT_THROW(JSONDecoder::decode_json("n", narrow, &parser, true), JSONDecoder::err);
+  }
+  if constexpr (numeric_limits<unsigned long>::max() == numeric_limits<unsigned>::max()) {
+    EXPECT_NO_THROW(JSONDecoder::decode_json("n", narrow, &parser, true));
+    EXPECT_EQ(numeric_limits<unsigned>::max(), narrow);
+  }
+
+  for (const string_view json : {
+         R"({"n":"18446744073709551616"})", R"({"n":"42\u0000junk"})"}) {
+    JSONParser invalid;
+    ASSERT_TRUE(invalid.parse(json));
+    EXPECT_THROW(JSONDecoder::decode_json("n", wide, &invalid, true), JSONDecoder::err);
+  }
+}

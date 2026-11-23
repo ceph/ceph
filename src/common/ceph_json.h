@@ -38,6 +38,7 @@
 #include <ranges>
 #include <concepts>
 
+#include <type_traits>
 #include <typeindex>
 #include <stdexcept>
 
@@ -490,6 +491,47 @@ concept json_integer = requires
  requires !is_any_of<T, char, char8_t, char16_t, char32_t, wchar_t>();
 };
 
+template <json_integer IntegerT>
+std::optional<IntegerT> parse_legacy_integer(std::string_view input)
+{
+  constexpr std::string_view whitespace = " \t\n\r\f\v";
+  const auto first = input.find_first_not_of(whitespace);
+  if (first == std::string_view::npos) {
+    return std::nullopt;
+  }
+  input = input.substr(first, input.find_last_not_of(whitespace) - first + 1);
+
+  if (input.starts_with('+')) {
+    input.remove_prefix(1);
+    if (input.empty() || input.front() < '0' || input.front() > '9') {
+      return std::nullopt;
+    }
+  }
+
+  // strtoul/strtoull negated at their native width before checking narrower outputs:
+  using parsed_type = std::conditional_t<std::is_unsigned_v<IntegerT>,
+    std::conditional_t<(sizeof(IntegerT) <= sizeof(unsigned long)),
+                       unsigned long, unsigned long long>, IntegerT>;
+  const bool negative = std::is_unsigned_v<IntegerT> && input.starts_with('-');
+  if (negative) {
+    input.remove_prefix(1);
+  }
+  auto result = ceph::parse<parsed_type>(input);
+  if (!result) {
+    return std::nullopt;
+  }
+  if constexpr (std::is_unsigned_v<IntegerT>) {
+    if (negative) {
+      *result = parsed_type {} - *result;
+    }
+  }
+  if (!std::in_range<IntegerT>(*result)) {
+    return std::nullopt;
+  }
+
+  return static_cast<IntegerT>(*result);
+}
+
 template <typename T>
 concept json_signed_integer = requires 
 {
@@ -756,7 +798,7 @@ template <typename IntegerT>
 requires ceph_json::detail::json_integer<IntegerT> 
 void decode_json_obj(IntegerT& val, JSONObj *obj)
 {
- auto r = ceph::parse<IntegerT>(obj->get_data());
+ auto r = ceph_json::detail::parse_legacy_integer<IntegerT>(obj->get_data());
 
  if(!r)
   throw JSONDecoder::err(fmt::format("failed to parse number from JSON"));
