@@ -146,6 +146,7 @@ private:
   }
 
   void _remove_from_tree(rbm_abs_addr start, rbm_abs_addr size);
+  rbm_abs_addr _alloc_from_range(extent_range_t& r, size_t size);
   rbm_abs_addr find_block(size_t size);
   extent_len_t find_block(size_t size, rbm_abs_addr &start);
 
