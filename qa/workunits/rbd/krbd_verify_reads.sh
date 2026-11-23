@@ -7,6 +7,13 @@
 # a single shard, if the kernel supports EC direct reads.  Such a kernel
 # counts them in debugfs; then at least one of each is required, so that
 # the run can't pass without exercising those paths.
+#
+# Every map/read/write runs under READ_TIMEOUT.  If one does not finish in
+# time (e.g. during OSD thrashing), the operation is dumped with the kernel's
+# outstanding OSD requests (/sys/kernel/debug/ceph/*/osdc) and the libceph
+# dmesg tail, then the test fails -- so a hung direct read (an osdc request
+# stuck on one OSD while the rest churn) is distinguishable from a cluster
+# that is merely unavailable mid-thrash, instead of an opaque command timeout.
 
 set -e
 set -o pipefail
@@ -16,26 +23,60 @@ IMAGE=${IMAGE:-verify-reads}
 OBJECTS=${OBJECTS:-48}
 BLOCK=${BLOCK:-65536}
 DURATION=${DURATION:-600}
+READ_TIMEOUT=${READ_TIMEOUT:-180}
 
 OBJECT_SIZE=$((4 << 20))
 OFFSET=8192
 DATA=$(mktemp -d)
 
+# On a stalled op, capture the kernel's view: the outstanding OSD requests
+# name the target OSD/shard of a stuck direct read, so we can tell a kernel
+# stall (request pending on a down OSD, not redriven) from cluster-wide
+# unavailability.
+function dump_stuck() {
+    echo "=== STUCK OP: $* (exceeded ${READ_TIMEOUT}s), cycle ${cycle:-pre} $(date -u +%T) ==="
+    echo "--- outstanding OSD requests (/sys/kernel/debug/ceph/*/osdc) ---"
+    sudo sh -c 'cat /sys/kernel/debug/ceph/*/osdc' 2>/dev/null || true
+    echo "--- osdmap (up/down) ---"
+    sudo sh -c 'cat /sys/kernel/debug/ceph/*/osdmap' 2>/dev/null | head -20 || true
+    echo "--- libceph dmesg (tail) ---"
+    sudo dmesg 2>/dev/null | grep -aE 'libceph|rbd[0-9]|ceph:' | tail -40 || true
+    echo "=== end stuck dump ==="
+}
+
+# Trace the osd_client request lifecycle so the dmesg tail above shows the
+# direct-read redrive decisions (best-effort; needs CONFIG_DYNAMIC_DEBUG).
+function enable_dyndbg() {
+    local c=/sys/kernel/debug/dynamic_debug/control
+    [ -e "$c" ] || return 0
+    echo 'file net/ceph/osd_client.c +p' | sudo tee "$c" >/dev/null 2>&1 || true
+}
+
 function write_object() {
     local i=$1
+    local skip=$((i * OBJECT_SIZE + OFFSET))
 
     dd if=/dev/urandom of=$DATA/$i bs=$BLOCK count=1 status=none
-    sudo dd if=$DATA/$i of=$DEV bs=$BLOCK count=1 oflag=direct,seek_bytes \
-        seek=$((i * OBJECT_SIZE + OFFSET)) status=none
+    if ! timeout $READ_TIMEOUT sudo dd if=$DATA/$i of=$DEV bs=$BLOCK count=1 \
+            oflag=direct,seek_bytes seek=$skip status=none; then
+        dump_stuck "write object $i ($BLOCK bytes) at offset $skip"
+        echo "object $i: write did not complete in ${READ_TIMEOUT}s (stuck)"
+        return 1
+    fi
 }
 
 function verify_object() {
     local i=$1
     local len=$2
+    local skip=$((i * OBJECT_SIZE + OFFSET))
 
-    if ! cmp -n $len $DATA/$i <(sudo dd if=$DEV bs=$len count=1 \
-            iflag=direct,skip_bytes skip=$((i * OBJECT_SIZE + OFFSET)) \
-            status=none); then
+    if ! timeout $READ_TIMEOUT sudo dd if=$DEV of=$DATA/got bs=$len count=1 \
+            iflag=direct,skip_bytes skip=$skip status=none; then
+        dump_stuck "read object $i ($len bytes) at offset $skip"
+        echo "object $i: read of the first $len bytes did not complete in ${READ_TIMEOUT}s (stuck)"
+        return 1
+    fi
+    if ! cmp -n $len $DATA/$i $DATA/got; then
         echo "object $i: the first $len bytes read back differ"
         return 1
     fi
@@ -68,6 +109,7 @@ sys.exit(not any(p["pool_name"] == sys.argv[1] and p["type"] == 3 for p in pools
 }
 
 mountpoint -q /sys/kernel/debug || sudo mount -t debugfs none /sys/kernel/debug
+enable_dyndbg
 
 rbd create --size $((OBJECTS * OBJECT_SIZE)) $POOL/$IMAGE
 DEV=$(sudo rbd device map $POOL/$IMAGE)
