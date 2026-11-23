@@ -86,6 +86,29 @@ other daemons, please see :ref:`health-checks`.
     too slowly, or a software bug is preventing trimming, then this health
     message may appear.  The threshold for this message to appear is controlled by
     the config option ``mds_log_warn_factor``, the default is 2.0.
+    If the journal reaches the hard limit, the ``MDS_JOURNAL_HARD_LIMIT``
+    message is also raised; see below.
+
+``MDS_JOURNAL_HARD_LIMIT``
+--------------------------
+
+  Message
+    "*N* MDSs have reached the journal hard limit"
+  Description
+    The MDS journal has reached its hard limit, which is
+    ``mds_log_max_segments`` multiplied by ``mds_log_hard_limit_factor``.
+    While the limit is reached, new client operations that modify metadata are
+    parked instead of completing, and they resume once trimming brings the
+    journal back under the limit. This is an error because client writes are
+    stopped. The cause is usually the same as for ``MDS_TRIM``: trimming is not
+    keeping up. Check the journal segment count in the MDS performance counters
+    and find out why trimming has stalled. While the journal is above the
+    warn threshold, ``MDS_TRIM`` is raised, and the monitor refuses failover
+    of an active MDS unless ``--yes-i-really-mean-it`` is given. This covers
+    the delay band as well as the hard limit. Once the hard limit is reached,
+    ``MDS_JOURNAL_HARD_LIMIT`` is also raised. The flag is required because
+    failover would replay the journal, and the replay time at the hard limit
+    has not been measured.
 
 ``MDS_HEALTH_CLIENT_LATE_RELEASE``, ``MDS_HEALTH_CLIENT_LATE_RELEASE_MANY``
 ---------------------------------------------------------------------------

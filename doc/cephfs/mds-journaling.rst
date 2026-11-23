@@ -154,3 +154,35 @@ The target maximum number of segments is controlled by:
 
 The MDS will often sit a little above this number due to non-major segments
 awaiting trimming up to the next major segment.
+
+Journal back-pressure
+---------------------
+
+Once the number of segments passes ``mds_log_max_segments`` times
+``mds_log_warn_factor``, the MDS raises ``MDS_TRIM``. Client operations that
+modify metadata are then delayed, to give trimming time to catch up. The delay
+grows with the backlog until the journal reaches the hard limit:
+
+.. confval:: mds_log_admission_min_delay
+.. confval:: mds_log_admission_max_delay
+
+At the hard limit, the MDS stops admitting new client operations that modify
+metadata and parks them until trimming brings the journal back under the limit.
+The hard limit is set by:
+
+.. confval:: mds_log_hard_limit_factor
+
+The hard limit is ``mds_log_max_segments`` multiplied by this factor, and it is
+always kept above the warn threshold. Setting the factor to 0 disables both the
+hard limit and the delay.
+
+Trimming runs at the interval set by:
+
+.. confval:: mds_log_trim_upkeep_interval
+
+Parked operations resume after a trim pass brings the journal below the limit.
+A stalled journal shows up as ``MDS_JOURNAL_HARD_LIMIT`` in
+``ceph health detail``; see :doc:`health-messages`.
+
+A large backlog released at once can push the journal back over the limit
+before trimming catches up, so the health check may reappear briefly.

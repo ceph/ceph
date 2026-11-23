@@ -1658,7 +1658,8 @@ int MDSMonitor::filesystem_command(
     }
 
     if (!confirm &&
-        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED}, gid)) {
+        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED,
+                             MDS_HEALTH_JOURNAL_HARD_LIMIT}, gid)) {
       ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }

@@ -102,8 +102,8 @@ public:
 
 
 static constexpr auto errmsg_for_unhealthy_mds = \
-  "MDS has one of two health warnings which could extend recovery: "
-  "MDS_TRIM or MDS_CACHE_OVERSIZED. MDS failover is not recommended "
+  "MDS has one of three health warnings which could extend recovery: "
+  "MDS_TRIM, MDS_CACHE_OVERSIZED or MDS_JOURNAL_HARD_LIMIT. MDS failover is not recommended "
   "since it might cause unexpected file system unavailability. If "
   "you wish to proceed, pass --yes-i-really-mean-it";
 

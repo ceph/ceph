@@ -423,6 +423,10 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
+  // Set once a new client mutation has been delayed by journal admission
+  // control, so its retry is not delayed a second time.
+  bool is_admission_delayed() const { return admission_delayed; }
+  void mark_admission_delayed() { admission_delayed = true; }
   bool get_queued_next_replay_op() const {
     return queued_next_replay_op;
   }
@@ -514,6 +518,7 @@ protected:
   void _dump(ceph::Formatter *f, bool has_mds_lock) const;
   void _dump_op_descriptor(std::ostream& stream) const override;
   bool queued_next_replay_op = false;
+  bool admission_delayed = false;
 };
 
 struct MDPeerUpdate {
