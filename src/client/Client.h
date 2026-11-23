@@ -1345,6 +1345,9 @@ protected:
   void put_fast_rd_ref(Inode *in);
   template <typename F>
   bool _getattr_fast(Inode *in, unsigned mask, F&& fill);
+  template <typename F>
+  bool _ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
+		       const UserPerm& perms, Inode **out, F&& fill);
   bool _ll_put_fast(Inode *in, bool *last);
   void _put_cap_ref_last(Inode *in, int last);
   bool _read_fast(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,

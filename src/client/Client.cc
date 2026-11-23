@@ -1059,6 +1059,9 @@ void Client::trim_cache(bool trim_kernel_dcache)
   ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << max << dendl;
   assert_lru_num_pinned_sane("trim_cache start");
   unsigned last = 0;
+  // the lookup fast path does not touch the lru, it marks the dentry
+  // referenced: such a dentry goes back to the top once
+  uint64_t spared = 0;
   while (lru.lru_get_size() != last) {
     last = lru.lru_get_size();
 
@@ -1068,6 +1071,14 @@ void Client::trim_cache(bool trim_kernel_dcache)
     Dentry *dn = static_cast<Dentry*>(lru.lru_get_next_expire());
     if (!dn)
       break;  // done
+
+    if (!is_unmounting() && spared < last &&
+	dn->fast_referenced.exchange(false, std::memory_order_relaxed)) {
+      lru.lru_touch(dn);
+      spared++;
+      last = 0;  // nothing trimmed: go round again
+      continue;
+    }
 
     assert_lru_num_pinned_sane("trim_cache before evict", dn);
 
@@ -15705,6 +15716,81 @@ InodeRef Client::open_snapdir(const InodeRef& diri)
   return in;
 }
 
+/*
+ * Look @name up in @dir without client_lock, as path_walk() would with
+ * a dentry the directory's Fs cap keeps valid, and take an ll ref on
+ * the file it names (see _ll_put_fast()).  Only for a plain file whose
+ * caps cover @mask, in a plain directory the caller may search by its
+ * mode bits; @fill then fills the attributes under the file's
+ * Inode::lock.  Returns false, with nothing held, when any of that
+ * does not hold: the caller goes through client_lock, which also asks
+ * the MDS.  The dentry is not touched in the lru, only marked (see
+ * trim_cache()), and the directory's Inode::lock is shared: what is
+ * read under it changes under it (see Inode.h).
+ */
+template <typename F>
+bool Client::_ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
+			     const UserPerm& perms, Inode **out, F&& fill)
+{
+  std::string_view sv(name);
+  if (sv.empty() || sv.size() > NAME_MAX || sv == "."sv || sv == ".."sv ||
+      sv.find('/') != std::string_view::npos ||
+      sv == cct->_conf->client_snapdir)
+    return false;
+  // the file type and the snapid never change
+  if (!dir->is_dir() || dir->snapid != CEPH_NOSNAP)
+    return false;
+  bool check_perms = should_check_perms();
+  if (check_perms && acl_type != NO_ACL && perms.uid() != 0)
+    return false;
+
+  Inode *in;
+  {
+    std::shared_lock il(dir->lock);
+    if (!dir->dir || dir->has_charmap() || dir->is_encrypted() ||
+	dir->is_fscrypt_enabled())
+      return false;
+    // may_lookup(), from the caps alone: inode_permission() without
+    // ACLs (or for root), which would take a ref on the directory
+    if (check_perms &&
+	(!dir->caps_issued_mask(CEPH_CAP_AUTH_SHARED, true, false) ||
+	 (perms.uid() != 0 && !dir->check_mode(perms, CLIENT_MAY_EXEC))))
+      return false;
+    if (!dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true, false))
+      return false;
+    auto it = dir->dir->dentries.find(std::string(sv));
+    if (it == dir->dir->dentries.end())
+      return false;
+    Dentry *dn = it->second;
+    if (!dn->inode || dn->cap_shared_gen != dir->shared_gen)
+      return false;
+    in = dn->inode.get();
+    if (!in->is_file() || in->snapid != CEPH_NOSNAP)
+      return false;
+    // the dentry's ref keeps the inode above inode_map's while we pin it
+    if (in->ll_get() == 0)
+      in->iget();
+    if (!dn->fast_referenced.load(std::memory_order_relaxed))
+      dn->fast_referenced.store(true, std::memory_order_relaxed);
+  }
+
+  bool ok;
+  {
+    std::shared_lock il(in->lock);
+    ok = !mask || in->caps_issued_mask(mask, true, false);
+    if (ok)
+      fill(in);
+  }
+  if (!ok) {
+    bool last;
+    if (!_ll_put_fast(in, &last))
+      ceph_abort_msg("a file's ll ref we took");
+    return false;
+  }
+  *out = in;
+  return true;
+}
+
 int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		      Inode **out, const UserPerm& caller_perms)
 {
@@ -15719,6 +15805,15 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 
   // ask for the process's ids, if they are its, before taking client_lock
   const UserPerm perms = caller_perms.resolved();
+
+  if (_ll_lookup_fast(parent, name, CEPH_STAT_CAP_INODE_ALL | CEPH_CAP_AUTH_SHARED,
+		      perms, out, [&](Inode *in) { _fill_stat(in, attr); })) {
+    ldout(cct, 3) << __func__ << " " << vparent << " " << name
+		  << " -> 0 (" << hex << attr->st_ino << dec << ") (fast)" << dendl;
+    tout(cct) << attr->st_ino << std::endl;
+    return 0;
+  }
+
   std::scoped_lock lock(client_lock);
 
   int r = 0;
@@ -15820,6 +15915,18 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 
   // ask for the process's ids, if they are its, before taking client_lock
   const UserPerm perms = caller_perms.resolved();
+  unsigned mask = statx_to_mask(flags, want);
+
+  // path_walk() asks for As as well when it checks the permissions
+  if (_ll_lookup_fast(parent, name,
+		      mask | (should_check_perms() ? CEPH_CAP_AUTH_SHARED : 0),
+		      perms, out, [&](Inode *in) { _fill_statx(in, mask, stx); })) {
+    ldout(cct, 3) << __func__ << " " << vparent << " " << name
+		  << " -> 0 (" << hex << stx->stx_ino << dec << ") (fast)" << dendl;
+    tout(cct) << stx->stx_ino << std::endl;
+    return 0;
+  }
+
   std::scoped_lock lock(client_lock);
 
   int r = 0;
@@ -15829,7 +15936,6 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
       return r;
   }
 
-  unsigned mask = statx_to_mask(flags, want);
   InodeRef in;
   r = path_walk(parent, filepath(name), &in, perms, {.followsym = false, .mask = mask});
   if (r < 0) {
