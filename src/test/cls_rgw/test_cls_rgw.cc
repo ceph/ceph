@@ -829,6 +829,102 @@ TEST_P(TestClsRgw, index_list_resume_after_null_version)
   EXPECT_EQ(cls_rgw_obj_key("f"), entry.key);
 }
 
+// a null delete marker that replaces the null version must not be counted
+// when the index stats are recalculated, by check_index or by a reshard
+TEST_P(TestClsRgw, index_null_delete_marker_over_null_version)
+{
+  string bucket_oid = str_int("bucket", 121);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  // PUT "k" while versioning is suspended -> null version
+  const string name = "k";
+  const string tag = "tag-k";
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::Main;
+  meta.size = 1024;
+  meta.mtime = ceph::real_clock::now();
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, name, "loc");
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, name, meta);
+  ASSERT_NO_FATAL_FAILURE(
+      link_null_version(ioctx, bucket_oid, name, tag, false, meta));
+
+  // DELETE "k" -> a null delete marker replaces the null version
+  ASSERT_NO_FATAL_FAILURE(
+      link_null_version(ioctx, bucket_oid, name, tag, true, {}));
+
+  // rgw then applies the olh log and deletes the null version it replaced
+  {
+    const string rm_tag = "tag-rm";
+    rgw_bucket_dir_entry_meta rm_meta;
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, rm_tag, name, "loc");
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, rm_tag, 2, name, rm_meta,
+                   RGW_BILOG_FLAG_VERSIONED_OP);
+  }
+  {
+    rgw_bucket_dir_header header;
+    ASSERT_EQ(0, read_header(ioctx, bucket_oid, header));
+    for (const auto& [category, stats] : header.stats) {
+      EXPECT_EQ(0u, stats.num_entries) << "category " << to_string(category);
+    }
+  }
+
+  // the marker's instance entry is written without exists, and a reshard
+  // does not count it
+  {
+    list<rgw_cls_bi_entry> entries;
+    bool truncated = false;
+    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, bucket_oid, name, "", 100,
+                                 &entries, &truncated));
+    unsigned markers = 0;
+    for (const auto& bi : entries) {
+      if (bi.type != BIIndexType::Instance) {
+        continue;
+      }
+      rgw_bucket_dir_entry entry;
+      auto p = bi.data.cbegin();
+      decode(entry, p);
+      if (!entry.is_delete_marker()) {
+        continue;
+      }
+      ++markers;
+      EXPECT_FALSE(entry.exists);
+      cls_rgw_obj_key key;
+      RGWObjCategory category;
+      rgw_bucket_category_stats stats;
+      EXPECT_FALSE(bi.get_info(&key, &category, &stats));
+    }
+    EXPECT_EQ(1u, markers);
+  }
+
+  // bucket check calculates nothing for the marker
+  {
+    bufferlist out;
+    ObjectReadOperation rop;
+    cls_rgw_bucket_check_index(rop, out);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &rop, nullptr));
+    rgw_cls_check_index_ret result;
+    cls_rgw_bucket_check_index_decode(out, result);
+    for (const auto& [category, stats] : result.calculated_header.stats) {
+      EXPECT_EQ(0u, stats.num_entries) << "category " << to_string(category);
+    }
+  }
+
+  // and bucket check --fix leaves no object behind in any category
+  {
+    ObjectWriteOperation wop;
+    cls_rgw_bucket_rebuild_index(wop);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &wop));
+    rgw_bucket_dir_header header;
+    ASSERT_EQ(0, read_header(ioctx, bucket_oid, header));
+    for (const auto& [category, stats] : header.stats) {
+      EXPECT_EQ(0u, stats.num_entries) << "category " << to_string(category);
+    }
+  }
+}
+
 TEST_P(TestClsRgw, bi_list)
 {
   string bucket_oid = str_int("bucket", 5);
