@@ -151,6 +151,47 @@ You may use Erasure Coded pools as CephFS data pools as long as they have overwr
 
 Note that EC overwrites are only supported when using OSDs with the BlueStore backend.
 
+For example, the following commands create a file system whose default data
+pool is a three-way replicated pool, add an erasure-coded pool as a second data
+pool, and set the layout of the root directory so that new files store their
+data in the erasure-coded pool. The default data pool still holds a small
+object for every file (see `Creating pools`_). The erasure-code profile in this
+example, ``k=4 m=2`` with a ``host`` failure domain, needs at least six hosts
+with OSDs. At least seven are advised, so that Ceph can restore all six shards
+of each object after a host fails.
+
+Create the pools:
+
+.. prompt:: bash #
+
+   ceph osd pool create cephfs_metadata --size 3
+   ceph osd pool create cephfs_data --size 3
+   ceph osd erasure-code-profile set ec42 k=4 m=2 crush-failure-domain=host
+   ceph osd pool create cephfs_data_ec erasure ec42
+   ceph osd pool set cephfs_data_ec allow_ec_overwrites true
+
+Create the file system with the replicated pool as its default data pool, and
+add the erasure-coded pool as a second data pool:
+
+.. prompt:: bash #
+
+   ceph fs new cephfs cephfs_metadata cephfs_data
+   ceph fs add_data_pool cephfs cephfs_data_ec
+
+Mount the file system, and set the layout of its root directory to the
+erasure-coded pool. Setting a layout needs the ``p`` flag in the client's MDS
+capabilities (``client.admin`` has it):
+
+.. prompt:: bash #
+
+   setfattr -n ceph.dir.layout.pool -v cephfs_data_ec /mnt/cephfs
+
+Files created after this anywhere in the file system inherit the layout and
+store their data in ``cephfs_data_ec``. Files that already exist keep their
+layout. Clients whose capabilities were created with ``ceph fs authorize`` can
+use the new pool without changes, because their OSD capability
+(``allow rw tag cephfs data=cephfs``) covers every data pool of the file system.
+
 If you are storing lots of small files or are frequently modifying files you can improve performance by enabling EC optimizations, which is done as follows:
 
 .. code:: bash
