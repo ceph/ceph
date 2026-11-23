@@ -8,12 +8,17 @@
 # counts them in debugfs; then at least one of each is required, so that
 # the run can't pass without exercising those paths.
 #
-# Every map/read/write runs under READ_TIMEOUT.  If one does not finish in
-# time (e.g. during OSD thrashing), the operation is dumped with the kernel's
-# outstanding OSD requests (/sys/kernel/debug/ceph/*/osdc) and the libceph
-# dmesg tail, then the test fails -- so a hung direct read (an osdc request
-# stuck on one OSD while the rest churn) is distinguishable from a cluster
-# that is merely unavailable mid-thrash, instead of an opaque command timeout.
+# Under OSD thrashing the data pool can drop below min_size.  I/O to an
+# inactive PG is EXPECTED to stall and then recover once enough shards come
+# back, so a slow op is never killed outright -- that would turn normal
+# below-min_size behaviour into a spurious failure.  If an op is still
+# pending after READ_TIMEOUT we snapshot the kernel's outstanding OSD
+# requests (/sys/kernel/debug/ceph/*/osdc), the osdmap and the libceph
+# dmesg tail and keep waiting.  The snapshot tells an expected
+# cluster-unavailable stall (whole PGs inactive, many requests queued) from
+# a kernel bug (a single request stuck on a down OSD while the rest churn,
+# i.e. not redriven).  Only an op that never recovers within HANG_CEIL
+# fails the test, with the snapshots already in the log.
 
 set -e
 set -o pipefail
@@ -23,25 +28,24 @@ IMAGE=${IMAGE:-verify-reads}
 OBJECTS=${OBJECTS:-48}
 BLOCK=${BLOCK:-65536}
 DURATION=${DURATION:-600}
-READ_TIMEOUT=${READ_TIMEOUT:-180}
+READ_TIMEOUT=${READ_TIMEOUT:-120}   # snapshot a still-pending op this often
+HANG_CEIL=${HANG_CEIL:-900}         # fail only if an op never recovers in this
 
 OBJECT_SIZE=$((4 << 20))
 OFFSET=8192
 DATA=$(mktemp -d)
 
-# On a stalled op, capture the kernel's view: the outstanding OSD requests
-# name the target OSD/shard of a stuck direct read, so we can tell a kernel
-# stall (request pending on a down OSD, not redriven) from cluster-wide
-# unavailability.
+# Snapshot the kernel's view of in-flight I/O.  The outstanding OSD requests
+# name the target OSD/shard of a stalled op, so an expected below-min_size
+# stall (whole PGs inactive) is distinguishable from a kernel stall (a
+# request pending on a down OSD while the rest churn, not redriven).
 function dump_stuck() {
-    echo "=== STUCK OP: $* (exceeded ${READ_TIMEOUT}s), cycle ${cycle:-pre} $(date -u +%T) ==="
     echo "--- outstanding OSD requests (/sys/kernel/debug/ceph/*/osdc) ---"
     sudo sh -c 'cat /sys/kernel/debug/ceph/*/osdc' 2>/dev/null || true
     echo "--- osdmap (up/down) ---"
     sudo sh -c 'cat /sys/kernel/debug/ceph/*/osdmap' 2>/dev/null | head -20 || true
     echo "--- libceph dmesg (tail) ---"
     sudo dmesg 2>/dev/null | grep -aE 'libceph|rbd[0-9]|ceph:' | tail -40 || true
-    echo "=== end stuck dump ==="
 }
 
 # Trace the osd_client request lifecycle so the dmesg tail above shows the
@@ -52,17 +56,41 @@ function enable_dyndbg() {
     echo 'file net/ceph/osd_client.c +p' | sudo tee "$c" >/dev/null 2>&1 || true
 }
 
+# Run a blocking device I/O.  Do not kill it when it is merely slow: while
+# the pool is below min_size the op is expected to stall and recover.  Take
+# a diagnostic snapshot every READ_TIMEOUT it stays pending; give up (and
+# fail) only once it has not recovered within HANG_CEIL.
+function timed_io() {
+    local desc=$1; shift
+    "$@" &
+    local pid=$! waited=0 next=$READ_TIMEOUT
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 5
+        waited=$((waited + 5))
+        if ((waited >= next)); then
+            echo "=== SLOW OP: $desc pending ${waited}s" \
+                 "(below-min_size stalls are expected to recover; waiting) $(date -u +%T) ==="
+            dump_stuck
+            next=$((next + READ_TIMEOUT))
+        fi
+        if ((waited >= HANG_CEIL)); then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            echo "object I/O did not recover after ${HANG_CEIL}s: $desc"
+            return 1
+        fi
+    done
+    wait "$pid"
+}
+
 function write_object() {
     local i=$1
     local skip=$((i * OBJECT_SIZE + OFFSET))
 
     dd if=/dev/urandom of=$DATA/$i bs=$BLOCK count=1 status=none
-    if ! timeout $READ_TIMEOUT sudo dd if=$DATA/$i of=$DEV bs=$BLOCK count=1 \
-            oflag=direct,seek_bytes seek=$skip status=none; then
-        dump_stuck "write object $i ($BLOCK bytes) at offset $skip"
-        echo "object $i: write did not complete in ${READ_TIMEOUT}s (stuck)"
-        return 1
-    fi
+    timed_io "write object $i ($BLOCK bytes) at offset $skip" \
+        sudo dd if=$DATA/$i of=$DEV bs=$BLOCK count=1 \
+        oflag=direct,seek_bytes seek=$skip status=none
 }
 
 function verify_object() {
@@ -70,12 +98,9 @@ function verify_object() {
     local len=$2
     local skip=$((i * OBJECT_SIZE + OFFSET))
 
-    if ! timeout $READ_TIMEOUT sudo dd if=$DEV of=$DATA/got bs=$len count=1 \
-            iflag=direct,skip_bytes skip=$skip status=none; then
-        dump_stuck "read object $i ($len bytes) at offset $skip"
-        echo "object $i: read of the first $len bytes did not complete in ${READ_TIMEOUT}s (stuck)"
-        return 1
-    fi
+    timed_io "read object $i ($len bytes) at offset $skip" \
+        sudo dd if=$DEV of=$DATA/got bs=$len count=1 \
+        iflag=direct,skip_bytes skip=$skip status=none
     if ! cmp -n $len $DATA/$i $DATA/got; then
         echo "object $i: the first $len bytes read back differ"
         return 1
