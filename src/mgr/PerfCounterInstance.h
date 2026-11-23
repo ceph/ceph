@@ -56,6 +56,10 @@ class PerfCounterInstance
   }
   const DataPoint& get_latest_data() const
   {
+    static const DataPoint empty{utime_t{}, 0};
+    if (buffer.empty()) {
+      return empty;
+    }
     return buffer.back();
   }
   const boost::circular_buffer<AvgDataPoint> & get_data_avg() const
