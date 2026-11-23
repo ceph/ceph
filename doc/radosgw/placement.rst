@@ -238,6 +238,12 @@ zonegroup that receives the request:
 
   <LocationConstraint>:new-placement</LocationConstraint>
 
+In either form, the placement target must exist in the bucket's zonegroup, and
+the zone that receives the request must have pools for it. Otherwise the
+request fails with ``InvalidLocationConstraint``. The gateway does not look for
+the placement target in other zonegroups and does not fall back to a default
+placement target.
+
 Swift Bucket Placement
 ----------------------
 
