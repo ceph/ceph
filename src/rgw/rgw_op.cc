@@ -6539,6 +6539,9 @@ int RGWCopyObj::verify_permission(optional_yield y)
   boost::optional<Policy> src_policy;
   rgw_placement_rule src_placement;
 
+  // add server-side encryption headers
+  rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
+
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
     s->src_object->set_atomic(true);
