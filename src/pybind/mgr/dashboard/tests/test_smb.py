@@ -142,6 +142,25 @@ class SMBClusterTest(ControllerTestCase):
         self.assertStatus(204)
         mgr.remote.assert_called_once_with('smb', 'apply_resources', json.dumps(_res_simplified))
 
+    def test_remove_fails_when_cluster_has_shares(self):
+        _res_simplified = {
+            "resource": {
+                "resource_type": "ceph.smb.cluster",
+                "cluster_id": "smbClusterWithShares",
+                "intent": "removed"
+            },
+            "msg": "cluster in use by shares",
+            "shares": ["share1", "share2"],
+            "success": False
+        }
+        mgr.remote = Mock()
+        mgr.remote.return_value.one.return_value.to_simplified = Mock(
+            return_value=_res_simplified
+        )
+        self._delete(f'{self._endpoint}/smbClusterWithShares')
+        self.assertStatus(400)
+        self.assertEqual(self.json_body()['detail'], 'cluster in use by shares')
+
 
 class SMBShareTest(ControllerTestCase):
     _endpoint = '/api/smb/share'
