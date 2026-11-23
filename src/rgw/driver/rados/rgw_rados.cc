@@ -9540,7 +9540,15 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
     [this, bs, &obj_instance, &bucket_info, &bucket_attrs, &y, dpp](const std::string& log_tag) -> int {
     int ret = get_bucket_info(&svc, bs->bucket.tenant, bs->bucket.name,
 			      bucket_info, nullptr, y, dpp, ctl.bucket, &bucket_attrs);
-    if (ret < 0) {
+    if (ret == -ENOENT) {
+      // the bucket was deleted while we waited for the reshard. a bare
+      // ENOENT would reach the client as NoSuchKey, so report the
+      // missing bucket instead
+      ldpp_dout(dpp, 5) << __func__ <<
+	" INFO: bucket " << bs->bucket << " was removed during reshard at " <<
+	log_tag << dendl;
+      return -ERR_NO_SUCH_BUCKET;
+    } else if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR: failed to refresh bucket info after reshard at " <<
 	log_tag << ": " << cpp_strerror(-ret) << dendl;
