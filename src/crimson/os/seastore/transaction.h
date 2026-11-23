@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iostream>
 #include <memory_resource>
+#include <vector>
 
 #include <boost/intrusive/list.hpp>
 
@@ -176,12 +177,15 @@ public:
     }
   }
 
-  // Returns true if added, false if already added or weak
+  // Writers keep no read set (single writer per shard). For a READ
+  // transaction these hooks record the extents it accesses, see
+  // is_reader_stale().
   struct maybe_add_readset_ret {
     bool added = false;
     bool is_paddr_known = true;
   };
   maybe_add_readset_ret maybe_add_to_read_set(CachedExtentRef ref) {
+    reader_track(std::move(ref));
     return {false, true};
   }
 
@@ -189,8 +193,59 @@ public:
     return false;
   }
 
-  void add_to_read_set(CachedExtentRef ref) {}
-  void maybe_add_to_read_set_step_2(CachedExtentRef ref) {}
+  void add_to_read_set(CachedExtentRef ref) {
+    reader_track(std::move(ref));
+  }
+  void maybe_add_to_read_set_step_2(CachedExtentRef ref) {
+    reader_track(std::move(ref));
+  }
+
+  /**
+   * Reader validation
+   *
+   * Writers never conflict, as there is a single writer per shard (see
+   * writer_gate_t). READ transactions still run concurrently with the
+   * writer, and a commit may retire or replace an extent a reader is using
+   * while it waits. A reader remembers the extents it accessed, and is
+   * stale once one of them got invalidated. TransactionConflictCondition
+   * then interrupts it at its next continuation, and the repeat_eagain
+   * loops of the read paths retry it with a new transaction.
+   *
+   * Nothing is tracked on the extent side, and the writer only bumps
+   * Cache's invalidation epoch. A reader rescans its extents only when that
+   * epoch moved since its last check.
+   *
+   * Weak transactions are not validated.
+   */
+  bool is_validated_reader() const {
+    return src == src_t::READ && !weak;
+  }
+
+  bool is_reader_stale() {
+    if (!is_validated_reader() || !invalidation_epoch) {
+      return false;
+    }
+    if (reader_stale) {
+      return true;
+    }
+    if (*invalidation_epoch == reader_checked_epoch) {
+      return false;
+    }
+    reader_checked_epoch = *invalidation_epoch;
+    for (auto &e : reader_extents) {
+      if (!e->is_valid()) {
+        reader_stale = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Set by Cache when creating the transaction
+  void set_invalidation_epoch(const uint64_t *epoch) {
+    invalidation_epoch = epoch;
+    reader_checked_epoch = *epoch;
+  }
 
   void add_fresh_extent(
     CachedExtentRef ref) {
@@ -736,7 +791,29 @@ private:
   friend Ref make_test_transaction();
 
   void clear_read_set() {
+    reader_extents.clear();
+    reader_stale = false;
+    if (invalidation_epoch) {
+      reader_checked_epoch = *invalidation_epoch;
+    }
   }
+
+  void reader_track(CachedExtentRef ref) {
+    if (!is_validated_reader()) {
+      return;
+    }
+    // consecutive accesses to the same extent are common
+    if (!reader_extents.empty() && reader_extents.back() == ref) {
+      return;
+    }
+    reader_extents.emplace_back(std::move(ref));
+  }
+
+  /// See is_reader_stale()
+  const uint64_t *invalidation_epoch = nullptr;
+  uint64_t reader_checked_epoch = 0;
+  bool reader_stale = false;
+  std::vector<CachedExtentRef> reader_extents;
 
   std::pair<get_extent_ret, CachedExtentRef> do_get_extent(paddr_t addr) {
     LOG_PREFIX(Transaction::do_get_extent);

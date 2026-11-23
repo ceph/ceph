@@ -1116,6 +1116,9 @@ void Cache::invalidate_extent(
   // Under single-writer shard execution, conflict invalidation of concurrent
   // transactions is eliminated. Extent is marked invalid directly.
   extent.set_invalid(t);
+  // READ transactions check their extents again, see
+  // Transaction::is_reader_stale()
+  ++invalidation_epoch;
 }
 
 void Cache::on_transaction_destruct(Transaction& t)

@@ -132,6 +132,7 @@ public:
       ++next_id,
       cache_hint)
     );
+    ret->set_invalidation_epoch(&invalidation_epoch);
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
               *ret, name, src, is_weak);
     assert(!is_weak || src == Transaction::src_t::READ);
@@ -1654,6 +1655,7 @@ public:
             SUBDEBUGT(seastore_cache, "extent is not alive, remove extent -- {}", t, *e);
             remove_extent(e, nullptr);
 	    e->set_invalid(t);
+	    ++invalidation_epoch;
           } else {
             SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
           }
@@ -1930,6 +1932,10 @@ private:
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   transaction_id_t next_id = 0;
+
+  /// Bumped whenever an extent readers may hold is invalidated, see
+  /// Transaction::is_reader_stale()
+  uint64_t invalidation_epoch = 0;
 
   const bool force_backref = false;
 

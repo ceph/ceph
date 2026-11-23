@@ -15,7 +15,9 @@ namespace crimson::os::seastore {
 
 bool TransactionConflictCondition::is_conflicted() const
 {
-  return false;
+  // Writers can't conflict (single writer per shard). A READ transaction
+  // is interrupted once an extent it accessed was invalidated.
+  return t.is_reader_stale();
 }
 
 }
