@@ -114,6 +114,30 @@ def test_remote_command():
     ]
 
 
+def test_reset_cons_with_concurrent_connection(cephadm_module):
+    # _reset_cons() runs on a command thread while the event loop thread
+    # may store a new connection in ssh.cons. Simulate that by adding one
+    # while the old connections are being closed.
+    ssh = cephadm_module.ssh
+    new_conn = mock.MagicMock()
+
+    def add_conn() -> None:
+        ssh.cons['host3'] = new_conn
+
+    old1 = mock.MagicMock()
+    old1.close.side_effect = add_conn
+    old2 = mock.MagicMock()
+    ssh.cons = {'host1': old1, 'host2': old2}
+
+    ssh._reset_cons()
+
+    old1.close.assert_called_once()
+    old2.close.assert_called_once()
+    # the connection opened during the reset is kept, not dropped unclosed
+    assert ssh.cons == {'host3': new_conn}
+    new_conn.close.assert_not_called()
+
+
 @mock.patch("cephadm.offline_watcher.CephadmServe._run_cephadm")
 def test_offline_watcher_uses_cephadm_check_online(run_cephadm, cephadm_module):
     run_cephadm.side_effect = async_side_effect(([''], [''], 0))
