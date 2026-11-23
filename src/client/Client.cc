@@ -540,6 +540,8 @@ void Client::_apply_tuning()
     sh->oc->set_max_writeback(
       wb ? wb : uint64_t(conf.get_val<Option::size_t>("client_oc_max_dirty")));
     sh->oc->set_gate_spin_tries(conf.get_val<int64_t>("client_lock_spin_tries"));
+    sh->oc->set_flush_min_age(ceph::make_timespan(
+      conf.get_val<double>("client_oc_flush_min_age")));
   }
 }
 
@@ -21109,6 +21111,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_lock_max_spinners",
     "client_lock_spin_tries",
     "client_mount_timeout",
+    "client_oc_flush_min_age",
     "client_oc_max_dirty",
     "client_oc_max_dirty_age",
     "client_oc_max_objects",
@@ -21194,6 +21197,7 @@ void Client::handle_conf_change(const ConfigProxy& conf,
       changed.count("client_lock_max_spinners") ||
       changed.count("client_lock_spin_tries") ||
       changed.count("client_oc_max_dirty") ||
+      changed.count("client_oc_flush_min_age") ||
       changed.count("client_oc_max_woken_writers") ||
       changed.count("client_oc_max_writeback") ||
       changed.count("client_oc_read_gate_retries")) {

@@ -1388,11 +1388,13 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
     finish_contexts(cct, ls, r);
 }
 
-void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs)
+void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs,
+                         ceph::timespan min_age)
 {
   ceph_assert(trace != nullptr);
   ceph_assert(ceph_mutex_is_locked(lock));
-  ceph::real_time cutoff = ceph::real_clock::now();
+  // the LRU is in last_write order: stop at the first bh younger than min_age
+  ceph::real_time cutoff = ceph::real_clock::now() - min_age;
 
   ldout(cct, 10) << "flush " << amount
                  << " bytes, max bufferheads " << max_bhs << dendl;
@@ -2529,18 +2531,24 @@ void ObjectCacher::flusher_entry()
       if (t.clean > max_size || t.clean_bh > (max_size >> BUFFER_MEMORY_WEIGHT))
         trim();   // as no read or write of ours may come to do it
     }
+    // only down to the target: leave young data to be rewritten in the
+    // cache, unless a writer waits for room (see set_flush_min_age())
+    ceph::timespan min_age = ceph::timespan::zero();
+    if ((over > 0 || over_bhs > 0) &&
+        !get_stat_nr_dirty_waiters() && !(group && group_totals().waiters))
+      min_age = ceph::timespan(flush_min_age_ns.load(std::memory_order_relaxed));
     if (actual > 0 && over > 0) {
       // flush some dirty pages
       ldout(cct, 10) << "flusher " << get_stat_dirty() << " dirty + "
 		     << get_stat_dirty_waiting() << " dirty_waiting > target "
 		     << target_dirty << ", flushing some dirty bhs" << dendl;
-      flush(&trace, over);
+      flush(&trace, over, 0, min_age);
     } else if (over_bhs > 0) {
       ldout(cct, 10) << "flusher " << dirty_or_tx_bh.size() << " dirty/tx bh + "
                      << get_stat_nr_dirty_waiters() << " dirty_waiters > "
                      << "target dirty bh " << target_dirty_bh
                      << ", flushing some dirty bhs" << dendl;
-      flush(&trace, 0, over_bhs);
+      flush(&trace, 0, over_bhs, min_age);
     } else {
       // check tail of lru for old dirty items
       ceph::real_time cutoff = ceph::real_clock::now();

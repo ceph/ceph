@@ -264,6 +264,28 @@ options:
   - runtime
   see_also:
   - client_oc_max_dirty
+- name: client_oc_flush_min_age
+  type: float
+  level: dev
+  desc: Seconds dirty data stays in the cache before the flusher sends it
+    only to bring the cache down to client_oc_target_dirty
+  long_desc: The object cache's flusher brings the dirty data down to
+    client_oc_target_dirty, oldest first.  Data younger than this is left
+    in the cache, where a rewrite costs nothing, instead of being sent
+    again on every pass; under a rewrite load that keeps the OSDs and the
+    writeback in flight busy, and the writers wait at client_oc_max_dirty.
+    Once a writer waits for room, the flusher sends data of any age.  0
+    sends the oldest data whatever its age.  client_oc_max_dirty_age
+    still flushes data that stays dirty that long.
+  default: 0
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_target_dirty
+  - client_oc_max_dirty
+  - client_oc_max_dirty_age
 - name: client_oc_max_woken_writers
   type: uint
   level: dev

@@ -546,6 +546,7 @@ class ObjectCacher {
   uint64_t stat_wb_inflight = 0;
   // the most of those the flusher keeps (its share of it), 0 for no limit
   std::atomic<uint64_t> max_writeback{0};
+  std::atomic<int64_t> flush_min_age_ns{0};  // see set_flush_min_age()
   // Over its share of the limit, a member of a group may still send what
   // the others leave unused, as the dirty limits let it: one busy file
   // lives in one member, and its writeback would otherwise get only that
@@ -641,7 +642,8 @@ class ObjectCacher {
 			    int64_t *amount, int *max_count);
 
   void trim();
-  void flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0);
+  void flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0,
+             ceph::timespan min_age=ceph::timespan::zero());
 
   /**
    * flush a range of buffers
@@ -785,6 +787,18 @@ class ObjectCacher {
    */
   void set_max_writeback(uint64_t bytes) {
     max_writeback.store(bytes, std::memory_order_relaxed);
+  }
+  /**
+   * Leave dirty data younger than @age to be rewritten in the cache when
+   * the flusher only brings the cache down to its dirty target; 0, the
+   * default, flushes the oldest data whatever its age.  Data rewritten
+   * faster than the OSDs take it is otherwise sent again on every pass,
+   * and the writeback in flight keeps the writers at the dirty limit.
+   * Once a writer waits for room, the flusher sends any age.
+   */
+  void set_flush_min_age(ceph::signedspan age) {
+    flush_min_age_ns.store(std::max<int64_t>(age.count(), 0),
+                           std::memory_order_relaxed);
   }
   void set_max_woken_writers(uint64_t n) {
     max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);
