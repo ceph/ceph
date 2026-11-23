@@ -167,8 +167,10 @@ allocated = bucket_id_from_b_key()
 print(f"{GREEN}ok:{NC} L N bucket_id counter after mb=0x{after:016x} (B row bucket_id=0x{allocated:016x})")
 if after != before + 1:
     raise SystemExit(f"{RED}FAIL:{NC} bucket counter 0x{before:016x} -> 0x{after:016x}, expected 0x{before+1:016x}")
-if after != allocated:
-    raise SystemExit(f"{RED}FAIL:{NC} bucket counter 0x{after:016x} != allocated bucket_id 0x{allocated:016x}")
+# bucket_id is the 64-bit bit-reversal of the counter (bucket_id_t::from_counter).
+expected_bucket_id = int(f"{after:064b}"[::-1], 2)
+if expected_bucket_id != allocated:
+    raise SystemExit(f"{RED}FAIL:{NC} bucket counter 0x{after:016x} (bit-reversed 0x{expected_bucket_id:016x}) != allocated bucket_id 0x{allocated:016x}")
 
 subprocess.check_call(
     ["aws", "--endpoint-url", endpoint, "s3", "rb", f"s3://{bucket_name}"],

@@ -1202,22 +1202,34 @@ void put_overwrite_standalone_worker(KvRgwServiceImpl &service,
       std::snprintf(bname, sizeof(bname), "perf-bucket-%d", bidx);
       const auto name = make_object_name(thread_id, static_cast<uint64_t>(j));
 
-      ScopedRequestLatency _lat(service.latency_stats(), OpType::kPutObject);
-
-      auto res = service.put_object(
-          tenant_id, std::string_view(bname), name,
-          g_put_buffer, obj_size, {}, obj_size, nullptr,
-          std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
-          std::span<const MetaPair>(g_put_meta_pairs.data(), g_put_meta_count));
-      if (res.error_code == KVRGW_ERR_OK) {
-        result.ops.fetch_add(1, std::memory_order_relaxed);
-      }
-      else {
-        result.errors.fetch_add(1, std::memory_order_relaxed);
+      // Retriable FDB errors (e.g. storage server behind during a start-up
+      // burst) are retried with backoff; only non-retriable errors, or
+      // exhausted attempts, are reported as PUT_ERR.
+      constexpr int kMaxAttempts = 10;
+      auto backoff = std::chrono::milliseconds(5);
+      for (int attempt = 1;; ++attempt) {
+        ScopedRequestLatency _lat(service.latency_stats(), OpType::kPutObject);
+        auto res = service.put_object(
+            tenant_id, std::string_view(bname), name,
+            g_put_buffer, obj_size, {}, obj_size, nullptr,
+            std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
+            std::span<const MetaPair>(g_put_meta_pairs.data(), g_put_meta_count));
+        if (res.error_code == KVRGW_ERR_OK) {
+          result.ops.fetch_add(1, std::memory_order_relaxed);
+          break;
+        }
         result.record_error(res.error_code);
+        if (kvrgw::is_retriable(res.error_code) && attempt < kMaxAttempts) {
+          result.retries.fetch_add(1, std::memory_order_relaxed);
+          std::this_thread::sleep_for(backoff);
+          backoff = std::min(backoff * 2, std::chrono::milliseconds(500));
+          continue;
+        }
+        result.errors.fetch_add(1, std::memory_order_relaxed);
         std::cerr << "PUT_ERR t=" << thread_id << " key=" << name
                   << " bucket=" << bname << " code=" << res.error_code
                   << " msg=" << kvrgw_strerror(res.error_code) << "\n";
+        break;
       }
       progress_tick(thread_id, progress_sec, OpType::kPutObject,
                     service.latency_stats(), t0, last_t, last_count,

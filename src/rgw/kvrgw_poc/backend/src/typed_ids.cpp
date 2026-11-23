@@ -14,6 +14,7 @@
 
 #include "typed_ids.hpp"
 
+#include "bit_reverse.hpp"
 #include "error_codes.hpp"
 
 #include <cstdio>
@@ -106,14 +107,6 @@ bool bucket_id_t::operator!=(const bucket_id_t& o) const
 }
 
 //--------------------------------------------------------------------------------
-static inline uint64_t bit_reverse64(uint64_t v)
-{
-  v = ((v >> 1) & 0x5555555555555555ULL) | ((v & 0x5555555555555555ULL) << 1);
-  v = ((v >> 2) & 0x3333333333333333ULL) | ((v & 0x3333333333333333ULL) << 2);
-  v = ((v >> 4) & 0x0F0F0F0F0F0F0F0FULL) | ((v & 0x0F0F0F0F0F0F0F0FULL) << 4);
-  return __builtin_bswap64(v);
-}
-
 bucket_id_t bucket_id_t::from_counter(uint64_t host_val)
 {
   bucket_id_t id;

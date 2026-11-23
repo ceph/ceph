@@ -14,6 +14,8 @@
 
 #include "ref_tag.hpp"
 
+#include "bit_reverse.hpp"
+
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
@@ -109,7 +111,9 @@ RefTag RefTagGenerator::next()
   const uint32_t rgw_net = htonl(rgw_id_);
   std::memcpy(ref_tag.bytes_, &rgw_net, sizeof(rgw_net));
   const uint64_t seq     = seq_id_.fetch_add(1, std::memory_order_relaxed);
-  const uint64_t seq_net = htobe64(seq);
+  // Bit-reversed so consecutive tags spread across the whole key range
+  // instead of appending at its tail.
+  const uint64_t seq_net = htobe64(bit_reverse64(seq));
   std::memcpy(ref_tag.bytes_ + sizeof(rgw_net), &seq_net, sizeof(seq_net));
   return ref_tag;
 }

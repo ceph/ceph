@@ -131,6 +131,9 @@ target_include_directories(l_key_test PRIVATE
 target_link_libraries(l_key_test PRIVATE OpenSSL::Crypto "${FDB_LIB_DIR}/libfdb_c.so")
 target_compile_definitions(l_key_test PRIVATE FDB_API_VERSION=730)
 
+add_executable(ref_tag_test tests/ref_tag_test.cpp src/ref_tag.cpp)
+target_include_directories(ref_tag_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+
 add_executable(data_store_test tests/data_store_test.cpp src/data_store.cpp src/ref_tag.cpp)
 target_include_directories(data_store_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(data_store_test PRIVATE OpenSSL::Crypto)
@@ -441,6 +444,7 @@ set_target_properties(multipart_goa_test PROPERTIES
 enable_testing()
 add_test(NAME object_value_test COMMAND object_value_test)
 add_test(NAME l_key_test COMMAND l_key_test)
+add_test(NAME ref_tag_test COMMAND ref_tag_test)
 add_test(NAME multipart_key_test COMMAND multipart_key_test)
 add_test(NAME multipart_manifest_test COMMAND multipart_manifest_test)
 add_test(NAME checksum_test COMMAND checksum_test)
