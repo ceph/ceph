@@ -89,6 +89,15 @@ describe('SmbClusterFormComponent', () => {
     component.submitAction();
   });
 
+  it('should set placement.label as a single string', () => {
+    const placement = component.getPlacementSpec({
+      placement: 'label',
+      label: { content: 'smb' },
+      count: 1
+    });
+    expect(placement).toEqual({ count: 1, label: 'smb' });
+  });
+
   it('should have client_compat control defaulting to false', () => {
     const clientCompatControl = component.smbForm.get('client_compat');
     expect(clientCompatControl).toBeTruthy();
