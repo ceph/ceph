@@ -645,6 +645,32 @@ class TestVolumes(TestVolumesHelper):
             for volume in volumenames:
                 self._fs_cmd("volume", "rm", volume, "--yes-i-really-mean-it")
 
+    def test_volume_ls_with_search_filter(self):
+        """
+        That the volumes can be listed using search filter and
+        finally cleans up.
+        """
+        #create new volumes and add it to the existing list of volumes
+        self._fs_cmd("volume", "create", "vol")
+        volumenames = self._gen_vol_name(2)
+        for volumename in volumenames:
+            self._fs_cmd("volume", "create", f"filter_{volumename}")
+
+        search_filter = "filter"
+
+        # list volumes
+        try:
+            volumels = json.loads(self._fs_cmd('volume', 'ls', f"--filter={search_filter}"))
+            volumes = [volume['name'] for volume in volumels]
+            if ( len(volumes) !=2 or [vols for vols in volumenames
+                                      if f"filter_{vols}" not in volumes] ):
+                raise RuntimeError("Error in listing volumes")
+        finally:
+            # clean up
+            self._fs_cmd("volume", "rm", "vol", "--yes-i-really-mean-it")
+            for volume in volumenames:
+                self._fs_cmd("volume", "rm", f"filter_{volume}", "--yes-i-really-mean-it")
+
     def test_volume_rm(self):
         """
         That the volume can only be removed when --yes-i-really-mean-it is used
@@ -2363,6 +2389,30 @@ class TestSubvolumeGroups(TestVolumesHelper):
             subvolgroupnames = [subvolumegroup['name'] for subvolumegroup in subvolumegroupls]
             if collections.Counter(subvolgroupnames) != collections.Counter(subvolumegroups):
                 raise RuntimeError("Error creating or listing subvolume groups")
+            
+    def test_subvolume_group_ls_with_search_filter(self):
+        # tests the 'fs subvolumegroup ls' command with search filter
+
+        #create subvolumegroups
+        self._fs_cmd("subvolumegroup", "create", self.volname, "group")
+        self._fs_cmd("subvolumegroup", "create", self.volname, 'test_subvolumegroup1')
+        self._fs_cmd("subvolumegroup", "create", self.volname, 'test_subvolumegroup2')
+
+        search_filter = 'test'
+
+        subvolumegroupls = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname, f"--filter={search_filter}"))
+        subvolgroupnames = [subvolumegroup['name'] for subvolumegroup in subvolumegroupls]
+        if ( len(subvolgroupnames) != 2 or "test_subvolumegroup1" not in subvolgroupnames or
+           "test_subvolumegroup2" not in subvolgroupnames ):
+            raise RuntimeError("Error in listing subvolume groups")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, "group")
+        self._fs_cmd("subvolumegroup", "rm", self.volname, "test_subvolumegroup1")
+        self._fs_cmd("subvolumegroup", "rm", self.volname, "test_subvolumegroup2")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_group_ls_filter(self):
         # tests the 'fs subvolumegroup ls' command filters '_deleting' directory
@@ -3436,6 +3486,31 @@ class TestSubvolumes(TestVolumesHelper):
         # remove subvolume
         for subvolume in subvolumes:
             self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_ls_with_search_filter(self):
+        # tests the 'fs subvolume ls' command using search filter
+
+        # create subvolumes
+        self._fs_cmd("subvolume", "create", self.volname, "subvol")
+        self._fs_cmd("subvolume", "create", self.volname, "test_subvol1")
+        self._fs_cmd("subvolume", "create", self.volname, "test_subvol2")
+
+        search_filter = "test"
+
+        # list subvolumes
+        subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname, f"--filter={search_filter}"))
+        subvolnames = [subvolume['name'] for subvolume in subvolumels]
+        if ( len(subvolnames) != 2 or "test_subvol1" not in subvolnames or
+           "test_subvol2" not in subvolnames ):
+            raise RuntimeError("Error in listing subvolumes")
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, "subvol")
+        self._fs_cmd("subvolume", "rm", self.volname, "test_subvol1")
+        self._fs_cmd("subvolume", "rm", self.volname, "test_subvol2")
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
@@ -6145,6 +6220,37 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # remove snapshot
         for snapshot in snapshots:
             self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_ls_with_search_filter(self):
+        # tests the 'fs subvolume snapshot ls' command using search filter
+
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # create subvolume snapshots
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, "snap")
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, "test_snapshot1")
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, "test_snapshot2")
+
+        search_filter = "test"
+
+        subvolsnapshotls = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume, f"--filter={search_filter}"))
+        snapshotnames = [snapshot['name'] for snapshot in subvolsnapshotls]
+        if ( len(snapshotnames) != 2 or "test_snapshot1" not in snapshotnames or
+           "test_snapshot2" not in snapshotnames ):
+            raise RuntimeError("Error in listing subvolume snapshots")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, "snap")
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, "test_snapshot1")
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, "test_snapshot2")
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
