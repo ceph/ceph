@@ -260,12 +260,36 @@ The role is described in full in :doc:`security/securitylead`.
 
 Current Security Lead: Sage McTaggart <sagemct@ibm.com>
 
+Redmine Administration Team
+===========================
+
+Responsibilities
+----------------
+
+ * Coordinate, review, and execute project-level and global Redmine
+   configuration changes (such as tracker workflows, custom fields, and
+   project creation)
+ * Maintain an intake process for community and developer configuration
+   requests
+ * Process group and role permission updates for user accounts
+
+Membership
+----------
+
+ * Two to three members appointed by the Ceph Executive Council
+ * Global administrator privileges in the Redmine application are restricted
+   to team members and necessary service accounts approved by the
+   infrastructure team
+
+Current Members: TBD
+
 Appointing Leads
 ================
 
-The executive council appoints all leads (component team leads, the Release
-Manager, the Documentation Lead and the Security Lead) on the recommendation
-of the CSC.  For a team lead, the CSC normally follows the recommendation of
-the team and the outgoing lead.  Periodic rotation is encouraged.
+The executive council appoints all leads and teams (component team leads, the
+Release Manager, the Documentation Lead, the Security Lead, and the Redmine
+Administration Team) on the recommendation of the CSC.  For a team lead, the
+CSC normally follows the recommendation of the team and the outgoing lead.
+Periodic rotation is encouraged.
 
 .. _component team: https://ceph.io/en/community/team/
