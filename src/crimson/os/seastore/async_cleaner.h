@@ -306,8 +306,16 @@ std::ostream &operator<<(std::ostream &, const segments_info_t &);
  * The gate is FIFO, so a background transaction delays the client batches
  * queued behind it for as long as it holds the gate.
  *
- * TODO: allocation retries (wait_background() after eagain from an
- *       allocation) still wait while holding the gate.
+ * An allocation that fails while holding the gate aborts instead of
+ * waiting for background work to free space, see
+ * TransactionManager::wait_background_for_alloc().
+ * TODO: make that failure impossible instead of fatal:
+ *       - the reservation taken before the gate must cover what the
+ *         transaction can allocate, not only the cleaner and trimmer
+ *         thresholds;
+ *       - with a cold tier, hot space is freed by demote, which needs the
+ *         gate too. Run a demote or clean turn before starting a writer
+ *         that wouldn't fit, rather than inside it (the writer loop).
  * TODO: background transactions hold the gate across their disk reads
  *       (cleaner, promote/demote) and across up to
  *       max_backref_bytes_per_cycle of backref merging (trim alloc).

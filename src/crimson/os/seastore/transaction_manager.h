@@ -620,6 +620,27 @@ public:
     std::vector<laddr_t> offsets);
 
   /**
+   * wait_background_for_alloc
+   *
+   * An allocation failed without the device being full, so background work
+   * (cleaning, demoting) has to free space first. A writer holding the
+   * writer gate can't wait for it, since that background work needs the
+   * gate: the shard would hang. Abort instead, see writer_gate_t. The usage
+   * reserved before taking the gate should make this unreachable.
+   * Transactions without the gate (tests, tools) keep waiting.
+   */
+  auto wait_background_for_alloc(Transaction &t) {
+    if (writer_gate.is_held_by(t)) {
+      LOG_PREFIX(TransactionManager::wait_background_for_alloc);
+      SUBERRORT(seastore_tm,
+                "allocation failed while holding the writer gate", t);
+      ceph_abort_msg("allocation failed while holding the writer gate");
+    }
+    epm->maybe_wake_background();
+    return trans_intr::make_interruptible(epm->wait_background());
+  }
+
+  /**
    * alloc_non_data_extent
    *
    * Allocates a new block of type T with the minimum lba range of size len
@@ -648,8 +669,7 @@ public:
           t, len, {placement_hint, INIT_GENERATION});
       } catch(crimson::ct_error::eagain&) {}
       if (!ext) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     // user must initialize the logical extent themselves.
@@ -696,8 +716,7 @@ public:
           });
       } catch (crimson::ct_error::eagain&) {}
       if (exts.empty()) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     // user must initialize the logical extent themselves

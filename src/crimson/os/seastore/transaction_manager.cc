@@ -986,8 +986,7 @@ TransactionManager::rewrite_logical_extent(
           is_tracked)->cast<LogicalChildNode>();
       } catch (crimson::ct_error::eagain&) {}
       if (!nextent) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
@@ -1048,8 +1047,7 @@ TransactionManager::rewrite_logical_extent(
           });
       } catch (crimson::ct_error::eagain&) {}
       if (extents.empty()) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     extent_len_t off = 0;
@@ -1425,8 +1423,7 @@ TransactionManager::promote_extent(
           });
       } catch (crimson::ct_error::eagain&) {}
       if (promoted_raw_extents.empty()) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
@@ -1483,8 +1480,7 @@ TransactionManager::promote_extent(
           true);
       } catch (crimson::ct_error::eagain&) {}
       if (!promoted_extent) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     auto lext = promoted_extent->cast<LogicalChildNode>();
