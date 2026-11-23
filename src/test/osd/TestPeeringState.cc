@@ -374,6 +374,22 @@ protected:
   // state or inject changes after each step
   // ============================================================================
 
+  // Deliver a peering event the way PG::do_peering_event() does: an event
+  // sent before the PG's last peering reset is discarded, not handled.
+  // This matters when a test queues a message (e.g. a share_pg_info())
+  // and calls new_epoch() before dispatching it.
+  void deliver_peering_event(int osd, PGPeeringEventRef evt)
+  {
+    PeeringState *ps = get_ps(osd);
+    if (ps->pg_has_reset_since(evt->get_epoch_sent()) ||
+        ps->pg_has_reset_since(evt->get_epoch_requested())) {
+      dout(0) << __func__ << " discard old " << evt->get_desc()
+              << " to osd." << osd << dendl;
+      return;
+    }
+    ps->handle_event(evt, get_ctx(osd));
+  }
+
   // Dispatcher - send peering messages to other OSDs from a given OSD. Peering
   // messages are queued in message_map in PeeringCtx
   // toosd - if specified only send messages to the specified OSD
@@ -404,7 +420,7 @@ protected:
         ConnectionRef c = ceph::make_ref<MockConnection>();
         pm->set_connection(c);
 #endif
-        get_ps(osd)->handle_event(PGPeeringEventRef(pm->get_event()), get_ctx(osd));
+        deliver_peering_event(osd, PGPeeringEventRef(pm->get_event()));
         // MessageRef m goes out of scope here, automatically releasing the reference
         did_work = true;
         if (num_messages > 0 && --num_messages == 0) {
@@ -449,12 +465,8 @@ protected:
         MessageRef m = *it;
         it = ls.erase(it);
         // NOTE: This dispatcher only handles MOSDPeeringOp-derived messages (MOSDPGLog,
-        // MOSDPGNotify2, MOSDPGInfo2, MOSDPGLease, MOSDPGLeaseAck, MOSDPGQuery2, MOSDPGTrim).
-        // Non-peering messages like MOSDPGRemove and MRecoveryReserve are sent via
-        // send_cluster_message() but are not dispatched through this function - they are
-        // handled by other test mechanisms or are not relevant to peering state transitions.
-        // This is sufficient for testing PeeringState behavior as all peering-related
-        // messages derive from MOSDPeeringOp and provide get_event() for state machine events.
+        // MOSDPGNotify2, MOSDPGInfo2, MOSDPGLease, MOSDPGLeaseAck, MOSDPGQuery2, MOSDPGTrim,
+        // MRecoveryReserve). Non-peering messages like MOSDPGRemove are not expected here.
         // Future enhancement: If testing non-peering cluster messages becomes necessary,
         // add type checking and appropriate handling for Message-derived (non-MOSDPeeringOp) types.
         dout(0) << __func__ << " message type = " << m->get_type() << dendl;
@@ -469,7 +481,7 @@ protected:
         ConnectionRef c = ceph::make_ref<MockConnection>();
         pm->set_connection(c);
 #endif
-        get_ps(osd)->handle_event(PGPeeringEventRef(pm->get_event()), get_ctx(osd));
+        deliver_peering_event(osd, PGPeeringEventRef(pm->get_event()));
         // MessageRef m goes out of scope here, automatically releasing the reference
         did_work = true;
         if (num_messages > 0 && --num_messages == 0) {
@@ -509,7 +521,7 @@ protected:
       auto evt = *it;
       it = ls.erase(it);
       dout(0) << __func__ << " event to osd." << fromosd << " " << evt->get_desc() << dendl;
-      get_ps(fromosd)->handle_event(evt, get_ctx(fromosd));
+      deliver_peering_event(fromosd, evt);
       did_work = true;
       if (num_events > 0 && --num_events == 0) {
         return did_work;
