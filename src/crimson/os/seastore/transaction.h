@@ -150,8 +150,14 @@ public:
     assert(!is_weak());
 #ifndef NDEBUG
     auto [result, ext] = do_get_extent(ref->get_paddr());
-    assert(result == get_extent_ret::PRESENT);
-    assert(ext == ref);
+    if (ref->is_stable()) {
+      // Writers keep no read set, so the transaction only tracks its
+      // pending extents: a stable extent is absent, or already retired.
+      assert(result != get_extent_ret::PRESENT);
+    } else {
+      assert(result == get_extent_ret::PRESENT);
+      assert(ext == ref);
+    }
 #endif
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
