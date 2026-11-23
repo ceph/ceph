@@ -9825,6 +9825,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     spi->migration_src.reset();
     spi->migration_target = pool;
     pi->migration_src = source_pool_id.value();
+    // the target takes the source's name and its clients: keep its applications
+    pi->application_metadata = spi->application_metadata;
     pi->migration_target.reset();
     pi->migration_root = spi->migration_root.value_or(source_pool_id.value());
     spi->migration_root.reset();
