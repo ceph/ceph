@@ -305,6 +305,59 @@ TEST_P(TestClsVersion, test_version_inc_check)
   delete rop;
 }
 
+// RGW writes its metadata objects with one request that removes and
+// recreates the object, then checks and sets the version (see
+// RGWSI_SysObj_Core::write()). The version check must see the version from
+// before the request, not the result of the remove.
+TEST_P(TestClsVersion, test_version_check_after_remove_in_same_op)
+{
+  string oid = "obj";
+
+  ASSERT_EQ(0, ioctx.create(oid, true));
+
+  obj_version ver;
+  ver.ver = 123;
+  ver.tag = "foo";
+  {
+    librados::ObjectWriteOperation op;
+    cls_version_set(op, ver);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  obj_version new_ver;
+  new_ver.ver = 124;
+  new_ver.tag = "foo";
+  bufferlist data;
+  data.append("data");
+  {
+    librados::ObjectWriteOperation op;
+    op.remove();
+    op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    op.create(false);
+    cls_version_check(op, ver, VER_COND_EQ);
+    cls_version_set(op, new_ver);
+    op.write_full(data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  obj_version read_ver;
+  ASSERT_EQ(0, cls_version_read(ioctx, oid, &read_ver));
+  ASSERT_EQ(new_ver.ver, read_ver.ver);
+  ASSERT_EQ(new_ver.tag, read_ver.tag);
+
+  // the check fails with the old version
+  {
+    librados::ObjectWriteOperation op;
+    op.remove();
+    op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    op.create(false);
+    cls_version_check(op, ver, VER_COND_EQ);
+    op.write_full(data);
+    ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
+  }
+  ASSERT_EQ(0, cls_version_read(ioctx, oid, &read_ver));
+  ASSERT_EQ(new_ver.ver, read_ver.ver);
+}
 
 INSTANTIATE_TEST_SUITE_P(, TestClsVersion,
   ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),

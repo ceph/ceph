@@ -818,5 +818,101 @@ TEST_P(LibRadosIoEC, ObjectInfoXattrAfterSnapTrim) {
   check_object_info_xattr_after_snap_trim(pool_name, nspace);
 }
 
+static void expect_xattr(rados_ioctx_t ioctx, const char *oid,
+                         const char *name, const char *value, size_t len)
+{
+  char buf[128];
+  ASSERT_EQ((int)len, rados_getxattr(ioctx, oid, name, buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(value, buf, len));
+}
+
+// An xattr read in a write request sees the xattrs as they were before the
+// request, not as changed by the earlier ops of the request. RGW depends on
+// this: it removes and recreates its metadata objects, then checks their
+// version xattr, in one request.
+static void check_xattr_reads_see_state_before_request(rados_ioctx_t ioctx)
+{
+  const char *oid = "xattr_before_request";
+  char data[] = "ceph";
+  char v1[] = "value1";
+  char v2[] = "value2";
+  char buf[128];
+
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_write_full(op, data, sizeof(data));
+  rados_write_op_setxattr(op, "key", v1, sizeof(v1));
+  rados_write_op_setxattr(op, "other", v1, sizeof(v1));
+  int r = rados_write_op_operate(op, ioctx, oid, NULL, 0);
+  rados_release_write_op(op);
+  ASSERT_EQ(0, r);
+
+  // SETXATTR, then CMPXATTR with the old value. The request does not end
+  // with CMPXATTR, because a true comparison returns 1.
+  op = rados_create_write_op();
+  rados_write_op_setxattr(op, "key", v2, sizeof(v2));
+  rados_write_op_cmpxattr(op, "key", LIBRADOS_CMPXATTR_OP_EQ, v1, sizeof(v1));
+  rados_write_op_write_full(op, data, sizeof(data));
+  r = rados_write_op_operate(op, ioctx, oid, NULL, 0);
+  rados_release_write_op(op);
+  ASSERT_EQ(0, r);
+  expect_xattr(ioctx, oid, "key", v2, sizeof(v2));
+
+  // SETXATTR, then CMPXATTR with the value that the request sets
+  op = rados_create_write_op();
+  rados_write_op_setxattr(op, "key", v1, sizeof(v1));
+  rados_write_op_cmpxattr(op, "key", LIBRADOS_CMPXATTR_OP_EQ, v1, sizeof(v1));
+  r = rados_write_op_operate(op, ioctx, oid, NULL, 0);
+  rados_release_write_op(op);
+  ASSERT_EQ(-ECANCELED, r);
+  expect_xattr(ioctx, oid, "key", v2, sizeof(v2));
+
+  // RMXATTR, then CMPXATTR with the old value
+  op = rados_create_write_op();
+  rados_write_op_rmxattr(op, "key");
+  rados_write_op_cmpxattr(op, "key", LIBRADOS_CMPXATTR_OP_EQ, v2, sizeof(v2));
+  rados_write_op_write_full(op, data, sizeof(data));
+  r = rados_write_op_operate(op, ioctx, oid, NULL, 0);
+  rados_release_write_op(op);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, oid, "key", buf, sizeof(buf)));
+
+  // DELETE and CREATE, then CMPXATTR with the old value, as RGW does
+  op = rados_create_write_op();
+  rados_write_op_remove(op);
+  rados_write_op_set_flags(op, LIBRADOS_OP_FLAG_FAILOK);
+  rados_write_op_create(op, LIBRADOS_CREATE_IDEMPOTENT, NULL);
+  rados_write_op_cmpxattr(op, "other", LIBRADOS_CMPXATTR_OP_EQ,
+                          v1, sizeof(v1));
+  rados_write_op_write_full(op, data, sizeof(data));
+  rados_write_op_setxattr(op, "key", v2, sizeof(v2));
+  r = rados_write_op_operate(op, ioctx, oid, NULL, 0);
+  rados_release_write_op(op);
+  ASSERT_EQ(0, r);
+  expect_xattr(ioctx, oid, "key", v2, sizeof(v2));
+  ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, oid, "other", buf, sizeof(buf)));
+
+  // the object did not exist before the request
+  const char *new_oid = "xattr_before_request_new";
+  op = rados_create_write_op();
+  rados_write_op_create(op, LIBRADOS_CREATE_EXCLUSIVE, NULL);
+  rados_write_op_setxattr(op, "key", v1, sizeof(v1));
+  rados_write_op_cmpxattr(op, "key", LIBRADOS_CMPXATTR_OP_EQ, v1, sizeof(v1));
+  rados_write_op_write_full(op, data, sizeof(data));
+  r = rados_write_op_operate(op, ioctx, new_oid, NULL, 0);
+  rados_release_write_op(op);
+  ASSERT_EQ(-ENOENT, r);
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(-ENOENT, rados_stat(ioctx, new_oid, &size, &mtime));
+}
+
+TEST_P(LibRadosIo, XattrReadsSeeStateBeforeRequest) {
+  check_xattr_reads_see_state_before_request(ioctx);
+}
+
+TEST_P(LibRadosIoEC, XattrReadsSeeStateBeforeRequest) {
+  check_xattr_reads_see_state_before_request(ioctx);
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIo);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoEC);
