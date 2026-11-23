@@ -3320,6 +3320,13 @@ struct shard_stats_t {
   uint64_t repeat_read_num = 0;
   uint64_t pending_read_num = 0;
 
+  // writer gate, see writer_gate_t
+  // writers that committed without holding the gate (a missed writer)
+  uint64_t writer_ungated_commits = 0;
+  // writers whose usage exceeded the reservation taken before the gate
+  // and could not be covered right away
+  uint64_t writer_overcommits = 0;
+
   // transaction_type_t::TRIM_DIRTY~CLEANER_COLD
   uint64_t pending_bg_num = 0;
   uint64_t trim_alloc_num = 0;
@@ -3361,6 +3368,9 @@ struct shard_stats_t {
     repeat_read_num += o.repeat_read_num;
     pending_read_num += o.pending_read_num;
 
+    writer_ungated_commits += o.writer_ungated_commits;
+    writer_overcommits += o.writer_overcommits;
+
     pending_bg_num += o.pending_bg_num;
     trim_alloc_num += o.trim_alloc_num;
     repeat_trim_alloc_num += o.repeat_trim_alloc_num;
@@ -3381,6 +3391,8 @@ struct shard_stats_t {
     repeat_io_num -= o.repeat_io_num;
     read_num -= o.read_num;
     repeat_read_num -= o.repeat_read_num;
+    writer_ungated_commits -= o.writer_ungated_commits;
+    writer_overcommits -= o.writer_overcommits;
     trim_alloc_num -= o.trim_alloc_num;
     repeat_trim_alloc_num -= o.repeat_trim_alloc_num;
     trim_dirty_num -= o.trim_dirty_num;

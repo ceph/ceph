@@ -698,6 +698,7 @@ TransactionManager::submit_transaction(
       extra.cleaner_usage.main_usage ||
       extra.cleaner_usage.cold_ool_usage;
     if (has_extra && !epm->try_reserve_projected_usage(extra)) {
+      ++(shard_stats.writer_overcommits);
       SUBWARNT(seastore_t, "overcommit {}: projected {} exceeds reserved {}",
                t, extra, projected_usage, *reserved);
       has_extra = false;
@@ -827,12 +828,16 @@ TransactionManager::do_submit_transaction(
   std::optional<journal_seq_t> trim_alloc_to)
 {
   LOG_PREFIX(TransactionManager::do_submit_transaction);
-  if (unlikely(!writer_gate.is_held_by(tref) && !warned_ungated_commit)) {
-    // Every writer should hold the writer gate, see writer_gate_t. Logged
-    // once, as tests and tools submit their own transactions directly.
-    warned_ungated_commit = true;
-    SUBERRORT(seastore_t, "committing without the writer gate, src={}",
-              tref, tref.get_src());
+  if (unlikely(!writer_gate.is_held_by(tref))) {
+    // Every writer should hold the writer gate, see writer_gate_t. Always
+    // counted, logged once, as tests and tools submit their own
+    // transactions directly.
+    ++(shard_stats.writer_ungated_commits);
+    if (!warned_ungated_commit) {
+      warned_ungated_commit = true;
+      SUBERRORT(seastore_t, "committing without the writer gate, src={}",
+                tref, tref.get_src());
+    }
   }
   SUBDEBUGT(seastore_t, "start, entering ool_writes", tref);
   co_await trans_intr::make_interruptible(

@@ -371,6 +371,36 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
+        "read_txns",
+        [this] { return shard_stats.read_num; },
+        sm::description("READ transactions started; restarts are "
+                        "read_attempts - read_txns"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "read_attempts",
+        [this] { return shard_stats.repeat_read_num; },
+        sm::description("READ transaction attempts including the first; "
+                        "a restart happens when an extent a reader used "
+                        "was invalidated by a writer"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "writer_ungated_commits",
+        [this] { return shard_stats.writer_ungated_commits; },
+        sm::description("writers that committed without holding the "
+                        "writer gate (should stay 0 outside of tests)"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "writer_overcommits",
+        [this] { return shard_stats.writer_overcommits; },
+        sm::description("writers whose usage exceeded the reservation taken "
+                        "before the writer gate and was not available "
+                        "right away"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
         "attr_inline",
         [this] { return stats.oi_inline; },
         sm::description("attributes stored in the onode's inline slot"),
