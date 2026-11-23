@@ -928,7 +928,6 @@ private:
         intervals.unchecked_emplace_back(std::forward<Args>(arguments)...);
     }
 
-private:
     constexpr void ensure_capacity() const
     {
         if (Capacity == std::size(intervals)) {
@@ -1373,19 +1372,21 @@ private:
 
     // Reserve only after a nonempty interval passes the existing admission checks:
     template <std::size_t Reserve, boundary_view LowerT, boundary_view UpperT>
-    constexpr void append_with_reserve(std::size_t slot, const LowerT& lower, const UpperT& upper)
+    constexpr void append_with_reserve(const std::size_t slot, const LowerT& lower, const UpperT& upper)
     {
         tick();
         if (detail::empty_bounds(lower, upper)) {
             return;
         }
         check_entries(1);
+
         auto& values = buffers.at(slot);
-        if constexpr (Reserve != 0) {
+        if constexpr (0 != Reserve) {
             if (std::empty(values)) {
                 values.reserve(Reserve);
             }
         }
+
         values.push_back(query<DomainT>::between(lower, upper));
         ++retained;
     }
@@ -2414,12 +2415,14 @@ struct canonical_access final
     struct retention_sink final
     {
         StorageT& selected;
+
         using domain_type = typename StorageT::value_type::domain_type;
 
+    public:
         constexpr void emit_interval(const boundary_ref<domain_type>& lower,
                                      const boundary_ref<domain_type>& upper) const
         {
-            selected.emplace_back(interval_factory<domain_type> {lower, upper});
+            (*this)(interval_factory<domain_type> {lower, upper});
         }
 
         template <typename ValueT>
@@ -2468,12 +2471,13 @@ struct canonical_access final
     static constexpr auto normalize(RangeT&& source)
     {
         using domain_type = compilation_domain_t<RangeT>;
+        constexpr auto input_capacity = automatic_storage<RangeT>::fits ? component_bound_v<RangeT> : 0;
+
         workspace<domain_type> scratch;
         scratch.reset(1);
-        constexpr auto reserve = automatic_storage<RangeT>::fits ? component_bound_v<RangeT> : 0;
         for (const auto& value : std::ranges::ref_view {source}) {
             const auto bounds = detail::bounds_of(value);
-            scratch.template append_with_reserve<reserve>(0, bounds.lower(), bounds.upper());
+            scratch.template append_with_reserve<input_capacity>(0, bounds.lower(), bounds.upper());
         }
         detail::normalize_buffer(scratch, 0);
         auto values = scratch.take(0);

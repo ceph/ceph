@@ -222,6 +222,8 @@ struct immutable_domain final
     }
 };
 
+using immutable_query = iv::query<immutable_domain>;
+
 struct fragile_point final
 {
     static inline int live = 0;
@@ -247,6 +249,8 @@ struct fragile_point final
     fragile_point& operator=(fragile_point&&) = default;
     auto operator<=>(const fragile_point&) const = default;
 };
+
+using fragile_query = iv::query<iv::comparison_domain<fragile_point>>;
 
 } // anonymous namespace
 
@@ -329,7 +333,6 @@ TEST_CASE("storage selection does not observe providers or add point assignment 
     REQUIRE(selected.size() == 1);
     CHECK(selected[0] == previous);
 
-    using immutable_query = iv::query<immutable_domain>;
     const auto value = immutable_query::closed(immutable_point {1}, immutable_point {3});
     immutable_point::copies = 0;
     auto retained = iv::compile_intervals(value);
@@ -358,7 +361,6 @@ TEST_CASE("quota policies preserve zero observation and output limits")
 
 TEST_CASE("failed retention destroys the constructed prefix and preserves the source")
 {
-    using fragile_query = iv::query<iv::comparison_domain<fragile_point>>;
     const auto source = fragile_query::closed(fragile_point {1}, fragile_point {3});
     const auto live_before = fragile_point::live;
     fragile_point::copy_budget = 1;
@@ -393,7 +395,6 @@ TEST_CASE("inferred results retain temporary point owners and support clipping")
 
 TEST_CASE("streamed retention unwinds partial intervals and rejects capacity before point copies")
 {
-    using fragile_query = iv::query<iv::comparison_domain<fragile_point>>;
     const auto source = fragile_query::closed(fragile_point {1}, fragile_point {8}) ^
                         fragile_query::closed(fragile_point {5}, fragile_point {12});
     const auto live_before = fragile_point::live;
@@ -425,7 +426,6 @@ TEST_CASE("streamed retention unwinds partial intervals and rejects capacity bef
 
 TEST_CASE("raw reservation and transfer release prefixes after endpoint-copy refusal")
 {
-    using fragile_query = iv::query<iv::comparison_domain<fragile_point>>;
     const std::array raw {fragile_query::closed(fragile_point {8}, fragile_point {9}),
                           fragile_query::closed(fragile_point {1}, fragile_point {3}),
                           fragile_query::closed(fragile_point {2}, fragile_point {4})};
@@ -466,7 +466,6 @@ TEST_CASE("raw reservation and transfer release prefixes after endpoint-copy ref
 
 TEST_CASE("raw reservation preserves nonassignable points and normalized-output limits")
 {
-    using immutable_query = iv::query<immutable_domain>;
     const std::array raw {immutable_query::closed(immutable_point {8}, immutable_point {9}),
                           immutable_query::closed(immutable_point {1}, immutable_point {3}),
                           immutable_query::closed(immutable_point {2}, immutable_point {4})};
