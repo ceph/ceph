@@ -319,18 +319,25 @@ public:
     }
   }
 
-  std::vector<CachedExtentRef> get_delayed_alloc_list() {
-    std::vector<CachedExtentRef> ret;
-    ret.reserve(delayed_alloc_list.size());
+  template <typename F>
+  void for_each_delayed_alloc_extent(F&& f) {
     for (auto& extent : delayed_alloc_list) {
       // delayed extents may be invalidated
       if (extent->is_valid()) {
-        ret.push_back(std::move(extent));
+        f(extent);
       } else {
         ++num_delayed_invalid_extents;
       }
     }
     delayed_alloc_list.clear();
+  }
+
+  std::vector<CachedExtentRef> get_delayed_alloc_list() {
+    std::vector<CachedExtentRef> ret;
+    ret.reserve(delayed_alloc_list.size());
+    for_each_delayed_alloc_extent([&ret](auto& extent) {
+      ret.push_back(std::move(extent));
+    });
     return ret;
   }
 

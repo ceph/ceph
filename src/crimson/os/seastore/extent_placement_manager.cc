@@ -550,7 +550,6 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
   for (std::size_t i = 0; i < writer_refs.size(); ++i) {
     res.alloc_map[i].writer = writer_refs[i].get();
   }
-  res.delayed_extents = t.get_delayed_alloc_list();
 
   // init projected usage
   for (auto& extent : t.get_inline_block_list()) {
@@ -560,7 +559,7 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
     }
   }
 
-  for (auto& extent : res.delayed_extents) {
+  t.for_each_delayed_alloc_extent([this, &t, &res](auto& extent) {
     if (dispatch_delayed_extent(extent)) {
       res.usage.inline_usage += extent->get_length();
       res.usage.cleaner_usage.main_usage += extent->get_length();
@@ -594,7 +593,7 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
       assert(writer_ptr != nullptr);
       res.alloc_map[writer_ptr->get_writer_id()].extents.emplace_back(extent);
     }
-  }
+  });
   return res;
 }
 
@@ -629,31 +628,30 @@ ExtentPlacementManager::write_preallocated_ool_extents(
   LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
   DEBUGT("start with {} allocated extents",
          t, extents.size());
+  if (extents.empty()) {
+    co_return;
+  }
   assert(writer_refs.size());
-  return seastar::do_with(
-      extents_by_writer_t(),
-      [this, &t, &extents](auto& alloc_map) {
-    alloc_map.resize(writer_refs.size());
-    for (std::size_t i = 0; i < writer_refs.size(); ++i) {
-      alloc_map[i].writer = writer_refs[i].get();
+
+  extents_by_writer_t alloc_map;
+  alloc_map.resize(writer_refs.size());
+  for (std::size_t i = 0; i < writer_refs.size(); ++i) {
+    alloc_map[i].writer = writer_refs[i].get();
+  }
+  for (auto& extent : extents) {
+    auto writer_ptr = get_writer(
+        extent->get_user_hint(),
+        get_extent_category(extent->get_type()),
+        extent->get_rewrite_generation());
+    alloc_map[writer_ptr->get_writer_id()].extents.emplace_back(extent);
+  }
+  for (auto& p : alloc_map) {
+    if (!p.extents.empty()) {
+      assert(p.writer->get_type() == backend_type_t::RANDOM_BLOCK);
+      co_await p.writer->alloc_write_ool_extents(t, p.extents);
     }
-    for (auto& extent : extents) {
-      auto writer_ptr = get_writer(
-          extent->get_user_hint(),
-          get_extent_category(extent->get_type()),
-          extent->get_rewrite_generation());
-      alloc_map[writer_ptr->get_writer_id()].extents.emplace_back(extent);
-    }
-    return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
-      auto writer = p.writer;
-      auto& extents = p.extents;
-      if (extents.empty()) {
-        return ExtentOolWriter::alloc_write_iertr::now();
-      }
-      assert(writer->get_type() == backend_type_t::RANDOM_BLOCK);
-      return writer->alloc_write_ool_extents(t, extents);
-    });
-  });
+  }
+  co_return;
 }
 
 ExtentPlacementManager::close_ertr::future<>

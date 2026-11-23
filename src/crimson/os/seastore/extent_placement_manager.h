@@ -720,7 +720,6 @@ public:
   using extents_by_writer_t = boost::container::small_vector<writer_extents_t, DEFAULT_OOL_WRITERS_CAPACITY>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
-    std::vector<CachedExtentRef> delayed_extents;
     io_usage_t usage;
   };
 
