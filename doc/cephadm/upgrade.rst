@@ -507,6 +507,8 @@ Example: specifying services and using limit:
    * ``nfs``
    * ``nvmeof``
    * ``smb``
+   * ``haproxy``
+   * ``keepalived``
    * ``node-exporter``
    * ``prometheus``
    * ``alertmanager``
