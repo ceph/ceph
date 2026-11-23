@@ -163,9 +163,9 @@ struct Inode : RefCountedObject {
    * per-thread state, which the data path would pay for on every call.
    *
    * Readers that only look (getattr from the caps) may share it
-   * (std::shared_lock): they count themselves in, and leave and queue on
-   * the mutex when a writer is in or waiting, so a stream of readers
-   * never starves a writer, which may hold client_lock.  A shared holder
+   * (std::shared_lock): they count themselves in, and leave and wait for
+   * the writer flag to drop when a writer is in or waiting, so a stream
+   * of readers never starves a writer, which may hold client_lock.  A shared holder
    * must not take the lock exclusively, nor call the helpers that do,
    * nor take it shared again.
    *

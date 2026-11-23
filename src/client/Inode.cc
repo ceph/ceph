@@ -131,6 +131,7 @@ void Inode::Lock::unlock()
   // even again, after all this hold changed
   seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_release);
   writer.store(false, std::memory_order_release);
+  writer.notify_all();   // the readers waiting for us (lock_shared())
   m.unlock();
 }
 
@@ -145,10 +146,13 @@ void Inode::Lock::lock_shared()
   ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
 #endif
   auto c = count_in();
-  if (writer.load(std::memory_order_seq_cst)) {
-    // a writer is in or waiting for us: let it go first
+  while (writer.load(std::memory_order_seq_cst)) {
+    // a writer is in or waiting for us: let it go first, and wait for it
+    // to leave on the writer flag, not on the mutex: thousands of readers
+    // queued on the mutex went through it one by one after each writer,
+    // and an unlucky one waited for seconds
     c->fetch_sub(1, std::memory_order_release);
-    std::lock_guard l(m);
+    writer.wait(true, std::memory_order_acquire);
     c = count_in();
   }
   my_count = c;
