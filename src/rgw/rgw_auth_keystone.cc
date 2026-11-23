@@ -125,7 +125,8 @@ admin_token_retry:
   }
 
   ldpp_dout(dpp, 20) << "received response status=" << validate.get_http_status()
-                 << ", body=" << std::string_view(token_body_bl.c_str()) << dendl;
+                    << ", body=" << std::string_view{token_body_bl.c_str(), token_body_bl.length()}
+                    << dendl;
 
   TokenEngine::token_envelope_t token_body;
   ret = token_body.parse(dpp, token, token_body_bl);

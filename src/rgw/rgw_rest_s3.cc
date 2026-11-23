@@ -3624,12 +3624,10 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
       return -EINVAL;
     }
 
-    if('\0' != decoded_policy.c_str()[decoded_policy.length() - 1]) 
-     decoded_policy.append('\0'); // NULL terminate
- 
-    ldpp_dout(this, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
+    ldpp_dout(this, 20) << "POST policy: "
+                      << std::string_view{decoded_policy.c_str(), decoded_policy.length()} << dendl;
 
-    int r = post_policy.from_json(std::string_view { decoded_policy.c_str() }, err_msg);
+    int r = post_policy.from_json(decoded_policy, err_msg);
     if (r < 0) {
       if (err_msg.empty()) {
 	err_msg = "Failed to parse policy";
