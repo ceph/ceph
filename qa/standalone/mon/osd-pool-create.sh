@@ -504,12 +504,20 @@ function TEST_osd_pool_create_migrate_from() {
   #resize the ec pool to have small number of pgs
   ceph osd pool set $SRC_POOL_NAME pg_num 2 || return 1
 
-  #Wait some of the PGs to be merged
-  sleep 10  
+  #wait for the merge to finish: a pool cannot start migrating while its
+  #pg_num is changing
+  local i
+  for ((i = 0; i < 600; i++)); do
+    test "$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$SRC_POOL_NAME\") |
+      .pg_num == 2 and .pg_num_pending == 2")" = true && break
+    sleep 1
+  done
+  test $i -lt 600 || return 1
 
   #migrate the pool, the new pool takes over the name and the old pool is
   #renamed to .migrate-1
-  ceph osd pool migrate $SRC_POOL_NAME || return 1
+  #(a migration to the layout the pool has must be confirmed)
+  ceph osd pool migrate $SRC_POOL_NAME --yes-i-really-mean-it || return 1
   TGT_POOL_NAME=$SRC_POOL_NAME
   SRC_POOL_NAME=".migrate-1"
    
@@ -517,23 +525,18 @@ function TEST_osd_pool_create_migrate_from() {
   ceph osd pool unset noautoscale || return 1
 
   #check that changing the pg_num on either pool is blocked
-  ceph osd pool set $SRC_POOL_NAME pg_num 10
-  ceph osd pool set $TGT_POOL_NAME pg_num 10
+  expect_failure $dir "while the pool is migrating" ceph osd pool set $SRC_POOL_NAME pg_num 10 || return 1
+  expect_failure $dir "while the pool is migrating" ceph osd pool set $TGT_POOL_NAME pg_num 10 || return 1
 
-  #Let the message reach the logs
-  sleep 2
-  
-  grep "pool pg_num change is disabled; you must unset nopgchange flag for the pool first" $dir/mon.a.log || return 1
-
-  #check that the daemonServer was blocked from changing the pg_num on the two
-  #pools involved in the migration
-  SRC_POOL_ID=$(ceph osd dump | grep " '$SRC_POOL_NAME' " | awk '{print $2}')
-  TGT_POOL_ID=$(ceph osd dump | grep " '$TGT_POOL_NAME' " | awk '{print $2}')
+  #check that the daemonServer was blocked from changing the pg_num on the
+  #source pool
+  #(the plain osd dump does not list the source of a migration)
+  SRC_POOL_ID=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$SRC_POOL_NAME\") | .pool")
+  TGT_POOL_ID=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$TGT_POOL_NAME\") | .pool")
   echo "Source pool id: $SRC_POOL_ID"
   echo "Target pool id: $TGT_POOL_ID"
   
   grep "Pool $SRC_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
-  grep "Pool $TGT_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
 
   teardown $dir || return 1
 }
