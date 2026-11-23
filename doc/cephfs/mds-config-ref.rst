@@ -4,9 +4,31 @@
  MDS Config Reference
 ======================
 
-These options configure the Ceph Metadata Server (MDS). To set them, see
-:ref:`configuring-ceph`. The options under `Developer Options`_ are for testing
-and debugging. Some of them crash the MDS or delete metadata on purpose.
+These options configure the Ceph Metadata Server (MDS). The options under
+`Developer Options`_ are for testing and debugging. Some of them crash the MDS
+or delete metadata on purpose.
+
+To set an option for every MDS, or for one MDS, run a command of one of the
+following forms:
+
+.. prompt:: bash #
+
+   ceph config set mds <option> <value>
+   ceph config set mds.<name> <option> <value>
+
+To see the MDS options that are set in the Monitor configuration database, run
+``ceph config get mds``. To see the options that a running MDS uses with
+values other than their defaults, run either of the following commands:
+
+.. prompt:: bash #
+
+   ceph config show mds.<name>
+   ceph tell mds.<name> config diff
+
+Here ``<name>`` is the name of the MDS daemon, as shown by ``ceph fs status``
+or ``ceph orch ps --daemon-type mds``. For more on these commands, see
+:ref:`configuring-ceph-api` and :ref:`configuring_ceph_runtime_view`. For
+everything else about setting options, see :ref:`configuring-ceph`.
 
 .. confval:: mds_cache_mid
 .. confval:: mds_allow_batched_ops
