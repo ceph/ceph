@@ -1338,11 +1338,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   {
     std::scoped_lock il(in->lock);  // getattr reads these without client_lock
     in->rdev = st->rdev;
+    // the lookup fast path reads the charmap
+    in->optmetadata = st->optmetadata; // TODO maybe prune unknown_md_t
   }
   if (in->is_symlink())
     in->symlink = st->symlink;
-
-  in->optmetadata = st->optmetadata; // TODO maybe prune unknown_md_t
 
   // only update inode if mds info is strictly newer, or it is the same and projected (odd).
   bool new_version = false;
@@ -1740,7 +1740,11 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
       dn->lease_gen = session->cap_gen;
     }
   }
-  dn->cap_shared_gen = dn->dir->parent_inode->shared_gen;
+  {
+    Inode *diri = dn->dir->parent_inode;
+    std::scoped_lock il(diri->lock);  // the lookup fast path reads it
+    dn->cap_shared_gen = diri->shared_gen;
+  }
   if (dlease->mask & CEPH_LEASE_PRIMARY_LINK)
     dn->mark_primary();
   dn->alternate_name = std::move(dlease->alternate_name);
@@ -4144,8 +4148,11 @@ void Client::close_dir(Dir *dir)
     assert_lru_num_pinned_sane("close_dir after parent unpin");
   }
   
-  delete in->dir;
-  in->dir = 0;
+  {
+    std::scoped_lock il(in->lock);  // the lookup fast path reads in->dir
+    delete in->dir;
+    in->dir = 0;
+  }
   put_inode(in);               // unpin inode
 }
 
@@ -4157,8 +4164,11 @@ void Client::close_dir(Dir *dir)
 Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 {
   if (!dn) {
-    // create a new Dentry
-    dn = new Dentry(dir, name);
+    // create a new Dentry; the lookup fast path reads the dir's dentries
+    {
+      std::scoped_lock il(dir->parent_inode->lock);
+      dn = new Dentry(dir, name);
+    }
 
     lru.lru_insert_mid(dn);    // mid or top?
 
@@ -4187,7 +4197,10 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
       unlink(olddn, true, true);  // keep dir, dentry
     }
 
-    dn->link(in);
+    {
+      std::scoped_lock il(dir->parent_inode->lock);  // see above
+      dn->link(in);
+    }
     inc_dentry_nr();
     ldout(cct, 20) << "link  inode " << in << " parents now " << in->dentries << dendl;
   }
@@ -4219,7 +4232,11 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   // unlink from inode
   if (dn->inode) {
-    dn->unlink();
+    {
+      // the lookup fast path reads dn->inode
+      std::scoped_lock il(dn->dir->parent_inode->lock);
+      dn->unlink();
+    }
     dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
@@ -4232,7 +4249,10 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
     // unlink from dir
     Dir *dir = dn->dir;
-    dn->detach();
+    {
+      std::scoped_lock il(dir->parent_inode->lock);  // see above
+      dn->detach();
+    }
     ceph_assert(dn->dir == nullptr);   // detach() must clear it
 
     assert_lru_num_pinned_sane("unlink before lru_remove", dn);
@@ -5371,8 +5391,10 @@ void Client::check_cap_issue(Inode *in, unsigned issued)
 
   if ((issued & CEPH_CAP_FILE_SHARED) !=
       (had & CEPH_CAP_FILE_SHARED)) {
-    if (issued & CEPH_CAP_FILE_SHARED)
+    if (issued & CEPH_CAP_FILE_SHARED) {
+      std::scoped_lock il(in->lock);  // the lookup fast path reads it
       in->shared_gen++;
+    }
     if (in->is_dir())
       clear_dir_complete_and_ordered(in, true);
   }

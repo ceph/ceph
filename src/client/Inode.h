@@ -322,7 +322,11 @@ struct Inode : RefCountedObject {
   }
 
   // about the dir (if this is one!)
-  Dir       *dir = 0;     // if i'm a dir.
+  // if i'm a dir.  It, its dentries map, each of their inode and
+  // cap_shared_gen, and shared_gen and optmetadata below change under
+  // client_lock and lock: a lookup without client_lock reads them
+  // under lock alone
+  Dir       *dir = 0;
   fragtree_t dirfragtree;
   uint64_t dir_release_count = 1;
   uint64_t dir_ordered_count = 1;

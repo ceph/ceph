@@ -561,7 +561,10 @@ bool Inode::have_valid_size()
 Dir *Inode::open_dir()
 {
   if (!dir) {
-    dir = new Dir(this);
+    {
+      std::scoped_lock l(lock);  // the lookup fast path reads dir
+      dir = new Dir(this);
+    }
     lsubdout(client->cct, client, 15) << "open_dir " << dir << " on " << this << dendl;
     ceph_assert(dentries.size() < 2); // dirs can't be hard-linked
     if (!dentries.empty())
