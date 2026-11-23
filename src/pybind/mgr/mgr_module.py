@@ -317,6 +317,31 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
         uglymap = self._get_take_weight_osd_map(root)
         return {int(k): v for k, v in uglymap.get('weights', {}).items()}
 
+    def solve_flat_weights(self, weights: List[float],
+                           picks: int) -> Optional[List[float]]:
+        """
+        Weights to draw with, one per item, so that an item is among the
+        ``picks`` distinct items picked from a bucket with probability
+        ``picks * weight / sum(weights)``: a flat weight-set that corrects
+        the multi-pick anomaly. For any rule. ``None`` if there is no
+        solution, i.e. an item has more than ``1 / picks`` of the weight, or
+        it is too expensive to compute (thousands of items of different
+        weights).
+        """
+        return self._solve_flat_weights([float(w) for w in weights], picks)
+
+    def solve_positional_weights(self, weights: List[float],
+                                 picks: int) -> Optional[List[List[float]]]:
+        """
+        Weights to draw with at each position, so that an item is picked at
+        every position with probability ``weight / sum(weights)``: a
+        positional weight-set that corrects the multi-pick anomaly. For
+        firstn rules. ``None`` if there is no solution or it is too
+        expensive to compute (many items and more than three picks).
+        """
+        return self._solve_positional_weights([float(w) for w in weights],
+                                              picks)
+
     @staticmethod
     def have_default_choose_args(dump: Dict[str, Any]) -> bool:
         return CRUSHMap.DEFAULT_CHOOSE_ARGS in dump.get('choose_args', {})

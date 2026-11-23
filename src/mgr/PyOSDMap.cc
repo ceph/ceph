@@ -7,6 +7,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "crush/CrushWeightSolver.h"
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
@@ -698,6 +699,83 @@ static PyObject *crush_get_take_weight_osd_map(BasePyCRUSH *self, PyObject *args
   return f.get();
 }
 
+// (list of weights, picks) from the arguments; false with an error set
+static bool parse_weights_and_picks(PyObject *args, const char *format,
+				    std::vector<double> *weights,
+				    unsigned *picks)
+{
+  PyObject *list;
+  int r;
+  if (!PyArg_ParseTuple(args, format, &PyList_Type, &list, &r)) {
+    return false;
+  }
+  if (r < 0) {
+    PyErr_SetString(PyExc_ValueError, "negative number of picks");
+    return false;
+  }
+  *picks = r;
+  for (Py_ssize_t i = 0; i < PyList_Size(list); i++) {
+    double w = PyFloat_AsDouble(PyList_GET_ITEM(list, i));
+    if (PyErr_Occurred()) {
+      return false;
+    }
+    weights->push_back(w);
+  }
+  return true;
+}
+
+static PyObject *weights_to_list(const std::vector<double>& weights)
+{
+  PyObject *list = PyList_New(weights.size());
+  for (unsigned i = 0; i < weights.size(); i++) {
+    PyList_SET_ITEM(list, i, PyFloat_FromDouble(weights[i]));
+  }
+  return list;
+}
+
+static PyObject *crush_solve_flat_weights(BasePyCRUSH *self, PyObject *args)
+{
+  std::vector<double> weights;
+  unsigned picks;
+  if (!parse_weights_and_picks(args, "O!i:solve_flat_weights",
+			       &weights, &picks)) {
+    return nullptr;
+  }
+  std::vector<double> solved;
+  {
+    without_gil_t no_gil;
+    solved = ceph::crush::solve_flat_weights(weights, picks);
+  }
+  if (solved.empty()) {
+    Py_RETURN_NONE;
+  }
+  return weights_to_list(solved);
+}
+
+static PyObject *crush_solve_positional_weights(BasePyCRUSH *self,
+						PyObject *args)
+{
+  std::vector<double> weights;
+  unsigned picks;
+  if (!parse_weights_and_picks(args, "O!i:solve_positional_weights",
+			       &weights, &picks)) {
+    return nullptr;
+  }
+  std::vector<std::vector<double>> solved;
+  {
+    without_gil_t no_gil;
+    solved = ceph::crush::solve_positional_weights(weights, picks);
+  }
+  if (solved.empty()) {
+    Py_RETURN_NONE;
+  }
+  PyObject *list = PyList_New(solved.size());
+  for (unsigned i = 0; i < solved.size(); i++) {
+    PyList_SET_ITEM(list, i, weights_to_list(solved[i]));
+  }
+  return list;
+}
+
 PyMethodDef BasePyCRUSH_methods[] = {
   {"_dump", (PyCFunction)crush_dump, METH_NOARGS, "Dump map"},
   {"_get_item_name", (PyCFunction)crush_get_item_name, METH_VARARGS,
@@ -710,6 +788,11 @@ PyMethodDef BasePyCRUSH_methods[] = {
     "Find distinct TAKE roots"},
   {"_get_take_weight_osd_map", (PyCFunction)crush_get_take_weight_osd_map,
     METH_VARARGS, "Get OSD weight map for a given TAKE root node"},
+  {"_solve_flat_weights", (PyCFunction)crush_solve_flat_weights,
+    METH_VARARGS, "Weights that correct the multi-pick anomaly, one per item"},
+  {"_solve_positional_weights", (PyCFunction)crush_solve_positional_weights,
+    METH_VARARGS,
+    "Weights that correct the multi-pick anomaly, per position and item"},
   {NULL, NULL, 0, NULL}
 };
 
