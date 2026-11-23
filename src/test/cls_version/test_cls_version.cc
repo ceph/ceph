@@ -124,6 +124,54 @@ TEST_P(TestClsVersion, test_version_set)
   delete op;
 }
 
+// RGW writes metadata objects with [delete, create, version.check_conds,
+// version.set, writefull] in one request. The check must see the version
+// of the object as it was before the delete.
+TEST_P(TestClsVersion, test_version_check_after_recreate)
+{
+  string oid = "obj";
+  bufferlist data;
+  data.append("ceph");
+
+  obj_version ver;
+  ver.ver = 123;
+  ver.tag = "foo";
+  {
+    librados::ObjectWriteOperation op;
+    op.write_full(data);
+    cls_version_set(op, ver);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  obj_version new_ver;
+  new_ver.ver = 124;
+  new_ver.tag = "foo";
+  {
+    librados::ObjectWriteOperation op;
+    op.remove();
+    op.create(false);
+    cls_version_check(op, ver, VER_COND_EQ);
+    cls_version_set(op, new_ver);
+    op.write_full(data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  obj_version got;
+  ASSERT_EQ(0, cls_version_read(ioctx, oid, &got));
+  ASSERT_EQ((long long)new_ver.ver, (long long)got.ver);
+  ASSERT_EQ(new_ver.tag, got.tag);
+
+  // a stale version is still rejected
+  {
+    librados::ObjectWriteOperation op;
+    op.remove();
+    op.create(false);
+    cls_version_check(op, ver, VER_COND_EQ);
+    op.write_full(data);
+    ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
+  }
+}
+
 TEST_P(TestClsVersion, test_version_inc_cond)
 {
 

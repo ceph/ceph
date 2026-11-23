@@ -471,11 +471,18 @@ auto OpsExecuter::do_const_op(Func&& f) {
 template <class Func>
 auto OpsExecuter::do_read_attr_cache(Func&& f) {
   ++num_read;
+  // As on the classic OSD, xattr reads see the object's xattrs as they were
+  // before this request: a replicated pool reads the store, and on an EC pool
+  // ECTransaction updates attr_cache only after all ops have run. RGW
+  // depends on this: [delete, create, version.check_conds, ...] must check
+  // the version the object had before the delete.
+  // If no op has modified the cache yet, obc->attr_cache is that view.
+  const auto& attrs = attr_cache_backup ? *attr_cache_backup : obc->attr_cache;
   // TODO: pass backend as read-only
   return std::invoke(
     std::forward<Func>(f),
     pg->get_backend(),
-    std::as_const(obc->attr_cache),
+    std::as_const(attrs),
     std::as_const(obc->obs));
 }
 

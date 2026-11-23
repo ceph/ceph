@@ -923,6 +923,57 @@ TEST_P(LibRadosMiscECPP, XattrsAfterRecreate) {
   check_xattrs_after_recreate(ioctx);
 }
 
+// xattr reads in a request see the xattrs as they were before the
+// request, not as changed by its earlier ops. RGW relies on this: it
+// writes metadata objects with [delete, create, version.check_conds, ...].
+static void check_xattr_reads_in_request(IoCtx& ioctx)
+{
+  const std::string oid = "xattr_reads_in_request";
+  bufferlist data, v1, v2, got;
+  data.append("ceph");
+  v1.append("value1");
+  v2.append("value2");
+
+  ObjectWriteOperation create;
+  create.write_full(data);
+  create.setxattr("key", v1);
+  ASSERT_EQ(0, ioctx.operate(oid, &create));
+
+  // the comparison after delete+create sees the xattr of the removed object
+  {
+    ObjectWriteOperation op;
+    op.remove();
+    op.create(false);
+    op.cmpxattr("key", CEPH_OSD_CMPXATTR_OP_EQ, v1);
+    op.write_full(data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  // the recreated object has no xattrs
+  got.clear();
+  ASSERT_EQ(-ENODATA, ioctx.getxattr(oid, "key", got));
+
+  ASSERT_EQ(0, ioctx.setxattr(oid, "key", v1));
+  // the comparison does not see the value set earlier in the request
+  {
+    ObjectWriteOperation op;
+    op.setxattr("key", v2);
+    op.cmpxattr("key", CEPH_OSD_CMPXATTR_OP_EQ, v2);
+    ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
+  }
+  // and the failed request did not change the xattr
+  got.clear();
+  ASSERT_EQ((int)v1.length(), ioctx.getxattr(oid, "key", got));
+  ASSERT_TRUE(got.contents_equal(v1));
+}
+
+TEST_P(LibRadosMiscPP, XattrReadsInRequest) {
+  check_xattr_reads_in_request(ioctx);
+}
+
+TEST_P(LibRadosMiscECPP, XattrReadsInRequest) {
+  check_xattr_reads_in_request(ioctx);
+}
+
 TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   SKIP_IF_CRIMSON();
   bufferlist bl1;

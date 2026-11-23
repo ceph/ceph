@@ -199,7 +199,9 @@ private:
   bool initial_obs_dirty = false; ///< FLAG_DIRTY on the object before this op
 
   /// obc->attr_cache as it was before the first op of this request
-  /// modified it. Used to revert the cache if a later op fails.
+  /// modified it. xattr reads of this request use it (see
+  /// do_read_attr_cache()), and it is used to revert the cache if a
+  /// later op fails.
   std::optional<ObjectContext::attr_cache_t> attr_cache_backup;
 
   SnapContext snapc; // writer snap context
