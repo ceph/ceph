@@ -245,6 +245,25 @@ options:
   - mds_client
   flags:
   - startup
+- name: client_oc_max_writeback
+  type: size
+  level: dev
+  desc: Limit in bytes for writeback in flight to the OSDs (0 =
+    client_oc_max_dirty)
+  long_desc: The object cache's flusher sends no more writeback while this
+    many bytes it sent are not committed.  Data rewritten while its
+    writeback is in flight is then written back once the OSDs catch up,
+    not every time it is rewritten; without a limit the OSDs can fall
+    minutes behind under a rewrite load, and every read and write that
+    reaches them waits that long.  0 uses client_oc_max_dirty.  fsync and
+    the flushes asked for by the client are not held back.
+  default: 0
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_max_dirty
 - name: client_oc_max_woken_writers
   type: uint
   level: dev

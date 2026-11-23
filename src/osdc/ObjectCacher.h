@@ -439,6 +439,7 @@ class ObjectCacher {
   struct alignas(64) Published {
     std::atomic<uint64_t> clean{0}, clean_bh{0}, dirty{0}, dirty_tx{0},
                           dirty_tx_bh{0}, waiting{0}, waiters{0};
+    std::atomic<uint64_t> wb_inflight{0};   // stat_wb_inflight
   };
   Published pub;
   struct Totals {
@@ -495,6 +496,11 @@ class ObjectCacher {
   LRU   ob_lru;
 
   ceph::condition_variable flusher_cond;
+  // set by another member of the group whose writeback ended, so this
+  // flusher looks again before it sleeps: that member holds its own lock
+  // and may not wait for ours (see kick_flusher())
+  std::atomic<bool> flusher_kicked{false};
+  void kick_flusher();
   bool flusher_stop;
   void flusher_entry();
   class FlusherThread : public Thread {
@@ -534,6 +540,32 @@ class ObjectCacher {
   loff_t stat_missing;
   loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
+  // bytes of the writes sent to the OSDs and not committed yet: unlike
+  // stat_tx, which counts BufferHeads in tx, it keeps counting a write
+  // whose BufferHeads a later write made dirty again (see writeback_full())
+  uint64_t stat_wb_inflight = 0;
+  // the most of those the flusher keeps (its share of it), 0 for no limit
+  std::atomic<uint64_t> max_writeback{0};
+  // Over its share of the limit, a member of a group may still send what
+  // the others leave unused, as the dirty limits let it: one busy file
+  // lives in one member, and its writeback would otherwise get only that
+  // share of the in-flight budget however idle the rest is.
+  bool writeback_full() const {
+    uint64_t m = max_writeback.load(std::memory_order_relaxed);
+    if (!m || stat_wb_inflight < share(m))
+      return false;
+    if (!group)
+      return true;
+    uint64_t t = stat_wb_inflight;
+    for (auto o : *group)
+      if (o != this)
+        t += o->pub.wb_inflight.load(std::memory_order_relaxed);
+    return t >= m;
+  }
+  void publish_wb_inflight() {
+    if (group)
+      pub.wb_inflight.store(stat_wb_inflight, std::memory_order_relaxed);
+  }
 
   size_t stat_nr_dirty_waiters;
   // the waiters asleep: those not asleep were woken for room and have not
@@ -739,6 +771,21 @@ class ObjectCacher {
     hit_slots.resize(want);
   }
   // tuning, may be changed at any time
+  /**
+   * Have the flusher send no more writeback while @bytes (this member's
+   * share of them, for a budget group) of the writes it sent are not
+   * committed; 0 for no limit, the default.  Without it, data rewritten
+   * while its writeback is in flight is sent again and again, as fast as
+   * the writers dirty it: a write that makes a BufferHead in tx dirty
+   * again takes it out of stat_tx, so the dirty limits no longer see the
+   * write in flight, and the OSDs fall behind by as many writes as the
+   * flusher can send.  With it, rewrites while the OSDs catch up land in
+   * the cache.  fsync() and the other flushes the cache's users ask for
+   * are not held back.
+   */
+  void set_max_writeback(uint64_t bytes) {
+    max_writeback.store(bytes, std::memory_order_relaxed);
+  }
   void set_max_woken_writers(uint64_t n) {
     max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);
   }

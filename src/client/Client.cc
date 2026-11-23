@@ -535,6 +535,10 @@ void Client::_apply_tuning()
   read_gate_retries.store(conf.get_val<uint64_t>("client_oc_read_gate_retries"), r);
   for (auto& sh : oc_shards) {
     sh->oc->set_max_woken_writers(conf.get_val<uint64_t>("client_oc_max_woken_writers"));
+    // 0: as much as may be dirty
+    uint64_t wb = conf.get_val<Option::size_t>("client_oc_max_writeback");
+    sh->oc->set_max_writeback(
+      wb ? wb : uint64_t(conf.get_val<Option::size_t>("client_oc_max_dirty")));
     sh->oc->set_gate_spin_tries(conf.get_val<int64_t>("client_lock_spin_tries"));
   }
 }
@@ -21099,6 +21103,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_oc_max_dirty_age",
     "client_oc_max_objects",
     "client_oc_max_woken_writers",
+    "client_oc_max_writeback",
     "client_oc_read_gate_retries",
     "client_oc_size",
     "client_oc_target_dirty",
@@ -21178,7 +21183,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
       changed.count("client_inode_lock_spread_after") ||
       changed.count("client_lock_max_spinners") ||
       changed.count("client_lock_spin_tries") ||
+      changed.count("client_oc_max_dirty") ||
       changed.count("client_oc_max_woken_writers") ||
+      changed.count("client_oc_max_writeback") ||
       changed.count("client_oc_read_gate_retries")) {
     _apply_tuning();
   }
