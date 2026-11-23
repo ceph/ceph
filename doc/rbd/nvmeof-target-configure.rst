@@ -114,6 +114,11 @@ Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
 
    To allow any host to connect, use ``*`` as the host NQN:
 
+   .. warning:: With ``*``, any host that can reach a listener of the
+      subsystem can connect to it and read and write its namespaces.
+      The monitoring stack raises the ``NVMeoFGatewayOpenSecurity`` alert
+      for such a subsystem. Use ``*`` only on an isolated test network.
+
    .. prompt:: bash #
 
       ceph nvmeof host add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --host-nqn "*"
@@ -214,17 +219,19 @@ Locations and disaster recovery
 Gateways can be assigned a *location*, an availability domain label
 such as a site or rack, which the Monitors use for disaster-recovery
 handling. These commands were added in Tentacle 20.2.2. They require
-the ``beacon-diff`` Monitor feature and fail cleanly when it is not
-available:
+the ``nvmeof_beacon_diff`` Monitor feature and fail cleanly when it is
+not available:
 
 .. prompt:: bash #
 
    ceph nvme-gw set-location GATEWAY_ID NVME-OF_POOL_NAME NVME_OF_GROUP_NAME LOCATION
 
 When all the gateways in a location have become unavailable, for
-example after the loss of a site, the location can be declared to be
-in a disaster state so that the surviving locations take over its ANA
-groups without waiting for a failback:
+example after the loss of a site, their ANA groups fail over to
+gateways in the other locations. To keep the ANA groups there while
+the location is repaired, declare the location to be in a disaster
+state. Its gateways then take no ANA group back, and no ANA group over
+from another location, even when some of them return:
 
 .. prompt:: bash #
 
@@ -239,15 +246,22 @@ permit failback:
 
    ceph nvme-gw disaster-clear NVME-OF_POOL_NAME NVME_OF_GROUP_NAME LOCATION
 
-.. warning:: ``disaster-set`` and ``disaster-clear`` move live I/O
-   paths between locations. Use them only as part of a planned
-   disaster-recovery procedure.
+.. warning:: ``disaster-clear`` moves live I/O paths back into the
+   location. Use ``disaster-set`` and ``disaster-clear`` only as part
+   of a planned disaster-recovery procedure.
 
-The ``beacon-diff`` feature itself can be toggled cluster-wide:
+Once all the Monitors run Tentacle 20.2.2 or later, they switch every
+gateway group to differential beacons, in which gateways send only the
+subsystems that changed since their previous beacon. To turn
+differential beacons off, or on again with ``enable``, run:
 
 .. prompt:: bash #
 
-   ceph nvme-gw set beacon-diff enable
+   ceph nvme-gw set beacon-diff disable
 
-This affects gateway beacon reporting and failover timing for all
-gateway groups; leave it at the default unless directed otherwise.
+With differential beacons, the Monitors also check the order of the
+beacons. A beacon out of order from an available gateway sets the
+gateway to ``CREATED``, which takes its ANA groups off it, and holds
+back failovers in its gateway group for 7 seconds. The setting does
+not affect the location commands. Leave it at the default unless
+directed otherwise.
