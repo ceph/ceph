@@ -108,6 +108,9 @@ void Inode::Lock::lock()
   }
   owner.store(self, std::memory_order_relaxed);
   depth = 1;
+  // odd: readers without the lock retry (see read_begin())
+  seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+  std::atomic_thread_fence(std::memory_order_release);
 #ifdef CEPH_DEBUG_MUTEX
   held = this;
 #endif
@@ -125,6 +128,8 @@ void Inode::Lock::unlock()
   held = nullptr;
 #endif
   owner.store(nullptr, std::memory_order_relaxed);
+  // even again, after all this hold changed
+  seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_release);
   writer.store(false, std::memory_order_release);
   m.unlock();
 }

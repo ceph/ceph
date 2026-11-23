@@ -2913,6 +2913,14 @@ void Client::update_metadata(std::string const &k, std::string const &v)
   metadata[k] = v;
 }
 
+void Client::publish_session(const MetaSession *s, bool closed)
+{
+  auto& live = session_live[unsigned(s->mds_num) % SESSION_LIVE_SLOTS];
+  live.gen.store(s->cap_gen.load(), std::memory_order_relaxed);
+  live.ttl_ns.store(closed ? 0 : utime_t(s->cap_ttl.load()).to_nsec(),
+                    std::memory_order_release);
+}
+
 MetaSessionRef Client::_open_mds_session(mds_rank_t mds)
 {
   ldout(cct, 10) << __func__ << " mds." << mds << dendl;
@@ -2922,6 +2930,7 @@ MetaSessionRef Client::_open_mds_session(mds_rank_t mds)
       std::forward_as_tuple(new MetaSession(mds, messenger->connect_to_mds(addrs), addrs)));
   ceph_assert(em.second); /* not already present */
   auto session = em.first->second;
+  publish_session(session.get());   // gen 0, ttl 0: no cap valid yet
 
   auto m = make_message<MClientSession>(CEPH_SESSION_REQUEST_OPEN);
   m->metadata = metadata;
@@ -2945,6 +2954,7 @@ void Client::_closed_mds_session(MetaSession *s, int err, bool rejected)
     s->state = MetaSession::STATE_REJECTED;
   else
     s->state = MetaSession::STATE_CLOSED;
+  publish_session(s, true);
   s->con->mark_down();
   s->deferred_msgs.clear();
   signal_context_list(s->waiting_for_open);
@@ -3073,6 +3083,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       bool was_stale = ceph_clock_now() >= session->cap_ttl;
       session->cap_ttl =
 	session->last_cap_renew_request + mdsmap->get_session_timeout();
+      publish_session(session.get());
       if (was_stale)
 	wake_up_session_caps(session.get(), false);
     }
@@ -3086,6 +3097,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       ttl -= 1;
       session->cap_ttl = ttl;
     }
+    publish_session(session.get());
     renew_caps(session.get());
     break;
 
@@ -5815,11 +5827,15 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
     ++p;
 
     // used by the data path since its last trim: give it a second chance
-    if (second_chances > 0 &&
-        cap->referenced.exchange(false, std::memory_order_relaxed)) {
-      --second_chances;
-      cap->touch();
-      continue;
+    if (second_chances > 0) {
+      // clear both flags, no short-circuit
+      bool referenced = cap->referenced.exchange(false, std::memory_order_relaxed);
+      bool used = cap->inode.fast_caps.used.exchange(false, std::memory_order_relaxed);
+      if (referenced || used) {
+        --second_chances;
+        cap->touch();
+        continue;
+      }
     }
     InodeRef in(&cap->inode);
 
@@ -16218,11 +16234,75 @@ bool Client::_getattr_fast(Inode *in, unsigned mask, F&& fill)
 {
   if (in->snapid != CEPH_NOSNAP)
     return false;
+  if (_getattr_seq(in, mask, fill))
+    return true;
   std::shared_lock il(in->lock);
   if (mask && !in->caps_issued_mask(mask, true, false))
     return false;
+  _keep_fast_caps(in);
   fill();
   return true;
+}
+
+/*
+ * Keep what _getattr_seq() needs of in's caps, under in->lock (shared or
+ * not): only for one cap and no snap caps, which is the usual case.
+ */
+void Client::_keep_fast_caps(Inode *in)
+{
+  auto r = std::memory_order_relaxed;
+  uint32_t s = in->lock.held_seq();
+  auto& fc = in->fast_caps;
+  if (fc.seq.load(r) == s)
+    return;   // kept for this state already
+  if (in->caps.size() != 1 || in->snap_caps)
+    return;
+  const auto& [mds, cap] = *in->caps.begin();
+  fc.mds.store(mds, r);
+  fc.bits.store(cap.issued | cap.implemented, r);
+  fc.gen.store(cap.gen, r);
+  fc.seq.store(s, std::memory_order_release);
+}
+
+/*
+ * getattr without any lock: from the caps _keep_fast_caps() kept, while
+ * Inode::lock's sequence count says nothing changed since, and the
+ * attributes copied under that count (see Inode::Lock::read_begin()).
+ * Not for an encrypted inode, whose size the copy would follow a pointer
+ * for.  Returns false when it cannot tell: the caller locks.
+ */
+template <typename F>
+bool Client::_getattr_seq(Inode *in, unsigned mask, F&& fill)
+{
+  auto r = std::memory_order_relaxed;
+  for (int tries = 0; tries < 2; tries++) {
+    uint32_t s = in->lock.read_begin();
+    if (s & 1)
+      return false;   // a writer is in: wait for it on the lock
+    auto& fc = in->fast_caps;
+    if (fc.seq.load(std::memory_order_acquire) != s)
+      return false;   // caps not kept for this state
+    uint32_t bits = fc.bits.load(r);
+    int32_t mds = fc.mds.load(r);
+    uint64_t gen = fc.gen.load(r);
+    if (mask && (bits & mask) != mask)
+      return false;
+    auto& live = session_live[unsigned(mds) % SESSION_LIVE_SLOTS];
+    int64_t ttl = live.ttl_ns.load(std::memory_order_acquire);
+    if (live.gen.load(r) > gen ||
+        int64_t(ceph_clock_now().to_nsec()) >= ttl)
+      return false;   // as Inode::cap_is_valid()
+    if (!in->fscrypt_auth.empty() || !in->fscrypt_file.empty())
+      return false;
+    fill();
+    if (in->lock.read_retry(s))
+      continue;
+    if (!fc.used.load(r))
+      fc.used.store(true, r);   // as Cap::mark_referenced()
+    cap_hit();
+    return true;
+  }
+  return false;
 }
 
 int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)

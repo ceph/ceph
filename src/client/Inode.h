@@ -182,6 +182,26 @@ struct Inode : RefCountedObject {
     void unlock();
     void lock_shared();
     void unlock_shared();
+    /*
+     * A sequence count over the exclusive holds: odd while a writer holds
+     * the lock, bumped when it leaves.  A reader that only copies a few
+     * fields (getattr, Client::_getattr_seq()) reads it, copies, and reads
+     * it again: the copy is good if neither was odd and both are the same.
+     * Such a reader writes nothing, so many of them on one inode do not
+     * take a cache line from each other.  It must not follow pointers into
+     * what writers change (maps, vectors): a writer may free them under it.
+     */
+    uint32_t read_begin() const {
+      return seq.load(std::memory_order_acquire);
+    }
+    bool read_retry(uint32_t s) const {
+      std::atomic_thread_fence(std::memory_order_acquire);
+      return seq.load(std::memory_order_relaxed) != s;
+    }
+    // the count while the lock is held, shared or not: even, and stable
+    uint32_t held_seq() const {
+      return seq.load(std::memory_order_relaxed);
+    }
     // whether this thread holds any Inode::lock (debug builds; release
     // builds do not know, and say no)
     static bool held_by_me() {
@@ -210,6 +230,7 @@ struct Inode : RefCountedObject {
     // shared holders, and whether a writer is in or about to be
     std::atomic<uint32_t> readers{0};
     std::atomic<bool> writer{false};
+    std::atomic<uint32_t> seq{0};  // see read_begin()
     std::atomic<int> spinners{0};
     // the spread counts (see above), once readers met often enough
     struct alignas(64) Slot {
@@ -402,6 +423,22 @@ struct Inode : RefCountedObject {
   // reader's Fh keeps the inode.
   // Its own cache line too, as the lock (each reader changes it twice)
   alignas(64) std::atomic<uint32_t> fast_rd_refs{0};
+
+  /*
+   * The caps as a getattr under Inode::lock last found them, for a getattr
+   * without any lock (Client::_getattr_seq()), which may not walk caps:
+   * the one cap's mds, gen and issued|implemented bits, good while the
+   * lock's sequence count is still `seq` (odd: none).  Written by readers
+   * that hold the lock shared, all with the same values for one count.
+   * `used`: such a getattr used the cap since trim_caps() last looked.
+   */
+  struct alignas(64) FastCaps {
+    std::atomic<uint32_t> seq{1};
+    std::atomic<int32_t> mds{-1};
+    std::atomic<uint32_t> bits{0};
+    std::atomic<uint64_t> gen{0};
+    std::atomic<bool> used{false};
+  } fast_caps;
 
   alignas(64) ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 

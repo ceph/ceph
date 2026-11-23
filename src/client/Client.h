@@ -1346,6 +1346,21 @@ protected:
   template <typename F>
   bool _getattr_fast(Inode *in, unsigned mask, F&& fill);
   template <typename F>
+  bool _getattr_seq(Inode *in, unsigned mask, F&& fill);
+  void _keep_fast_caps(Inode *in);
+  /*
+   * Each mds rank's session's cap_gen and cap_ttl, for a getattr without
+   * any lock (_getattr_seq()) to check a cap's validity by: never freed,
+   * unlike a session, and changed with the session's (publish_session()).
+   */
+  struct alignas(64) SessionLive {
+    std::atomic<uint64_t> gen{0};
+    std::atomic<int64_t> ttl_ns{0};
+  };
+  static constexpr unsigned SESSION_LIVE_SLOTS = 256;
+  std::array<SessionLive, SESSION_LIVE_SLOTS> session_live;
+  void publish_session(const MetaSession *s, bool closed = false);
+  template <typename F>
   bool _ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
 		       const UserPerm& perms, Inode **out, F&& fill);
   bool _ll_put_fast(Inode *in, bool *last);
