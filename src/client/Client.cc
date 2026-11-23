@@ -1666,8 +1666,13 @@ void Client::update_dir_dist(Inode *in, DirStat *dst, mds_rank_t from)
 {
   // auth
   ldout(cct, 20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
-  if (dst->auth >= 0) {
-    in->fragmap[dst->frag] = dst->auth;
+  // CDIR_AUTH_PARENT: the dirfrag is not a subtree root, so its auth is
+  // the auth of the inode
+  mds_rank_t auth = dst->auth;
+  if (auth < 0 && in->auth_cap)
+    auth = in->auth_cap->session->mds_num;
+  if (auth >= 0) {
+    in->fragmap[dst->frag] = auth;
   } else {
     in->fragmap.erase(dst->frag);
   }
