@@ -488,6 +488,36 @@ try:
     qos.get('limiting_queue_bytes_storage_server',0),
     qos.get('limiting_durability_lag_storage_server',{}).get('seconds',0)))
 
+  # FDB-side latency: client-visible probe latencies (seconds) and Ratekeeper state
+  lp = c.get('latency_probe',{})
+  print('probe commit_s={:.6f} read_s={:.6f} grv_s={:.6f} grv_batch_s={:.6f} grv_immediate_s={:.6f}'.format(
+    lp.get('commit_seconds',0), lp.get('read_seconds',0), lp.get('transaction_start_seconds',0),
+    lp.get('batch_priority_transaction_start_seconds',0), lp.get('immediate_priority_transaction_start_seconds',0)))
+  plb = qos.get('performance_limited_by',{})
+  bplb = qos.get('batch_performance_limited_by',{})
+  print('rk limited_by={} reason_id={} batch_limited_by={} batch_reason_id={} tps_limit={:.0f} released_tps={:.0f} batch_tps_limit={:.0f} batch_released_tps={:.0f}'.format(
+    str(plb.get('name','?')).replace(' ','_'), plb.get('reason_id',-1),
+    str(bplb.get('name','?')).replace(' ','_'), bplb.get('reason_id',-1),
+    qos.get('transactions_per_second_limit',0), qos.get('released_transactions_per_second',0),
+    qos.get('batch_transactions_per_second_limit',0), qos.get('batch_released_transactions_per_second',0)))
+
+  def _lat(s):
+    return 'n={} mean_s={:.6f} p50_s={:.6f} p90_s={:.6f} p99_s={:.6f} max_s={:.6f}'.format(
+      s.get('count',0), s.get('mean',0), s.get('median',0), s.get('p90',0), s.get('p99',0),
+      s.get('max',0) if s.get('count',0) else 0)
+
+  for pid,p in sorted(procs.items()):
+    addr = p.get('address','?')
+    for r in p.get('roles',[]):
+      role = r.get('role')
+      if role == 'commit_proxy':
+        print(f'cp addr={addr} {_lat(r.get(\"commit_latency_statistics\",{}))} batch_window_mean_s={r.get(\"commit_batching_window_size\",{}).get(\"mean\",0):.6f}')
+      elif role == 'grv_proxy':
+        g = r.get('grv_latency_statistics',{})
+        print(f'grv addr={addr} {_lat(g.get(\"default\",{}))}')
+      elif role == 'storage':
+        print(f'ssread addr={addr} {_lat(r.get(\"read_latency_statistics\",{}))}')
+
   for pid,p in sorted(procs.items()):
     for r in p.get('roles',[]):
       if r.get('role') != 'storage': continue
@@ -505,7 +535,7 @@ try:
       disk_busy = p.get('disk',{}).get('busy',0)
       disk_reads = p.get('disk',{}).get('reads',{}).get('hz',0)
       disk_writes = p.get('disk',{}).get('writes',{}).get('hz',0)
-      print(f'ss addr={addr} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss} input_hz={inp:.0f} durable_hz={dur:.0f} stored_bytes={stored} kvstore_bytes={kvstore} data_lag_s={data_lag:.3f} durability_lag_s={dur_lag:.3f} queue_disk_bytes={queue_disk} disk_busy={disk_busy:.3f} disk_reads_hz={disk_reads:.0f} disk_writes_hz={disk_writes:.0f}')
+      print(f'ss addr={addr} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss} input_hz={inp:.0f} durable_hz={dur:.0f} stored_bytes={stored} kvstore_bytes={kvstore} data_lag_s={data_lag:.3f} durability_lag_s={dur_lag:.3f} queue_disk_bytes={queue_disk} disk_busy={disk_busy:.3f} disk_reads_hz={disk_reads:.0f} disk_writes_hz={disk_writes:.0f} run_loop_busy={p.get(\"run_loop_busy\",0):.3f}')
 
   for pid,p in sorted(procs.items()):
     for r in p.get('roles',[]):
@@ -521,7 +551,7 @@ try:
       disk_busy = p.get('disk',{}).get('busy',0)
       disk_reads = p.get('disk',{}).get('reads',{}).get('hz',0)
       disk_writes = p.get('disk',{}).get('writes',{}).get('hz',0)
-      print(f'log addr={addr} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss} input_hz={inp:.0f} durable_hz={dur:.0f} queue_disk_bytes={queue_disk} queue_mem_bytes={queue_mem} disk_busy={disk_busy:.3f} disk_reads_hz={disk_reads:.0f} disk_writes_hz={disk_writes:.0f}')
+      print(f'log addr={addr} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss} input_hz={inp:.0f} durable_hz={dur:.0f} queue_disk_bytes={queue_disk} queue_mem_bytes={queue_mem} disk_busy={disk_busy:.3f} disk_reads_hz={disk_reads:.0f} disk_writes_hz={disk_writes:.0f} run_loop_busy={p.get(\"run_loop_busy\",0):.3f}')
 
   # One line per stateless-class process (idle ones included), plus any other
   # process hosting a proxy/resolver role. Roles are comma-joined.
@@ -533,7 +563,7 @@ try:
     cpu = p.get('cpu',{}).get('usage_cores',0)
     mem = p.get('memory',{}).get('used_bytes',0)
     rss = p.get('memory',{}).get('rss_bytes', mem)
-    print(f'sl addr={addr} role={role} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss}')
+    print(f'sl addr={addr} role={role} cpu={cpu:.3f} mem_bytes={mem} rss_bytes={rss} run_loop_busy={p.get(\"run_loop_busy\",0):.3f}')
 
   if disk_free:
     print(f'disk_free {disk_free}')

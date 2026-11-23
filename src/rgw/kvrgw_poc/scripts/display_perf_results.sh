@@ -18,6 +18,7 @@ Usage: $(basename "$0") <results-dir> <selector>... [--deviation N]
 
 Selectors:
   KVRGW   - KVRGW latency, batch stats, error stats
+  LAT     - FDB commit/GRV/read latency, run-loop busy, Ratekeeper limit reason
   SS      - FDB storage server stats
   LOG     - FDB log server stats
   SL      - FDB stateless server stats
@@ -61,7 +62,7 @@ while [[ $# -gt 0 ]]; do
     --linear) LINEAR=1; shift ;;
     --interval) INTERVAL="$2"; shift 2 ;;
     --warmup) WARMUP="$2"; shift 2 ;;
-    KVRGW|SS|LOG|SL|FDB|HEALTH) SELECTORS+=("$1"); shift ;;
+    KVRGW|SS|LOG|SL|FDB|HEALTH|LAT) SELECTORS+=("$1"); shift ;;
     *) echo "Unknown: $1" >&2; usage ;;
   esac
 done
@@ -75,6 +76,7 @@ show_log=0
 show_sl=0
 show_kvrgw=0
 show_health=0
+show_lat=0
 
 for sel in "${SELECTORS[@]}"; do
   case "$sel" in
@@ -84,6 +86,7 @@ for sel in "${SELECTORS[@]}"; do
     SL) show_sl=1 ;;
     KVRGW) show_kvrgw=1 ;;
     HEALTH) show_health=1 ;;
+    LAT) show_lat=1 ;;
   esac
 done
 
@@ -146,6 +149,21 @@ with open(fdb_log) as f:
                 if m.group(1) not in ('addr','role'):
                     entry[m.group(1)] = float(m.group(2))
             current.setdefault('sl_list', []).append(entry)
+        elif line.startswith('probe '):
+            for m in re.finditer(r'(\w+)=([\d.]+)', line):
+                current['probe_' + m.group(1)] = float(m.group(2))
+        elif line.startswith('rk '):
+            current['rk_limited_by'] = re.search(r'\blimited_by=(\S+)', line).group(1)
+            for m in re.finditer(r'(\w+)=([\d.]+)', line):
+                if m.group(1) in ('tps_limit', 'released_tps', 'batch_tps_limit', 'batch_released_tps'):
+                    current['rk_' + m.group(1)] = float(m.group(2))
+        elif line.startswith(('cp ', 'grv ', 'ssread ')):
+            kind = line.split(' ', 1)[0]
+            entry = {'addr': re.search(r'addr=(\S+)', line).group(1)}
+            for m in re.finditer(r'(\w+)=([\d.]+)', line):
+                if m.group(1) != 'addr':
+                    entry[m.group(1)] = float(m.group(2))
+            current.setdefault(kind + '_list', []).append(entry)
         elif line.startswith('disk_free'):
             parts = line.split()[1:]
             for p in parts:
@@ -323,6 +341,73 @@ def log_accum_line(entries, field, label):
     drain_start = drain_vals[0] if drain_vals else total
     drained = "YES" if drain_end < drain_start * 0.5 else "NO"
     print(f'  {label}: {fmt_bytes(rate)}/s  total={fmt_bytes(total)}  drain={drained} ({fmt_bytes(drain_start)}→{fmt_bytes(drain_end)})')
+
+if mode == 'lat':
+    print('\n  ==========================================')
+    print('  FDB Latency / Ratekeeper / Run-loop (LOAD phase)')
+    print('  ==========================================')
+
+    def lat_table(rows):
+        print(f'  {"Metric":<28s} {"min":>10s} {"max":>10s} {"avg":>10s} {"median":>10s}')
+        print(f'  {"-"*28} {"-"*10} {"-"*10} {"-"*10} {"-"*10}')
+        for name, vals in rows:
+            if not vals: continue
+            print(f'  {name:<28s} {min(vals):>10.3f} {max(vals):>10.3f} {sum(vals)/len(vals):>10.3f} {median_val(vals):>10.3f}')
+
+    load_idx = [i for i, s in enumerate(samples)
+                if not s.get('skip') and active_start <= i < drain_line]
+
+    def per_sample(key, field, agg, scale=1.0, need_n=True):
+        out = []
+        for i in load_idx:
+            vals = [e[field] * scale for e in samples[i].get(key, [])
+                    if field in e and (not need_n or e.get('n', 1) > 0)]
+            if vals: out.append(agg(vals))
+        return out
+
+    def sample_field(field, scale=1.0):
+        return [samples[i][field] * scale for i in load_idx if field in samples[i]]
+
+    print('\n  Latency (ms)  [client probe; commit proxy/GRV/SS read = max across servers per sample]')
+    lat_table([
+        ('probe commit',          sample_field('probe_commit_s', 1000)),
+        ('probe read',            sample_field('probe_read_s', 1000)),
+        ('probe GRV',             sample_field('probe_grv_s', 1000)),
+        ('commit proxy mean',     per_sample('cp_list', 'mean_s', max, 1000)),
+        ('commit proxy p99',      per_sample('cp_list', 'p99_s', max, 1000)),
+        ('commit batch window',   per_sample('cp_list', 'batch_window_mean_s', max, 1000)),
+        ('GRV proxy mean',        per_sample('grv_list', 'mean_s', max, 1000)),
+        ('GRV proxy p99',         per_sample('grv_list', 'p99_s', max, 1000)),
+        ('SS read mean',          per_sample('ssread_list', 'mean_s', max, 1000)),
+        ('SS read p99',           per_sample('ssread_list', 'p99_s', max, 1000)),
+    ])
+
+    print('\n  Run-loop busy (fraction of a core-loop; max across servers per sample)')
+    rl_rows = [
+        ('SS',  per_sample('ss_list',  'run_loop_busy', max, 1, False)),
+        ('LOG', per_sample('log_list', 'run_loop_busy', max, 1, False)),
+    ]
+    sl_roles = sorted({e.get('role_name', '') for s in samples for e in s.get('sl_list', [])})
+    for role in sl_roles:
+        vals = []
+        for i in load_idx:
+            v = [e['run_loop_busy'] for e in samples[i].get('sl_list', [])
+                 if e.get('role_name') == role and 'run_loop_busy' in e]
+            if v: vals.append(max(v))
+        rl_rows.append(('SL ' + role[:24], vals))
+    lat_table(rl_rows)
+
+    print('\n  Ratekeeper')
+    from collections import Counter
+    cnt = Counter(samples[i]['rk_limited_by'] for i in load_idx if 'rk_limited_by' in samples[i])
+    tot = sum(cnt.values())
+    for name, c in cnt.most_common():
+        print(f'  limited_by={name:<28s} {c:>5d} samples ({100.0*c/tot:.0f}%)')
+    lat_table([
+        ('tps_limit',     sample_field('rk_tps_limit')),
+        ('released_tps',  sample_field('rk_released_tps')),
+    ])
+    sys.exit(0)
 
 if mode == 'ss':
     print('\n  ==========================================')
@@ -852,7 +937,7 @@ PYEOF
 
 FDB_LOG_FILE=$(ls "${RESULTS_DIR}"/fdb_stats_*.log 2>/dev/null | head -1 || true)
 
-if [[ $show_fdb -eq 1 || $show_ss -eq 1 || $show_log -eq 1 || $show_sl -eq 1 || $show_health -eq 1 ]]; then
+if [[ $show_fdb -eq 1 || $show_ss -eq 1 || $show_log -eq 1 || $show_sl -eq 1 || $show_health -eq 1 || $show_lat -eq 1 ]]; then
   if [[ -z "${FDB_LOG_FILE}" ]]; then
     echo "WARNING: no fdb_stats log found in ${RESULTS_DIR}"
   else
@@ -867,6 +952,9 @@ if [[ $show_fdb -eq 1 || $show_ss -eq 1 || $show_log -eq 1 || $show_sl -eq 1 || 
     fi
     if [[ $show_log -eq 1 ]]; then
       FDB_DISPLAY_MODE=log FDB_LONG="${LONG}" FDB_WARMUP="${WARMUP}" parse_fdb_stats "${FDB_LOG_FILE}"
+    fi
+    if [[ $show_lat -eq 1 ]]; then
+      FDB_DISPLAY_MODE=lat FDB_WARMUP="${WARMUP}" parse_fdb_stats "${FDB_LOG_FILE}"
     fi
     if [[ $show_sl -eq 1 ]]; then
       FDB_DISPLAY_MODE=sl FDB_LONG="${LONG}" FDB_WARMUP="${WARMUP}" parse_fdb_stats "${FDB_LOG_FILE}"

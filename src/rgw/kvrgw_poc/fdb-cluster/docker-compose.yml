@@ -10,7 +10,7 @@ services:
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4500 -d /data/data/4500 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4500 -d /data/data/4500 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage10:
@@ -22,7 +22,7 @@ services:
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4501 -d /data/data/4501 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4501 -d /data/data/4501 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage20:
@@ -34,7 +34,7 @@ services:
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4502 -d /data/data/4502 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4502 -d /data/data/4502 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage01:
@@ -46,7 +46,7 @@ services:
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4503 -d /data/data/4503 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4503 -d /data/data/4503 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage11:
@@ -58,7 +58,7 @@ services:
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4504 -d /data/data/4504 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4504 -d /data/data/4504 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage21:
@@ -70,7 +70,7 @@ services:
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4505 -d /data/data/4505 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4505 -d /data/data/4505 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage02:
@@ -82,7 +82,7 @@ services:
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4506 -d /data/data/4506 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4506 -d /data/data/4506 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage12:
@@ -94,7 +94,7 @@ services:
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4507 -d /data/data/4507 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4507 -d /data/data/4507 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage22:
@@ -106,7 +106,7 @@ services:
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4508 -d /data/data/4508 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4508 -d /data/data/4508 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage03:
@@ -118,7 +118,7 @@ services:
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4509 -d /data/data/4509 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4509 -d /data/data/4509 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage13:
@@ -130,7 +130,7 @@ services:
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4510 -d /data/data/4510 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4510 -d /data/data/4510 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage23:
@@ -142,7 +142,7 @@ services:
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4511 -d /data/data/4511 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4511 -d /data/data/4511 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage04:
@@ -154,7 +154,7 @@ services:
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4512 -d /data/data/4512 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4512 -d /data/data/4512 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage14:
@@ -166,7 +166,7 @@ services:
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4513 -d /data/data/4513 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4513 -d /data/data/4513 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage24:
@@ -178,7 +178,7 @@ services:
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4514 -d /data/data/4514 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4514 -d /data/data/4514 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage05:
@@ -190,7 +190,7 @@ services:
     volumes:
       - /mnt/fdb0:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4515 -d /data/data/4515 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4515 -d /data/data/4515 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage0 --locality_zoneid zone0 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage15:
@@ -202,7 +202,7 @@ services:
     volumes:
       - /mnt/fdb1:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4516 -d /data/data/4516 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4516 -d /data/data/4516 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage1 --locality_zoneid zone1 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-storage25:
@@ -214,7 +214,7 @@ services:
     volumes:
       - /mnt/fdb2:/data
       - /home/gbenhano/ceph_kvrgw_poc/ceph/src/rgw/kvrgw_poc/third_party/fdb/usr/sbin/fdbserver:/usr/sbin/fdbserver:ro
-    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4517 -d /data/data/4517 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=1572864000"]
+    command: ["sh", "-c", "mkdir -p /data/logs && exec /usr/sbin/fdbserver -C /data/fdb.cluster -p 127.0.0.1:4517 -d /data/data/4517 -L /data/logs -m 8GiB --cache_memory 4GiB --class storage --locality_machineid fdb-storage2 --locality_zoneid zone2 --knob_storage_hard_limit_bytes=2621440000"]
     restart: unless-stopped
 
   fdb-log00:

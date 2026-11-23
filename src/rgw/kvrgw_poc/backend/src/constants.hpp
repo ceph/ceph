@@ -36,6 +36,7 @@ inline constexpr char kCategoryObject = 'O';
 inline constexpr char kCategoryVersion = 'V';
 inline constexpr char kCategoryMultipart = 'M';      // S: namespace, multipart head row only
 inline constexpr char kCategoryMultipartPart = 'U';  // S: namespace, multipart part rows
+inline constexpr char kCategoryPending = 'P';        // S: namespace, pending object entry
 inline constexpr char kOpTypeObject = 'O';
 inline constexpr char kOpTypeGroup = 'G';
 inline constexpr char kOpTypeMultipart = 'M';    // G: namespace, G:M whole-upload directive

@@ -274,7 +274,15 @@ int count_po(Env &env, const BucketInfo &b)
   const auto prefix = make_p_bucket_prefix(b.id);
   const std::string end = prefix_range_end(prefix.view());
   auto r = env.store->range_scan(prefix.view(), end, 1000);
-  return r ? static_cast<int>(r->size()) : -1;
+  int count = r ? static_cast<int>(r->size()) : -1;
+
+  const auto g_prefix = make_group_po_bucket_prefix(b.id);
+  const std::string g_end = prefix_range_end(g_prefix.view());
+  auto gr = env.store->range_scan(g_prefix.view(), g_end, 1000);
+  if (gr && count >= 0) {
+    count += static_cast<int>(gr->size());
+  }
+  return count;
 }
 
 bool kv_present(Env &env, const KeyBuf &k)

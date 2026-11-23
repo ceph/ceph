@@ -581,8 +581,9 @@ void BatchCommitQueue::start_batch(InFlightBatch &ib)
 
   auto flush_as_group_po = [&](std::unique_ptr<KvTransaction>& tr) {
     const auto ref_view = accumulator.entries[0].gc.chunk.ref_tag_view();
+    const auto bid = accumulator.entries[0].gc.chunk.get_bucket_id();
     KeyBuf& key = ib.phase1_keys[ib.phase1_key_count];
-    make_group_po_key(ref_view, key);
+    make_group_po_key(bid, ref_view, key);
     GroupPoValueBuf val_buf;
     make_group_po_value(val_buf, accumulator);
     tr->kv_put(key.view(), val_buf.view());

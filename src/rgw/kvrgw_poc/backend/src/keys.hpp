@@ -103,10 +103,12 @@ void   make_po_key(
     std::string_view ref_tag_bytes,
     KeyBuf& out);
 void   make_group_po_key(
+    bucket_id_t bucket_id,
     std::string_view group_ref_tag,
     KeyBuf& out);
 KeyBuf make_p_prefix();
 KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id);
+KeyBuf make_group_po_bucket_prefix(bucket_id_t bucket_id);
 std::optional<PoKeyParts> parse_po_key(std::string_view key);
 bool   parse_group_po_key(std::string_view key);
 

@@ -295,30 +295,14 @@ std::optional<ObjectKeyPartsView> parse_object_key_parts_view(std::string_view k
 
 void make_po_key(bucket_id_t bucket_id, std::string_view ref_tag_bytes, KeyBuf& out)
 {
-  KeyHeaderPO hdr(bucket_id);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryPending);
   out.set_header(hdr);
   out.append(ref_tag_bytes.data(), ref_tag_bytes.size());
 }
 
-// Per-thread xorshift64 for the Group P:O lane byte (no lock, no atomic).
-static uint8_t next_group_po_lane()
+void make_group_po_key(bucket_id_t bucket_id, std::string_view group_ref_tag, KeyBuf& out)
 {
-  static thread_local uint64_t s = [] {
-    uint64_t seed = std::chrono::steady_clock::now().time_since_epoch().count() ^
-                    (std::hash<std::thread::id>{}(std::this_thread::get_id()) *
-                     0x9E3779B97F4A7C15ULL);
-    return seed ? seed : 0x9E3779B97F4A7C15ULL;
-  }();
-  s ^= s << 13;
-  s ^= s >> 7;
-  s ^= s << 17;
-  return static_cast<uint8_t>(s >> 32);
-}
-
-void make_group_po_key(std::string_view group_ref_tag, KeyBuf& out)
-{
-  KeyHeaderPOGroup hdr{};
-  hdr.lane = next_group_po_lane();
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kOpTypeGroup);
   out.set_header(hdr);
   out.append(group_ref_tag.data(), group_ref_tag.size());
 }
@@ -334,34 +318,40 @@ KeyBuf make_p_prefix()
 KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id)
 {
   KeyBuf key;
-  KeyHeaderPO hdr(bucket_id);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryPending);
   key.set_header(hdr);
   return key;
 }
 
-// Single P:O key: [ns='P'][bucket_id 8B][cat='O'][ref_tag 12B] = 22B
+KeyBuf make_group_po_bucket_prefix(bucket_id_t bucket_id)
+{
+  KeyBuf key;
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kOpTypeGroup);
+  key.set_header(hdr);
+  return key;
+}
+
+// Single P:O key: [ns='S'][shard_count 2B][shard_id 2B][bucket_id 8B][cat='P'][ref_tag 12B] = 26B
 std::optional<PoKeyParts> parse_po_key(std::string_view key)
 {
-  constexpr size_t kPoKeySize = sizeof(KeyHeaderPO) + kRefTagSize;
-  if (key.size() != kPoKeySize || key[0] != kNamespacePending ||
-      key[offsetof(KeyHeaderPO, cat)] != kCategoryObject) [[unlikely]] {
+  constexpr size_t kPoKeySize = sizeof(KeyHeaderS) + kRefTagSize;
+  if (key.size() != kPoKeySize || key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryPending) [[unlikely]] {
     return std::nullopt;
   }
   PoKeyParts parts;
-  parts.bucket_id.load(key.data() + offsetof(KeyHeaderPO, bucket_id));
-  parts.ref_tag.load(key.data() + sizeof(KeyHeaderPO));
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderS, bucket_id));
+  parts.ref_tag.load(key.data() + sizeof(KeyHeaderS));
   return parts;
 }
 
-// Group P:O key: [ns='P'][cat='G'][lane 1B][ref_tag_0 12B] = 15B.
-// Legacy keys without the lane byte (14B) are still accepted.
+// Group P:O key: [ns='S'][shard_count 2B][shard_id 2B][bucket_id 8B][cat='G'][ref_tag_0 12B] = 26B.
 bool parse_group_po_key(std::string_view key)
 {
-  constexpr size_t kGroupPoKeySize = sizeof(KeyHeaderPOGroup) + kRefTagSize;
-  constexpr size_t kLegacyGroupPoKeySize = kGroupPoKeySize - 1;
-  return (key.size() == kGroupPoKeySize || key.size() == kLegacyGroupPoKeySize) &&
-         key[0] == kNamespacePending &&
-         key[offsetof(KeyHeaderPOGroup, cat)] == kOpTypeGroup;
+  constexpr size_t kGroupPoKeySize = sizeof(KeyHeaderS) + kRefTagSize;
+  return key.size() == kGroupPoKeySize &&
+         key[0] == kNamespaceObject &&
+         key[offsetof(KeyHeaderS, cat)] == kOpTypeGroup;
 }
 
 void make_pm_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)

@@ -85,6 +85,113 @@ int main()
     assert(vk_other.view() > vk1.view());
   }
 
+  // S:P (Pending Object) key tests
+  {
+    bucket_id_t bucket_id;
+    const uint8_t bid_bytes[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    bucket_id.load(bid_bytes);
+
+    RefTag ref_tag;
+    const uint8_t rt_bytes[12] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
+    ref_tag.load(rt_bytes);
+
+    KeyBuf po_key;
+    make_po_key(bucket_id, ref_tag.view(), po_key);
+
+    // Exact length check: KeyHeaderS (14B) + RefTag (12B) = 26B
+    assert(po_key.len == sizeof(KeyHeaderS) + kRefTagSize);
+    assert(po_key.len == 26);
+    assert(po_key.data[0] == static_cast<uint8_t>(kNamespaceObject));
+    assert(po_key.data[offsetof(KeyHeaderS, cat)] == static_cast<uint8_t>(kCategoryPending));
+
+    // Prefix check
+    KeyBuf p_prefix = make_p_bucket_prefix(bucket_id);
+    assert(p_prefix.len == sizeof(KeyHeaderS));
+    assert(po_key.view().substr(0, p_prefix.len) == p_prefix.view());
+
+    bucket_id_t other_bid;
+    const uint8_t other_bid_bytes[8] = {9, 9, 9, 9, 9, 9, 9, 9};
+    other_bid.load(other_bid_bytes);
+    KeyBuf other_prefix = make_p_bucket_prefix(other_bid);
+    assert(po_key.view().substr(0, other_prefix.len) != other_prefix.view());
+
+    // Parse round-trip
+    auto parsed = parse_po_key(po_key.view());
+    assert(parsed.has_value());
+    assert(parsed->bucket_id == bucket_id);
+    assert(parsed->ref_tag == ref_tag);
+
+    // Invalidation checks
+    // Wrong length
+    assert(!parse_po_key(po_key.view().substr(0, 22)));
+    assert(!parse_po_key(po_key.view().substr(0, 25)));
+    std::string too_long(po_key.view());
+    too_long.push_back('x');
+    assert(!parse_po_key(too_long));
+
+    // Wrong namespace
+    std::string wrong_ns(po_key.view());
+    wrong_ns[0] = 'P';
+    assert(!parse_po_key(wrong_ns));
+
+    // Wrong category
+    std::string wrong_cat(po_key.view());
+    wrong_cat[offsetof(KeyHeaderS, cat)] = kCategoryObject;
+    assert(!parse_po_key(wrong_cat));
+  }
+
+  // S:G (Group P:O) key tests
+  {
+    bucket_id_t bucket_id;
+    const uint8_t bid_bytes[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    bucket_id.load(bid_bytes);
+
+    RefTag ref_tag;
+    const uint8_t rt_bytes[12] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
+    ref_tag.load(rt_bytes);
+
+    KeyBuf group_po_key;
+    make_group_po_key(bucket_id, ref_tag.view(), group_po_key);
+
+    // Exact length check: KeyHeaderS (14B) + RefTag (12B) = 26B
+    assert(group_po_key.len == sizeof(KeyHeaderS) + kRefTagSize);
+    assert(group_po_key.len == 26);
+    assert(group_po_key.data[0] == static_cast<uint8_t>(kNamespaceObject));
+    assert(group_po_key.data[offsetof(KeyHeaderS, cat)] == static_cast<uint8_t>(kOpTypeGroup));
+
+    // Prefix check
+    KeyBuf pg_prefix = make_group_po_bucket_prefix(bucket_id);
+    assert(pg_prefix.len == sizeof(KeyHeaderS));
+    assert(group_po_key.view().substr(0, pg_prefix.len) == pg_prefix.view());
+
+    bucket_id_t other_bid;
+    const uint8_t other_bid_bytes[8] = {9, 9, 9, 9, 9, 9, 9, 9};
+    other_bid.load(other_bid_bytes);
+    KeyBuf other_prefix = make_group_po_bucket_prefix(other_bid);
+    assert(group_po_key.view().substr(0, other_prefix.len) != other_prefix.view());
+
+    // Parse check
+    assert(parse_group_po_key(group_po_key.view()));
+
+    // Invalidation checks
+    // Wrong length
+    assert(!parse_group_po_key(group_po_key.view().substr(0, 15)));
+    assert(!parse_group_po_key(group_po_key.view().substr(0, 25)));
+    std::string too_long(group_po_key.view());
+    too_long.push_back('x');
+    assert(!parse_group_po_key(too_long));
+
+    // Wrong namespace
+    std::string wrong_ns(group_po_key.view());
+    wrong_ns[0] = 'P';
+    assert(!parse_group_po_key(wrong_ns));
+
+    // Wrong category
+    std::string wrong_cat(group_po_key.view());
+    wrong_cat[offsetof(KeyHeaderS, cat)] = kCategoryPending;
+    assert(!parse_group_po_key(wrong_cat));
+  }
+
   std::cout << "l_key_test passed\n";
   return 0;
 }

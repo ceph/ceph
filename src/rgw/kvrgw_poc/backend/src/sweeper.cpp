@@ -63,6 +63,20 @@ std::string Sweeper::compute_exclusive_end(std::string_view prefix)
 
 void Sweeper::sweep_once()
 {
+  const std::string b_prefix(1, kNamespaceBucket);
+  auto scan_tr = store_.begin_transaction();
+  if (scan_tr) {
+    FdbRangeHolder holder((*scan_tr)->kv_async_get_range_holder(
+        b_prefix, /*exclusive_begin=*/false, compute_exclusive_end(b_prefix), kSweeperMaxKeys));
+    if (!holder.wait()) {
+      for (const auto &[key, value] : holder) {
+        if (const auto *bvh = bvh_ptr(value)) {
+          process_bucket(bvh_bucket_id(bvh), /*force=*/false);
+        }
+      }
+    }
+  }
+
   const auto prefix = make_p_prefix();
   sweep_range(prefix.view(), compute_exclusive_end(prefix.view()), /*force=*/false);
 }
@@ -72,6 +86,9 @@ void Sweeper::process_bucket(bucket_id_t bucket_id, bool force)
   const auto prefix = make_p_bucket_prefix(bucket_id);
   sweep_range(prefix.view(), compute_exclusive_end(prefix.view()), force);
 
+  const auto pg_prefix = make_group_po_bucket_prefix(bucket_id);
+  sweep_range(pg_prefix.view(), compute_exclusive_end(pg_prefix.view()), force);
+
   // P:M's key layout places `cat` right after `ns` (same convention as
   // P:O), so it can't share a single contiguous per-bucket prefix scan
   // with P:O above -- swept separately (see plans/fixing_agent_mess.md
@@ -80,11 +97,9 @@ void Sweeper::process_bucket(bucket_id_t bucket_id, bool force)
   sweep_range(pm_prefix.view(), compute_exclusive_end(pm_prefix.view()), force);
 }
 
-// Scans [prefix, end) of the P: namespace and promotes aged-out entries to
-// the G: (GC) namespace. Handles both single P:O keys and Group P:O keys
-// (the latter is structurally unreachable when `prefix` is a per-bucket
-// KeyHeaderPO prefix, since Group P:O keys carry no bucket_id — see
-// process_bucket()/make_p_bucket_prefix()).
+// Scans [prefix, end) of the pending range and promotes aged-out entries to
+// the G: (GC) namespace. Handles single P:O (S:P) keys, Group P:O (S:G) keys,
+// and P:M keys.
 void Sweeper::sweep_range(std::string_view prefix, std::string_view end, bool force)
 {
   auto scan_tr = store_.begin_transaction();
@@ -105,7 +120,7 @@ void Sweeper::sweep_range(std::string_view prefix, std::string_view end, bool fo
   const int64_t now = now_unix();
 
   for (const auto &[key, value] : holder) {
-    // Single P:O key: [ns='P'][bucket_id 8B][cat='O'][ref_tag 12B] = 22B
+    // Single P:O (S:P) key: [ns='S'][shard_count 2B][shard_id 2B][bucket_id 8B][cat='P'][ref_tag 12B] = 26B
     const auto parts = parse_po_key(key);
     if (parts) {
       const auto po_entry = parse_po_value_view(value);
