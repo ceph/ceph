@@ -4196,6 +4196,16 @@ void Client::put_inode(Inode *in, int n)
 {
   ldout(cct, 20) << __func__ << " on " << *in << " n = " << n << dendl;
 
+  // Refs that leave more than inode_map's need no cleanup: drop them
+  // here.  Every InodeRef dropped without client_lock comes here (an Fh
+  // closed on the open/close fast path, a lookup), and queueing each
+  // under the one global delay_i_lock, a spinlock, made all of them spin
+  // on it: open+close of private files cost 0.5 ms of CPU at 64 threads,
+  // 7.6 ms at 1024.
+  while (n > 0 && in->iput_unless_last())
+    n--;
+  if (!n)
+    return;
   std::scoped_lock dl(delay_i_lock);
   delay_i_release[in] += n;
 }
