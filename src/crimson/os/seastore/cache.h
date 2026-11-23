@@ -139,15 +139,6 @@ public:
     return ret;
   }
 
-  /// Resets transaction preserving
-  void reset_transaction_preserve_handle(Transaction &t) {
-    LOG_PREFIX(Cache::reset_transaction_preserve_handle);
-    if (t.did_reset()) {
-      SUBDEBUGT(seastore_t, "reset", t);
-    }
-    t.reset_preserve_handle();
-  }
-
   /// Declare ref retired in t
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     LOG_PREFIX(Cache::retire_extent);

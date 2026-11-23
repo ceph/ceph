@@ -148,7 +148,7 @@ public:
   }
 
   seastar::future<> demote() final {
-    return repeat_eagain([this] {
+    return run_writer_once([this] {
       return ecb->with_transaction_intr(
         Transaction::src_t::DEMOTE,
         "demote", cache_hint_t::get_nocache(),

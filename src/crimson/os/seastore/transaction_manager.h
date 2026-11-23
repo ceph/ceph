@@ -62,6 +62,22 @@ auto repeat_eagain(F &&f) {
 }
 
 /**
+ * run_writer_once
+ *
+ * Runs a writing transaction once. A writer holds the writer gate (see
+ * writer_gate_t), so nothing can conflict with it, and only READ
+ * transactions get interrupted (see Transaction::is_reader_stale()).
+ * eagain reaching a writer is a bug, not a reason to retry.
+ * The returned future has the same errors as repeat_eagain()'s.
+ */
+template <typename F>
+auto run_writer_once(F &&f) {
+  return std::invoke(std::forward<F>(f)).handle_error(
+    crimson::ct_error::eagain::assert_failure("eagain in a writer"),
+    crimson::ct_error::pass_further_all{});
+}
+
+/**
  * TransactionManager
  *
  * Abstraction hiding reading and writing to persistence.
@@ -99,11 +115,6 @@ public:
 
   cache_stats_t get_cache_stats(bool report_detail, double seconds) const {
     return cache->get_stats(report_detail, seconds);
-  }
-
-  /// Resets transaction
-  void reset_transaction_preserve_handle(Transaction &t) {
-    return cache->reset_transaction_preserve_handle(t);
   }
 
   /**

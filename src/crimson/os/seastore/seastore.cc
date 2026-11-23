@@ -974,7 +974,9 @@ SeaStore::Shard::mkfs_managers()
   TransactionRef t = transaction_manager->create_transaction(
     Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
   transaction_manager->get_writer_gate().set_holder(*t);
-   co_await with_repeat_trans_intr(*t,
+  // Not run_writer_once(): a coroutine lambda must outlive its coroutine,
+  // so it has to stay in this full expression, not in a lambda's return.
+  co_await with_trans_intr(*t,
     seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
     ++(shard_stats.repeat_io_num);
     DEBUGT("...", tr);
@@ -982,7 +984,9 @@ SeaStore::Shard::mkfs_managers()
     auto coll_root = co_await collection_manager->mkfs(tr);
     transaction_manager->write_collection_root(tr, coll_root);
     co_await transaction_manager->submit_transaction(tr, &usage);
-  }));
+  })).handle_error(
+    crimson::ct_error::eagain::assert_failure("eagain in a writer"),
+    crimson::ct_error::pass_further_all{});
   assert(shard_stats.pending_io_num);
   --(shard_stats.pending_io_num);
    // XXX: it's wrong to assume no failure
@@ -3608,7 +3612,7 @@ seastar::future<> SeaStore::Shard::write_meta(
   {
     return transaction_manager->reserve_writer_usage(usage
     ).then([this, &key, &value, &usage] {
-      return repeat_eagain([this, &key, &value, &usage] {
+      return run_writer_once([this, &key, &value, &usage] {
         ++(shard_stats.repeat_io_num);
 
         return transaction_manager->with_transaction_intr(

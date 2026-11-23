@@ -643,7 +643,7 @@ JournalTrimmerImpl::trim_alloc()
   ++(shard_stats.trim_alloc_num);
   ++(shard_stats.pending_bg_num);
 
-  return repeat_eagain([this, FNAME, &shard_stats] {
+  return run_writer_once([this, FNAME, &shard_stats] {
     ++(shard_stats.repeat_trim_alloc_num);
 
     return extent_callback->with_transaction_intr(
@@ -694,7 +694,7 @@ JournalTrimmerImpl::trim_dirty()
 	seastar::stop_iteration>(seastar::stop_iteration::yes);
     }
     ++(shard_stats.pending_bg_num);
-    return repeat_eagain([this, FNAME, &shard_stats, target] {
+    return run_writer_once([this, FNAME, &shard_stats, target] {
       ++(shard_stats.repeat_trim_dirty_num);
 
       return extent_callback->with_transaction_intr(
@@ -1311,7 +1311,7 @@ do_reclaim_space_ret do_reclaim_space(
   // 	tree doesn't match the extent's paddr
   // 3. the extent is physical and doesn't exist in the
   // 	lba tree, backref tree or backref cache;
-  return repeat_eagain([&extent_callback, &backref_extents,
+  return run_writer_once([&extent_callback, &backref_extents,
 			&shard_stats, &pin_list, &reclaimed,
 			&runs, is_cold, &backref_manager,
 			modify_time, start_pos, end_pos, target_generation] {

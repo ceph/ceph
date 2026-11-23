@@ -598,53 +598,6 @@ public:
   uint64_t read_hit_hot = 0;
   uint64_t read_hit_cold = 0;
 
-  void reset_preserve_handle() {
-    write_hit_hot = 0;
-    write_hit_cold = 0;
-    read_hit_hot = 0;
-    read_hit_cold = 0;
-    root.reset();
-    offset = 0;
-    delayed_temp_offset = 0;
-    clear_read_set();
-    fresh_backref_extents = 0;
-    invalidate_clear_write_set();
-    mutated_block_list.clear();
-    fresh_block_stats = {};
-    num_delayed_invalid_extents = 0;
-    num_allocated_invalid_extents = 0;
-    delayed_alloc_list.clear();
-    inline_block_list.clear();
-    ool_block_list.clear();
-    inplace_ool_block_list.clear();
-    pre_alloc_list.clear();
-    pending_ool = nullptr;
-    pre_inplace_rewrite_list.clear();
-    retired_set.clear();
-    existing_block_list.clear();
-    existing_block_stats = {};
-    onode_tree_stats = {};
-    omap_tree_stats = {};
-    lba_tree_stats = {};
-    backref_tree_stats = {};
-    ool_write_stats = {};
-    rewrite_stats = {};
-    force_rewrite_invalidate = false;
-    assert(backref_entries.empty());
-    if (!has_reset) {
-      has_reset = true;
-    }
-    get_handle().exit();
-    views.clear();
-    copied_lba_keys.clear();
-    update_copied_lba_key = nullptr;
-    touched_prefix.clear();
-  }
-
-  bool did_reset() const {
-    return has_reset;
-  }
-
   struct tree_stats_t {
     uint64_t depth = 0;
     uint64_t num_inserts = 0;
@@ -821,14 +774,6 @@ private:
   friend class Cache;
   friend Ref make_test_transaction();
 
-  void clear_read_set() {
-    reader_extents.clear();
-    reader_stale = false;
-    if (invalidation_epoch) {
-      reader_checked_epoch = *invalidation_epoch;
-    }
-  }
-
   void reader_track(CachedExtentRef ref) {
     if (!is_validated_reader()) {
       return;
@@ -964,8 +909,6 @@ private:
   rewrite_stats_t rewrite_stats;
 
   phase_durations_t phase_durations;
-
-  bool has_reset = false;
 
   OrderingHandle handle;
 

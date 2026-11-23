@@ -74,31 +74,6 @@ auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
     std::forward<Args>(args)...);
 }
 
-template <typename Prepare, typename F, typename... Args>
-auto with_repeat_trans_intr(Prepare &&prepare_attempt, Transaction &t, F &&f, Args&&... args) {
-  return repeat_eagain(
-    [&t,
-    prepare_attempt = std::forward<Prepare>(prepare_attempt),
-    f = std::forward<F>(f),
-    ... args = std::forward<Args>(args) ] {
-    prepare_attempt();
-    return trans_intr::with_interruption_to_error<crimson::ct_error::eagain>(
-      f,
-      TransactionConflictCondition(t),
-      t,
-      args...);
-  });
-}
-
-template <typename F, typename... Args>
-auto with_repeat_trans_intr(Transaction &t, F &&f, Args&&... args) {
-  return with_repeat_trans_intr(
-      [] {},
-      t,
-      std::forward<F>(f),
-      std::forward<Args>(args)...);
-}
-
 template <typename T>
 using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
 

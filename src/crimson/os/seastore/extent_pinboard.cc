@@ -417,7 +417,7 @@ public:
   seastar::future<> promote() {
     assert(enabled());
     std::list<CachedExtentRef> promoting_extents;
-    co_await repeat_eagain([this, &promoting_extents] {
+    co_await run_writer_once([this, &promoting_extents] {
       return ecb->with_transaction_intr(
         Transaction::src_t::PROMOTE,
 	"promote", cache_hint_t::get_nocache(),
