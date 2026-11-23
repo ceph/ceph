@@ -623,6 +623,7 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_stats = {};
+    force_rewrite_invalidate = false;
     assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
@@ -763,6 +764,18 @@ public:
   }
 
   btree_cursor_stats_t cursor_stats;
+
+  /**
+   * force_rewrite_invalidate
+   *
+   * Set by a background rewrite that changes the LBA tree's shape, e.g.
+   * a logical range rewritten as multiple extents. Its commit then
+   * replaces and invalidates the priors instead of taking the no-conflict
+   * publish path, which keeps priors valid and isn't safe for concurrent
+   * readers when the tree changes shape. Readers holding an invalidated
+   * prior restart, see is_reader_stale().
+   */
+  bool force_rewrite_invalidate = false;
 
   struct lmapping_t {
     laddr_t dest = L_ADDR_NULL;
@@ -998,7 +1011,7 @@ constexpr bool should_use_no_conflict_publish(const Transaction &t,
   if (is_root_type(ext_type)) {
     return false;
   }
-  return is_rewrite_transaction(t.get_src());
+  return !t.force_rewrite_invalidate && is_rewrite_transaction(t.get_src());
 }
 
 }

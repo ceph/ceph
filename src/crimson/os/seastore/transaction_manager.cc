@@ -1053,6 +1053,10 @@ TransactionManager::rewrite_logical_extent(
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
+    // A logical range rewritten as multiple extents changes the LBA tree's
+    // shape (insertions, splits). The no-conflict publish path doesn't cover
+    // that safely for concurrent readers, see force_rewrite_invalidate.
+    t.force_rewrite_invalidate |= (extents.size() > 1);
     for (auto &_nextent : extents) {
       auto nextent = _nextent->template cast<LogicalChildNode>();
       assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
@@ -1434,6 +1438,8 @@ TransactionManager::promote_extent(
     auto orig_laddr = orig_ext->get_laddr();
     auto orig_paddr = orig_ext->get_paddr();
     auto orig_length = orig_ext->get_length();
+    // see force_rewrite_invalidate
+    t.force_rewrite_invalidate |= (promoted_raw_extents.size() > 1);
     for (auto &extent : promoted_raw_extents) {
       auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
       auto slice_length = extent->get_length();
