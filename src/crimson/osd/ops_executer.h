@@ -198,9 +198,12 @@ private:
   size_t num_write = 0;   ///< count update ops
   bool initial_obs_dirty = false; ///< FLAG_DIRTY on the object before this op
 
-  /// obc->attr_cache as it was before the first op of this request
-  /// modified it. Used to revert the cache if a later op fails.
-  std::optional<ObjectContext::attr_cache_t> attr_cache_backup;
+  /// obc->obs.exists as it was before the first op of this request.
+  /// The ops of a request change obc->obs, but not obc->attr_cache:
+  /// the backend updates attr_cache when the request is submitted. Xattr
+  /// reads use this value with attr_cache, so they see the object as it
+  /// was before the request, as on the classic OSD.
+  const bool initial_obs_exists;
 
   SnapContext snapc; // writer snap context
   struct CloningContext {
@@ -364,8 +367,6 @@ private:
 
   template <class Func>
   auto do_write_op(Func&& f, modified_by m = modified_by::user);
-  template <class Func>
-  auto do_write_op_attr_cache(Func&& f, modified_by m = modified_by::user);
 
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
@@ -478,13 +479,6 @@ public:
 
   void reset_cloning_ctx() {
     cloning_ctx.reset();
-  }
-
-  void rollback_attr_cache() {
-    if (attr_cache_backup) {
-      obc->attr_cache = std::move(*attr_cache_backup);
-      attr_cache_backup.reset();
-    }
   }
 
   ObjectContextRef prepare_clone(

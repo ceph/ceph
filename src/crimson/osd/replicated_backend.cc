@@ -3,12 +3,15 @@
 
 #include "replicated_backend.h"
 
+#include <array>
+
 #include "messages/MOSDRepOpReply.h"
 
 #include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"
 #include "crimson/os/futurized_store.h"
+#include "crimson/osd/attr_cache_update.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/shard_services.h"
 #include "osd/PeeringState.h"
@@ -112,6 +115,20 @@ ReplicatedBackend::submit_transaction(
   auto txn = std::move(t);
   auto osd_op_p = std::move(opp);
   auto _new_clone = std::move(new_clone);
+
+  // before the first suspension point, so that the next request on these
+  // obcs sees the new xattrs
+  {
+    static_assert(std::is_same_v<ObjectContext::attr_cache_t, attr_map_t>);
+    std::array<tracked_attrs_t, 3> objs;
+    size_t num_objs = 0;
+    for (auto o : {obc.get(), _new_clone.get(), rollback_to.get()}) {
+      if (o) {
+        objs[num_objs++] = {&o->get_oid(), &o->attr_cache};
+      }
+    }
+    update_attr_cache(txn, std::span(objs.data(), num_objs));
+  }
 
   cancel_pct_update();
 

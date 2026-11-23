@@ -476,7 +476,8 @@ auto OpsExecuter::do_read_attr_cache(Func&& f) {
     std::forward<Func>(f),
     pg->get_backend(),
     std::as_const(obc->attr_cache),
-    std::as_const(obc->obs));
+    obc->obs.oi.soid,
+    initial_obs_exists);
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
@@ -485,15 +486,6 @@ auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   check_init_op_params(m);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
-}
-template <class Func>
-auto OpsExecuter::do_write_op_attr_cache(Func&& f, OpsExecuter::modified_by m) {
-  ++num_write;
-  check_init_op_params(m);
-  if (!attr_cache_backup) {
-    attr_cache_backup = obc->attr_cache;
-  }
-  return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn, obc->attr_cache);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
   OSDOp& osd_op,
@@ -670,24 +662,27 @@ OpsExecuter::do_execute_op_body(OSDOp& osd_op)
   case CEPH_OSD_OP_GETXATTR:
     return do_read_attr_cache([this, &osd_op](auto& backend,
 					      const auto& attr_cache,
-					      const auto& os) {
-      return backend.getxattr(os, attr_cache, osd_op, delta_stats);
+					      const auto& soid,
+					      bool exists) {
+      return backend.getxattr(soid, exists, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_GETXATTRS:
     return do_read_attr_cache([this, &osd_op](auto& backend,
 					      const auto& attr_cache,
-					      const auto& os) {
-      return backend.get_xattrs(os, attr_cache, osd_op, delta_stats);
+					      const auto& soid,
+					      bool exists) {
+      return backend.get_xattrs(soid, exists, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_CMPXATTR:
     return do_read_attr_cache([this, &osd_op](auto& backend,
 					      const auto& attr_cache,
-					      const auto& os) {
-      return backend.cmp_xattr(os, attr_cache, osd_op, delta_stats);
+					      const auto& soid,
+					      bool exists) {
+      return backend.cmp_xattr(soid, exists, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_RMXATTR:
-    return do_write_op_attr_cache([&osd_op](auto& backend, auto& os, auto& txn, auto& attr_cache) {
-      return backend.rm_xattr(os, osd_op, txn, attr_cache);
+    return do_write_op([&osd_op](auto& backend, auto& os, auto& txn) {
+      return backend.rm_xattr(os, osd_op, txn);
     });
   case CEPH_OSD_OP_CREATE:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -706,13 +701,12 @@ OpsExecuter::do_execute_op_body(OSDOp& osd_op)
       return backend.writefull(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_ROLLBACK:
-    return do_write_op_attr_cache([this, &head=obc, &osd_op](
-      auto& backend, auto& os, auto& txn, auto& attr_cache) {
+    return do_write_op([this, &head=obc, &osd_op](
+      auto& backend, auto& os, auto& txn) {
       ceph_assert(obc->ssc);
       return backend.rollback(os, obc->ssc->snapset,
 			      osd_op, txn, *osd_op_params, delta_stats,
-                              head, pg->obc_loader, snapc, attr_cache,
-                              rollback_to);
+                              head, pg->obc_loader, snapc, rollback_to);
     });
   case CEPH_OSD_OP_APPEND:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -733,8 +727,8 @@ OpsExecuter::do_execute_op_body(OSDOp& osd_op)
       return backend.set_allochint(os, osd_op, txn, delta_stats);
     });
   case CEPH_OSD_OP_SETXATTR:
-    return do_write_op_attr_cache([this, &osd_op](auto& backend, auto& os, auto& txn, auto& attr_cache) {
-      return backend.setxattr(os, osd_op, txn, delta_stats, attr_cache);
+    return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
+      return backend.setxattr(os, osd_op, txn, delta_stats);
     });
   case CEPH_OSD_OP_DELETE:
   {
@@ -744,8 +738,8 @@ OpsExecuter::do_execute_op_body(OSDOp& osd_op)
                      __func__, obc->obs.oi.soid);
       whiteout = true;
     }
-    return do_write_op_attr_cache([this, whiteout](
-      auto& backend, auto& os, auto& txn, auto& attr_cache) {
+    return do_write_op([this, whiteout](
+      auto& backend, auto& os, auto& txn) {
       struct emptyctx_t {};
       return with_effect_on_obc(
 	emptyctx_t{},
@@ -761,7 +755,7 @@ OpsExecuter::do_execute_op_body(OSDOp& osd_op)
 	    num_bytes = obc->obs.oi.size;
 	  }
 	  return backend.remove(os, txn, *osd_op_params,
-				delta_stats, whiteout, num_bytes, attr_cache);
+				delta_stats, whiteout, num_bytes);
 	},
 	[](auto &&ctx, ObjectContextRef obc, Ref<PG>) {
 	  return seastar::do_for_each(
@@ -1016,8 +1010,7 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
       obc->obs.oi.soid,
       obc->obs.oi,
       obc->obs.oi.soid.is_head() ? &(obc->ssc->snapset) : nullptr,
-      txn,
-      obc->attr_cache);
+      txn);
   } else {
     // reset cached ObjectState without enforcing eviction
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
@@ -1117,8 +1110,7 @@ pg_log_entry_t OpsExecuter::complete_cloning_ctx()
     cloning_ctx->coid,
     cloning_ctx->clone_obc->obs.oi,
     nullptr /* snapset */,
-    txn,
-    cloning_ctx->clone_obc->attr_cache);
+    txn);
 
   pg_log_entry_t ret{
     pg_log_entry_t::CLONE,
@@ -1180,11 +1172,8 @@ ObjectContextRef OpsExecuter::prepare_clone(
 
   clone_obc->set_clone_state(std::move(clone_obs));
   clone_obc->ssc = obc->ssc;
-  // No op of this request has run yet, so obc->attr_cache holds the
-  // xattrs that clone_for_write() copies to the clone. The clone does
-  // not get SS_ATTR.
-  clone_obc->attr_cache = obc->attr_cache;
-  clone_obc->attr_cache.erase(SS_ATTR);
+  // The backend fills clone_obc->attr_cache from the clone op in txn
+  // when the request is submitted.
   return clone_obc;
 }
 
@@ -1206,6 +1195,7 @@ OpsExecuter::OpsExecuter(Ref<PG> _pg,
     conn(conn),
     txn(pg->min_peer_features()),
     initial_obs_dirty(obc->obs.oi.is_dirty()),
+    initial_obs_exists(obc->obs.exists),
     snapc(_snapc)
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {

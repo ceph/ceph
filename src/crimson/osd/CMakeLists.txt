@@ -1,4 +1,5 @@
 add_executable(crimson-osd
+  attr_cache_update.cc
   backfill_state.cc
   ec_backend.cc
   ec_recovery_backend.cc

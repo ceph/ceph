@@ -869,7 +869,6 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   crimson::osd::ObjectContextRef head,
   crimson::osd::ObjectContextLoader& obc_loader,
   const SnapContext &snapc,
-  ObjectContext::attr_cache_t& attr_cache,
   crimson::osd::ObjectContextRef& rollback_to)
 {
   const ceph_osd_op& op = osd_op.op;
@@ -881,8 +880,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   target_coid.snap = snapid;
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
-    [this, &os, &txn, &delta_stats, &osd_op_params, snapid, &attr_cache,
-     &rollback_to]
+    [this, &os, &txn, &delta_stats, &osd_op_params, snapid, &rollback_to]
     (auto head_obc, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
@@ -911,14 +909,10 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
                                ghobject_t{os.oi.soid});
     //    The backend needs the clone obc, as PrimaryLogPG::_rollback_to()
-    //    adds it to the PGTransaction
+    //    adds it to the PGTransaction. When the request is submitted, the
+    //    backend copies the xattrs of the clone obc to the attr_cache of
+    //    the head.
     rollback_to = resolved_obc;
-    //    The head now has the xattrs of the clone. On EC pools,
-    //    ECTransaction copies them from the clone obc, as on the
-    //    classic OSD.
-    if (!is_erasure()) {
-      attr_cache = resolved_obc->attr_cache;
-    }
     //    Copy clone obc.os.oi to os.oi
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     os.oi.copy_user_bits(resolved_obc->obs.oi);
@@ -953,14 +947,13 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // if there's no snapshot, we delete the object;
     // otherwise, do nothing.
     crimson::ct_error::enoent::handle(
-    [this, &os, snapid, &txn, &delta_stats, &snapc, &ss, &osd_op_params,
-     &attr_cache] {
+    [this, &os, snapid, &txn, &delta_stats, &snapc, &ss, &osd_op_params] {
       logger().debug("PGBackend::rollback: deleting head on {}"
                      " with snap_id of {}"
                      " because got ENOENT|whiteout on obc lookup",
                      os.oi.soid, snapid);
       return remove(os, txn, osd_op_params, delta_stats,
-                    should_whiteout(ss, snapc), os.oi.size, attr_cache
+                    should_whiteout(ss, snapc), os.oi.size
       ).handle_error_interruptible(
 	crimson::ct_error::enoent::handle([] {
 	  // We consider rolling back a non-existing head to
@@ -1119,8 +1112,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   osd_op_params_t& osd_op_params,
   object_stat_sum_t& delta_stats,
   bool whiteout,
-  int num_bytes,
-  ObjectContext::attr_cache_t& attr_cache)
+  int num_bytes)
 {
   if (!os.exists) {
     logger().debug("{} {} does not exist",__func__, os.oi.soid);
@@ -1132,7 +1124,6 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   }
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
-  attr_cache.clear();
 
   if (os.oi.is_omap()) {
     os.oi.clear_flag(object_info_t::FLAG_OMAP);
@@ -1209,8 +1200,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
-  object_stat_sum_t& delta_stats,
-  ObjectContext::attr_cache_t& attr_cache)
+  object_stat_sum_t& delta_stats)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
@@ -1218,7 +1208,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   }
   return interruptor::make_interruptible(
     setxattr_errorator::future<store_kv_limits_t>(get_store_kv_limits())
-  ).safe_then_interruptible([this, &os, &osd_op, &txn, &delta_stats, &attr_cache](
+  ).safe_then_interruptible([this, &os, &osd_op, &txn, &delta_stats](
       store_kv_limits_t limits) -> setxattr_ierrorator::future<> {
     const auto max_name_len = std::min<uint64_t>(
       limits.max_attr_name_len, local_conf()->osd_max_attr_name_len);
@@ -1246,7 +1236,6 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
     }
     logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
     txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
-    attr_cache[name] = val;
     delta_stats.num_wr++;
     return setxattr_ierrorator::future<>(seastar::now());
   });
@@ -1254,24 +1243,26 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
 
 PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
 PGBackend::get_xattr_from_cache(
-  const ObjectState& os,
+  const hobject_t& soid,
+  bool exists,
   const ObjectContext::attr_cache_t& attr_cache,
   std::string&& name) const
 {
-  if (!os.exists) {
-    logger().debug("getxattr: object {} does not exist", os.oi.soid);
+  if (!exists) {
+    logger().debug("getxattr: object {} does not exist", soid);
     return crimson::ct_error::enoent::make();
   }
   if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
     return get_attr_ierrorator::make_ready_future<ceph::bufferlist>(
       cache_it->second);
   }
-  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+  logger().debug("getxattr on obj={} for attr={}", soid, name);
   return crimson::ct_error::enodata::make();
 }
 
 PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
-  const ObjectState& os,
+  const hobject_t& soid,
+  bool exists,
   const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
@@ -1284,7 +1275,7 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     name = "_" + aname;
   }
   return get_xattr_from_cache(
-    os, attr_cache, std::move(name)
+    soid, exists, attr_cache, std::move(name)
   ).safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
@@ -1296,13 +1287,14 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
 }
 
 PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
-  const ObjectState& os,
+  const hobject_t& soid,
+  bool exists,
   const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (!os.exists) {
-    logger().debug("getxattrs: object {} does not exist", os.oi.soid);
+  if (!exists) {
+    logger().debug("getxattrs: object {} does not exist", soid);
     return crimson::ct_error::enoent::make();
   }
   std::vector<std::pair<std::string, bufferlist>> user_xattrs;
@@ -1362,7 +1354,8 @@ static int do_xattr_cmp_u64(int op, uint64_t lhs, bufferlist& rhs_xattr)
 }
 
 PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
-  const ObjectState& os,
+  const hobject_t& soid,
+  bool exists,
   const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
@@ -1371,9 +1364,9 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
   auto bp = osd_op.indata.cbegin();
   bp.copy(osd_op.op.xattr.name_len, name);
  
-  logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
+  logger().debug("cmpxattr on obj={} for attr={}", soid, name);
   return get_xattr_from_cache(
-    os, attr_cache, std::move(name)
+    soid, exists, attr_cache, std::move(name)
   ).safe_then_interruptible(
     [&delta_stats, &osd_op] (auto &&xattr) -> cmp_xattr_ierrorator::future<> {
     delta_stats.num_rd++;
@@ -1450,8 +1443,7 @@ PGBackend::rm_xattr_iertr::future<>
 PGBackend::rm_xattr(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn,
-  ObjectContext::attr_cache_t& attr_cache)
+  ceph::os::Transaction& txn)
 {
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
@@ -1461,7 +1453,6 @@ PGBackend::rm_xattr(
   string attr_name{"_"};
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
-  attr_cache.erase(attr_name);
   return rm_xattr_iertr::now();
 }
 
@@ -2099,29 +2090,18 @@ void PGBackend::set_metadata(
   const hobject_t &obj,
   object_info_t &oi,
   const SnapSet *ss /* non-null iff head */,
-  ceph::os::Transaction& txn,
-  ObjectContext::attr_cache_t& attr_cache)
+  ceph::os::Transaction& txn)
 {
   ceph_assert((obj.is_head() && ss) || (!obj.is_head() && !ss));
-  // On EC pools, ECTransaction updates attr_cache from the transaction,
-  // as on the classic OSD. It must read the old OI from attr_cache first,
-  // to plan the write and to make the rollback info.
-  const bool update_cache = !is_erasure();
   {
     ceph::bufferlist bv;
     oi.encode(bv, CEPH_FEATURES_ALL);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, OI_ATTR, bv);
-    if (update_cache) {
-      attr_cache[OI_ATTR] = std::move(bv);
-    }
   }
   if (ss) {
     ceph::bufferlist bss;
     encode(*ss, bss);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, SS_ATTR, bss);
-    if (update_cache) {
-      attr_cache[SS_ATTR] = std::move(bss);
-    }
   }
 }
 
