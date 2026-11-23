@@ -574,14 +574,15 @@ int MgrClient::start_tell_command(
   op.outs = outs;
   op.on_finish = onfinish;
 
-  if (session && session->con && (name.size() == 0 || map.active_name == name)) {
+  if (session && session->con &&
+      (op.name.size() == 0 || map.active_name == op.name)) {
     // Set fsid argument to signal that this is really a tell message (and
     // we are not a legacy client sending a non-tell command via MCommand).
     auto m = op.get_message(monmap->fsid, false);
     session->con->send_message2(std::move(m));
   } else {
     ldout(cct, 5) << "no mgr session (no running mgr daemon?), or "
-		  << name << " not active mgr, waiting" << dendl;
+		  << op.name << " not active mgr, waiting" << dendl;
   }
   return 0;
 }
