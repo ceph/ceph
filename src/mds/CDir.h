@@ -414,6 +414,9 @@ public:
 
   mds_authority_t authority() const override;
   mds_authority_t get_dir_auth() const { return dir_auth; }
+  // see CInode::ancestry_gen
+  mutable uint64_t auth_cache_gen = 0;
+  mutable mds_authority_t auth_cache;
   void set_dir_auth(const mds_authority_t &a);
   void set_dir_auth(mds_rank_t a) { set_dir_auth(mds_authority_t(a, CDIR_AUTH_UNKNOWN)); }
   bool is_ambiguous_dir_auth() const {

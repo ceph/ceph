@@ -533,6 +533,7 @@ MDSRank::MDSRank(
   locker = new Locker(this, mdcache);
 
   CInode::lazy_quarantine_path = g_conf().get_val<bool>("mds_lazy_quarantine_path");
+  CInode::cache_ancestry = g_conf().get_val<bool>("mds_cache_ancestry");
 
   quiesce_db_manager.reset(new QuiesceDbManager());
 
@@ -4196,6 +4197,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_bal_split_size",
     "mds_bal_split_wr",
     "mds_bal_unreplicate_threshold",
+    "mds_cache_ancestry",
     "mds_cache_memory_limit",
     "mds_cache_mid",
     "mds_cache_quiesce_decay_rate",
@@ -4276,6 +4278,11 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   // XXX with or without mds_lock!
   dout(2) << __func__ << ": " << changed << dendl;
 
+  if (changed.count("mds_cache_ancestry")) {
+    // mds_lock is held here or not; either way drop every cached value
+    CInode::cache_ancestry = conf.get_val<bool>("mds_cache_ancestry");
+    CInode::ancestry_changed();
+  }
   if (changed.count("mds_lazy_quarantine_path")) {
     CInode::lazy_quarantine_path = conf.get_val<bool>("mds_lazy_quarantine_path");
   }

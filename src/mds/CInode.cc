@@ -3157,20 +3157,32 @@ void CInode::auth_unpin(void *by)
 
 // authority
 
+std::atomic<uint64_t> CInode::ancestry_gen{1};
+std::atomic<bool> CInode::cache_ancestry{true};
+
 mds_authority_t CInode::authority() const
 {
   if (inode_auth.first >= 0) 
     return inode_auth;
 
-  if (parent)
-    return parent->dir->authority();
+  const uint64_t gen = ancestry_gen.load(std::memory_order_relaxed);
+  const bool cache = cache_ancestry.load(std::memory_order_relaxed);
+  if (cache && auth_cache_gen == gen)
+    return auth_cache;
 
+  mds_authority_t a = CDIR_AUTH_UNDEF;
+  if (parent)
+    a = parent->dir->authority();
   // new items that are not yet linked in (in the committed plane) belong
   // to their first parent.
-  if (!projected_parent.empty())
-    return projected_parent.front()->dir->authority();
+  else if (!projected_parent.empty())
+    a = projected_parent.front()->dir->authority();
 
-  return CDIR_AUTH_UNDEF;
+  if (cache) {
+    auth_cache = a;
+    auth_cache_gen = gen;
+  }
+  return a;
 }
 
 
@@ -3323,6 +3335,7 @@ snapid_t CInode::pick_old_inode(snapid_t snap) const
 
 void CInode::open_snaprealm(bool nosplit)
 {
+  CInode::ancestry_changed();
   if (!snaprealm) {
     SnapRealm *parent = find_snaprealm();
     snaprealm = new SnapRealm(mdcache, this);
@@ -3340,6 +3353,7 @@ void CInode::open_snaprealm(bool nosplit)
 }
 void CInode::close_snaprealm(bool nojoin)
 {
+  CInode::ancestry_changed();
   if (snaprealm) {
     dout(15) << __func__ << " " << *snaprealm << dendl;
     if (snaprealm->parent) {
@@ -3354,14 +3368,37 @@ void CInode::close_snaprealm(bool nojoin)
 
 SnapRealm *CInode::find_snaprealm() const
 {
+  if (snaprealm)
+    return snaprealm;
+
+  const uint64_t gen = ancestry_gen.load(std::memory_order_relaxed);
+  const bool cache = cache_ancestry.load(std::memory_order_relaxed);
+  if (cache && realm_cache_gen == gen)
+    return realm_cache;
+
+  // walk up to the nearest realm, or to an ancestor that knows it
+  SnapRealm *r = nullptr;
   const CInode *cur = this;
-  while (!cur->snaprealm) {
+  while (true) {
     const CDentry *pdn = cur->get_oldest_parent_dn();
     if (!pdn)
       break;
     cur = pdn->get_dir()->get_inode();
+    if (cur->snaprealm) {
+      r = cur->snaprealm;
+      break;
+    }
+    if (cache && cur->realm_cache_gen == gen) {
+      r = cur->realm_cache;
+      break;
+    }
   }
-  return cur->snaprealm;
+
+  if (cache) {
+    realm_cache = r;
+    realm_cache_gen = gen;
+  }
+  return r;
 }
 
 void CInode::encode_snap_blob(bufferlist &snapbl)

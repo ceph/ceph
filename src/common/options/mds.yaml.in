@@ -831,6 +831,15 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_cache_ancestry
+  type: bool
+  level: dev
+  desc: cache what an inode's authority and snaprealm are, instead of walking up its parents every time
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_lazy_quarantine_path
   type: bool
   level: dev

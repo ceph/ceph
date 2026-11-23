@@ -882,6 +882,8 @@ bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
  */
 void CDir::steal_dentry(CDentry *dn)
 {
+  // the dentry, and what is below it, moves to another dirfrag
+  CInode::ancestry_changed();
   dout(15) << __func__ << " " << *dn << dendl;
 
   items[dn->key()] = dn;
@@ -3097,8 +3099,17 @@ mds_authority_t CDir::authority() const
 {
   if (is_subtree_root()) 
     return dir_auth;
-  else
-    return inode->authority();
+
+  const uint64_t gen = CInode::ancestry_gen.load(std::memory_order_relaxed);
+  const bool cache = CInode::cache_ancestry.load(std::memory_order_relaxed);
+  if (cache && auth_cache_gen == gen)
+    return auth_cache;
+  mds_authority_t a = inode->authority();
+  if (cache) {
+    auth_cache = a;
+    auth_cache_gen = gen;
+  }
+  return a;
 }
 
 /** is_subtree_root()
@@ -3166,6 +3177,7 @@ void CDir::set_dir_auth(const mds_authority_t &a)
 
   // set it.
   dir_auth = a;
+  CInode::ancestry_changed();
 
   // new subtree root?
   if (!was_subtree && is_subtree_root()) {
