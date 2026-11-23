@@ -46,8 +46,8 @@ Unmapping a Block Device
 ========================
 
 To unmap a block device image with the ``rbd`` command, specify the
-``device unmap`` arguments and the device name (i.e., by convention the
-same as the block device image name). :: 
+``device unmap`` arguments and the device, for example ``/dev/rbd0``, or its
+udev link ``/dev/rbd/{poolname}/{imagename}``. ::
 
 	sudo rbd device unmap /dev/rbd/{poolname}/{imagename}
 
