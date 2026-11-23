@@ -4512,6 +4512,7 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   dout(10) << __func__ << " " << *m << dendl;
   if (!have_pg_pool(m->pgid.pool())) {
     dout(1) << __func__ << " source pool " << m->pgid.pool() << " deleted during migration" << dendl;
+    mon.no_reply(op);
     return false;
   }
   pg_pool_t source_p = get_pg_pool(m->pgid.pool());
@@ -4525,6 +4526,7 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
 
   if (!have_pg_pool(source_p.migration_target.value())) {
     dout(1) << __func__ << " target pool " << source_p.migration_target.value() << " deleted during migration" << dendl;
+    mon.no_reply(op);
     return false;
   }
 
@@ -4576,6 +4578,9 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
 
   pending_inc.new_pools[m->pgid.pool()] = source_p;
 
+  // the OSD expects no reply, but a peon that forwarded this keeps the routed
+  // request, and reports it as a slow op, until told there will be none
+  mon.no_reply(op);
   return true;
 }
 
