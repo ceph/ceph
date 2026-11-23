@@ -11,6 +11,7 @@ tasks:
 - ceph:
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+      - \(FS_DEGRADED\)
       - MDS_ALL_DOWN
       - MDS_UP_LESS_THAN_MAX
 - ceph-fuse:
