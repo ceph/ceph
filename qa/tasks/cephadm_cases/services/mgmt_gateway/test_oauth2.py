@@ -7,7 +7,7 @@ helpers live in common.py.
 """
 
 import urllib.parse
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 from tasks.cephadm_cases.services.base import WORKDIR
 from tasks.cephadm_cases.services.mgmt_gateway.common import (
@@ -127,9 +127,11 @@ class TestOAuth2Proxy(GatewayTestCase):
         puser, ppass = self.prometheus_creds()
 
         def closed() -> List[Check]:
-            ways = [('without credentials', {}),
-                    ('with a bearer token', {'bearer': bearer}),
-                    ('with basic auth', {'user': puser, 'password': ppass})]
+            # annotated: with a bare {} mypy joins the literals to object
+            ways: List[Tuple[str, Dict[str, Any]]] = [
+                ('without credentials', {}),
+                ('with a bearer token', {'bearer': bearer}),
+                ('with basic auth', {'user': puser, 'password': ppass})]
             reqs = [dict(url=self.gw(path), **extra) for _, path in SSO_ROUTES for _, extra in ways]
             r = iter(self.http_many(reqs))
             return [(f'{path} {how} refused', self.fail_closed(next(r)))
