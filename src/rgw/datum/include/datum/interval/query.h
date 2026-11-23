@@ -147,6 +147,7 @@ class cut;
 namespace detail {
 
 struct boundary_access;
+struct canonical_access;
 } // detail
 
 template <ordered_domain DomainT>
@@ -918,6 +919,16 @@ class static_interval_set final
     compat::detail::query_storage<query<DomainT>, Capacity> intervals;
 
 private:
+    friend struct detail::canonical_access;
+
+    template <typename ...Args>
+    constexpr void emplace_back(Args&& ...arguments)
+    {
+        ensure_capacity();
+        intervals.unchecked_emplace_back(std::forward<Args>(arguments)...);
+    }
+
+private:
     constexpr void ensure_capacity() const
     {
         if (Capacity == std::size(intervals)) {
@@ -970,14 +981,12 @@ public:
 public:
     constexpr void push_back(const value_type& value)
     {
-        ensure_capacity();
-        intervals.unchecked_emplace_back(value);
+        emplace_back(value);
     }
 
     constexpr void push_back(value_type&& value)
     {
-        ensure_capacity();
-        intervals.unchecked_emplace_back(std::move(value));
+        emplace_back(std::move(value));
     }
 
 public:
@@ -2233,12 +2242,6 @@ constexpr void for_each_interval(const detail::binary_expression<Operation, LhsT
 
 // A checked range of nonempty, ordered, noncoalescible intervals. Storage may
 // own its values or borrow them; external mutation must preserve the invariant.
-namespace detail {
-
-struct canonical_access;
-
-} // detail
-
 template <std::ranges::range StorageT>
 requires std::ranges::forward_range<const StorageT> and
          stable_interval<std::ranges::range_reference_t<const StorageT>> and
@@ -2379,6 +2382,38 @@ using automatic_storage_t = typename automatic_storage<SourceT>::type;
 // Only producers that establish canonical geometry may bypass admission checks.
 struct canonical_access final
 {
+    template <ordered_domain DomainT>
+    struct interval_factory final
+    {
+        const boundary_ref<DomainT>& lower;
+        const boundary_ref<DomainT>& upper;
+
+        // [dcl.init.general]: the conversion result initializes the destination directly:
+        constexpr operator query<DomainT>() const
+        {
+            return query<DomainT>::between(lower, upper);
+        }
+    };
+
+    template <typename StorageT>
+    struct retention_sink final
+    {
+        StorageT& selected;
+        using domain_type = typename StorageT::value_type::domain_type;
+
+        constexpr void emit_interval(const boundary_ref<domain_type>& lower,
+                                     const boundary_ref<domain_type>& upper) const
+        {
+            selected.emplace_back(interval_factory<domain_type> {lower, upper});
+        }
+
+        template <typename ValueT>
+        constexpr void operator()(ValueT&& value) const
+        {
+            selected.emplace_back(std::forward<ValueT>(value));
+        }
+    };
+
     // Fill the final owner directly; synchronous producers are borrowed and do not escape:
     template <typename StorageT, typename ProducerT>
     static constexpr auto build(ProducerT&& produce)
@@ -2404,9 +2439,7 @@ struct canonical_access final
                 if constexpr (requires { selected.reserve(0); }) {
                     selected.reserve(interval_view<SourceT> ? 1 : 4);
                 }
-                interval::for_each_interval(source, [&selected](auto&& value) {
-                    selected.push_back(std::forward<decltype(value)>(value));
-                });
+                interval::for_each_interval(source, retention_sink<StorageT> {selected});
             });
         }
 
