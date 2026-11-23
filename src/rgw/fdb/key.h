@@ -33,7 +33,8 @@ concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::strin
 namespace ceph::libfdb::detail {
 
 // String-view-convertible keys need no adapter; other key types supply this
-// operation through ADL. Key access borrows storage without copying the provider.
+// operation through ADL (argument-dependent lookup). Key access borrows storage
+// without copying the provider:
 constexpr std::string_view libfdb_key_view(const concepts::stringview_convertible auto& key)
 {
  return std::string_view(key);

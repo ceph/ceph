@@ -40,11 +40,11 @@
 #include <concepts>
 #include <cstdint>
 #include <exception>
-#include <initializer_list>
-#include <stdexcept>
 #include <filesystem>
 #include <functional>
+#include <initializer_list>
 #include <memory>
+#include <stdexcept>
 #include <stop_token>
 #include <type_traits>
 #include <utility>
@@ -591,6 +591,7 @@ inline select as_half_open_select(select selection)
  if (not selection.begin_inclusive) {
   selection.begin_key.push_back('\0');
  }
+
  if (selection.end_inclusive) {
   selection.end_key.push_back('\0');
  }
@@ -633,6 +634,7 @@ class option_list final
   : entries(values)
  {}
 
+ public:
  const_iterator begin() const noexcept { return entries.begin(); }
  const_iterator cbegin() const noexcept { return entries.cbegin(); }
 
@@ -678,7 +680,7 @@ class option_list final
   append_range(values);
  }
 
- // Replace every matching value in place; an absent code inserts nothing.
+ // Replace every matching value in place; an absent code inserts nothing:
  size_type replace_all(const OptionCodeT code, const option_value& value)
  {
   size_type count = 0;
@@ -1573,8 +1575,8 @@ namespace detail {
 inline bool risky_causal_writes(const transaction_options& options) noexcept
 {
  return std::ranges::any_of(options, [](const auto& option) {
-  return option.first == FDB_TR_OPTION_CAUSAL_WRITE_RISKY or
-         option.first == FDB_TR_OPTION_INITIALIZE_NEW_DATABASE;
+  return FDB_TR_OPTION_CAUSAL_WRITE_RISKY == option.first or
+         FDB_TR_OPTION_INITIALIZE_NEW_DATABASE == option.first;
  });
 }
 
@@ -1584,9 +1586,11 @@ inline commit_status commit_failure_status(const std::error_code error,
  if (retryable_not_committed(error)) {
   return commit_status::not_committed;
  }
- if (error == fdb_error_code::commit_unknown_result and not risky_causal_writes(options)) {
+
+ if (fdb_error_code::commit_unknown_result == error and not risky_causal_writes(options)) {
   return commit_status::unknown_result;
  }
+
  return commit_status::unconfirmed;
 }
 
@@ -1595,13 +1599,17 @@ inline transaction_result<void> commit_exception(transaction& txn, transaction_s
 {
  const auto phase = 0 == status.attempts ? transaction_phase::setup
                                        : transaction_phase::commit_observation;
+
  auto failure = exception_failure(error, phase, status);
+
  const auto *native = std::get_if<fdb_error>(&failure.cause);
 
  if (commit_status::committed == status.commit) {
   finish_version_stamps(txn, native ? native->code : std::make_error_code(std::errc::operation_canceled));
+
   return transaction_result<void> {std::in_place, status};
  }
+
  if (native and commit_status::unconfirmed == status.commit) {
   uncertain_commit(status, status.commit, native->code);
   failure.status = status;
@@ -1617,6 +1625,7 @@ class commit_attempt final
  enum struct phase { commit, versionstamp, complete };
 
  transaction& txn;
+
  transaction_status& status;
 
  std::optional<future_value> versionstamp_future;
@@ -1630,6 +1639,7 @@ class commit_attempt final
   status.attempts = 1;
   status.commit = commit_status::unconfirmed;
   status.duplicate_commit_possible = risky_causal_writes(txn.options);
+
   return future_value(fdb_transaction_commit(txn.raw_handle()));
  }
 
@@ -1674,7 +1684,8 @@ class commit_attempt final
 
  public:
  explicit commit_attempt(transaction& transaction, transaction_status& completion)
-  : txn(transaction), status(completion),
+  : txn(transaction),
+    status(completion),
     versionstamp_future(make_versionstamp_future(txn)),
     commit_future(submit(txn, status))
  {}
@@ -1723,11 +1734,13 @@ class commit_attempt final
     // The commit succeeded; error here applies only to versionstamp results:
     publish_versionstamp(wait_error);
     current_phase = phase::complete;
+
     return transaction_result<void> {std::in_place, status};
    }
 
    if (0 != wait_error) {
     const auto error = std::error_code(wait_error, ::ceph::libfdb::fdb_error_category());
+
     uncertain_commit(status, commit_status::unconfirmed, error);
     txn.finish_version_stamps(error);
     current_phase = phase::complete;
@@ -1737,16 +1750,23 @@ class commit_attempt final
    if (const auto future_error = fdb_future_get_error(commit_future.raw_ptr_or_throw());
        0 != future_error) {
     const auto error = std::error_code(future_error, ::ceph::libfdb::fdb_error_category());
+
     status.commit = commit_failure_status(error, txn.options);
-    if (status.commit == commit_status::not_committed) {
+
+    if (commit_status::not_committed == status.commit) {
      status.duplicate_commit_possible = false;
     }
+
     if (status.has_unknown_commit()) {
      uncertain_commit(status, status.commit, error);
     }
+
     txn.finish_version_stamps(error);
     current_phase = phase::complete;
-    return transaction_result<void> {fail_transaction(fdb_error {error, {}}, transaction_phase::commit, status)};
+
+    return transaction_result<void> {
+                fail_transaction(fdb_error {error, {}}, transaction_phase::commit, status)
+            };
    }
 
    txn.state = transaction::state_t::committed;
@@ -1754,10 +1774,12 @@ class commit_attempt final
 
    if (not versionstamp_future) {
     current_phase = phase::complete;
+
     return transaction_result<void> {std::in_place, status};
    }
 
    current_phase = phase::versionstamp;
+
    return std::nullopt;
   }
  catch (...)
@@ -1884,14 +1906,16 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(
 namespace detail {
 
 // Keep the waiting mechanism separate from submission/observation evidence.
-// The synchronous API and tests of wait failures use this same implementation.
+// The synchronous API and tests of wait failures use this same implementation:
 template <typename WaitFnT>
 transaction_result<void> complete_commit(transaction& txn, WaitFnT&& wait) noexcept
 {
  transaction_status status;
+
  try
   {
    commit_attempt attempt {txn, status};
+
    for (;;) {
     if (auto result = attempt.advance(std::invoke(wait, attempt.pending_future()))) {
      return std::move(*result);

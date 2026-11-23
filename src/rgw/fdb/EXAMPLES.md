@@ -408,10 +408,14 @@ A transaction handle groups operations; ordinary completion submits once:
 
 ~~~cpp
 auto txn = lfdb::make_transaction(dbh);
+
 lfdb::set(txn, "person/frances-allen/name", "Frances Allen");
+
 const auto committed = lfdb::commit(txn);
+
 if (not committed) {
   const auto& failure = committed.error();
+
   std::cerr << "Commit confirmed: " << false
             << ", may finish later: " << failure.status.may_commit_later() << '\n';
 }
@@ -423,9 +427,11 @@ Inspect the cause as well as commit knowledge. Native/library codes retain their
 ~~~cpp
 if (not committed) {
   const auto& failure = committed.error();
+
   if (const auto *native = std::get_if<lfdb::fdb_error>(&failure.cause)) {
     std::cerr << native->code.category().name() << ": " << native->code.message() << '\n';
   }
+
   if (const auto *exception = std::get_if<std::exception_ptr>(&failure.cause)) {
     // Explicit caller choice; completion itself has already returned.
     std::rethrow_exception(*exception);
@@ -448,8 +454,10 @@ for reuse across attempts:
 
 ~~~cpp
 const auto txr = lfdb::make_transactor(dbh);
+
 const auto updated = txr([](auto& txn, const std::string& name) {
   lfdb::set(txn, "person/frances-allen/name", name);
+
   return name.size();
 }, std::string {"Frances Allen"});
 
@@ -490,11 +498,14 @@ auto update_name(lfdb::transaction_handle& txn, const std::string& name)
   if (name.empty()) {
     return std::unexpected(update_error::empty_name);
   }
+
   lfdb::set(txn, "person/frances-allen/name", name);
+
   return name.size();
 }
 
 const auto txr = lfdb::make_transactor(dbh);
+
 if (const auto result = txr(update_name, std::string {"Frances Allen"}); not result) {
   if (const auto *rejection =
         std::get_if<lfdb::application_error<update_error>>(&result.error().cause)) {
@@ -549,9 +560,11 @@ enum struct profile_error { missing, empty };
 auto read_profile(lfdb::transaction_handle& txn, const std::string& key)
 {
   std::expected<std::map<std::string, std::string>, profile_error> fields {std::in_place};
+
   if (not lfdb::get(txn, key, *fields)) {
     fields = std::unexpected(profile_error::missing);
   }
+
   return fields;
 }
 
@@ -562,43 +575,59 @@ auto write_profile(lfdb::transaction_handle& txn, const std::string& key,
   if (fields.empty()) {
     return std::unexpected(profile_error::empty);
   }
+
   lfdb::set(txn, key, fields);
+
   return fields.size();
 }
 
 void reuse_profile(const lfdb::database_handle& dbh)
 {
   const std::string key = "example/reuse/profile";
+
   lfdb::set(dbh, key, std::map<std::string, std::string> {{"name", "Frances"}});
+
   const auto txr = lfdb::make_transactor(dbh);
+
   auto update_profile = [&](auto& txn) {
     return txr(txn, read_profile, key).and_then([&](auto&& fields) {
       fields["name"] = "Frances Allen";
+
       return txr(txn, write_profile, key, fields);
     });
   };
+
   auto report_status = [](const auto& failure) {
     std::cerr << "Failure after " << failure.status.attempts
               << " attempt(s); uncertain: " << failure.status.has_unknown_commit() << '\n';
   };
 
   auto caller_txn = lfdb::make_transaction(dbh);
+
   const auto working = txr(caller_txn, update_profile);
+
   if (not working) {
     report_status(working.error());
+
     return;
   }
+
   std::cout << "Prepared " << *working << " fields before commit\n";
+
   if (const auto committed = lfdb::commit(caller_txn); not committed) {
     report_status(committed.error());
+
     return;
   }
 
   const auto completed = txr(update_profile);
+
   if (not completed) {
     report_status(completed.error());
+
     return;
   }
+
   std::cout << "Committed " << completed->value << " fields in "
             << completed->status.attempts << " attempt(s)\n";
 }
@@ -625,6 +654,7 @@ the next step is a native operation without an application rejection channel:
 
 ~~~cpp
 const auto txr = lfdb::make_transactor(dbh);
+
 const auto completed = txr([&](auto& txn) {
   return txr(txn, read_profile, std::string {"example/reuse/profile"})
     .transform([&](auto&& fields) {
@@ -632,6 +662,7 @@ const auto completed = txr([&](auto& txn) {
       lfdb::set(txn, "example/reuse/profile", fields);
     });
 });
+
 if (not completed) {
   std::cerr << "Profile update failed; uncertain: "
             << completed.error().status.has_unknown_commit() << '\n';
@@ -761,7 +792,7 @@ It can be true without a first error code because no failure was observed.
 See the pinned [native commit implementation](https://github.com/apple/foundationdb/blob/341404ebaa376c5247929cc8543dfd4bc3cf9e1a/fdbclient/NativeAPI.actor.cpp#L6734)
 and [option definitions](https://github.com/apple/foundationdb/blob/341404ebaa376c5247929cc8543dfd4bc3cf9e1a/fdbclient/vexillographer/fdb.options).
 
-Both policies use native `on_error` for eligibility, backoff, retry limit and
+Both policies use native `on_error` for eligibility, backoff, retry limit, and
 timeout. They add no libfdb attempt budget. A zero native retry limit allows the
 initial attempt only. The default, `retry_policy::no_replay_unknown`, stops when
 this owner has uncertain commit effects:
@@ -772,8 +803,10 @@ const lfdb::transaction_options options {
   {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}}
 };
 const auto txr = lfdb::make_transactor(dbh, options);
+
 if (const auto result = txr(update_name, std::string {"Frances Allen"}); not result) {
   const auto& failure = result.error();
+
   std::cerr << "Update failed after " << failure.status.attempts
             << " attempt(s); uncertain: " << failure.status.has_unknown_commit() << '\n';
 }
@@ -794,14 +827,15 @@ For an additional application decision, pass `retry_if(callable)`:
 ~~~cpp
 const auto result = txr(lfdb::retry_if([](const lfdb::transaction_failure<>& failure) {
   const auto& native = std::get<lfdb::fdb_error>(failure.cause);
-  return native.code != lfdb::fdb_error_code::database_locked;
+
+  return lfdb::fdb_error_code::database_locked != native.code;
 }), update_name, std::string {"Frances Allen"});
 ~~~
 
 The callable sees native failures permitted by the uncertainty policy, with their phase/status,
 before recovery.
 False returns the original failure. True requests native preparation; it cannot
-override eligibility, budgets or the configured uncertainty policy. One mutable,
+override eligibility, budgets, or the configured uncertainty policy. One mutable,
 possibly move-only callable is reused for the invocation. Policy exceptions
 are captured in `fdb_error.retry_error` without replacing the original trigger.
 Native recovery failure retains its separate code there. Recovery does not call
@@ -816,7 +850,7 @@ An observed native commit-future error need not have an exception object.
 
 For database effects that must be applied once, store a durable operation marker
 in the same transaction as those effects. Keep its identifier stable across
-attempts, later reconciliation and process restarts:
+attempts, later reconciliation, and process restarts:
 
 ~~~cpp
 void apply_once(lfdb::transaction_handle& txn, const std::string& marker)
@@ -824,7 +858,9 @@ void apply_once(lfdb::transaction_handle& txn, const std::string& marker)
   if (lfdb::key_exists(txn, marker)) {
     return;
   }
+
   std::uint64_t count = 0;
+
   lfdb::get(txn, "example/once/count", count);
   lfdb::set(txn, "example/once/count", count + 1);
   lfdb::set(txn, marker, true);
@@ -833,6 +869,7 @@ void apply_once(lfdb::transaction_handle& txn, const std::string& marker)
 const std::string marker = "example/once/applied/job-42";
 const auto txr = lfdb::make_transactor(dbh, options, lfdb::retry_policy::replay_unknown);
 const auto result = txr(apply_once, marker);
+
 if (const auto& status = result ? result->status : result.error().status; status.has_unknown_commit()) {
   std::cerr << "Reconciliation required; may finish later: "
             << status.may_commit_later() << '\n';
@@ -1218,7 +1255,9 @@ storage rather than guessing a capacity or counting first:
 
 ```cpp
 const auto selected = q::difference(q::prefix("tenant/"), q::prefix("tenant/private/"));
+
 static_assert(2 == q::interval_capacity_v<decltype(selected)>);
+
 const auto prepared = q::compile_intervals(std::in_place, selected);
 
 for (const auto& interval : prepared) {
@@ -1295,6 +1334,7 @@ void reconcile_byte_extents()
 
   const auto previous = extent::closed_open(0, 8);
   const auto desired = extent::closed_open(5, 12);
+
   const auto additions = desired - previous;
   const auto removals = previous - desired;
   const auto changed = previous ^ desired;
@@ -1585,6 +1625,7 @@ Use raw callbacks to inspect or copy encoded records without decoding them:
 
 ```cpp
 std::size_t encoded_bytes = 0;
+
 lfdb::for_each(lfdb::raw, dbh, q::prefix("person/"),
   [&encoded_bytes](std::span<const std::uint8_t> key,
                    std::span<const std::uint8_t> value) {
@@ -1732,6 +1773,7 @@ must be released within the constant evaluation; database reads remain runtime:
 ```cpp
 static_assert([] {
   const auto page = lfdb::collect(std::array{10, 20, 30}, lfdb::page{2});
+
   return page.has_more && 2 == page.size() && 10 == page.rows.front();
 }());
 ```
@@ -2097,6 +2139,7 @@ lfdb::get(txn, "person/alonzo-church/name", name);
 lfdb::commit(txn, stamp).value();
 // Commit succeeded. Any error below concerns only the requested stamp.
 const auto bytes = stamp.resolved_bytes(lfdb::with_result);
+
 if (not bytes) {
   std::cerr << "Committed, but no stamp: " << bytes.error().message() << '\n';
 }

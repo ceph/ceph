@@ -54,13 +54,16 @@ struct archive_progress final
 {
   std::size_t records = 0;
   std::size_t bytes = 0;
+
   bool has_more = false;
 };
 
 q::interval_set archive_selection(const std::string_view marker = {})
 {
   q::interval_set selected {
-    q::prefix("example/ceph/live/bucket-a/") | q::prefix("example/ceph/live/bucket-b/")};
+    q::prefix("example/ceph/live/bucket-a/") | q::prefix("example/ceph/live/bucket-b/")
+  };
+
   selected -= q::prefix("example/ceph/live/bucket-a/.internal/");
   selected -= q::prefix("example/ceph/live/bucket-b/.internal/");
 
@@ -75,11 +78,12 @@ auto archive_record(lfdb::transaction_handle& txn, const std::string& source,
                     const ceph::buffer::list& payload)
   -> std::expected<std::size_t, archive_error>
 {
-  if (payload.length() > 64 * 1024) {
+  if (64 * 1024 < payload.length()) {
     return std::unexpected(archive_error::payload_too_large);
   }
 
   const auto destination = "example/ceph/archive/" + source;
+
   if (lfdb::key_exists(txn, destination)) {
     return std::unexpected(archive_error::destination_exists);
   }
@@ -95,14 +99,16 @@ auto archive_batch(const lfdb::database_handle& dbh, const q::interval_set& sele
 {
   const auto txr = lfdb::make_transactor(dbh);
 
-  return txr([&](auto& txn, auto& output)
+  return txr([&txr, &selected](auto& txn, auto& output)
     -> std::expected<archive_progress, lfdb::transaction_failure<archive_error>> {
       const auto batch = lfdb::collect(
         lfdb::scan<ceph::buffer::list>(txn, selected), lfdb::page{16});
+
       std::size_t bytes = 0;
 
       for (const auto& [key, payload] : batch.rows) {
         auto moved = txr(txn, archive_record, key, payload);
+
         if (not moved) {
           return std::unexpected(std::move(moved.error()));
         }
@@ -138,10 +144,12 @@ namespace metadata_example {
 void show_one_batch(const lfdb::database_handle& dbh)
 {
   std::vector<std::string> archived;
+
   const auto completed = archive_batch(dbh, archive_selection(), archived);
 
   if (not completed) {
     const auto& failure = completed.error();
+
     std::cerr << "Archive failed in phase " << std::to_underlying(failure.phase)
               << "; uncertain: " << failure.status.has_unknown_commit()
               << "; may finish later: " << failure.status.may_commit_later() << '\n';

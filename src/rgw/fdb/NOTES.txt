@@ -27,10 +27,10 @@ Foundation. See file COPYING.
   Arbitrary expressions still normalize when canonical traversal requires it.
 
 * General set mutations reuse core interval assignment for strong publication.
-  FDB construction/mutation share bounded geometry, and scalar/composite scans
+  FDB (FoundationDB) construction/mutation share bounded geometry, and scalar/composite scans
   share selector compilation. Scalar emptiness/count checks borrow endpoint bytes;
-  executable rvalues transfer them. Key concepts and ADL adaptation live once in
-  standard-only key.h; query.h no longer requires a prior base.h include or Ceph
+  executable rvalues transfer them. Key concepts and ADL (argument-dependent lookup) adaptation live
+  once in standard-only key.h; query.h no longer requires a prior base.h include or Ceph
   container dispatch.
 
 * The complete set-operator family (&, |, -, ^, ~) delegates to named algebra
@@ -40,19 +40,19 @@ Foundation. See file COPYING.
   General sets build a canonical replacement and swap on success; the single-
   interval intersection retains its storage-reuse fast path. Options survive
   empty results. Core/FDB overloads preserve their respective universes; bounded
-  XOR toggling is distinct from relative complement. See EXAMPLES.md.
+  XOR (exclusive or) toggling is distinct from relative complement. See EXAMPLES.md.
 
 * query::assign_intersection(range, bound) and range &= bound modify a concrete
   interval and return it by reference. The operator delegates to the named mutator;
   concrete value-producing intersection uses the same implementation. Borrowed
   core bound selection retains unchanged strings and lets temporary bounds donate
-  tighter endpoints. Option conflicts, self-aliasing, open/closed boundaries and
+  tighter endpoints. Option conflicts, self-aliasing, open/closed boundaries, and
   ordinary-keyspace clamping keep their existing semantics. Lazy expressions remain
   value-producing. See EXAMPLES.md for usage and exception guarantees.
 
 * Paged collection reserves from source cardinality rather than the requested
   maximum. Exact sizes use standard range sizing; bounded approximate sources use
-  the C++26 reserve_hint CPO only when its library feature macro is available.
+  the C++26 reserve_hint CPO (customization point object) only when its library feature macro is available.
   Unlimited unsized streams grow from actual rows, and empty generic pages reserve
   no vector storage. Native single-window pages use the same collector over a
   capped decoded view, preserving returned-row reservation and avoiding decoding
@@ -98,7 +98,7 @@ Foundation. See file COPYING.
 
 * Native commit attempts produce that same completion result internally.
   Synchronous and asynchronous owners share failure classification, exception
-  origin, stamp cleanup and replay decisions. Read helpers omit completion.
+  origin, stamp cleanup, and replay decisions. Read helpers omit completion.
   Single-shot leaf writes share native completion but preserve their caller's
   transaction when the leaf body fails before commit.
 

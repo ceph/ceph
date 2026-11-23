@@ -25,7 +25,9 @@
 namespace ceph::libfdb {
 
 enum struct transaction_phase { setup, body, commit, commit_observation };
+
 enum struct commit_status { not_submitted, not_committed, committed, unknown_result, unconfirmed };
+
 // Unknown includes unconfirmed submission and uncertainty retained from earlier attempts.
 enum struct retry_policy { no_replay_unknown, replay_unknown };
 
@@ -34,7 +36,9 @@ struct transaction_status final
  std::size_t attempts = 0;
 
  commit_status commit = commit_status::not_submitted;
+
  std::optional<commit_status> prior_unknown_commit;
+
  std::optional<std::error_code> first_unknown_commit_error;
 
  // Expert causal-write options weaken guarantees even after observed success.
@@ -52,6 +56,7 @@ struct transaction_status final
   return duplicate_commit_possible or prior_unknown_commit == commit_status::unconfirmed or
          commit_status::unconfirmed == commit;
  }
+
 };
 
 struct fdb_error final
@@ -74,12 +79,14 @@ struct application_error final
 template <typename ErrorT = void>
 struct transaction_failure final
 {
- using cause_type = std::conditional_t<std::is_void_v<ErrorT>,
-  std::variant<fdb_error, std::exception_ptr>,
+ using cause_type = std::conditional_t<
+  std::is_void_v<ErrorT>, std::variant<fdb_error, std::exception_ptr>,
   std::variant<application_error<ErrorT>, fdb_error, std::exception_ptr>>;
 
  cause_type cause;
+
  transaction_phase phase;
+
  transaction_status status;
 };
 
@@ -87,6 +94,7 @@ template <typename ValueT>
 struct committed_value final
 {
  ValueT value;
+
  transaction_status status;
 };
 
@@ -101,7 +109,7 @@ using transaction_result = std::expected<committed_value<ValueT>, transaction_fa
 
 namespace detail {
 
-// Preserve user origin when application code throws a native-looking error.
+// Preserve user origin when application code throws a native-looking error:
 struct user_callback_failure final
 {
  std::exception_ptr cause;
@@ -136,6 +144,7 @@ inline void next_attempt(transaction_status& status) noexcept
  if (commit_status::unconfirmed == status.commit) {
   status.prior_unknown_commit = commit_status::unconfirmed;
  }
+
  if (commit_status::unknown_result == status.commit and not status.prior_unknown_commit) {
   status.prior_unknown_commit = commit_status::unknown_result;
  }
@@ -148,6 +157,7 @@ inline void uncertain_commit(transaction_status& status, const commit_status sta
                              const std::optional<std::error_code> code = std::nullopt) noexcept
 {
  status.commit = state;
+
  if (not status.first_unknown_commit_error and code) {
   status.first_unknown_commit_error = code;
  }
@@ -157,6 +167,7 @@ inline void observe_commit(transaction_status& status, const transaction_status&
 {
  status.commit = completion.commit;
  status.duplicate_commit_possible |= completion.duplicate_commit_possible;
+
  if (not status.first_unknown_commit_error) {
   status.first_unknown_commit_error = completion.first_unknown_commit_error;
  }
@@ -168,8 +179,9 @@ auto fail_transaction(auto&& cause, const transaction_phase phase,
  -> std::unexpected<transaction_failure<ErrorT>>
 {
  return std::unexpected(transaction_failure<ErrorT> {
-  typename transaction_failure<ErrorT>::cause_type {std::forward<decltype(cause)>(cause)}, phase, status
- });
+             typename transaction_failure<ErrorT>::cause_type {std::forward<decltype(cause)>(cause)},
+             phase, status
+         });
 }
 
 template <typename ErrorT = void>

@@ -298,7 +298,7 @@ concept query_interval =
 
 template <typename T>
 concept byte_interval_expression =
- core::detail::plain_expression<T> &&
+ core::detail::plain_expression<T> and
  std::same_as<core::expression_domain_t<T>, byte_string_domain>;
 
 template <typename T>
@@ -362,6 +362,7 @@ constexpr void normalize_keyspace(interval& x)
 constexpr interval clamp_to_keyspace(interval&& x)
 {
  normalize_keyspace(x);
+
  return std::move(x);
 }
 
@@ -369,7 +370,9 @@ constexpr bool is_empty_select(const interval& x) noexcept
 {
  const auto reserved = byte_string_domain::is_reserved_key(x.end_key);
  const auto upper = reserved ? byte_string_domain::keyspace_limit_view() : std::string_view(x.end_key);
- if (const auto order = byte_string_domain::compare(x.begin_key, upper); std::strong_ordering::equal != order) {
+
+ if (const auto order = byte_string_domain::compare(x.begin_key, upper);
+     std::strong_ordering::equal != order) {
   return std::strong_ordering::greater == order;
  }
 
@@ -407,7 +410,9 @@ constexpr interval to_select(interval&& x, const query_options& options)
  if (is_empty_select(x)) {
   return to_select(boundary::closed(""), boundary::open(""), options);
  }
+
  x.options = options;
+
  return clamp_to_keyspace(std::move(x));
 }
 
@@ -490,7 +495,7 @@ struct is_keyspace_bounded<core::detail::set_union_expr<LHS_T, RHS_T>>
 
 template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
 struct is_keyspace_bounded<core::detail::symmetric_difference_expr<LHS_T, RHS_T>>
- : std::bool_constant<is_keyspace_bounded<LHS_T>::value &&
+ : std::bool_constant<is_keyspace_bounded<LHS_T>::value and
                       is_keyspace_bounded<RHS_T>::value>
 {};
 
@@ -585,6 +590,7 @@ constexpr interval singleton(concepts::libfdb_key auto&& key)
 
  auto lower = closed(std::forward<decltype(key)>(key));
  auto upper = closed(lower.key);
+
  return interval(std::move(lower), std::move(upper));
 }
 
@@ -633,13 +639,15 @@ constexpr auto with_options(ExprT&& expr, const query_options& options)
 }
 
 // Modify one concrete interval. Prepare replacements before changing lhs, including
-// when rhs aliases lhs; an rvalue rhs can donate its tighter endpoint strings.
+// when rhs aliases lhs; an rvalue rhs can donate its tighter endpoint strings:
 template <query_interval RhsT>
 constexpr interval& assign_intersection(interval& lhs, RhsT&& rhs)
 {
  const auto options = detail::combined_options(lhs, rhs);
+
  const auto lhs_bounds = core::detail::bounds_of(lhs);
  const auto rhs_bounds = core::detail::bounds_of(rhs);
+
  const auto bounds = core::detail::intersection_bounds(lhs_bounds, rhs_bounds);
 
  if (!bounds) {
@@ -648,22 +656,28 @@ constexpr interval& assign_intersection(interval& lhs, RhsT&& rhs)
   lhs.begin_inclusive = true;
   lhs.end_inclusive = false;
   lhs.options = options;
+
   return lhs;
  }
 
  const auto& [lower, upper] = *bounds;
+
  const bool includes_begin = lower.inclusive();
+
  const bool reserved_end = byte_string_domain::is_reserved_key(upper.finite_key());
  const bool includes_end = !reserved_end && upper.inclusive();
+
  std::optional<std::string> next_begin;
  std::optional<std::string> next_end;
 
  if (std::addressof(lower.finite_key()) != std::addressof(lhs.begin_key)) {
   next_begin.emplace(std::forward<RhsT>(rhs).begin_key);
  }
+
  if (reserved_end && lhs.end_key != byte_string_domain::keyspace_limit_view()) {
   next_end.emplace(byte_string_domain::keyspace_limit());
  }
+
  if (!reserved_end && std::addressof(upper.finite_key()) != std::addressof(lhs.end_key)) {
   next_end.emplace(std::forward<RhsT>(rhs).end_key);
  }
@@ -671,12 +685,15 @@ constexpr interval& assign_intersection(interval& lhs, RhsT&& rhs)
  if (next_begin) {
   lhs.begin_key = std::move(*next_begin);
  }
+
  if (next_end) {
   lhs.end_key = std::move(*next_end);
  }
+
  lhs.begin_inclusive = includes_begin;
  lhs.end_inclusive = includes_end;
  lhs.options = options;
+
  return lhs;
 }
 
@@ -690,6 +707,7 @@ template <query_interval RhsT>
 constexpr interval intersection(interval lhs, RhsT&& rhs)
 {
  assign_intersection(lhs, std::forward<RhsT>(rhs));
+
  return lhs;
 }
 
@@ -731,9 +749,10 @@ requires expression<LHS_T> and expression<RHS_T>
 constexpr auto symmetric_difference(LHS_T&& lhs, RHS_T&& rhs)
 {
  const auto options = detail::combined_options(lhs, rhs);
+
  return detail::configure(
-  core::symmetric_difference(detail::core_expression_of(std::forward<LHS_T>(lhs)),
-                            detail::core_expression_of(std::forward<RHS_T>(rhs))), options);
+          core::symmetric_difference(detail::core_expression_of(std::forward<LHS_T>(lhs)),
+                                    detail::core_expression_of(std::forward<RHS_T>(rhs))), options);
 }
 
 template <expression ExprT>
@@ -751,19 +770,21 @@ template <byte_interval_expression ExprT>
 constexpr auto bounded_geometry(const ExprT& geometry)
 {
  return core::detail::intersection_expr<const ExprT&, interval> {
-  .lhs = geometry, .rhs = query::universal()};
+             .lhs = geometry, .rhs = query::universal()
+         };
 }
 
 } // namespace detail
 
 // Unlike a single interval, this value can retain disconnected results. Geometry
-// uses the core's canonical storage; one options value also survives empty sets.
+// uses the core's canonical storage; one options value also survives empty sets:
 struct interval_set final
 {
  using domain_type = byte_string_domain;
  using interval_expression_type = core::interval_set<domain_type>;
 
  interval_expression_type expression;
+
  query_options options;
 
  public:
@@ -778,9 +799,11 @@ struct interval_set final
   expression = detail::bounded_geometry(detail::core_expression_of(source));
  }
 
+ public:
  constexpr interval_set& operator=(interval_set other) noexcept
  {
   swap(other);
+
   return *this;
  }
 
@@ -788,20 +811,25 @@ struct interval_set final
  constexpr interval_set& operator=(const ExprT& source)
  {
   interval_set next {source};
+
   swap(next);
+
   return *this;
  }
 
+ public:
  constexpr void swap(interval_set& other) noexcept
  {
   expression.swap(other.expression);
   std::swap(options, other.options);
  }
+
 };
 
 constexpr interval_set with_options(interval_set x, const query_options& options)
 {
  x.options = options;
+
  return x;
 }
 
@@ -812,13 +840,15 @@ constexpr interval_set& assign_geometry(interval_set& target, const ExprT& geome
                                         const query_options& options)
 {
  static_assert(std::is_nothrow_copy_assignable_v<query_options>);
+
  target.expression = bounded_geometry(geometry);
  target.options = options;
+
  return target;
 }
 
 // Pure-core operands retain their algebraic universe. An FDB operand selects
-// the FDB overload, whose stronger shared core constraint resolves mixed ADL.
+// the FDB overload, whose stronger shared core constraint resolves mixed argument-dependent lookup:
 template <typename T>
 concept fdb_operand = query_interval<T> or configured_expression<T>;
 
@@ -834,9 +864,12 @@ constexpr interval_set& assign_intersection(interval_set& lhs, const RhsT& rhs)
 {
  const auto options = detail::combined_options(lhs, rhs);
  const auto& geometry = detail::core_expression_of(rhs);
+
  return detail::assign_geometry(lhs,
-  core::detail::intersection_expr<const interval_set::interval_expression_type&, decltype(geometry)> {
-   .lhs = lhs.expression, .rhs = geometry}, options);
+          core::detail::intersection_expr<const interval_set::interval_expression_type&,
+                                           decltype(geometry)> {
+           .lhs = lhs.expression, .rhs = geometry
+          }, options);
 }
 
 template <expression RhsT>
@@ -844,18 +877,24 @@ constexpr interval_set& assign_set_union(interval_set& lhs, const RhsT& rhs)
 {
  const auto options = detail::combined_options(lhs, rhs);
  const auto& geometry = detail::core_expression_of(rhs);
+
  return detail::assign_geometry(lhs,
-  core::detail::set_union_expr<const interval_set::interval_expression_type&, decltype(geometry)> {
-   .lhs = lhs.expression, .rhs = geometry}, options);
+          core::detail::set_union_expr<const interval_set::interval_expression_type&,
+                                        decltype(geometry)> {
+           .lhs = lhs.expression, .rhs = geometry
+          }, options);
 }
 
 template <expression RhsT>
 constexpr interval_set& assign_difference(interval_set& lhs, const RhsT& rhs)
 {
  const auto& geometry = detail::core_expression_of(rhs);
+
  return detail::assign_geometry(lhs,
-  core::detail::difference_expr<const interval_set::interval_expression_type&, decltype(geometry)> {
-   .lhs = lhs.expression, .rhs = geometry}, lhs.options);
+          core::detail::difference_expr<const interval_set::interval_expression_type&,
+                                         decltype(geometry)> {
+           .lhs = lhs.expression, .rhs = geometry
+          }, lhs.options);
 }
 
 template <expression RhsT>
@@ -863,17 +902,22 @@ constexpr interval_set& assign_symmetric_difference(interval_set& lhs, const Rhs
 {
  const auto options = detail::combined_options(lhs, rhs);
  const auto& geometry = detail::core_expression_of(rhs);
+
  return detail::assign_geometry(lhs,
-  core::detail::symmetric_difference_expr<const interval_set::interval_expression_type&, decltype(geometry)> {
-   .lhs = lhs.expression, .rhs = geometry}, options);
+          core::detail::symmetric_difference_expr<const interval_set::interval_expression_type&,
+                                                   decltype(geometry)> {
+           .lhs = lhs.expression, .rhs = geometry
+          }, options);
 }
 
 constexpr interval_set& assign_complement(interval_set& x)
 {
  const auto universe = query::universal();
+
  return detail::assign_geometry(x,
-  core::detail::difference_expr<const interval&, const interval_set::interval_expression_type&> {
-   .lhs = universe, .rhs = x.expression}, x.options);
+          core::detail::difference_expr<const interval&, const interval_set::interval_expression_type&> {
+           .lhs = universe, .rhs = x.expression
+          }, x.options);
 }
 
 template <typename LhsT, typename RhsT>
@@ -1044,8 +1088,9 @@ constexpr bool intersects(const LHS_T& lhs, const RHS_T& rhs)
 
  const auto& left = detail::core_expression_of(lhs);
  const auto& right = detail::core_expression_of(rhs);
+
  return not query::is_empty_expression(
-  core::detail::intersection_expr<decltype(left), decltype(right)> {.lhs = left, .rhs = right});
+              core::detail::intersection_expr<decltype(left), decltype(right)> {.lhs = left, .rhs = right});
 }
 
 template <expression LHS_T, expression RHS_T>
@@ -1064,8 +1109,9 @@ constexpr bool encloses(const LHS_T& outer, const RHS_T& inner)
 
  const auto& inside = detail::core_expression_of(inner);
  const auto& outside = detail::core_expression_of(outer);
+
  return query::is_empty_expression(
-  core::detail::difference_expr<decltype(inside), decltype(outside)> {.lhs = inside, .rhs = outside});
+          core::detail::difference_expr<decltype(inside), decltype(outside)> {.lhs = inside, .rhs = outside});
 }
 
 constexpr boundary closed_bound(concepts::libfdb_key auto&& key)
@@ -1101,23 +1147,32 @@ constexpr auto upper_before(concepts::libfdb_key auto&& key)
 constexpr auto between(core::lower_endpoint<byte_string_domain> lower,
                        core::upper_endpoint<byte_string_domain> upper)
 {
- return detail::to_select(interval {std::move(lower.value), std::move(upper.value),
-  core::endpoint_inclusion::included == lower.inclusion,
-  core::endpoint_inclusion::included == upper.inclusion}, {});
+ return detail::to_select(
+          interval {
+           std::move(lower.value), std::move(upper.value),
+           core::endpoint_inclusion::included == lower.inclusion,
+           core::endpoint_inclusion::included == upper.inclusion
+          }, {});
 }
 
 constexpr auto from(core::lower_endpoint<byte_string_domain> lower)
 {
  // The missing upper side means public libfdb universal, not algebraic +infinity.
- return detail::to_select(interval {std::move(lower.value), byte_string_domain::keyspace_limit(),
-  core::endpoint_inclusion::included == lower.inclusion, false}, {});
+ return detail::to_select(
+          interval {
+           std::move(lower.value), byte_string_domain::keyspace_limit(),
+           core::endpoint_inclusion::included == lower.inclusion, false
+          }, {});
 }
 
 constexpr auto until(core::upper_endpoint<byte_string_domain> upper)
 {
  // The missing lower side means public libfdb universal, not algebraic -infinity.
- return detail::to_select(interval {byte_string_domain::minimum_key(), std::move(upper.value),
-  true, core::endpoint_inclusion::included == upper.inclusion}, {});
+ return detail::to_select(
+          interval {
+           byte_string_domain::minimum_key(), std::move(upper.value),
+           true, core::endpoint_inclusion::included == upper.inclusion
+          }, {});
 }
 
 constexpr auto at(concepts::libfdb_key auto&& key)

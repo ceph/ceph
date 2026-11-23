@@ -787,8 +787,7 @@ template <query::expression SelectionT>
 [[nodiscard]] inline std::int64_t approximate_range_size(database_handle dbh,
                                                          SelectionT selection)
 {
- return approximate_range_size(
-  std::move(dbh), transaction_options {}, std::move(selection));
+ return approximate_range_size(std::move(dbh), transaction_options {}, std::move(selection));
 }
 
 // For ordinary range scans inside one explicit transaction, scan() is usually
@@ -873,12 +872,16 @@ constexpr std::size_t initial_reservation(RangeT& rows, const page p,
 {
  const auto bounded_count = [p, max_capacity](const auto hint) -> std::size_t {
   using count_type = std::common_type_t<decltype(hint), uint64_t>;
+
   const auto limit = static_cast<count_type>(p.size);
   const auto available = static_cast<count_type>(hint);
+
   const auto count = 0 == limit || limit > available ? available : limit;
+
   if (max_capacity < count) {
    throw std::length_error("range reservation exceeds vector capacity");
   }
+
   return static_cast<std::size_t>(count);
  };
 
@@ -887,7 +890,7 @@ constexpr std::size_t initial_reservation(RangeT& rows, const page p,
  }
 
  // C++26 hints require library support, independently of the compiler version.
- // The feature macro protects missing names; the concept checks the range.
+ // The feature macro protects missing names; the concept checks the range:
 #if defined(__cpp_lib_ranges_reserve_hint) && 202502L <= __cpp_lib_ranges_reserve_hint
  if constexpr (std::ranges::approximately_sized_range<RangeT>) {
   // An unsized take view can advertise its cap. Unlimited pages grow from actual rows.
@@ -896,6 +899,7 @@ constexpr std::size_t initial_reservation(RangeT& rows, const page p,
   }
  }
 #endif
+
  return 0;
 }
 
@@ -935,6 +939,7 @@ template <std::ranges::input_range RangeT>
  using row_type = std::ranges::range_value_t<RangeT>;
 
  page_result<row_type> out;
+
  // Input-only ranges may require querying their size or hint before begin().
  const auto capacity = detail::initial_reservation(rows, p, out.rows.max_size());
 
@@ -948,6 +953,7 @@ template <std::ranges::input_range RangeT>
   if (out.rows.empty() && 0 != capacity) {
    out.rows.reserve(capacity);
   }
+
   out.rows.emplace_back(std::forward<decltype(row)>(row));
  }
 
@@ -1238,8 +1244,7 @@ inline std::size_t for_each(raw_t, transaction_handle txn,
   throw libfdb_exception(std::errc::invalid_argument, "raw traversal requires a transaction handle");
  }
 
- return detail::for_each_result_pair(
-   *txn, std::move(selection), mode, detail::raw_row_callback(fn));
+ return detail::for_each_result_pair(*txn, std::move(selection), mode, detail::raw_row_callback(fn));
 }
 
 /* The database form retries each result window before exposing its borrowed
@@ -1251,11 +1256,14 @@ inline std::size_t for_each(raw_t, database_handle dbh, const transaction_option
                             SelectionT selection, const read_mode mode, FnT&& fn)
 {
  const detail::transaction_source source(std::move(dbh), options);
+
  auto cursor = detail::make_managed_query_cursor(std::move(selection));
+
  std::size_t nread = 0;
 
  while (cursor) {
   auto txn = source.make();
+
   auto window = detail::read_query_window_with_retry(txn, cursor, mode);
 
   if (not window) {

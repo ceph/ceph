@@ -45,6 +45,7 @@ inline auto convert_to_buffer(const auto& from, auto& out_data,
  out_data.clear();
 
  zpp::bits::out out(out_data, options...);
+
  if (const auto status = out(from); zpp::bits::failure(status)) {
   throw libfdb_exception(std::make_error_code(static_cast<std::errc>(status)),
                          "unable to encode value");

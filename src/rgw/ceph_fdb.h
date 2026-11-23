@@ -38,6 +38,7 @@ auto serialize(auto& archive, ceph::buffer::list& target)
  // Decode a transient view, then copy the bytes once into their durable Ceph
  // owner:
  std::span<const std::uint8_t> bytes;
+
  auto result = archive(bytes);
 
  target.clear();

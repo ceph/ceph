@@ -600,10 +600,10 @@ inline void managed_atomic_op(database_handle dbh,
 template <FDBMutationType MutationKind, auto MaterializeParam, typename ParamT>
 requires requires(const ParamT& value) { MaterializeParam(value); }
 inline void atomic_op(database_handle dbh,
-                              const concepts::libfdb_key auto& k, const ParamT& param)
+                       const concepts::libfdb_key auto& k, const ParamT& param)
 {
  return managed_atomic_op<MutationKind, MaterializeParam>(
-  std::move(dbh), transaction_options {}, k, param);
+          std::move(dbh), transaction_options {}, k, param);
 }
 
 } // namespace detail
@@ -915,8 +915,7 @@ inline void compare_and_clear(database_handle dbh,
                               const concepts::libfdb_key auto& k,
                               const FDBBytesT& expected)
 {
- return compare_and_clear(
-  std::move(dbh), transaction_options {}, k, expected);
+ return compare_and_clear(std::move(dbh), transaction_options {}, k, expected);
 }
 
 } // namespace atomic

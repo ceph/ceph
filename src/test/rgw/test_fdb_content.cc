@@ -104,9 +104,10 @@ std::string materialized_key(const content::compiled_key& key)
 std::string tuple_string(const std::string_view bytes)
 {
  std::string encoded(1, '\x01');
+
  std::size_t first = 0;
 
- for (auto zero = bytes.find('\0'); zero != std::string_view::npos;
+ for (auto zero = bytes.find('\0'); std::string_view::npos != zero;
       zero = bytes.find('\0', first)) {
   encoded.append(bytes.substr(first, zero - first));
   encoded.append("\0\xFF", 2);
@@ -122,21 +123,27 @@ std::string tuple_string(const std::string_view bytes)
 struct inspected_child final
 {
  std::string_view bytes;
+
  mutable int inspections = 0;
 
+ public:
  explicit inspected_child(const std::string_view bytes)
   : bytes(bytes)
  {}
+
  inspected_child(const inspected_child&) = delete;
 
+ public:
  operator std::string_view() const
  {
   ++inspections;
+
   return bytes;
  }
+
 };
 
-} // namespace
+} // anonymous namespace
 
 TEST_CASE("content keys use the FoundationDB byte-string tuple representation",
           "[fdb][content]")
@@ -207,21 +214,26 @@ TEST_CASE("content composition inspects a borrowed child once", "[fdb][content][
  SECTION("preserved compiled prefix") {
   CHECK(materialized_key(content::key(prefix, child)) == expected);
  }
+
  SECTION("consumed compiled prefix") {
   CHECK(materialized_key(content::key(content::key("tenant", "objects"), child)) == expected);
  }
+
  SECTION("batch append") {
   auto key = prefix;
   key.append(child);
-  CHECK(materialized_key(key) == expected);
- }
- SECTION("single consuming extension") {
-  auto key = prefix;
-  key /= child;
+
   CHECK(materialized_key(key) == expected);
  }
 
- CHECK(child.inspections == 1);
+ SECTION("single consuming extension") {
+  auto key = prefix;
+  key /= child;
+
+  CHECK(materialized_key(key) == expected);
+ }
+
+ CHECK(1 == child.inspections);
 }
 
 TEST_CASE("content assembly normalizes its borrowed root once", "[fdb][content]")
@@ -229,17 +241,21 @@ TEST_CASE("content assembly normalizes its borrowed root once", "[fdb][content]"
  const inspected_child root {"https://example.test/tenant"};
  const auto key = content::key(root, "objects", "name");
 
- CHECK(root.inspections == 1);
+ CHECK(1 == root.inspections);
  CHECK(materialized_key(key) == tuple_string(root.bytes) + tuple_string("objects") +
                                 tuple_string("name"));
 }
 
 TEST_CASE("content input conversion completes before mutation", "[fdb][content]")
 {
- struct conversion_failure {};
- struct failing_segment {
+ struct conversion_failure final {};
+
+ struct failing_segment final
+ {
   operator std::string_view() const { throw conversion_failure {}; }
+
  };
+
  auto key = content::key("tenant", "objects");
  const auto original = key;
  const failing_segment child;
@@ -263,10 +279,12 @@ TEST_CASE("content text keys retain their UTF-8 bytes", "[fdb][content]")
 
   auto appended = prefix;
   appended.append(child);
+
   CHECK(materialized_key(appended) == expected);
 
   auto consumed = prefix;
   consumed /= child;
+
   CHECK(materialized_key(consumed) == expected);
  }
 }
@@ -280,20 +298,36 @@ TEST_CASE("content composition preserves bytes across NUL and size boundaries", 
 
   for (const auto size : {0u, 1u, 12u, 13u, 14u, 15u, 16u, 17u, 30u, 31u, 32u,
                          63u, 64u, 65u, 127u, 128u, 129u, 255u, 256u, 257u, 1024u, 4096u}) {
-   for (int pattern = 0; pattern < 6; ++pattern) {
+   for (int pattern = 0; 6 > pattern; ++pattern) {
     std::string child(size, 'x');
-    if (size > 0) {
-     if (pattern == 1) { child.front() = '\0'; }
-     if (pattern == 2) { child.back() = '\0'; }
-     if (pattern == 3) { child[size / 2] = '\0'; }
-     if (pattern == 4) {
-      for (std::size_t i = 0; i < size; i += 7) { child[i] = '\0'; }
+
+    if (0 < size) {
+     if (1 == pattern) {
+      child.front() = '\0';
      }
-     if (pattern == 5) { std::ranges::fill(child, '\0'); }
+
+     if (2 == pattern) {
+      child.back() = '\0';
+     }
+
+     if (3 == pattern) {
+      child[size / 2] = '\0';
+     }
+
+     if (4 == pattern) {
+      for (std::size_t i = 0; size > i; i += 7) {
+       child[i] = '\0';
+      }
+     }
+
+     if (5 == pattern) {
+      std::ranges::fill(child, '\0');
+     }
     }
 
     CAPTURE(prefix_size, size, pattern);
     const auto expected = prefix_bytes + tuple_string(child);
+
     CHECK(content::key(prefix, child).size() == expected.size());
     CHECK(materialized_key(content::key(prefix, child)) == expected);
     CHECK(materialized_key(prefix / child) == expected);
@@ -303,10 +337,12 @@ TEST_CASE("content composition preserves bytes across NUL and size boundaries", 
 
     auto appended = prefix;
     appended.append(child, "\0tail"sv);
+
     CHECK(materialized_key(appended) == expected + tuple_string("\0tail"sv));
 
     auto assigned = prefix;
     assigned /= child;
+
     CHECK(materialized_key(assigned) == expected);
     CHECK(materialized_key(prefix) == prefix_bytes);
    }

@@ -32,7 +32,7 @@ namespace ceph::libfdb::layer::content {
 
 namespace detail {
 
-constexpr char* copy_string_bytes(char* out, const std::string_view bytes) noexcept
+constexpr char *copy_string_bytes(char *out, const std::string_view bytes) noexcept
 {
  if (not bytes.empty()) {
   std::char_traits<char>::copy(out, bytes.data(), bytes.size());
@@ -41,15 +41,15 @@ constexpr char* copy_string_bytes(char* out, const std::string_view bytes) noexc
  return out + bytes.size();
 }
 
-constexpr char* write_string_segment(char* out, std::string_view bytes,
-                                      const std::size_t first_nul) noexcept
+constexpr char *write_string_segment(char *out, std::string_view bytes,
+                                     const std::size_t first_nul) noexcept
 {
  // FoundationDB's Tuple-layer byte-string type code makes the NUL-FF escape distinguishable from a
  // segment terminator followed by an FF byte:
  *out++ = '\x01';
  out = copy_string_bytes(out, bytes.substr(0, first_nul));
 
- if (first_nul != std::string_view::npos) {
+ if (std::string_view::npos != first_nul) {
   bytes.remove_prefix(first_nul);
 
   for (const char c : bytes) {
@@ -104,7 +104,9 @@ constexpr void write_string_segments(std::string& out, const std::string_view co
 {
  const auto previous_size = out.size();
  const auto limit = out.max_size();
+
  auto size = previous_size;
+
  const auto add_size = [&](const std::size_t amount) {
   if (amount > limit - size) {
    throw std::length_error("content key exceeds maximum string size");
@@ -112,6 +114,7 @@ constexpr void write_string_segments(std::string& out, const std::string_view co
 
   size += amount;
  };
+
  add_size(compiled_prefix.size());
  ((add_size(2), add_size(segments.size())), ...);
 
@@ -122,12 +125,13 @@ constexpr void write_string_segments(std::string& out, const std::string_view co
  // Preserve amortized growth when repeatedly extending an owned key:
  auto capacity = size;
 
- if (previous_size != 0 and size > out.capacity()) {
+ if (0 != previous_size and size > out.capacity()) {
   capacity = std::max(size, out.capacity() <= limit / 2 ? 2 * out.capacity() : limit);
  }
 
- out.resize_and_overwrite(capacity, [&](char* buffer, std::size_t) noexcept {
-  auto* cursor = copy_string_bytes(buffer + previous_size, compiled_prefix);
+ out.resize_and_overwrite(capacity, [&](char *buffer, std::size_t) noexcept {
+  auto *cursor = copy_string_bytes(buffer + previous_size, compiled_prefix);
+
   const auto emit = [&](const std::string_view segment) {
    auto first_nul = std::string_view::npos;
 
@@ -137,6 +141,7 @@ constexpr void write_string_segments(std::string& out, const std::string_view co
 
    cursor = write_string_segment(cursor, segment, first_nul);
   };
+
   (emit(segments), ...);
 
   return size;
@@ -156,8 +161,9 @@ constexpr void append_encoded_string_segments(std::string& out, const std::strin
                                                const std::array<std::string_view, N>& segments)
 {
  std::apply([&](const auto& ...views) {
-  if (((views.find('\0') == std::string_view::npos) and ...)) [[likely]] {
+  if (((std::string_view::npos == views.find('\0')) and ...)) [[likely]] {
    write_string_segments<false>(out, compiled_prefix, views...);
+
    return;
   }
 
@@ -169,6 +175,7 @@ constexpr void append_encoded_string_segments(std::string& out, const std::strin
 
 template <typename ...Segments>
 concept key_segments = 0 < sizeof...(Segments) && (concepts::stringview_convertible<Segments> && ...);
+
 class compiled_key final
 {
  std::string encoded_bytes;
@@ -197,8 +204,8 @@ class compiled_key final
 
  constexpr bool operator==(const compiled_key& rhs) const noexcept = default;
 
- // Append child segments to an exclusively owned compiled key. This may invalidate views into its bytes, so segment
- // arguments must not alias them:
+ // Append child segments to an exclusively owned compiled key. This may invalidate views into its
+ // bytes, so segment arguments must not alias them:
  template <typename ...Segments>
  requires key_segments<Segments...>
  constexpr compiled_key& append(const Segments& ...segments) &
@@ -249,13 +256,16 @@ class compiled_key final
  template <typename ...Segments>
  requires key_segments<Segments...>
  friend constexpr compiled_key key(compiled_key&& prefix, const Segments& ...segments);
+
 };
+
 template <typename ...Segments>
 requires key_segments<Segments...>
 constexpr compiled_key key(const Segments& ...segments)
 {
  // Only the root is constrained; later segments are user/domain data:
  const auto views = detail::segment_views(segments...);
+
  detail::require_valid_keyspace_root(views.front());
 
  return compiled_key(std::string_view {}, views);
