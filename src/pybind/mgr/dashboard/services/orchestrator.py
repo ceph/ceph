@@ -256,6 +256,10 @@ class CertStoreManager(ResourceManager):
                 include_cephadm_signed: bool = False) -> Dict[str, Any]:
         return self.api.cert_store_cert_ls(filter_by, show_details, include_cephadm_signed)
 
+    @wait_api_result
+    def generate_cert(self, module_name: Optional[str] = 'dashboard'):
+        return self.api.generate_certificates(module_name)
+
 
 class MonitoringManager(ResourceManager):
 
