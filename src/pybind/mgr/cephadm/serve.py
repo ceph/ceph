@@ -403,7 +403,8 @@ class CephadmServe:
         except OrchestratorError as e:
             return str(e)
 
-        self.mgr.cache.update_host_facts(host, val)
+        if self.mgr.cache.update_host_facts(host, val):
+            self.mgr.cache.save_host(host)
 
         return None
 

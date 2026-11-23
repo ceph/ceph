@@ -774,7 +774,8 @@ class HostData:
             if 'networks' in data and data['networks']:
                 self.mgr.cache.update_host_networks(host, data['networks'])
             if 'facts' in data and data['facts']:
-                self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
+                if self.mgr.cache.update_host_facts(host, json.loads(data['facts'])):
+                    self.mgr.cache.save_host(host)
             if 'volume' in data and data['volume']:
                 ret = Devices.from_json(json.loads(data['volume']))
                 self.mgr.cache.update_host_devices(host, ret.devices)

@@ -886,6 +886,10 @@ class HostCache():
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
         self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
+        # [hostname, shortname, fqdn] from gather-facts. Facts are not
+        # persisted, so keep the names in the host record: get_fqdn() needs
+        # them right after a mgr restart, before the first facts refresh.
+        self.known_hostnames = {}      # type: Dict[str, List[str]]
         self.last_autotune = {}        # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
         self.osdspec_last_applied = {}  # type: Dict[str, Dict[str, datetime.datetime]]
@@ -996,6 +1000,10 @@ class HostCache():
                     'scheduled_daemon_action_forces', {}
                 )
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
+                hostnames = j.get('known_hostnames', [])
+                if len(hostnames) == 3 and all(isinstance(n, str) for n in hostnames):
+                    self.known_hostnames[host] = hostnames
+                    self.mgr.inventory.update_known_hostnames(*hostnames)
 
                 if needs_save:
                     self.save_host(host)
@@ -1050,7 +1058,11 @@ class HostCache():
         self._tmp_daemons[host][dd.name()] = dd
 
     def update_host_facts(self, host, facts):
-        # type: (str, Dict[str, Dict[str, Any]]) -> None
+        # type: (str, Dict[str, Dict[str, Any]]) -> bool
+        """
+        Returns True if the host's known names changed and the host record
+        needs to be saved.
+        """
         host = normalize_hostname(host)
         self.facts[host] = facts
         hostnames: List[str] = []
@@ -1059,6 +1071,9 @@ class HostCache():
             hostnames.append(v if isinstance(v, str) else '')
         self.mgr.inventory.update_known_hostnames(hostnames[0], hostnames[1], hostnames[2])
         self.last_facts_update[host] = datetime_now()
+        changed = self.known_hostnames.get(host) != hostnames
+        self.known_hostnames[host] = hostnames
+        return changed
 
     def get_host_fips_enabled(self, host: str) -> Optional[bool]:
         facts = self.get_facts(host)
@@ -1264,6 +1279,8 @@ class HostCache():
             )
         if host in self.metadata_up_to_date:
             j['metadata_up_to_date'] = self.metadata_up_to_date[host]
+        if host in self.known_hostnames:
+            j['known_hostnames'] = self.known_hostnames[host]
         if host in self.devices:
             self.save_host_devices(host)
 
@@ -1341,6 +1358,8 @@ class HostCache():
             del self.facts[host]
         if host in self.last_facts_update:
             del self.last_facts_update[host]
+        if host in self.known_hostnames:
+            del self.known_hostnames[host]
         if host in self.last_autotune:
             del self.last_autotune[host]
         if host in self.osdspec_previews:
