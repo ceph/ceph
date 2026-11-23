@@ -1802,8 +1802,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     Dentry *d = request->dentry();
     if (d) {
-      Inode *diri = d->dir->parent_inode;
-      clear_dir_complete_and_ordered(diri, true);
+      Inode *diri = d->dir ? d->dir->parent_inode : request->inode();
+      if (diri && diri->is_dir())
+	clear_dir_complete_and_ordered(diri, true);
     }
 
     if (d && reply->get_result() == 0) {
@@ -1815,15 +1816,18 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	  Dentry *od = request->old_dentry();
 	  ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
 	  ceph_assert(od);
-	  if (od->dir && od->dir != d->dir)
-	    clear_dir_complete_and_ordered(od->dir->parent_inode, true);
-	  unlink(od, true, true);  // keep dir, dentry
+	  if (od->dir) {
+	    if (od->dir != d->dir)
+	      clear_dir_complete_and_ordered(od->dir->parent_inode, true);
+	    unlink(od, true, true);  // keep dir, dentry
+	  }
 	}
       } else if (op == CEPH_MDS_OP_RMDIR ||
 		 op == CEPH_MDS_OP_UNLINK) {
 	// unlink, rmdir
 	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
-	unlink(d, true, true);  // keep dir, dentry
+	if (d->dir)
+	  unlink(d, true, true);  // keep dir, dentry
       }
     }
     return NULL;
@@ -10115,7 +10119,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     struct dirent de;
     fill_statx(dn->inode, caps, &stx);
 
-    uint64_t next_off = dn->offset + 1;
+    int64_t dn_off = dn->offset;
+    uint64_t next_off = dn_off + 1;
     auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
     fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
     if (idx + 1 == dir->readdir_cache.size())
@@ -10133,7 +10138,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
-    ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
+    ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn_off << dec
 		   << " = " << r << dendl;
     if (r < 0) {
       return r;

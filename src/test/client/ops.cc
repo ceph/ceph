@@ -180,8 +180,8 @@ TEST_F(TestClient, RenameOverHardlinkPreservesOtherLinks) {
   ASSERT_EQ(0, client->mkdir(dir1.c_str(), 0755, myperm));
   ASSERT_EQ(0, client->mkdir(dir2.c_str(), 0755, myperm));
   ASSERT_EQ(0, client->mknod(src.c_str(), S_IFREG | 0644, myperm));
-  ASSERT_EQ(0, client->mknod(dst.c_str(), S_IFREG | 0644, myperm));
-  ASSERT_EQ(0, client->link(dst.c_str(), other_link.c_str(), myperm, ""));
+  ASSERT_EQ(0, client->mknod(other_link.c_str(), S_IFREG | 0644, myperm));
+  ASSERT_EQ(0, client->link(other_link.c_str(), dst.c_str(), myperm, ""));
 
   auto cleanup = make_scope_guard([&] {
     client->unlink(src.c_str(), myperm);
@@ -204,6 +204,7 @@ TEST_F(TestClient, RenameOverHardlinkPreservesOtherLinks) {
   client->closedir(dirp);
 
   ASSERT_EQ(0, client->rename(src.c_str(), dst.c_str(), myperm, ""));
+  ASSERT_EQ(0, client->sync_fs());
 
   {
     std::scoped_lock lock(client->client_lock);
@@ -247,6 +248,7 @@ TEST_F(TestClient, RenameSameInodeHardlinksIsNoop) {
   client->closedir(dirp);
 
   ASSERT_EQ(0, client->rename(a.c_str(), b.c_str(), myperm, ""));
+  ASSERT_EQ(0, client->sync_fs());
 
   {
     std::scoped_lock lock(client->client_lock);
@@ -268,5 +270,68 @@ TEST_F(TestClient, RenameSameInodeHardlinksIsNoop) {
 
   ASSERT_EQ(0, client->opendir(dir.c_str(), &dirp, myperm));
   EXPECT_EQ((std::set<std::string>{"a", "b"}), list_dir(client, dirp));
+  client->closedir(dirp);
+}
+
+TEST_F(TestClient, RenameSameInodeHardlinksCrossDirIsNoop) {
+  const std::string base = "/rename_same_inode_xdir_" + std::to_string(getpid());
+  const std::string dir1 = base + "/d1";
+  const std::string dir2 = base + "/d2";
+  const std::string a = dir1 + "/a";
+  const std::string b = dir2 + "/b";
+
+  ASSERT_EQ(0, client->mkdir(base.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mkdir(dir1.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mkdir(dir2.c_str(), 0755, myperm));
+  ASSERT_EQ(0, client->mknod(a.c_str(), S_IFREG | 0644, myperm));
+  ASSERT_EQ(0, client->link(a.c_str(), b.c_str(), myperm, ""));
+
+  auto cleanup = make_scope_guard([&] {
+    client->unlink(a.c_str(), myperm);
+    client->unlink(b.c_str(), myperm);
+    client->rmdir(dir1.c_str(), myperm);
+    client->rmdir(dir2.c_str(), myperm);
+    client->rmdir(base.c_str(), myperm);
+  });
+
+  dir_result_t *dirp;
+  ASSERT_EQ(0, client->opendir(dir1.c_str(), &dirp, myperm));
+  InodeRef dir1_in = dirp->inode;
+  ASSERT_EQ((std::set<std::string>{"a"}), list_dir(client, dirp));
+  client->closedir(dirp);
+
+  ASSERT_EQ(0, client->opendir(dir2.c_str(), &dirp, myperm));
+  InodeRef dir2_in = dirp->inode;
+  ASSERT_EQ((std::set<std::string>{"b"}), list_dir(client, dirp));
+  client->closedir(dirp);
+
+  ASSERT_EQ(0, client->rename(a.c_str(), b.c_str(), myperm, ""));
+  ASSERT_EQ(0, client->sync_fs());
+
+  {
+    std::scoped_lock lock(client->client_lock);
+    ASSERT_TRUE(dir1_in->dir != nullptr);
+    ASSERT_TRUE(dir2_in->dir != nullptr);
+    auto ita = dir1_in->dir->dentries.find(client->dentry_cache_key(*dir1_in, "a"));
+    auto itb = dir2_in->dir->dentries.find(client->dentry_cache_key(*dir2_in, "b"));
+    ASSERT_NE(ita, dir1_in->dir->dentries.end());
+    ASSERT_NE(itb, dir2_in->dir->dentries.end());
+    EXPECT_TRUE(ita->second->inode != nullptr);
+    EXPECT_TRUE(itb->second->inode != nullptr);
+    EXPECT_EQ(ita->second->inode, itb->second->inode);
+  }
+
+  struct stat sta {}, stb {};
+  ASSERT_EQ(0, client->stat(a.c_str(), &sta, myperm));
+  ASSERT_EQ(0, client->stat(b.c_str(), &stb, myperm));
+  EXPECT_EQ(sta.st_ino, stb.st_ino);
+  EXPECT_EQ(2u, sta.st_nlink);
+
+  ASSERT_EQ(0, client->opendir(dir1.c_str(), &dirp, myperm));
+  EXPECT_EQ((std::set<std::string>{"a"}), list_dir(client, dirp));
+  client->closedir(dirp);
+
+  ASSERT_EQ(0, client->opendir(dir2.c_str(), &dirp, myperm));
+  EXPECT_EQ((std::set<std::string>{"b"}), list_dir(client, dirp));
   client->closedir(dirp);
 }
