@@ -532,6 +532,8 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  CInode::lazy_quarantine_path = g_conf().get_val<bool>("mds_lazy_quarantine_path");
+
   quiesce_db_manager.reset(new QuiesceDbManager());
 
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
@@ -4230,6 +4232,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_inject_rename_corrupt_dentry_first",
     "mds_kill_dirfrag_at",
     "mds_kill_shutdown_at",
+    "mds_lazy_quarantine_path",
     "mds_log_event_large_threshold",
     "mds_log_events_per_segment",
     "mds_log_major_segment_event_ratio",
@@ -4261,7 +4264,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_session_max_caps_throttle_ratio",
     "mds_session_metadata_threshold",
     "mds_symlink_recovery",
-    "mds_use_global_snaprealm_seq_for_subvol"
+    "mds_use_global_snaprealm_seq_for_subvol",
   });
   static_assert(std::is_sorted(as_sv.begin(), as_sv.end()),
                 "keys are not sorted!");
@@ -4273,6 +4276,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   // XXX with or without mds_lock!
   dout(2) << __func__ << ": " << changed << dendl;
 
+  if (changed.count("mds_lazy_quarantine_path")) {
+    CInode::lazy_quarantine_path = conf.get_val<bool>("mds_lazy_quarantine_path");
+  }
   if (changed.count("mds_heartbeat_reset_grace")) {
     _heartbeat_reset_grace = conf.get_val<uint64_t>("mds_heartbeat_reset_grace");
   }

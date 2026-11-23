@@ -917,6 +917,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   int get_caps_quiesce_mask() const;
   int get_caps_quarantine_mask(bool has_qtine_auth_caps) const;
+  bool has_quarantine_access(Session *session) const;
+  // mds_lazy_quarantine_path
+  static std::atomic<bool> lazy_quarantine_path;
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }

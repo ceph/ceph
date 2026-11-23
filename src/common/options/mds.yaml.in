@@ -831,6 +831,15 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_lazy_quarantine_path
+  type: bool
+  level: dev
+  desc: build an inode's path for the quarantine cap check only when the inode is under quarantine
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_allow_batched_ops
   type: bool
   level: advanced

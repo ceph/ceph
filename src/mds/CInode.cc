@@ -3486,11 +3486,8 @@ bool CInode::try_drop_loner()
     set_loner_cap(-1);
     return true;
   }
-  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-  std::string path;
-  make_path_string(path, true);
   auto session = mdcache->mds->sessionmap.get_session(entity_name_t::CLIENT(cap->get_client().v));
-  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+  bool has_qtine_auth_caps = has_quarantine_access(session);
 
   int other_allowed = get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY);
   if (!cap ||
@@ -3712,6 +3709,25 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
   }
 }
 
+std::atomic<bool> CInode::lazy_quarantine_path{true};
+
+/*
+ * Whether this session's auth caps grant quarantine access to this inode.
+ * That only matters for an inode under quarantine (see
+ * get_caps_quarantine_mask()), and building the inode's path for the cap
+ * match is not cheap, so don't do it otherwise.
+ */
+bool CInode::has_quarantine_access(Session *session) const
+{
+  if (lazy_quarantine_path.load(std::memory_order_relaxed) &&
+      !is_under_quarantine())
+    return false;
+  std::string path;
+  make_path_string(path, true);
+  return session->auth_caps.quarantine_access_in_caps(
+    mdcache->mds->get_mds_map()->get_fs_name(), path);
+}
+
 int CInode::get_caps_quarantine_mask(bool has_qtine_auth_caps) const
 {
   if (is_under_quarantine()) {
@@ -3789,10 +3805,7 @@ int CInode::get_caps_careful(bool has_qtine_auth_caps) const
 int CInode::get_xlocker_mask(client_t client) const
 {
   Session *session = mdcache->mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
-  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-  std::string path;
-  make_path_string(path, true);
-  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+  bool has_qtine_auth_caps = has_quarantine_access(session);
 
   return get_caps_quarantine_mask(has_qtine_auth_caps) & get_caps_quiesce_mask() & (
     (filelock.gcaps_xlocker_mask(client) << CEPH_CAP_SFILE) |
@@ -3807,11 +3820,7 @@ int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
 {
   client_t client = session->get_client();
   int allowed;
-  std::string path;
-
-  make_path_string(path, true);
-  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+  bool has_qtine_auth_caps = has_quarantine_access(session);
 
   if (client == get_loner()) {
     // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
@@ -4198,10 +4207,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      * tracks caps per-snap and the mds does either per-interval or
      * multiversion.
      */
-    auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-    std::string path;
-    make_path_string(path, true);
-    bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+    bool has_qtine_auth_caps = has_quarantine_access(session);
 
     ecap.caps = valid ? get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY) : CEPH_STAT_CAP_INODE;
     if (last == CEPH_NOSNAP || is_any_caps())

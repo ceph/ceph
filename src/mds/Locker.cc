@@ -2471,11 +2471,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [auth] twiddle mode?
     eval(in, CEPH_CAP_LOCKS);
 
-    std::string path;
-    auto fs_name = mds->get_mds_map()->get_fs_name();
-    in->make_path_string(path, true);
-
-    bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+    bool has_qtine_auth_caps = in->has_quarantine_access(session);
     AllowedCapsCache caps_cache;
     int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, caps_cache);
 
@@ -2595,12 +2591,16 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
   else
     it = in->client_caps.begin();
   auto fs_name = mds->get_mds_map()->get_fs_name();
+  // the path only matters for an inode under quarantine
   std::string path;
-  in->make_path_string(path, true);
+  const bool need_qtine = !CInode::lazy_quarantine_path || in->is_under_quarantine();
+  if (need_qtine)
+    in->make_path_string(path, true);
   for (; it != in->client_caps.end(); ++it) {
     Capability *cap = &it->second;
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(it->first.v));
-    bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+    bool has_qtine_auth_caps = need_qtine &&
+      session->auth_caps.quarantine_access_in_caps(fs_name, path);
     int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, caps_cache);
     int pending = cap->pending();
     int wanted = cap->wanted();
