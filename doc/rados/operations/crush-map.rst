@@ -291,6 +291,8 @@ clusters, there is a *reclassify* tool available that can help them transition
 to device classes without triggering unwanted data movement (see
 :ref:`crush-reclassify`).
 
+.. _weight-sets:
+
 Weight sets
 -----------
 
