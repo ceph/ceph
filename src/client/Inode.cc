@@ -3,6 +3,7 @@
 
 #include <thread>
 #include "Client.h"
+#include "include/current_cpu.h"
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
@@ -46,6 +47,42 @@ Inode::~Inode()
 #ifdef CEPH_DEBUG_MUTEX
 thread_local Inode::Lock *Inode::Lock::held = nullptr;
 #endif
+thread_local std::atomic<uint32_t> *Inode::Lock::my_count = nullptr;
+
+// Count a reader in: in the CPU's spread count once there are any, else
+// in readers, spreading them when readers keep meeting there.  seq_cst
+// throughout, so that a writer that sets writer and then looks at slots
+// and the counts sees every reader that did not see writer set.
+std::atomic<uint32_t> *Inode::Lock::count_in()
+{
+  Slots *sl = slots.load(std::memory_order_seq_cst);
+  if (sl) {
+    auto c = &sl->slot[unsigned(ceph::current_cpu()) % nr_slots].n;
+    c->fetch_add(1, std::memory_order_seq_cst);
+    return c;
+  }
+  if (readers.fetch_add(1, std::memory_order_seq_cst) != 0 &&
+      met.fetch_add(1, std::memory_order_relaxed) + 1 == spread_after) {
+    auto n = new Slots;
+    Slots *none = nullptr;
+    if (!slots.compare_exchange_strong(none, n, std::memory_order_seq_cst))
+      delete n;
+  }
+  return &readers;
+}
+
+bool Inode::Lock::no_readers() const
+{
+  if (readers.load(std::memory_order_seq_cst) != 0)
+    return false;
+  if (Slots *sl = slots.load(std::memory_order_seq_cst)) {
+    for (auto& s : sl->slot) {
+      if (s.n.load(std::memory_order_seq_cst) != 0)
+        return false;
+    }
+  }
+  return true;
+}
 
 void Inode::Lock::lock()
 {
@@ -63,7 +100,7 @@ void Inode::Lock::lock()
   // keep new readers out and wait for those inside: they only look, and
   // leave soon
   writer.store(true, std::memory_order_seq_cst);
-  for (int spins = 0; readers.load(std::memory_order_seq_cst) != 0; ++spins) {
+  for (int spins = 0; !no_readers(); ++spins) {
     if (spins > 100)
       std::this_thread::yield();
   }
@@ -100,13 +137,14 @@ void Inode::Lock::lock_shared()
   ceph_assert(held == nullptr);             // never two Inode::locks
   ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
 #endif
-  readers.fetch_add(1, std::memory_order_seq_cst);
+  auto c = count_in();
   if (writer.load(std::memory_order_seq_cst)) {
     // a writer is in or waiting for us: let it go first
-    readers.fetch_sub(1, std::memory_order_release);
+    c->fetch_sub(1, std::memory_order_release);
     std::lock_guard l(m);
-    readers.fetch_add(1, std::memory_order_seq_cst);
+    c = count_in();
   }
+  my_count = c;
 #ifdef CEPH_DEBUG_MUTEX
   held = this;
 #endif
@@ -122,7 +160,8 @@ void Inode::Lock::unlock_shared()
   ceph_assert(held == this);
   held = nullptr;
 #endif
-  readers.fetch_sub(1, std::memory_order_release);
+  my_count->fetch_sub(1, std::memory_order_release);
+  my_count = nullptr;
 }
 
 void Inode::print(std::ostream& out) const

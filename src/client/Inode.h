@@ -165,7 +165,15 @@ struct Inode : RefCountedObject {
    * (std::shared_lock): they count themselves in, and leave and queue on
    * the mutex when a writer is in or waiting, so a stream of readers
    * never starves a writer, which may hold client_lock.  A shared holder
-   * must not take the lock exclusively, nor call the helpers that do.
+   * must not take the lock exclusively, nor call the helpers that do,
+   * nor take it shared again.
+   *
+   * The readers of one inode from many threads (getattr or cached reads
+   * of one file, lookups in one directory) would all write one count:
+   * once they meet each other in it often enough, the lock spreads them
+   * over a few counts on cache lines of their own, picked by CPU, which
+   * a writer then checks too.  A file that only one thread at a time
+   * reads keeps one count, and its writers check that alone.
    */
   class Lock {
   public:
@@ -202,9 +210,28 @@ struct Inode : RefCountedObject {
     std::atomic<uint32_t> readers{0};
     std::atomic<bool> writer{false};
     std::atomic<int> spinners{0};
+    // the spread counts (see above), once readers met often enough
+    static constexpr unsigned nr_slots = 16;
+    struct alignas(64) Slot {
+      std::atomic<uint32_t> n{0};
+    };
+    struct Slots {
+      Slot slot[nr_slots];
+    };
+    std::atomic<Slots*> slots{nullptr};
+    std::atomic<uint32_t> met{0};  // readers that found another in readers
+    static constexpr uint32_t spread_after = 64;
+    // the count this thread's shared hold went into: it leaves from the
+    // same one (it holds one Inode::lock at most)
+    static thread_local std::atomic<uint32_t> *my_count;
+    std::atomic<uint32_t> *count_in();
+    bool no_readers() const;
 #ifdef CEPH_DEBUG_MUTEX
     static thread_local Lock *held;
 #endif
+  public:
+    Lock() = default;
+    ~Lock() { delete slots.load(std::memory_order_relaxed); }
   };
   // Its own cache line: shared holders (getattr, cached reads of one
   // file) write its reader count twice per call, which would take the
