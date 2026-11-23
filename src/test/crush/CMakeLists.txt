@@ -4,6 +4,12 @@ add_executable(unittest_crush_wrapper
 add_ceph_unittest(unittest_crush_wrapper)
 target_link_libraries(unittest_crush_wrapper ceph-common)
 
+# unittest_crush_weight_solver
+add_executable(unittest_crush_weight_solver
+  CrushWeightSolver.cc)
+add_ceph_unittest(unittest_crush_weight_solver)
+target_link_libraries(unittest_crush_weight_solver ceph-common)
+
 # unittest_crush
 add_executable(unittest_crush
   crush.cc)
