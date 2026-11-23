@@ -114,9 +114,18 @@ Troubleshooting
   client does not support every feature that is enabled on the image. Run the
   ``rbd feature disable`` command that the error message suggests, then map
   the image again.
+- If ``rbd map`` reports ``rbd: failed to get mon address (possible ms_mode
+  mismatch)`` before ``rbd: map failed: (2) No such file or directory``,
+  ``mon_host`` in the client's ``ceph.conf`` has no Monitor address of the type
+  that the map uses. From Tentacle, the map uses msgr2, so a ``mon_host`` that
+  lists only msgr1 (v1) addresses fails. Add the v2 addresses, or map with
+  ``-o ms_mode=legacy``.
 - If ``rbd map`` reports ``rbd: map failed: (2) No such file or directory`` or
   ``modprobe: FATAL: Module rbd not found``, the client kernel has no ``rbd``
   module. Run ``modprobe rbd``, then map the image again.
+- If ``rbd map`` reports ``rbd: map failed: (22) Invalid argument`` and the
+  client runs Tentacle or later, the client kernel may be older than 5.11, which
+  does not accept the ``ms_mode`` option. Upgrade the client kernel.
 - If ``mkfs.ext4`` or ``mount`` reports ``No such file or directory`` for
   ``/dev/rbd/rbd1701/image1701``, the udev link was not created. Use the
   ``/dev/rbdN`` device name that ``rbd map`` printed.
