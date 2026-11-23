@@ -248,6 +248,13 @@ public:
 
   virtual seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const = 0;
 
+  /// true if any store shard is past its local full limit
+  /// (Shard::is_storage_full()), the limit at which the OSD rejects writes.
+  /// One shard can reach it while stat() still shows space left overall.
+  virtual seastar::future<bool> is_any_shard_storage_full() const {
+    return seastar::make_ready_future<bool>(false);
+  }
+
   virtual seastar::future<> report_stats() { return seastar::now(); }
 
   virtual uuid_d get_fsid() const  = 0;

@@ -12,6 +12,7 @@
 #include "osd/osd_types.h"
 
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/failsafe_full_ratio.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -1903,7 +1904,7 @@ public:
     // classic uses for its failsafe check (osd_failsafe_full_ratio, default
     // 0.97), i.e. free fraction drops below (1 - ratio).
     const double failsafe_full_ratio =
-      crimson::common::get_conf<double>("osd_failsafe_full_ratio");
+      crimson::common::get_failsafe_full_ratio();
     return st.available < st.total * (1.0 - failsafe_full_ratio);
   }
 

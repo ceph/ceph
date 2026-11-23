@@ -109,6 +109,63 @@ class OSD final : public crimson::net::Dispatcher,
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void update_stats();
+
+  // Fullness state, as classic's OSDService::s_names. It is computed on
+  // every tick from the store's statfs and from its shards' local full
+  // limits, and reported to the monitor (MOSDFull). The monitor then marks
+  // this OSD nearfull/backfillfull/full, and marks the pools it serves full.
+  enum class full_state_t {
+    none,
+    nearfull,
+    backfillfull,
+    full,
+    failsafe,
+  };
+  /// the state last derived by check_full_status()
+  full_state_t full_state = full_state_t::none;
+
+  /// the name of 'state', for logging
+  static std::string_view full_state_name(full_state_t state);
+
+  /**
+   * Derive the fullness state from the store's usage, as classic's
+   * OSDService::recalc_full_state() does.
+   *
+   * The thresholds are the osdmap's nearfull, backfillfull and full ratios,
+   * and osd_failsafe_full_ratio (read by get_failsafe_full_ratio(), as the
+   * store's local full limit is). As in classic, the osdmap ratios take
+   * precedence: no threshold is lower than the one before it, and the
+   * failsafe ratio is raised to the full ratio if that is higher.
+   *
+   * \param ratio the used fraction of the whole store (all its shards)
+   * \param any_shard_full true if any store shard is past its local full
+   *   limit, at which it rejects writes. The state is then 'failsafe',
+   *   whatever 'ratio' is.
+   */
+  full_state_t calc_full_state(double ratio, bool any_shard_full) const;
+
+  /**
+   * Called on every tick with the store's statfs: recompute full_state,
+   * log the changes (a cluster log error when failsafe engages or
+   * disengages), and tell the monitor if its record of this OSD differs
+   * (send_full_update()).
+   *
+   * Does nothing before the OSD has an osdmap.
+   */
+  seastar::future<> check_full_status(store_statfs_t st);
+
+  /**
+   * Send the monitor an MOSDFull with the flag that matches full_state
+   * (CEPH_OSD_FULL for full and failsafe, CEPH_OSD_BACKFILLFULL,
+   * CEPH_OSD_NEARFULL, or none), if the osdmap holds a different one for
+   * this OSD. As classic's OSD::send_full_update(), with the comparison of
+   * OSDService::need_fullness_update().
+   *
+   * Only an active (up) OSD sends it. It is sent again on every tick until
+   * the osdmap shows the new state.
+   */
+  seastar::future<> send_full_update();
+
   void check_debug_levels();
   seastar::future<MessageURef> get_stats() final;
 

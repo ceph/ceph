@@ -802,6 +802,7 @@ public:
 
   seastar::future<store_statfs_t> stat() const override;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const override;
+  seastar::future<bool> is_any_shard_storage_full() const override;
 
   seastar::future<> report_stats() override;
 

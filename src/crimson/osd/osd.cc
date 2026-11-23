@@ -5,15 +5,19 @@
 
 #include <sys/utsname.h>
 
+#include <cmath>
+
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <seastar/core/timer.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 
 #include "common/pick_address.h"
+#include "crimson/common/failsafe_full_ratio.h"
 #include "include/util.h"
 #include "include/utime_fmt.h"
 #include "include/uuid_fmt.h"
@@ -21,6 +25,7 @@
 #include "messages/MCommand.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
@@ -1293,10 +1298,129 @@ void OSD::update_stats()
       return get_shard_services().update_osd_stat(
         get_shard_services().get_up_epoch(),
         heartbeat->get_peers(),
-        st);
+        st
+      ).then([this, st] {
+        return check_full_status(st);
+      });
     });
   });
 
+}
+
+std::string_view OSD::full_state_name(full_state_t state)
+{
+  switch (state) {
+  case full_state_t::none:
+    return "none";
+  case full_state_t::nearfull:
+    return "nearfull";
+  case full_state_t::backfillfull:
+    return "backfillfull";
+  case full_state_t::full:
+    return "full";
+  case full_state_t::failsafe:
+    return "failsafe";
+  }
+  return "???";
+}
+
+OSD::full_state_t OSD::calc_full_state(double ratio, bool any_shard_full) const
+{
+  // as classic's OSDService::recalc_full_state(): the OSDMap ratios take
+  // precedence, so the failsafe ratio is never below the full ratio.
+  // (The OSDMap holds them as float; they widen to double exactly.)
+  double nearfull_ratio = osdmap->get_nearfull_ratio();
+  double backfillfull_ratio =
+    std::max<double>(osdmap->get_backfillfull_ratio(), nearfull_ratio);
+  double full_ratio =
+    std::max<double>(osdmap->get_full_ratio(), backfillfull_ratio);
+  double failsafe_ratio =
+    std::max(crimson::common::get_failsafe_full_ratio(), full_ratio);
+  if (full_ratio <= 0 || backfillfull_ratio <= 0 || nearfull_ratio <= 0) {
+    full_ratio = backfillfull_ratio = nearfull_ratio = failsafe_ratio;
+  }
+
+  // A store shard past its local full limit rejects writes (see
+  // OpsExecuter::do_execute_op()), even when the OSD as a whole has space
+  // left. Report failsafe, so that the monitor marks the pools full and the
+  // clients stop sending writes that are bound to be rejected.
+  if (any_shard_full || ratio > failsafe_ratio) {
+    return full_state_t::failsafe;
+  } else if (ratio > full_ratio) {
+    return full_state_t::full;
+  } else if (ratio > backfillfull_ratio) {
+    return full_state_t::backfillfull;
+  } else if (ratio > nearfull_ratio) {
+    return full_state_t::nearfull;
+  }
+  return full_state_t::none;
+}
+
+seastar::future<> OSD::check_full_status(store_statfs_t st)
+{
+  LOG_PREFIX(OSD::check_full_status);
+  if (st.total == 0 || !osdmap || osdmap->get_epoch() == 0) {
+    co_return;
+  }
+  const bool any_shard_full = co_await store.is_any_shard_storage_full();
+  const double ratio = double(st.get_used_raw()) / double(st.total);
+  const auto new_state = calc_full_state(ratio, any_shard_full);
+  if (new_state != full_state) {
+    INFO("full state {} -> {}, {:.2f}% used{}",
+         full_state_name(full_state), full_state_name(new_state),
+         ratio * 100, any_shard_full ? ", a store shard is full" : "");
+    const auto percent = static_cast<int>(std::round(ratio * 100));
+    if (new_state == full_state_t::failsafe) {
+      clog->error() << fmt::format(
+        "full status failsafe engaged, now {}% full{}",
+        percent,
+        any_shard_full ?
+          ", a store shard is past its full limit and rejects writes" : "");
+    } else if (full_state == full_state_t::failsafe) {
+      clog->error() << fmt::format(
+        "full status failsafe disengaged, now {}% full", percent);
+    }
+    full_state = new_state;
+  }
+  co_await send_full_update();
+}
+
+seastar::future<> OSD::send_full_update()
+{
+  LOG_PREFIX(OSD::send_full_update);
+  // only the monitor's record of an up OSD can be changed
+  if (!pg_shard_manager.is_active() || !osdmap->exists(whoami)) {
+    co_return;
+  }
+  unsigned want = 0;
+  if (full_state >= full_state_t::full) {
+    want = CEPH_OSD_FULL;
+  } else if (full_state >= full_state_t::backfillfull) {
+    want = CEPH_OSD_BACKFILLFULL;
+  } else if (full_state >= full_state_t::nearfull) {
+    want = CEPH_OSD_NEARFULL;
+  }
+  // as classic's OSDService::need_fullness_update(): compare the most
+  // severe of the flags the osdmap holds for this OSD
+  const unsigned osd_state = osdmap->get_state(whoami);
+  unsigned cur = 0;
+  if (osd_state & CEPH_OSD_FULL) {
+    cur = CEPH_OSD_FULL;
+  } else if (osd_state & CEPH_OSD_BACKFILLFULL) {
+    cur = CEPH_OSD_BACKFILLFULL;
+  } else if (osd_state & CEPH_OSD_NEARFULL) {
+    cur = CEPH_OSD_NEARFULL;
+  }
+  if (want == cur) {
+    co_return;
+  }
+  // repeated on every tick until the osdmap shows the new state. The
+  // monitor ignores the copies that arrive after it has updated the map.
+  std::set<std::string> states;
+  OSDMap::calc_state_set(want, states);
+  INFO("want state {}, osdmap e{}", states, osdmap->get_epoch());
+  co_await monc->send_message(
+    crimson::make_message<MOSDFull>(osdmap->get_epoch(), want));
 }
 
 seastar::future<MessageURef> OSD::get_stats()

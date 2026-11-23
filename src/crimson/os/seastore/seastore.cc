@@ -4,6 +4,7 @@
 #include "seastore.h"
 
 #include <algorithm>
+#include <functional>
 #include <string_view>
 
 #include <boost/algorithm/string/trim.hpp>
@@ -1089,6 +1090,19 @@ seastar::future<store_statfs_t> SeaStore::stat() const
     DEBUG("done, stat={}", final_stats);
     return seastar::make_ready_future<store_statfs_t>(std::move(final_stats));
   });
+}
+
+seastar::future<bool> SeaStore::is_any_shard_storage_full() const
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  return shard_stores.map_reduce0(
+    [](auto& local_store) {
+      return std::ranges::any_of(
+        local_store.mshard_stores,
+        [](auto& mshard_store) { return mshard_store->is_storage_full(); });
+    },
+    false,
+    std::logical_or<bool>());
 }
 
 seastar::future<store_statfs_t> SeaStore::pool_statfs(int64_t pool_id) const
