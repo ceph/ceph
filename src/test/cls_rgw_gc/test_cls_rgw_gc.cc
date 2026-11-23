@@ -531,6 +531,45 @@ TEST_P(TestClsRgwGc, gc_queue_ops9)
   ASSERT_EQ(-ENOSPC, ioctx.operate(queue_name, &defer_op));
 }
 
+TEST_P(TestClsRgwGc, gc_queue_list_expired_prefix)
+{
+  // The first entry expires later than the second one.
+  string queue_name = "my-expiry-queue";
+  uint64_t queue_size = 1024, num_urgent_data_entries = 10;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  const uint32_t expiration[] = {3600, 0};
+  for (int i = 0; i < 2; i++) {
+    librados::ObjectWriteOperation op;
+    cls_rgw_gc_obj_info info;
+    cls_rgw_obj obj1;
+    create_obj(obj1, i, 1);
+    info.chain.objs.push_back(obj1);
+    info.tag = "chain-" + to_string(i);
+    cls_rgw_gc_queue_enqueue(op, expiration[i], info);
+    ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  }
+
+  list<cls_rgw_gc_obj_info> list_info;
+  string marker, next_marker;
+  bool truncated;
+
+  // The expired second entry must not be returned on its own: the caller
+  // removes entries from the head by count.
+  ASSERT_EQ(0, cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, 10, true, list_info, truncated, next_marker));
+  ASSERT_EQ(0, list_info.size());
+  ASSERT_FALSE(truncated);
+
+  // All entries, regardless of expiry.
+  ASSERT_EQ(0, cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, 10, false, list_info, truncated, next_marker));
+  ASSERT_EQ(2, list_info.size());
+  ASSERT_EQ("chain-0", list_info.front().tag);
+  ASSERT_EQ("chain-1", list_info.back().tag);
+}
+
 INSTANTIATE_TEST_SUITE_P(, TestClsRgwGc,
   ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
   [](const ::testing::TestParamInfo<PoolType>& info) {
