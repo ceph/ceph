@@ -75,7 +75,7 @@ public:
   xlist<MetaRequest*>::item unsafe_target_item;
 
   ceph::condition_variable *caller_cond = NULL;   // who to take up
-  ceph::condition_variable *dispatch_cond = NULL; // who to kick back
+  ceph::condition_variable *dispatch_cond = NULL; // who to kick back (file locks, creates, opens)
   std::vector<Context*> waitfor_safe;
 
   InodeRef target;

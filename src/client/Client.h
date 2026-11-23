@@ -1006,9 +1006,12 @@ public:
   void update_dir_dist(Inode *in, DirStat *st, mds_rank_t from);
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
-  void insert_readdir_results(MetaRequest *request, MetaSession *session,
+  void insert_readdir_results(MetaRequest *request,
+                              const ceph::cref_t<MClientReply>& reply,
+                              MetaSession *session,
                               Inode *diri, Inode *diri_other);
-  Inode* insert_trace(MetaRequest *request, MetaSession *session);
+  Inode* insert_trace(MetaRequest *request, const ceph::cref_t<MClientReply>& reply,
+                      MetaSession *session);
   void update_inode_file_size(Inode *in, int issued, uint64_t size,
 			      uint64_t truncate_seq, uint64_t truncate_size);
   void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,

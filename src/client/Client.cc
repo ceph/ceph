@@ -1847,11 +1847,12 @@ void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
 /*
  * insert results from readdir or lssnap into the metadata cache.
  */
-void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
+void Client::insert_readdir_results(MetaRequest *request,
+                                    const ceph::cref_t<MClientReply>& reply,
+                                    MetaSession *session,
                                     Inode *diri, Inode *diri_other) {
 
-  auto& reply = request->reply;
-  ConnectionRef con = request->reply->get_connection();
+  ConnectionRef con = reply->get_connection();
   uint64_t features;
   if(session->mds_features.test(CEPHFS_FEATURE_REPLY_ENCODING)) {
     features = (uint64_t)-1;
@@ -2045,9 +2046,10 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
  *
  * insert a trace from a MDS reply into the cache.
  */
-Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
+Inode* Client::insert_trace(MetaRequest *request,
+                            const ceph::cref_t<MClientReply>& reply,
+                            MetaSession *session)
 {
-  auto& reply = request->reply;
   int op = request->get_op();
 
   ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds." << session->mds_num
@@ -2088,7 +2090,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     return NULL;
   }
 
-  ConnectionRef con = request->reply->get_connection();
+  ConnectionRef con = reply->get_connection();
   uint64_t features;
   if (session->mds_features.test(CEPHFS_FEATURE_REPLY_ENCODING)) {
     features = (uint64_t)-1;
@@ -2221,7 +2223,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   if (in) {
     if (op == CEPH_MDS_OP_READDIR ||
 	op == CEPH_MDS_OP_LSSNAP) {
-      insert_readdir_results(request,
+      insert_readdir_results(request, reply,
 	session,
 	in,
 	nullptr);
@@ -2231,7 +2233,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     } else if (op == CEPH_MDS_OP_READDIR_SNAPDIFF) {
       // provide both request's inode (aka snapA) and traced one (snapB)
       // to properly match snapdiff results
-      insert_readdir_results(request,
+      insert_readdir_results(request, reply,
 	session,
 	request->inode(),
 	in);
@@ -2655,15 +2657,16 @@ int Client::make_request(MetaRequest *request,
   // got it!
   auto reply = std::move(request->reply);
   r = reply->get_result();
+  if (request->dispatch_cond) {
+    // a file lock, create or open reply: let the dispatcher go on, once
+    // our caller (still under client_lock) has applied it, see
+    // handle_client_reply()
+    request->dispatch_cond->notify_all();
+    request->dispatch_cond = nullptr;
+  }
   if (r >= 0)
     request->success = true;
 
-  // kick dispatcher (we've got it!)
-  ceph_assert(request->dispatch_cond);
-  request->dispatch_cond->notify_all();
-  ldout(cct, 20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
-  request->dispatch_cond = 0;
-  
   if (r >= 0 && ptarget)
     r = verify_reply_trace(r, session.get(), request, reply, ptarget, pcreated, perms);
 
@@ -3466,9 +3469,15 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     return;
   }
 
-  ceph_assert(!request->reply);
-  request->reply = reply;
-  insert_trace(request, session.get());
+  // The caller takes the first reply, unsafe or safe; a safe one after
+  // an unsafe one is only applied, so it never replaces a reply the
+  // caller has not taken yet
+  bool first = !is_safe || !request->got_unsafe;
+  if (first) {
+    ceph_assert(!request->reply);
+    request->reply = reply;
+  }
+  insert_trace(request, reply, session.get());
 
   // Handle unsafe reply
   if (!is_safe) {
@@ -3485,26 +3494,34 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     }
   }
 
-  // Only signal the caller once (on the first reply):
-  // Either its an unsafe reply, or its a safe reply and no unsafe reply was sent.
-  if (!is_safe || !request->got_unsafe) {
-    ceph::condition_variable cond;
-    request->dispatch_cond = &cond;
-
-    // wake up waiter
+  // Only signal the caller once (on the first reply), and do not wait for
+  // it to take the reply: it holds its own ref on the request, and the
+  // dispatcher goes on to the next message (it used to wait for the
+  // caller to win client_lock, and every MDS message queued behind)
+  if (first) {
     ldout(cct, 20) << __func__ << " signalling caller " << (void*)request->caller_cond << dendl;
     request->caller_cond->notify_all();
-
-    // wake for kick back
-    std::unique_lock l{client_lock, std::adopt_lock};
-    cond.wait(l, [tid, request, &cond, this] {
-      if (request->dispatch_cond) {
-        ldout(cct, 20) << "handle_client_reply awaiting kickback on tid "
-		       << tid << " " << &cond << dendl;
-      }
-      return !request->dispatch_cond;
-    });
-    l.release();
+    int op = request->get_op();
+    if (op == CEPH_MDS_OP_SETFILELOCK || op == CEPH_MDS_OP_CREATE ||
+        op == CEPH_MDS_OP_OPEN) {
+      // Except for a file lock, a create or an open.  The caller of a file
+      // lock records a granted or released lock in the client's own lock
+      // state, which needs the MDS order: when one owner's unlock lets the
+      // MDS grant another owner's lock, the grant must not be recorded
+      // before the unlock, or the lock state sees a conflict.  The caller
+      // of a create or an open takes its open ref on the inode the reply
+      // gave caps for: until it has, the caps wanted are those of a file
+      // nobody has open, and a cap message the dispatcher handles in
+      // between (a revoke after another thread's unlink of the file, say)
+      // tells the MDS so; the file is then open with no caps wanted, and
+      // a write waits for Fw forever.  Wait for the caller to take the
+      // reply; it holds client_lock until it has done all that.
+      ceph::condition_variable cond;
+      request->dispatch_cond = &cond;
+      std::unique_lock l{client_lock, std::adopt_lock};
+      cond.wait(l, [request] { return !request->dispatch_cond; });
+      l.release();
+    }
   }
 
   if (is_safe) {
