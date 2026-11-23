@@ -370,7 +370,10 @@ struct Inode : RefCountedObject {
   uint64_t wanted_max_size = 0;
   uint64_t requested_max_size = 0;
 
-  uint64_t  ll_ref = 0;   // separate ref count for ll client
+  // separate ref count for ll client.  Atomic: a file's (not a
+  // directory's, nor a snapshot's) may be taken and dropped without
+  // client_lock
+  std::atomic<uint64_t> ll_ref{0};
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   std::string    symlink;  // symlink content, if it's a symlink
   std::map<std::string,bufferptr> xattrs;
@@ -402,13 +405,21 @@ struct Inode : RefCountedObject {
   // cwd that links to me.
   void iget() { get(); }
   void iput(int n=1) { ceph_assert(n >= 0); while (n--) put(); }
+  // drop @n refs that are not the last: returns how many are left
+  uint64_t iput_some(uint64_t n) { return put_not_last(n); }
+  // drop one ref unless that would leave only inode_map's (or fewer):
+  // the caller then puts it through Client::put_inode(), which cleans up
+  bool iput_unless_last() { return put_unless_down_to(1); }
 
-  void ll_get() {
-    ll_ref++;
+  // returns the count before
+  uint64_t ll_get() {
+    return ll_ref.fetch_add(1);
   }
-  void ll_put(uint64_t n=1) {
-    ceph_assert(ll_ref >= n);
-    ll_ref -= n;
+  // returns the count after
+  uint64_t ll_put(uint64_t n=1) {
+    uint64_t was = ll_ref.fetch_sub(n);
+    ceph_assert(was >= n);
+    return was - n;
   }
 
   // file locks

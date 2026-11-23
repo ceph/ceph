@@ -4065,10 +4065,10 @@ void Client::_put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << __func__ << " on " << *in << " n = " << n << dendl;
 
-  int left = in->get_nref();
-  ceph_assert(left >= n + 1);
-  in->iput(n);
-  left -= n;
+  // a file's ll ref may be taken or dropped meanwhile without
+  // client_lock (but never the last ones), so count what is left from
+  // the drop itself
+  uint64_t left = in->iput_some(n);
   if (left == 1) { // the last one will be held by the inode_map
     // release any caps
     remove_all_caps(in);
@@ -15858,7 +15858,9 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
 
 void Client::_ll_get(Inode *in)
 {
-  if (in->ll_ref == 0) {
+  // a file's ll ref also comes and goes without client_lock: what
+  // the first one pins follows the count this ll_get() moved
+  if (in->ll_get() == 0) {
     in->iget();
     if (in->is_dir() && !in->dentries.empty()) {
       ceph_assert(in->dentries.size() == 1); // dirs can't be hard-linked
@@ -15867,15 +15869,14 @@ void Client::_ll_get(Inode *in)
     if (in->snapid != CEPH_NOSNAP)
       ll_snap_ref[in->snapid]++;
   }
-  in->ll_get();
   ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
 }
 
 int Client::_ll_put(Inode *in, uint64_t num)
 {
-  in->ll_put(num);
-  ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
-  if (in->ll_ref == 0) {
+  uint64_t left = in->ll_put(num);
+  ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " " << num << " -> " << left << dendl;
+  if (left == 0) {
     if (in->is_dir() && !in->dentries.empty()) {
       ceph_assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->put(); // unpin dentry
@@ -15890,7 +15891,7 @@ int Client::_ll_put(Inode *in, uint64_t num)
     put_inode(in);
     return 0;
   } else {
-    return in->ll_ref;
+    return left;
   }
 }
 
@@ -15927,10 +15928,10 @@ bool Client::_ll_forget(Inode *in, uint64_t count)
   if (ino == 1) return true;  // ignore forget on root.
 
   bool last = false;
-  if (in->ll_ref < count) {
+  if (uint64_t have = in->ll_ref; have < count) {
     ldout(cct, 1) << "WARNING: ll_forget on " << ino << " " << count
-		  << ", which only has ll_ref=" << in->ll_ref << dendl;
-    _ll_put(in, in->ll_ref);
+		  << ", which only has ll_ref=" << have << dendl;
+    _ll_put(in, have);
     last = true;
   } else {
     if (_ll_put(in, count) == 0)
@@ -15952,8 +15953,41 @@ bool Client::ll_forget(Inode *in, uint64_t count)
   return _ll_forget(in, count);
 }
 
+/*
+ * Drop one ll ref of a file without client_lock.  Only a file's: a
+ * directory's first ll ref pins its dentry and a snapshot's counts in
+ * ll_snap_ref, both under client_lock.  The last ll ref also drops the
+ * inode ref it pinned, unless that leaves only inode_map's, which
+ * put_inode() queues for client_lock to clean up.  Returns false, with
+ * nothing done, when the slow path must do it.
+ */
+bool Client::_ll_put_fast(Inode *in, bool *last)
+{
+  // the file type and the snapid never change
+  if (in->is_dir() || in->snapid != CEPH_NOSNAP || in->ino == CEPH_INO_ROOT)
+    return false;
+  uint64_t n = in->ll_ref.load(std::memory_order_relaxed);
+  do {
+    if (n == 0)
+      return false;  // let _ll_forget() warn
+  } while (!in->ll_ref.compare_exchange_weak(n, n - 1));
+  *last = (n == 1);
+  if (*last && !in->iput_unless_last())
+    put_inode(in);
+  ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << n - 1 << dendl;
+  return true;
+}
+
 bool Client::ll_put(Inode *in)
 {
+  {
+    RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+    if (!mref_reader.is_state_satisfied())
+      return true;  // as _ll_forget()
+    bool last;
+    if (_ll_put_fast(in, &last))
+      return last;
+  }
   /* ll_forget already takes the lock */
   return ll_forget(in, 1);
 }

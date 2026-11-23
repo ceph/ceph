@@ -131,7 +131,7 @@ void Inode::print(std::ostream& out) const
   out << vino() << "("
       << "faked_ino=" << faked_ino
       << " nref=" << get_nref()
-      << " ll_ref=" << ll_ref
+      << " ll_ref=" << ll_ref.load()
       << " cap_refs=" << cap_refs
       << " fast_rd_refs=" << fast_rd_refs.load(std::memory_order_relaxed)
       << " open=" << open_by_mode
@@ -730,7 +730,7 @@ void Inode::dump(Formatter *f) const
     f->dump_unsigned("requested_max_size", requested_max_size);
 
   f->dump_int("nref", get_nref());
-  f->dump_int("ll_ref", ll_ref);
+  f->dump_int("ll_ref", ll_ref.load());
 
   if (!dentries.empty()) {
     f->open_array_section("parents");
