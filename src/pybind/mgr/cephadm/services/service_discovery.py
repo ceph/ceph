@@ -174,7 +174,10 @@ class Root:
         dd = service_registry.get_service('mgr').get_active_daemon(mgr_daemons)
         if dd:
             assert dd.hostname is not None
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            # dd is the active mgr, i.e. this daemon. Its prometheus module
+            # certificate is issued for get_mgr_ip(), which need not be the
+            # inventory address of its host, so scrape it there.
+            addr = dd.ip if dd.ip else self.mgr.get_mgr_ip()
             port_val = self.mgr.get_module_option_ex(
                 'prometheus', 'server_port', PrometheusService.DEFAULT_MGR_PROMETHEUS_PORT)
             port: Optional[int] = int(port_val) if port_val is not None else None

@@ -2554,6 +2554,7 @@ def test_prometheus_get_dependencies():
     mgr.cache.get_daemons_by_types.side_effect = (
         lambda types: ['mgr.a'] if types == ['mgr'] else []
     )
+    mgr._get_mgr_ips.return_value = ['192.168.1.1']
     spec = PrometheusSpec(
         'prometheus',
         remote_write_url='https://remote.example/api/v1/write',
@@ -2577,6 +2578,7 @@ def test_prometheus_get_dependencies():
         'mgmt-gateway_configured:False',
         'oauth2-proxy_configured:True',
         'mgr.a',
+        'mgr_ip:192.168.1.1',
         'remote_write_url:https://remote.example/api/v1/write',
         "remote_write_metrics:['ceph_health_status']",
     ])

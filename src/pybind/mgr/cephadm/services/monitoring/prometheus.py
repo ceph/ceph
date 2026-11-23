@@ -243,6 +243,10 @@ class PrometheusService(CephadmService):
         if not mgmt_gw_enabled:
             # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
             deps += mgr.cache.get_daemons_by_types(['mgr'])
+            # The service discovery URLs are built from these addresses, and a
+            # standby's address is only known once its metadata is loaded.
+            # Track them so prometheus.yml is rewritten when they change.
+            deps += [f'mgr_ip:{ip}' for ip in mgr._get_mgr_ips()]
 
         if spec:
             prometheus_spec = cast(PrometheusSpec, spec)

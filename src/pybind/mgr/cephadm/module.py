@@ -908,9 +908,29 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cert_mgr.init_tlsobject_store()
 
     def _get_mgr_ips(self) -> List[str]:
-        return [self.inventory.get_addr(d.hostname)
-                for d in self.cache.get_daemons_by_service('mgr')
-                if d.hostname is not None]
+        # The service discovery endpoint binds to the mgr's public address
+        # (get_mgr_ip()), which need not be the host address kept in the
+        # inventory: hosts are often added on a management network. Return
+        # the address each mgr actually binds to, so the URLs handed to
+        # prometheus reach the endpoint. For a standby mgr that is the address
+        # it reports in its metadata; fall back to the inventory address only
+        # when that is missing.
+        ips = []
+        for d in self.cache.get_daemons_by_service('mgr'):
+            if d.hostname is None:
+                continue
+            if d.daemon_id == self.get_mgr_id():
+                ips.append(self.get_mgr_ip())
+                continue
+            metadata = self.get_metadata('mgr', str(d.daemon_id))
+            addr = metadata.get('addr', '') if metadata else ''
+            try:
+                if ipaddress.ip_address(addr).is_unspecified:
+                    addr = ''
+            except ValueError:
+                addr = ''
+            ips.append(addr or self.inventory.get_addr(d.hostname))
+        return ips
 
     def _get_security_config(self) -> Tuple[bool, bool, bool]:
         oauth2_proxy_enabled = len(self.cache.get_daemons_by_service('oauth2-proxy')) > 0

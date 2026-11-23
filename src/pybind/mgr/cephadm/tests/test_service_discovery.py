@@ -146,6 +146,9 @@ class FakeMgr:
     def get_fqdn(self, hostname: str) -> str:
         return hostname
 
+    def get_mgr_ip(self) -> str:
+        return '5.6.7.8'
+
 
 class TestServiceDiscovery:
 
@@ -179,8 +182,10 @@ class TestServiceDiscovery:
         root = Root(mgr)
         cfg = root.get_sd_config('mgr-prometheus')
 
-        # Expect fallback to inventory IP (FakeInventory returns 1.2.3.4)
-        assert cfg == [{"targets": ["1.2.3.4:9283"], "labels": {}}]
+        # Expect fallback to the active mgr's own address (get_mgr_ip()),
+        # which its prometheus module certificate is issued for, rather than
+        # the inventory address of its host
+        assert cfg == [{"targets": ["5.6.7.8:9283"], "labels": {}}]
 
     def test_get_sd_config_node_exporter(self):
         mgr = FakeMgr()

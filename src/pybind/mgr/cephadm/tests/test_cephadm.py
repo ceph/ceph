@@ -295,6 +295,27 @@ class TestCephadm(object):
             mock_reset.assert_called_with('test')
             assert mock_reset.call_count == 2
 
+    def test_get_mgr_ips_uses_mgr_bind_addresses(self, cephadm_module):
+        # hosts are registered on a management network, while the mgrs (and
+        # the service discovery endpoint) bind to the public network
+        mgrs = [
+            DaemonDescription(daemon_type='mgr', daemon_id='a.x', hostname='host1'),
+            DaemonDescription(daemon_type='mgr', daemon_id='b.y', hostname='host2'),
+            DaemonDescription(daemon_type='mgr', daemon_id='c.z', hostname='host3'),
+        ]
+        inventory_addrs = {'host1': '10.0.0.1', 'host2': '10.0.0.2', 'host3': '10.0.0.3'}
+        metadata = {'b.y': {'addr': '192.168.1.2'}, 'c.z': {'addr': '0.0.0.0'}}
+        with mock.patch.object(cephadm_module.cache, 'get_daemons_by_service', return_value=mgrs), \
+                mock.patch.object(cephadm_module.inventory, 'get_addr', side_effect=inventory_addrs.get), \
+                mock.patch.object(cephadm_module, 'get_mgr_id', return_value='a.x'), \
+                mock.patch.object(cephadm_module, 'get_mgr_ip', return_value='192.168.1.1'), \
+                mock.patch.object(cephadm_module, 'get_metadata',
+                                  side_effect=lambda svc_type, svc_id: metadata.get(svc_id)):
+            # the active mgr uses its own bind address, a standby the address
+            # from its metadata, and a standby without a usable address falls
+            # back to the inventory
+            assert cephadm_module._get_mgr_ips() == ['192.168.1.1', '192.168.1.2', '10.0.0.3']
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
