@@ -8,6 +8,8 @@ tasks:
       - sudo ceph osd pool set ecdata allow_ec_optimizations true
       - sudo ceph osd pool application enable ecdata rbd
 overrides:
+  thrashosds:
+    min_in: 3  # a 2+1 PG needs all 3 of its shards placeable
   ceph:
     conf:
       client:
