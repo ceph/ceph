@@ -13795,7 +13795,7 @@ int BlueStore::_do_alloc_write(
       std::optional<int32_t> compressor_message;
       int r = wctx->compressor->compress(wi.bl, t, compressor_message);
       uint64_t want_len_raw = wi.blob_length * wctx->crr;
-      uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
+      uint64_t want_len = p2align(want_len_raw, min_alloc_size);
       bool rejected = false;
       uint64_t compressed_len = t.length();
       // do an approximate (fast) estimation for resulting blob size
@@ -14532,10 +14532,17 @@ int BlueStore::_do_write_v2_compressed(
     uint32_t au_size = min_alloc_size;
     disk_for_compressed = estimator->split_and_compress(data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
+    uint64_t want_len = p2align<uint64_t>(disk_for_raw * wctx.crr, au_size);
     BlueStore::Writer wr(this, txc, &wctx, o);
-    if (disk_for_compressed < disk_for_raw) {
+    if (disk_for_compressed < disk_for_raw &&
+        uint64_t(disk_for_compressed) <= want_len) {
       wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset + i.length, bd);
     } else {
+      dout(20) << __func__ << std::hex << " 0x" << i.offset << "~" << i.length
+               << " compressed to 0x" << disk_for_compressed
+               << ", uncompressed needs 0x" << disk_for_raw
+               << ", required 0x" << want_len
+               << ", leaving uncompressed" << std::dec << dendl;
       wr.do_write(i.offset, data_bl);
     }
     changes_start = std::min(changes_start, wr.left_affected_range);
