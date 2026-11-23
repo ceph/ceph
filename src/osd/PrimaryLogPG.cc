@@ -14226,6 +14226,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
     pool_migration_quiesce_error_code = 0;
   }
+  pool_migration_resume_pending = false;
   pool_migration_quiesce_last_started_reset = false;
 
   if (hit_set && hit_set->insert_count() == 0) {
@@ -16344,6 +16345,17 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
       last_pool_migration_started = pool_migration_watermark;
       dout(10) << __func__ << " drain complete, completing suspension" << dendl;
       on_pool_migration_source_suspended();
+      if (pool_migration_resume_pending) {
+        // the deferral that suspended us waited for this drain
+        pool_migration_resume_pending = false;
+        dout(10) << __func__ << " resuming in " << pool_migration_resume_delay
+                 << "s" << dendl;
+        schedule_event_after(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(), get_osdmap_epoch(),
+            PeeringState::DoPoolMigration()),
+          pool_migration_resume_delay);
+      }
       break;
     case PoolMigrationQuiesceReason::NEW_INTERVAL:
       // The in-flight ops from the previous interval have drained. The
@@ -16871,6 +16883,18 @@ void PrimaryLogPG::stop_pool_migration_error(int error_code)
         get_osdmap_epoch(),
         get_osdmap_epoch(),
         PeeringState::PoolMigrationStoppedError(error_code))));
+}
+
+bool PrimaryLogPG::pool_migration_resume_after_drain(float delay)
+{
+  if (pool_migration_quiesce_reason != PoolMigrationQuiesceReason::SUSPEND_NEEDED) {
+    return false;
+  }
+  dout(10) << __func__ << " " << pool_migrations_in_flight.size()
+           << " copies in flight, resuming " << delay << "s after they drain" << dendl;
+  pool_migration_resume_pending = true;
+  pool_migration_resume_delay = delay;
+  return true;
 }
 
 void PrimaryLogPG::on_pool_migration_source_suspended()
