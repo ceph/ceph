@@ -22,6 +22,7 @@
 #include <bit>
 #include <cmath>
 #include <iomanip>
+#include <limits>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -2587,6 +2588,31 @@ int OSDMap::calc_crush_rule_change_pins(
   if (fd_osds.size() < size)
     return -ENOSPC;                         // pool cannot satisfy the domain
 
+  // The hash fill picks a bucket, then an OSD in it, the way a straw2
+  // bucket does: each candidate draws its own straw, scaled by its weight,
+  // and the longest wins.  Picks follow weight, the bucket and OSD draws
+  // are independent, and pools with the same ps choose apart.
+  std::map<int, double> fd_weight;
+  for (auto& [b, osds] : fd_osds) {
+    for (int o : osds)
+      fd_weight[b] += weight_map.at(o);
+  }
+  auto straw2_pick = [pool_id](const std::vector<int>& items, auto&& weight,
+                               uint32_t ps, uint32_t salt) {
+    int best = items.front();
+    double longest = -std::numeric_limits<double>::infinity();
+    for (int item : items) {
+      uint32_t h = crush_hash32_4(CRUSH_HASH_RJENKINS1, ps, (uint32_t)pool_id,
+                                  (uint32_t)item, salt);
+      double straw = std::log(((double)h + 0.5) / 4294967296.0) / weight(item);
+      if (straw > longest) {
+        longest = straw;
+        best = item;
+      }
+    }
+    return best;
+  };
+
   // shards this plan has already assigned per OSD, for the load-aware fill
   std::map<int, unsigned> planned;
   int npins = 0;
@@ -2736,8 +2762,8 @@ int OSDMap::calc_crush_rule_change_pins(
         ok = false;
         break;
       }
-      uint32_t h = ps * 2654435761u + i * 40503u + 3u;
-      int b = free_bkts[h % free_bkts.size()];
+      int b = straw2_pick(free_bkts, [&](int q) { return fd_weight.at(q); },
+                          ps, 2 * i);
       used.insert(b);
       int chosen = -1;
       for (int cand : raw_new) {            // reuse a CRUSH pick living in b
@@ -2748,9 +2774,9 @@ int OSDMap::calc_crush_rule_change_pins(
         }
       }
       if (chosen < 0) {
-        auto& leaves = fd_osds[b];
-        uint32_t h2 = ps * 2654435761u + i * 40503u + 7u;
-        chosen = leaves[h2 % leaves.size()];
+        chosen = straw2_pick(fd_osds[b],
+                             [&](int o) { return weight_map.at(o); },
+                             ps, 2 * i + 1);
       }
       target[i] = chosen;
     }

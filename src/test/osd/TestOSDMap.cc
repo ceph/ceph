@@ -4501,3 +4501,120 @@ TEST_F(OSDMapTest, CalcCrushRuleChangePinsDropsPgUpmap) {
     ASSERT_TRUE(clean_inc.new_pg_upmap_items.empty());
   }
 }
+
+TEST_F(OSDMapTest, CalcCrushRuleChangePinsHashFill) {
+  // 24 osds, one host each, in 4 racks of 6 that weigh 12 each: the osds of
+  // rack0 and rack1 weigh 2, and in rack2 and rack3 the first two weigh 4
+  // and the other four weigh 1.
+  set_up_map(24, true);
+  {
+    CrushWrapper newcrush;
+    get_crush(osdmap, newcrush);
+    for (int i = 0; i < 24; i++) {
+      map<string,string> loc = {
+        {"root", "default"},
+        {"rack", "rack" + std::to_string(i / 6)},
+        {"host", "host" + std::to_string(i)},
+      };
+      const float w = i < 12 ? 2.0 : (i % 6 < 2 ? 4.0 : 1.0);
+      int r = newcrush.create_or_move_item(
+        g_ceph_context, i, w, "osd." + std::to_string(i), loc);
+      ASSERT_GE(r, 0);
+      // create_or_move_item() keeps the weight of an existing osd
+      ASSERT_GE(newcrush.adjust_item_weightf(g_ceph_context, i, w), 0);
+    }
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.fsid = osdmap.get_fsid();
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap.apply_incremental(pending_inc);
+  }
+  int host_rule = crush_rule_create_replicated("hf_host", "default", "host");
+  ASSERT_GE(host_rule, 0);
+  int rack_rule = crush_rule_create_replicated("hf_rack", "default", "rack");
+  ASSERT_GE(rack_rule, 0);
+
+  const unsigned pg_num = 4096;
+  uint64_t pool_id;
+  {
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.fsid = osdmap.get_fsid();
+    new_pool_inc.new_pool_max = osdmap.get_pool_max();
+    pg_pool_t empty;
+    pool_id = ++new_pool_inc.new_pool_max;
+    pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->set_pg_num(pg_num);
+    p->set_pgp_num(pg_num);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = host_rule;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    new_pool_inc.new_pool_names[pool_id] = "hfpool";
+    osdmap.apply_incremental(new_pool_inc);
+  }
+  // every pg sits on two osds of rack0 and one of rack1, so one of its
+  // shards must move to rack2 or rack3
+  {
+    OSDMap::Incremental ti(osdmap.get_epoch() + 1);
+    ti.fsid = osdmap.get_fsid();
+    for (unsigned ps = 0; ps < pg_num; ++ps) {
+      ti.new_pg_temp[pg_t(ps, pool_id)] =
+        mempool::osdmap::vector<int>(
+          {(int)(ps % 6), (int)((ps + 1) % 6), (int)(6 + ps % 6)});
+    }
+    osdmap.apply_incremental(ti);
+  }
+  OSDMap sc;
+  sc.deepish_copy_from(osdmap);
+  OSDMap::Incremental pi(osdmap.get_epoch() + 1);
+  pi.fsid = osdmap.get_fsid();
+  {
+    pg_pool_t tp = *osdmap.get_pg_pool(pool_id);
+    tp.crush_rule = rack_rule;
+    OSDMap::Incremental si(sc.get_epoch() + 1);
+    si.fsid = sc.get_fsid();
+    si.new_pools[pool_id] = tp;
+    sc.apply_incremental(si);
+    pi.new_pools[pool_id] = tp;
+  }
+  ASSERT_GT(osdmap.calc_crush_rule_change_pins(
+    g_ceph_context, sc, pool_id, &pi, false), 0);
+  OSDMap after;
+  after.deepish_copy_from(osdmap);
+  after.apply_incremental(pi);
+
+  // The hash fill picks a bucket only when the moved shard's own crush pick
+  // lies in rack0 or rack1, and an osd in it only when no other crush pick
+  // of the pg does.  Those osds, and the few the rotation breaker picks,
+  // are the ones of the new up set in neither the new raw set nor the
+  // acting set.
+  map<int, unsigned> picked;
+  unsigned total = 0;
+  for (unsigned ps = 0; ps < pg_num; ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> raw, up, acting;
+    int primary;
+    sc.pg_to_raw_osds(pg, &raw, &primary);
+    after.pg_to_up_acting_osds(pg, up, acting);
+    for (int o : up) {
+      if (std::find(raw.begin(), raw.end(), o) == raw.end() &&
+          std::find(acting.begin(), acting.end(), o) == acting.end()) {
+        ++picked[o];
+        ++total;
+      }
+    }
+  }
+  ASSERT_GT(total, 100u);
+  // every osd of the free racks can be picked
+  for (int o = 12; o < 24; ++o) {
+    ASSERT_GT(picked[o], 0u) << "osd." << o;
+  }
+  // in proportion to its weight: the weight 4 osds hold 8/12 of the weight
+  // of their rack (the old modulo picks gave them about a third)
+  unsigned heavy = 0;
+  for (int o = 12; o < 24; ++o) {
+    if (o % 6 < 2)
+      heavy += picked[o];
+  }
+  ASSERT_GT(heavy * 2, total) << heavy << " of " << total;
+}
