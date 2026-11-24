@@ -4,6 +4,7 @@
 #include <sys/resource.h>
 
 #include <boost/smart_ptr/make_local_shared.hpp>
+#include <seastar/core/reactor.hh>
 
 #include "crimson/osd/shard_services.h"
 
@@ -66,6 +67,80 @@ seastar::future<> PerShardState::dump_ops_in_flight(Formatter *f) const
     op.dump(f);
   });
   return seastar::now();
+}
+
+void ShardServices::core_hint_tick()
+{
+  LOG_PREFIX(ShardServices::core_hint_tick);
+  using std::chrono::duration;
+  auto& ctl = core_hint_control;
+  auto& state = local_state;
+  const auto now = std::chrono::steady_clock::now();
+  const auto busy_time = seastar::engine().total_busy_time();
+  const bool first = ctl.last_tick == std::chrono::steady_clock::time_point{};
+  const auto elapsed = now - ctl.last_tick;
+  const auto busy_delta = busy_time - ctl.last_busy;
+  ctl.last_tick = now;
+  ctl.last_busy = busy_time;
+
+  const auto& conf = crimson::common::local_conf();
+  if (!state.core_hint ||
+      !conf.get_val<bool>("crimson_osd_core_hint_withhold")) {
+    if (state.core_hint_withheld) {
+      INFO("core {}: hinted again (crimson_osd_core_hint_withhold off)",
+           seastar::this_shard_id());
+      state.core_hint_withheld = false;
+    }
+    ctl.busy_ticks = ctl.quiet_ticks = 0;
+    return;
+  }
+  if (first || elapsed <= std::chrono::steady_clock::duration::zero()) {
+    return;
+  }
+  // the fraction of the last tick this core was busy (not idle or polling)
+  const double busy =
+    duration<double>(busy_delta) / duration<double>(elapsed);
+
+  if (!state.core_hint_withheld) {
+    const auto threshold =
+      conf.get_val<double>("crimson_osd_core_hint_withhold_busy");
+    ctl.busy_ticks = busy >= threshold ? ctl.busy_ticks + 1 : 0;
+    const auto secs =
+      conf.get_val<uint64_t>("crimson_osd_core_hint_withhold_secs");
+    if (ctl.busy_ticks < secs) {
+      return;
+    }
+    // withheld again soon after: wait longer before hinting again (the
+    // load drops once the clients leave, which would hint it at once)
+    if (ctl.last_withheld && now - *ctl.last_withheld < std::chrono::minutes(10)) {
+      ctl.dwell_mult = std::min(ctl.dwell_mult * 2, 16u);
+    } else {
+      ctl.dwell_mult = 1;
+    }
+    ctl.last_withheld = now;
+    ctl.busy_ticks = ctl.quiet_ticks = 0;
+    state.core_hint_withheld = true;
+    INFO("core {}: {:.0f}% busy or more for {}s: hint withheld; hinted again "
+         "after {}s at {:.0f}% busy or less",
+         seastar::this_shard_id(), threshold * 100, secs,
+         conf.get_val<uint64_t>("crimson_osd_core_hint_rehint_secs") *
+           ctl.dwell_mult,
+         conf.get_val<double>("crimson_osd_core_hint_rehint_busy") * 100);
+  } else {
+    const auto threshold =
+      conf.get_val<double>("crimson_osd_core_hint_rehint_busy");
+    ctl.quiet_ticks = busy <= threshold ? ctl.quiet_ticks + 1 : 0;
+    const auto secs =
+      conf.get_val<uint64_t>("crimson_osd_core_hint_rehint_secs") *
+      ctl.dwell_mult;
+    if (ctl.quiet_ticks < secs) {
+      return;
+    }
+    ctl.busy_ticks = ctl.quiet_ticks = 0;
+    state.core_hint_withheld = false;
+    INFO("core {}: {:.0f}% busy or less for {}s: hinted again",
+         seastar::this_shard_id(), threshold * 100, secs);
+  }
 }
 
 seastar::future<> PerShardState::stop_pgs()
