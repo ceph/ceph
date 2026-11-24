@@ -42,7 +42,7 @@ struct record_input {
   std::string_view user_agent;
   std::string_view ssl_cipher;
   std::string_view tls_version;
-  std::string fqdn;          // appended in place with the domain suffix
+  std::string fqdn;          // Host header, or the domain without one
   std::string_view x_amz_id_2;
   std::string aws_version;   // written by get_aws_version_and_auth_type
   std::string auth_type;     // written by get_aws_version_and_auth_type

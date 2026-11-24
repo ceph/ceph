@@ -488,10 +488,9 @@ int log_record(rgw::sal::Driver* driver,
       input.user_or_account = s->account_name;
     }
   }
-  input.fqdn = s->info.host;
-  if (!s->info.domain.empty() && !input.fqdn.empty()) {
-    input.fqdn.append(".").append(s->info.domain);
-  }
+  // info.host is the full Host header (bucket.domain for virtual-hosted
+  // requests); fall back to the configured domain without one
+  input.fqdn = s->info.host.empty() ? s->info.domain : s->info.host;
   rgw::auth::s3::get_aws_version_and_auth_type(s, input.aws_version, input.auth_type);
   input.time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed());
   // same client address as policy evaluation (aws:SourceIp), so records
