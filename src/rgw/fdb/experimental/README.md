@@ -342,7 +342,11 @@ objects; no standard sender-conformance claim is made for that backend.
 NVIDIA mode uses the receiver's stop token. Read, scan, metadata, and watch
 cancellation is supported; submitted commits retain their outcome. Its Ceph
 terminal adapter accepts one successful completion shape and an
-`std::exception_ptr` error channel. Untransferred sender continuations may run
+`std::exception_ptr` error channel. Successful values must be non-reference and
+nothrow movable; map reference completions to owned values before using the
+terminal bridge. Unsupported completion shapes are rejected by its constraints.
+Native stdexec composition retains its own reference and error semantics.
+Untransferred sender continuations may run
 on FoundationDB's network thread; transfer application work to its chosen
 scheduler before blocking work.
 

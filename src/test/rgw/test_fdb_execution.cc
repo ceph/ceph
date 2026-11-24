@@ -18,6 +18,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <exec/single_thread_context.hpp>
+#include <exec/split.hpp>
 #include <exec/variant_sender.hpp>
 
 #include <stdexec/execution.hpp>
@@ -2033,6 +2034,64 @@ TEST_CASE("FDB execution scan windows cross the Asio bridge",
  const auto row = *std::begin(rows);
  CHECK(key == as_string_view(row.key));
  CHECK("value"sv == as_string_view(row.value));
+}
+
+template <typename SenderT, bool Supported>
+void check_bridge_sender()
+{
+ STATIC_REQUIRE(Supported == lfdbx::detail::asio_waitable_sender<SenderT>);
+ STATIC_REQUIRE(Supported == requires(SenderT sender) {
+  lfdbx::async_wait(std::move(sender), boost::asio::detached);
+ });
+ STATIC_REQUIRE(Supported == requires(SenderT sender) {
+  lfdbx::wait(std::move(sender), null_yield);
+ });
+}
+
+TEST_CASE("FDB execution Asio bridge rejects reference completions", "[fdb][execution][types]")
+{
+ int original = 42;
+ const auto reference = [&original] {
+  return stdexec::just() | stdexec::then([&original]() -> int& { return original; });
+ };
+ auto borrowed = reference();
+ auto borrowed_values = exec::split(stdexec::when_all(reference(), reference())) |
+  stdexec::let_error([](const std::exception_ptr& error) { return stdexec::just_error(error); });
+
+ STATIC_REQUIRE_FALSE(lfdbx::detail::wait_completion_t<decltype(borrowed_values)>::non_reference);
+
+ check_bridge_sender<decltype(borrowed), false>();
+ check_bridge_sender<decltype(borrowed_values), false>();
+
+ // Native composition still accepts references; ownership is a terminal-bridge requirement:
+ const auto native_result = stdexec::sync_wait(std::move(borrowed));
+
+ REQUIRE(native_result);
+ CHECK(original == std::get<0>(*native_result));
+
+ auto owned = reference() | stdexec::then([](const int& value) { return value; });
+
+ check_bridge_sender<decltype(owned), true>();
+ CHECK(original == lfdbx::wait(std::move(owned), null_yield));
+}
+
+TEST_CASE("FDB execution Asio bridge constrains each completion shape", "[fdb][execution][types]")
+{
+ using values = decltype(stdexec::just() | stdexec::then([] { return 42; }));
+ using strings = decltype(stdexec::just() | stdexec::then([] { return std::string {"value"}; }));
+ using error_only = decltype(stdexec::just_error(std::exception_ptr {}));
+ using value_only = decltype(stdexec::just(42));
+ using stopped_only = decltype(stdexec::just_stopped());
+ using multiple_values = exec::variant_sender<values, strings>;
+ using multiple_errors = exec::variant_sender<
+  values, decltype(stdexec::just_error(std::errc::invalid_argument))>;
+
+ check_bridge_sender<values, true>();
+ check_bridge_sender<error_only, false>();
+ check_bridge_sender<value_only, false>();
+ check_bridge_sender<stopped_only, false>();
+ check_bridge_sender<multiple_values, false>();
+ check_bridge_sender<multiple_errors, false>();
 }
 
 TEST_CASE("FDB execution Asio bridge preserves executor affinity",

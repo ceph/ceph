@@ -43,28 +43,32 @@ namespace ceph::libfdb::experimental {
 namespace detail {
 
 template <typename ...ValueTs>
-struct completion_value
+struct completion_value final
 {
  using type = std::tuple<ValueTs...>;
+
+ static constexpr bool non_reference = (not std::is_reference_v<ValueTs> and ...);
 };
 
 template <typename ValueT>
-struct completion_value<ValueT>
+struct completion_value<ValueT> final
 {
  using type = ValueT;
-};
 
-template <typename ...ValueTs>
-using completion_value_t = typename completion_value<ValueTs...>::type;
+ static constexpr bool non_reference = not std::is_reference_v<ValueT>;
+};
 
 using stop_environment_t = decltype(stdexec::env {stdexec::prop {
   stdexec::get_stop_token, std::declval<std::stop_token>()
 }});
 
 template <typename SenderT>
-using wait_value_t = stdexec::value_types_of_t<
+using wait_completion_t = stdexec::value_types_of_t<
   std::remove_cvref_t<SenderT>, stop_environment_t,
-  completion_value_t, std::type_identity_t>;
+  completion_value, std::type_identity_t>;
+
+template <typename SenderT>
+using wait_value_t = typename wait_completion_t<SenderT>::type;
 
 template <typename SenderT>
 using single_error_t = stdexec::error_types_of_t<
@@ -72,8 +76,9 @@ using single_error_t = stdexec::error_types_of_t<
 
 template <typename SenderT>
 concept asio_waitable_sender =
-  stdexec::sender_in<std::remove_cvref_t<SenderT>, stop_environment_t> &&
-  std::same_as<single_error_t<SenderT>, std::exception_ptr> &&
+  stdexec::sender_in<std::remove_cvref_t<SenderT>, stop_environment_t> and
+  wait_completion_t<SenderT>::non_reference and
+  std::same_as<single_error_t<SenderT>, std::exception_ptr> and
   std::is_nothrow_move_constructible_v<wait_value_t<SenderT>>;
 
 template <typename SenderT, typename HandlerT>
