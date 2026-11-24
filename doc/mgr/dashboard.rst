@@ -92,7 +92,8 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
   device class. Deploy OSDs on new drives and hosts.
 * **Device management**: List all hosts known by the orchestrator. List all
   drives attached to a host and their properties. Display drive
-  health predictions and SMART data. Blink enclosure LEDs.
+  health predictions and SMART data (see :ref:`enabling-monitoring` for the
+  requirements). Blink enclosure LEDs.
 * **iSCSI**: List all hosts that run the TCMU runner service, display all
   images and their performance characteristics (read/write ops, traffic).
   Create, modify, and delete iSCSI targets (via ``ceph-iscsi``). Display the
