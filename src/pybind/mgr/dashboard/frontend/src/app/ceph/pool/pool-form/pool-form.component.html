@@ -442,27 +442,27 @@
                   ></svg>
                 </cds-icon-button>
               </div>
-              @if (!editing) {
-                <div
-                  cdsCol
-                  [columnNumbers]="{ lg: 1 }"
-                  class="item-action-btn"
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 1 }"
+                class="item-action-btn"
+              >
+                <cds-icon-button
+                  kind="ghost"
+                  size="md"
+                  data-testid="ecp-view-button"
+                  description="View erasure code profile"
+                  i18n-description
+                  [disabled]="!selectedEcp"
+                  (click)="viewErasureCodeProfile()"
                 >
-                  <cds-icon-button
-                    kind="ghost"
-                    size="md"
-                    data-testid="ecp-view-button"
-                    [disabled]="!selectedEcp"
-                    (click)="viewErasureCodeProfile()"
-                  >
-                    <svg
-                      cdsIcon="view"
-                      size="20"
-                      class="cds--btn__icon"
-                    ></svg>
-                  </cds-icon-button>
-                </div>
-              }
+                  <svg
+                    cdsIcon="view"
+                    size="16"
+                    class="cds--btn__icon"
+                  ></svg>
+                </cds-icon-button>
+              </div>
               @if (!editing) {
                 <div
                   cdsCol

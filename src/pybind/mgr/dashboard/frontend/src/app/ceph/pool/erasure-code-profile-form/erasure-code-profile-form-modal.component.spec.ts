@@ -126,7 +126,11 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       plugin: 'isa',
       k: 8,
       m: 4,
-      'crush-failure-domain': 'rack'
+      'crush-failure-domain': 'rack',
+      'crush-num-failure-domains': 2,
+      'crush-osds-per-failure-domain': 3,
+      'crush-device-class': 'ssd',
+      scalar_mds: 'isa'
     };
 
     component.ngOnInit();
@@ -136,9 +140,30 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     expect(component.form.getValue('plugin')).toBe('isa');
     expect(component.form.getValue('k')).toBe(8);
     expect(component.form.getValue('m')).toBe(4);
-    expect(component.form.get('name').disabled).toBe(true);
-    expect(component.form.get('k').disabled).toBe(true);
-    expect(component.form.get('m').disabled).toBe(true);
+    expect(component.form.getValue('crushFailureDomain')).toBe('rack');
+    expect(component.form.getValue('crushNumFailureDomains')).toBe(2);
+    expect(component.form.getValue('crushOsdsPerFailureDomain')).toBe(3);
+    expect(component.form.getValue('crushDeviceClass')).toBe('ssd');
+    Object.values(component.form.controls).forEach((control) => {
+      expect(control.disabled).toBe(true);
+    });
+  });
+
+  it('should not allow toggling d calculation in view mode', () => {
+    component.profile = {
+      name: 'clay-profile',
+      plugin: 'clay',
+      k: 4,
+      m: 2,
+      d: 5
+    };
+
+    component.ngOnInit();
+    const initialD = component.form.getValue('d');
+    component.toggleDCalc();
+
+    expect(component.form.get('d').disabled).toBe(true);
+    expect(component.form.getValue('d')).toBe(initialD);
   });
 
   it('calls listing to get ecps on ngInit', () => {

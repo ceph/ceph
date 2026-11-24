@@ -2,7 +2,9 @@ import {
   ChangeDetectorRef,
   Component,
   EventEmitter,
+  Inject,
   OnInit,
+  Optional,
   Output,
   ViewChild
 } from '@angular/core';
@@ -63,7 +65,6 @@ export class ErasureCodeProfileFormModalComponent
   dCalc: boolean;
   lrcGroups: number;
   lrcMultiK: number;
-  profile: ErasureCodeProfile;
   private rootControl = new FormControl(null);
 
   public CrushFailureDomains = CrushFailureDomains;
@@ -74,7 +75,8 @@ export class ErasureCodeProfileFormModalComponent
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     public actionLabels: ActionLabelsI18n,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    @Optional() @Inject('profile') public profile?: ErasureCodeProfile
   ) {
     super();
     this.action = this.actionLabels.CREATE;
@@ -305,6 +307,9 @@ export class ErasureCodeProfileFormModalComponent
   }
 
   toggleDCalc() {
+    if (this.profile) {
+      return;
+    }
     this.dCalc = !this.dCalc;
     this.form.get('d')[this.dCalc ? 'disable' : 'enable']();
     this.calculateD();
@@ -468,20 +473,23 @@ export class ErasureCodeProfileFormModalComponent
 
   private initViewProfile(profile: ErasureCodeProfile) {
     this.action = this.actionLabels.VIEW;
-    this.form.silentSet('name', profile.name);
     this.plugin = profile.plugin;
-    this.form.silentSet('plugin', profile.plugin);
+    const controlNames: Record<string, string> = {
+      'crush-failure-domain': 'crushFailureDomain',
+      'crush-num-failure-domains': 'crushNumFailureDomains',
+      'crush-osds-per-failure-domain': 'crushOsdsPerFailureDomain',
+      'crush-device-class': 'crushDeviceClass',
+      'crush-locality': 'crushLocality'
+    };
 
-    if (profile.k !== undefined) {
-      this.form.silentSet('k', profile.k);
-    }
-    if (profile.m !== undefined) {
-      this.form.silentSet('m', profile.m);
-    }
+    Object.entries(profile).forEach(([profileName, value]) => {
+      const controlName = controlNames[profileName] || profileName;
+      if (value !== undefined && this.form.controls[controlName]) {
+        this.form.silentSet(controlName, value);
+      }
+    });
 
-    this.form.get('name').disable();
-    this.form.get('k').disable();
-    this.form.get('m').disable();
+    this.form.disable();
   }
 
   onSubmit() {

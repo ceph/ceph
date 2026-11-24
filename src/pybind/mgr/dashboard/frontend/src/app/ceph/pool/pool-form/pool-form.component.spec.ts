@@ -1136,6 +1136,14 @@ describe('PoolFormComponent', () => {
       });
     });
 
+    it('should show the view button when editing an erasure coded pool', () => {
+      component.editing = true;
+      fixture.detectChanges();
+      const viewButton = fixture.debugElement.query(By.css('[data-testid="ecp-view-button"]'));
+      expect(viewButton).toBeTruthy();
+      expect(viewButton.nativeElement.disabled).toBeFalsy();
+    });
+
     it('should select the newly created profile', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile')).toBe('ecp1');
