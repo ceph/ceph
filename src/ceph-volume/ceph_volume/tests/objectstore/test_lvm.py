@@ -15,8 +15,9 @@ class TestLvm:
 
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.api.lvm.get_single_lv')
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.osd_id_destroyed')
     @patch('ceph_volume.objectstore.lvm.prepare_utils.create_id', Mock(return_value='111'))
-    def test_pre_prepare_lv(self, m_get_single_lv, factory):
+    def test_pre_prepare_lv(self, m_osd_id_destroyed, m_get_single_lv, factory):
         args = factory(objectstore='seastore',
                        cluster_fsid='abcd',
                        osd_fsid='abc123',
@@ -33,10 +34,13 @@ class TestLvm:
         self.lvm.dmcrypt_key = 'fake-dmcrypt-key'
         self.lvm.args = args
         self.lvm.objectstore = 'seastore'
+        m_osd_id_destroyed.return_value = True
         self.lvm.pre_prepare()
         assert self.lvm.secrets['dmcrypt_key'] == 'fake-dmcrypt-key'
         assert self.lvm.secrets['crush_device_class'] == 'ssd'
         assert self.lvm.osd_id == '111'
+        m_osd_id_destroyed.assert_called_once_with('111')
+        assert self.lvm.reused_destroyed_id
         assert self.lvm.block_device_path == '/fake-path'
         assert self.lvm.tags == {'ceph.osd_fsid': 'abc123',
                                     'ceph.osd_id': '111',
@@ -54,6 +58,7 @@ class TestLvm:
 
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.api.lvm.get_single_lv')
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.osd_id_destroyed', Mock(return_value=False))
     @patch('ceph_volume.objectstore.lvm.prepare_utils.create_id', Mock(return_value='111'))
     def test_pre_prepare_lv_with_dmcrypt_and_tpm(self, m_get_single_lv, factory):
         args = factory(objectstore='seastore',
@@ -94,6 +99,7 @@ class TestLvm:
                                     'ceph.with_tpm': 1}
 
     @patch('ceph_volume.conf.cluster', 'ceph')
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.osd_id_destroyed', Mock(return_value=False))
     @patch('ceph_volume.objectstore.lvm.prepare_utils.create_id', Mock(return_value='111'))
     def test_pre_prepare_no_lv(self, factory):
         args = factory(cluster_fsid='abcd',
@@ -234,7 +240,7 @@ class TestLvm:
         m_rollback_osd.return_value = MagicMock()
         with pytest.raises(Exception):
             self.lvm.safe_prepare()
-        assert m_rollback_osd.mock_calls == [call('111')]
+        assert m_rollback_osd.mock_calls == [call('111', False)]
 
     @patch('ceph_volume.objectstore.lvm.Lvm.pre_prepare', Mock(return_value=None))
     @patch('ceph_volume.objectstore.lvm.Lvm.prepare_dmcrypt', MagicMock())

@@ -73,3 +73,28 @@ class TestCommon(object):
         ns = parser.parse_args(['--data', '/dev/sdz'])
         assert ns.dmcrypt_open_opts is None
         assert ns.dmcrypt_format_opts is None
+
+
+class TestRollbackOsd(object):
+
+    @patch('ceph_volume.devices.lvm.common.Zap')
+    @patch('ceph_volume.devices.lvm.common.process.run')
+    def test_purges_a_new_id(self, m_run, m_zap):
+        common.rollback_osd('3')
+        cmd = m_run.call_args[0][0]
+        assert cmd[-3:] == ['purge-new', 'osd.3', '--yes-i-really-mean-it']
+        m_zap.assert_called_once_with(['--destroy', '--osd-id', '3'])
+
+    @patch('ceph_volume.devices.lvm.common.Zap')
+    @patch('ceph_volume.devices.lvm.common.process.run')
+    def test_keeps_a_reused_destroyed_id(self, m_run, m_zap):
+        common.rollback_osd('3', reused_destroyed_id=True)
+        m_run.assert_not_called()
+        m_zap.assert_called_once_with(['--destroy', '--osd-id', '3'])
+
+    @patch('ceph_volume.devices.lvm.common.Zap')
+    @patch('ceph_volume.devices.lvm.common.process.run')
+    def test_nothing_to_rollback_without_an_id(self, m_run, m_zap):
+        common.rollback_osd(None)
+        m_run.assert_not_called()
+        m_zap.assert_not_called()

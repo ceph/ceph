@@ -5,15 +5,19 @@ from ceph_volume.devices.lvm.zap import Zap
 import argparse
 from typing import Any, Dict, Optional
 
-def rollback_osd(osd_id: Optional[str] = None) -> None:
+def rollback_osd(osd_id: Optional[str] = None,
+                 reused_destroyed_id: bool = False) -> None:
     """
     When the process of creating or preparing fails, the OSD needs to be
     destroyed so that the ID can be reused.  This prevents from leaving the ID
     around as "used" on the monitor, which can cause confusion if expecting
     sequential OSD IDs.
 
-    The usage of `destroy-new` allows this to be done without requiring the
+    The usage of `purge-new` allows this to be done without requiring the
     admin keyring (otherwise needed for destroy and purge commands)
+
+    :param reused_destroyed_id: The ID was taken over from a destroyed OSD
+                                (``--osd-id``) rather than newly allocated
     """
     if not osd_id:
         # it means that it wasn't generated, so there is nothing to rollback here
@@ -21,18 +25,28 @@ def rollback_osd(osd_id: Optional[str] = None) -> None:
 
     # once here, this is an error condition that needs to be rolled back
     terminal.error('Was unable to complete a new OSD, will rollback changes')
-    osd_name = 'osd.%s'
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
-    cmd = [
-        'ceph',
-        '--cluster', conf.cluster,
-        '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
-        'osd', 'purge-new', osd_name % osd_id,
-        '--yes-i-really-mean-it',
-    ]
+    if reused_destroyed_id:
+        # `osd new` clears the destroyed flag and marks the OSD as new, so
+        # `purge-new` would accept it and remove the OSD from the CRUSH map,
+        # moving data that was waiting for the replacement. Leave the ID in
+        # place; the bootstrap-osd key cannot mark it destroyed again.
+        terminal.warning(
+            'osd.%s was reused from a destroyed OSD and is kept in the OSD '
+            'map; run "ceph osd destroy %s --yes-i-really-mean-it" before '
+            'retrying with --osd-id %s' % (osd_id, osd_id, osd_id))
+    else:
+        osd_name = 'osd.%s'
+        bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+        cmd = [
+            'ceph',
+            '--cluster', conf.cluster,
+            '--name', 'client.bootstrap-osd',
+            '--keyring', bootstrap_keyring,
+            'osd', 'purge-new', osd_name % osd_id,
+            '--yes-i-really-mean-it',
+        ]
 
-    process.run(cmd)
+        process.run(cmd)
     Zap(['--destroy', '--osd-id', osd_id]).main()
 
 

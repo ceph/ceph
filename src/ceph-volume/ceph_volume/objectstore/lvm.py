@@ -36,6 +36,8 @@ class Lvm(BaseObjectStore):
         crush_device_class = self.args.crush_device_class
         if crush_device_class:
             self.secrets['crush_device_class'] = crush_device_class
+        self.reused_destroyed_id = prepare_utils.osd_id_destroyed(
+            self.args.osd_id)
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(self.osd_fsid,
                                               json.dumps(self.secrets),
@@ -128,7 +130,7 @@ class Lvm(BaseObjectStore):
         except Exception:
             logger.exception('lvm prepare was unable to complete')
             logger.info('will rollback OSD ID creation')
-            rollback_osd(self.osd_id)
+            rollback_osd(self.osd_id, self.reused_destroyed_id)
             raise
         terminal.success("ceph-volume lvm prepare successful for: %s" %
                          self.args.data)
