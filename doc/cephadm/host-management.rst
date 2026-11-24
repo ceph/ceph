@@ -543,6 +543,11 @@ You can make use of an existing key by directly importing it with:
    ceph config-key set mgr/cephadm/ssh_identity_key -i <key>
    ceph config-key set mgr/cephadm/ssh_identity_pub -i <pub>
 
+.. note:: Pass each key file with ``-i``. Without ``-i``,
+   ``ceph config-key set`` stores the file's path as the key, and
+   ``cephadm`` then fails to connect to hosts with
+   ``KeyImportError('Invalid private key')``.
+
 You will then need to restart the Manager daemon to reload the
 configuration with:
 
