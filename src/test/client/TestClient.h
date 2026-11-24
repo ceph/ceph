@@ -24,6 +24,7 @@
 #include "osdc/Objecter.h"
 #include "client/MetaRequest.h"
 #include "client/Client.h"
+#include "client/Inode.h"
 #include "client/FSCrypt.h"
 #include "messages/MClientReclaim.h"
 #include "messages/MClientSession.h"
