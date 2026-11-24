@@ -168,12 +168,12 @@ if [ -n "$counters" ] && [[ $OPTIONS =~ read_from_replica=(balance|localize) ]] 
     fi
 fi
 
-# Cleanup must not hang the job if the cluster is still recovering from the
-# thrash -- the verification above has already passed.  Force the unmap
-# (direct I/O leaves nothing to flush) and bound the image removal; a teardown
-# that cannot reach the cluster is teuthology's to clean up, not a test
-# failure.
-sudo rbd device unmap -o force $DEV || true
-timeout 300 rbd rm $POOL/$IMAGE || true
+# Unmap the device but do not remove the image: like diff_continuous.sh and
+# most krbd workunits, leave image teardown to teuthology's cluster cleanup,
+# which runs once the thrasher has stopped and the cluster has recovered.
+# Removing it here issues a cluster-wide object delete that blocks on an
+# inactive PG while the OSD thrasher is still running, which ran the job into
+# its timeout long after every read had already verified.
+sudo rbd device unmap $DEV
 rm -rf $DATA
 echo OK
