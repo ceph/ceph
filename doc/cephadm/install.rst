@@ -997,6 +997,9 @@ your own.
    - Node Exporter container image
    - Grafana container image
    - AlertManager container image
+   - The image of each other service that you will deploy, for example the
+     HAProxy and Keepalived images for the ingress service (see
+     :ref:`orchestrator-haproxy-service-spec`)
 
    Start with the Ceph image of the release of ``cephadm``, for example
    ``quay.io/ceph/ceph:v21`` for Umbrella. Pull it:
@@ -1025,7 +1028,8 @@ your own.
    The output ends with ``Writing manifest to image destination``.
 
 #. Repeat the last three steps for the Prometheus, Node Exporter, Grafana, and
-   Alertmanager images that ``cephadm list-images`` printed. Keep the path and
+   Alertmanager images that ``cephadm list-images`` printed, and for the image
+   of each other service that you will deploy. Keep the path and
    the tag of each image, and replace its registry with ``host1701:5000``.
    With Docker, use ``docker`` instead of ``podman``, without
    ``--tls-verify=false``.
@@ -1042,6 +1046,30 @@ your own.
       mgr/cephadm/container_image_node_exporter = host1701:5000/prometheus/node-exporter:<tag>
       mgr/cephadm/container_image_grafana = host1701:5000/ceph/grafana:<tag>
       mgr/cephadm/container_image_alertmanager = host1701:5000/prometheus/alertmanager:<tag>
+
+   For each other image that you pushed, add its line from the output of
+   ``cephadm list-images`` with the registry replaced. For the ingress service,
+   for example:
+
+   .. code-block:: ini
+
+      mgr/cephadm/container_image_haproxy = host1701:5000/ceph/haproxy:<tag>
+      mgr/cephadm/container_image_keepalived = host1701:5000/ceph/keepalived:<tag>
+
+#. If your registry requires a login, pass ``--registry-json`` to bootstrap in
+   the next step (see `Further Information about Cephadm Bootstrap`_).
+   ``cephadm`` stores the login and uses it on every host that it adds. To set
+   or change the login after bootstrap, run:
+
+   .. prompt:: bash #
+
+      ceph cephadm registry-login <url> <username> <password>
+
+   or, with the same JSON file:
+
+   .. prompt:: bash #
+
+      ceph cephadm registry-login -i <path to JSON file>
 
 #. Run bootstrap using the temporary configuration file, and pass the name of
    your container image as the argument of the ``--image`` flag:
