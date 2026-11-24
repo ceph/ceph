@@ -232,9 +232,6 @@ class MDCache {
   bool is_taken_inos_empty(void) {
     return replay_taken_inos.empty();
   }
-  size_t num_taken_inos() const {
-    return replay_taken_inos.size();
-  }
 
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;

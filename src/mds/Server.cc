@@ -8077,20 +8077,29 @@ void Server::handle_client_mknod_batch(const MDRequestRef& mdr)
   // One range of inode numbers for the whole batch, straight from the
   // inotable.  It is journaled as EMetaBlob's preallocated_inos with no
   // sessionmap version: replay then marks the range used in the inotable and
-  // leaves the session alone, which is what happens here too.  Numbers that
-  // a replay marked as taken are skipped, so ask for that many more.
-  interval_set<inodeno_t> inos;
-  mds->inotable->project_alloc_ids(inos, total + mdcache->num_taken_inos());
+  // leaves the session alone, which is what happens here too.  A free number
+  // that is marked as taken (a replay found it in use) is allocated too and
+  // skipped, as prepare_new_inode() does.  So walk the free numbers first to
+  // see how many the batch needs, then take exactly those: the event can
+  // journal only one version of the inotable.
   std::vector<inodeno_t> usable;
   usable.reserve(total);
-  for (auto p = inos.begin(); p != inos.end() && usable.size() < total; ++p) {
-    const uint64_t start = p.get_start(), len = p.get_len();
-    for (uint64_t v = start; v < start + len && usable.size() < total; v++) {
-      if (!mdcache->test_and_clear_taken_inos(inodeno_t(v)))
-	usable.push_back(inodeno_t(v));
+  unsigned want = 0;
+  {
+    const auto& pfree = mds->inotable->get_projected_free();
+    for (auto p = pfree.begin(); p != pfree.end() && usable.size() < total; ++p) {
+      const uint64_t start = p.get_start(), len = p.get_len();
+      for (uint64_t v = start; v < start + len && usable.size() < total; v++) {
+	want++;
+	if (!mdcache->test_and_clear_taken_inos(inodeno_t(v)))
+	  usable.push_back(inodeno_t(v));
+      }
     }
   }
   ceph_assert(usable.size() == total);
+  interval_set<inodeno_t> inos;
+  mds->inotable->project_alloc_ids(inos, want);
+  ceph_assert(inos.contains(usable.front()) && inos.contains(usable.back()));
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod_batch");
