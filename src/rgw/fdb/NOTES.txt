@@ -107,9 +107,11 @@ Network and Database Options:
 
 Option containers now retain insertion order and repeated applications. The
 option_map alias and associative operations are removed; use emplace_back(),
-append_range(), replace_all(), and erase(). Database helpers accept transaction
-options immediately after their handle. Lazy reads retain an owning snapshot,
-and replay restores nonpersistent entries in their original order. See the
+append_range(), replace_all(), and erase(). Mutable lists support writable
+iteration over codes and values; const lists and cbegin()/cend() retain const
+iterators. Reordering entries changes their application order.
+Database helpers accept transaction options immediately after their handle. Lazy reads
+retain an owning snapshot, and replay restores nonpersistent entries in their original order. See the
 Options chapter in EXAMPLES.md for migration and lifetime details.
 
 Pass a network_options object to create_database(netopts) to configure only the

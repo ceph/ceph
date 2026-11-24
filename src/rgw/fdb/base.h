@@ -621,6 +621,7 @@ struct option_list final
 {
  using value_type = std::pair<OptionCodeT, option_value>;
  using size_type = typename std::vector<value_type>::size_type;
+ using iterator = typename std::vector<value_type>::iterator;
  using const_iterator = typename std::vector<value_type>::const_iterator;
 
  private:
@@ -634,9 +635,11 @@ struct option_list final
  {}
 
  public:
+ iterator begin() noexcept { return std::begin(entries); }
  const_iterator begin() const noexcept { return std::begin(entries); }
  const_iterator cbegin() const noexcept { return std::cbegin(entries); }
 
+ iterator end() noexcept { return std::end(entries); }
  const_iterator end() const noexcept { return std::end(entries); }
  const_iterator cend() const noexcept { return std::cend(entries); }
 

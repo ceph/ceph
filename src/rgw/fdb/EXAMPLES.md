@@ -270,7 +270,10 @@ does not move its elements. An appended range must not overlap its destination.
 `replace_all()` returns the number of matching entries, including unchanged
 matches. It inserts nothing when the code is absent. `erase(code)` removes every
 matching entry and returns the count; `clear()` removes everything. Iteration is
-const, and insertion and erasure follow vector invalidation rules.
+mutable for non-const lists: `begin()` and `end()` return `iterator`, allowing
+edits to both option codes and values. Const lists and `cbegin()`/`cend()` return
+`const_iterator`. Mutating range algorithms can reorder entries, changing their
+application order. Insertion and erasure follow vector invalidation rules.
 
 Transactions, Transactors, and lazy database scans own their option snapshots.
 Changing the original list affects later construction. A consumed list can

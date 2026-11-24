@@ -6259,7 +6259,10 @@ TEST_CASE("Option list insertion and editing preserve sequence semantics", "[fdb
  using value_type = options_type::value_type;
 
  STATIC_REQUIRE(std::ranges::contiguous_range<options_type>);
+ STATIC_REQUIRE(std::ranges::contiguous_range<const options_type>);
  STATIC_REQUIRE(std::same_as<std::ranges::range_reference_t<options_type>,
+                            value_type&>);
+ STATIC_REQUIRE(std::same_as<std::ranges::range_reference_t<const options_type>,
                             const value_type&>);
 
  const auto string_values = std::views::values |
@@ -6276,6 +6279,37 @@ TEST_CASE("Option list insertion and editing preserve sequence semantics", "[fdb
  options.push_back({FDB_TR_OPTION_AUTO_THROTTLE_TAG, "b"});
  const value_type entry {FDB_TR_OPTION_TAG, "c"};
  options.push_back(entry);
+
+ SECTION("mutable iteration edits entries and their application order") {
+  using applied_option = std::pair<FDBTransactionOption, std::string>;
+
+  auto first = options.begin();
+  first->first = FDB_TR_OPTION_AUTO_THROTTLE_TAG;
+  first->second = "edited";
+  std::prev(options.end())->second = "last";
+
+  std::ranges::reverse(options);
+
+  std::vector<applied_option> applied;
+
+  lfdb::detail::apply_options(options,
+    [&applied](const auto code, const std::uint8_t *data, const int length) {
+     applied.emplace_back(code, std::string(reinterpret_cast<const char *>(data), length));
+
+     return fdb_error_t {0};
+    });
+
+  CHECK_THAT(applied, Catch::Matchers::RangeEquals(std::array {
+    applied_option {FDB_TR_OPTION_TAG, "last"},
+    applied_option {FDB_TR_OPTION_AUTO_THROTTLE_TAG, "b"},
+    applied_option {FDB_TR_OPTION_AUTO_THROTTLE_TAG, "edited"}
+  }));
+
+  const auto& const_options = options;
+
+  CHECK(const_options.begin() == options.cbegin());
+  CHECK(const_options.end() == options.cend());
+ }
 
  SECTION("bulk insertion and back insertion preserve all entries") {
   options.append({{FDB_TR_OPTION_TAG, "d"}, {FDB_TR_OPTION_TAG, "e"}});
