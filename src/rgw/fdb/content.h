@@ -34,11 +34,11 @@ namespace detail {
 
 constexpr char *copy_string_bytes(char *out, const std::string_view bytes) noexcept
 {
- if (not bytes.empty()) {
-  std::char_traits<char>::copy(out, bytes.data(), bytes.size());
+ if (not std::empty(bytes)) {
+  std::char_traits<char>::copy(out, std::data(bytes), std::size(bytes));
  }
 
- return out + bytes.size();
+ return out + std::size(bytes);
 }
 
 constexpr char *write_string_segment(char *out, std::string_view bytes,
@@ -102,37 +102,37 @@ template <bool Escaped>
 constexpr void write_string_segments(std::string& out, const std::string_view compiled_prefix,
                                       const auto& ...segments)
 {
- const auto previous_size = out.size();
+ const auto previous_size = std::size(out);
  const auto limit = out.max_size();
 
- auto size = previous_size;
+ auto encoded_size = previous_size;
 
- const auto add_size = [&](const std::size_t amount) {
-  if (amount > limit - size) {
+ const auto add_size = [&limit, &encoded_size](const std::size_t amount) {
+  if (limit - encoded_size < amount) {
    throw std::length_error("content key exceeds maximum string size");
   }
 
-  size += amount;
+  encoded_size += amount;
  };
 
- add_size(compiled_prefix.size());
- ((add_size(2), add_size(segments.size())), ...);
+ add_size(std::size(compiled_prefix));
+ ((add_size(2), add_size(std::size(segments))), ...);
 
  if constexpr (Escaped) {
   (add_size(static_cast<std::size_t>(std::ranges::count(segments, '\0'))), ...);
  }
 
  // Preserve amortized growth when repeatedly extending an owned key:
- auto capacity = size;
+ auto capacity = encoded_size;
 
- if (0 != previous_size and size > out.capacity()) {
-  capacity = std::max(size, out.capacity() <= limit / 2 ? 2 * out.capacity() : limit);
+ if (0 != previous_size and out.capacity() < encoded_size) {
+  capacity = std::max(encoded_size, out.capacity() <= limit / 2 ? 2 * out.capacity() : limit);
  }
 
  out.resize_and_overwrite(capacity, [&](char *buffer, std::size_t) noexcept {
   auto *cursor = copy_string_bytes(buffer + previous_size, compiled_prefix);
 
-  const auto emit = [&](const std::string_view segment) {
+  const auto emit = [&cursor](const std::string_view segment) {
    auto first_nul = std::string_view::npos;
 
    if constexpr (Escaped) {
@@ -144,7 +144,7 @@ constexpr void write_string_segments(std::string& out, const std::string_view co
 
   (emit(segments), ...);
 
-  return size;
+  return encoded_size;
  });
 }
 
@@ -160,7 +160,7 @@ template <std::size_t N>
 constexpr void append_encoded_string_segments(std::string& out, const std::string_view compiled_prefix,
                                                const std::array<std::string_view, N>& segments)
 {
- std::apply([&](const auto& ...views) {
+ std::apply([&out, &compiled_prefix](const auto& ...views) {
   if (((std::string_view::npos == views.find('\0')) and ...)) [[likely]] {
    write_string_segments<false>(out, compiled_prefix, views...);
 

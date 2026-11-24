@@ -37,6 +37,7 @@ transaction timeout and size budgets.
 #include <cstddef>
 #include <expected>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -67,7 +68,7 @@ q::interval_set archive_selection(const std::string_view marker = {})
   selected -= q::prefix("example/ceph/live/bucket-a/.internal/");
   selected -= q::prefix("example/ceph/live/bucket-b/.internal/");
 
-  if (not marker.empty()) {
+  if (not std::empty(marker)) {
     selected &= q::after(marker);
   }
 
@@ -117,7 +118,7 @@ auto archive_batch(const lfdb::database_handle& dbh, const q::interval_set& sele
         output.push_back(key);
       }
 
-      return archive_progress {batch.rows.size(), bytes, batch.has_more};
+      return archive_progress {std::size(batch.rows), bytes, batch.has_more};
     }, lfdb::staged(std::in_place, archived));
 }
 

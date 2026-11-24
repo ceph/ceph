@@ -24,6 +24,7 @@ between FDB's types! If you have a user type to add, this is the place!
 
 #include "fdb/fdb.h"
 
+#include <iterator>
 #include <span>
 #include <vector>
 #include <cstdint>
@@ -42,7 +43,7 @@ auto serialize(auto& archive, ceph::buffer::list& target)
  auto result = archive(bytes);
 
  target.clear();
- target.append(reinterpret_cast<const char *>(bytes.data()), std::size(bytes));
+ target.append(reinterpret_cast<const char *>(std::data(bytes)), std::size(bytes));
 
  return result;
 }

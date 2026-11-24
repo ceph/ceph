@@ -28,8 +28,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 #include <utility>
+#include <vector>
 
 namespace lfdb = ceph::libfdb;
 namespace li = ceph::libfdb::interval;
@@ -414,20 +414,20 @@ TEST_CASE("intersection assignment reuses concrete range storage", "[fdb][query]
   const std::string lower(256, 'a'), upper(256, 'z');
 
   auto selection = lq::closed_between(lower, upper);
-  const auto *begin_buffer = selection.begin_key.data();
-  const auto *end_buffer = selection.end_key.data();
+  const auto *begin_buffer = std::data(selection.begin_key);
+  const auto *end_buffer = std::data(selection.end_key);
 
   selection &= lq::universal();
 
-  CHECK(begin_buffer == selection.begin_key.data());
-  CHECK(end_buffer == selection.end_key.data());
+  CHECK(begin_buffer == std::data(selection.begin_key));
+  CHECK(end_buffer == std::data(selection.end_key));
 
   const auto bounds = lq::open_between(lower, upper);
 
   selection &= bounds;
 
-  CHECK(begin_buffer == selection.begin_key.data());
-  CHECK(end_buffer == selection.end_key.data());
+  CHECK(begin_buffer == std::data(selection.begin_key));
+  CHECK(end_buffer == std::data(selection.end_key));
   CHECK_FALSE(selection.begin_inclusive);
   CHECK_FALSE(selection.end_inclusive);
   CHECK(lower == bounds.begin_key);
@@ -437,25 +437,25 @@ TEST_CASE("intersection assignment reuses concrete range storage", "[fdb][query]
  SECTION("borrowed tighter bounds are copied once and the other endpoint survives") {
   auto selection = lq::between(std::string(256, 'a'), std::string(256, 'z'));
   const auto bounds = lq::between(std::string(256, 'm'), std::string(256, 'z'));
-  const auto *end_buffer = selection.end_key.data();
+  const auto *end_buffer = std::data(selection.end_key);
 
   selection &= bounds;
 
   CHECK(bounds.begin_key == selection.begin_key);
-  CHECK(bounds.begin_key.data() != selection.begin_key.data());
-  CHECK(end_buffer == selection.end_key.data());
+  CHECK(std::data(bounds.begin_key) != std::data(selection.begin_key));
+  CHECK(end_buffer == std::data(selection.end_key));
  }
 
  SECTION("temporary bounds donate only their tighter endpoint strings") {
   auto selection = lq::between(std::string(256, 'a'), std::string(256, 'z'));
   auto bounds = lq::open_between(std::string(256, 'm'), std::string(256, 'n'));
-  const auto *begin_buffer = bounds.begin_key.data();
-  const auto *end_buffer = bounds.end_key.data();
+  const auto *begin_buffer = std::data(bounds.begin_key);
+  const auto *end_buffer = std::data(bounds.end_key);
 
   selection &= std::move(bounds);
 
-  CHECK(begin_buffer == selection.begin_key.data());
-  CHECK(end_buffer == selection.end_key.data());
+  CHECK(begin_buffer == std::data(selection.begin_key));
+  CHECK(end_buffer == std::data(selection.end_key));
   CHECK_FALSE(selection.begin_inclusive);
   CHECK_FALSE(selection.end_inclusive);
 
@@ -465,8 +465,8 @@ TEST_CASE("intersection assignment reuses concrete range storage", "[fdb][query]
   selection &= std::move(selection);
 
   CHECK(original == selection);
-  CHECK(begin_buffer == selection.begin_key.data());
-  CHECK(end_buffer == selection.end_key.data());
+  CHECK(begin_buffer == std::data(selection.begin_key));
+  CHECK(end_buffer == std::data(selection.end_key));
  }
 
  SECTION("options survive empty results and conflicts precede mutation") {
@@ -509,6 +509,7 @@ TEST_CASE("intersection assignment reuses concrete range storage", "[fdb][query]
 
    std::string begin_key, end_key;
 
+   public:
    auto lower() const { return li::boundary<domain_type>::closed(begin_key); }
 
    auto upper() const { return li::boundary<domain_type>::open(end_key); }
@@ -620,8 +621,8 @@ constexpr auto prepared_text_intervals = [] {
   query::closed_open("collection/very/long/prefix/private/", "collection/very/long/prefix/private0")));
 }();
 static_assert(2 == prepared_text_intervals.size());
-static_assert(prepared_text_intervals[0].lower().finite_key() == "collection/very/long/prefix/");
-static_assert(prepared_text_intervals[1].lower().finite_key() == "collection/very/long/prefix/private0");
+static_assert("collection/very/long/prefix/" == prepared_text_intervals[0].lower().finite_key());
+static_assert("collection/very/long/prefix/private0" == prepared_text_intervals[1].lower().finite_key());
 
 struct tracked_int_interval final
 {
@@ -630,11 +631,12 @@ struct tracked_int_interval final
  int first;
  int last;
 
- std::size_t *evaluations;
+ std::size_t& evaluations;
 
+ public:
  auto lower() const
  {
-  ++*evaluations;
+  ++evaluations;
 
   return li::boundary_ref<int_domain>::closed(first);
  }
@@ -649,8 +651,8 @@ TEST_CASE("difference prepares its right operand once and only when needed", "[f
 
  std::size_t evaluations = 0;
 
- const auto rhs = li::set_union(tracked_int_interval {10, 12, &evaluations},
-                                tracked_int_interval {14, 16, &evaluations});
+ const auto rhs = li::set_union(tracked_int_interval {10, 12, evaluations},
+                                tracked_int_interval {14, 16, evaluations});
 
  CHECK(0 == li::interval_count(li::difference(query::empty(), rhs)));
  CHECK(0 == evaluations);
@@ -674,9 +676,9 @@ static_assert([] {
   lq::query_options {.result_limit = 7, .reverse_order = true});
  const auto compiled = lq::compile_intervals(std::in_place, expression);
 
- return compiled.size() == 2 && compiled[0].begin_key == prefix &&
+ return 2 == compiled.size() && compiled[0].begin_key == prefix &&
         compiled[1].begin_key == prefix + "p" && compiled[1].options.reverse_order &&
-        compiled[0].options.result_limit == 7 && 2 == lq::interval_count(expression);
+        7 == compiled[0].options.result_limit && 2 == lq::interval_count(expression);
 }());
 
 TEST_CASE("typed interval preparation preserves canonical geometry", "[fdb][query][constexpr]")
@@ -703,10 +705,10 @@ TEST_CASE("typed interval preparation preserves canonical geometry", "[fdb][quer
  check(li::difference(query::empty(), rhs));
  check(li::difference(lhs, li::difference(rhs, rhs)));
 
- for (bool outer_lower : {false, true}) {
-  for (bool outer_upper : {false, true}) {
-   for (bool inner_lower : {false, true}) {
-    for (bool inner_upper : {false, true}) {
+ for (const bool outer_lower : {false, true}) {
+  for (const bool outer_upper : {false, true}) {
+   for (const bool inner_lower : {false, true}) {
+    for (const bool inner_upper : {false, true}) {
      const auto outer = query::between(li::boundary<int_domain>::closed(0).with_inclusive(outer_lower),
                                       li::boundary<int_domain>::closed(4).with_inclusive(outer_upper));
      const auto inner = query::between(li::boundary<int_domain>::closed(0).with_inclusive(inner_lower),
@@ -730,11 +732,11 @@ TEST_CASE("owning query factories preserve consumed key storage", "[fdb][query][
 
  auto check = [&original](auto make_selection) {
   auto key = original;
-  const auto *storage = key.data();
+  const auto *storage = std::data(key);
   const auto selection = make_selection(std::move(key));
 
-  CHECK(selection.begin_key == original);
-  CHECK(selection.begin_key.data() == storage);
+  CHECK(original == selection.begin_key);
+  CHECK(storage == std::data(selection.begin_key));
  };
 
  check([](std::string key) { return lq::prefix(std::move(key)); });
@@ -746,16 +748,16 @@ TEST_CASE("owning query factories preserve consumed key storage", "[fdb][query][
  check([](std::string key) { return lfdb::select(lfdb::inclusive(std::move(key)), "z"); });
 
  auto key = original;
- const auto *storage = key.data();
+ const auto *storage = std::data(key);
  auto endpoint = li::lower_at_or_after<lq::byte_string_domain>(std::move(key));
  const auto core_selection = li::from(std::move(endpoint));
 
- CHECK(core_selection.lower().finite_key().data() == storage);
+ CHECK(storage == std::data(core_selection.lower().finite_key()));
 
  const auto borrowed = lq::prefix(original);
 
- CHECK(borrowed.begin_key == original);
- CHECK(borrowed.begin_key.data() != original.data());
+ CHECK(original == borrowed.begin_key);
+ CHECK(std::data(original) != std::data(borrowed.begin_key));
 }
 
 TEST_CASE("borrowed query counts stay inside ordinary keyspace", "[fdb][query][constexpr]")
@@ -777,6 +779,7 @@ struct value_bound_interval final
  std::string first;
  std::string last;
 
+ public:
  auto lower() const { return li::boundary<domain_type>::closed(first); }
 
  auto upper() const { return li::boundary<domain_type>::open(last); }

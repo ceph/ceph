@@ -540,6 +540,7 @@ struct select_interval_sink final
    std::invoke(sink, std::move(selection));
   }
  }
+
 };
 
 } // namespace detail
@@ -1202,70 +1203,72 @@ constexpr auto before(concepts::libfdb_key auto&& key)
 
 constexpr auto closed_between(concepts::libfdb_key auto&& lower, concepts::libfdb_key auto&& upper)
 {
- return between(lower_at_or_after(std::forward<decltype(lower)>(lower)),
-                 upper_at_or_before(std::forward<decltype(upper)>(upper)));
+ return between(
+          lower_at_or_after(std::forward<decltype(lower)>(lower)),
+          upper_at_or_before(std::forward<decltype(upper)>(upper)));
 }
 
 constexpr auto open_between(concepts::libfdb_key auto&& lower, concepts::libfdb_key auto&& upper)
 {
- return between(lower_after(std::forward<decltype(lower)>(lower)),
-                 upper_before(std::forward<decltype(upper)>(upper)));
+ return between(
+          lower_after(std::forward<decltype(lower)>(lower)),
+          upper_before(std::forward<decltype(upper)>(upper)));
 }
 
 template <expression ExprT>
 constexpr auto starting_at(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr),
-   at_or_after(std::forward<decltype(key)>(key)));
+ return query::intersection(
+          std::forward<ExprT>(expr), at_or_after(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
 constexpr auto starting_after(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr),
-   after(std::forward<decltype(key)>(key)));
+ return query::intersection(
+          std::forward<ExprT>(expr), after(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
 constexpr auto ending_at(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr),
-   at_or_before(std::forward<decltype(key)>(key)));
+ return query::intersection(
+          std::forward<ExprT>(expr), at_or_before(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
 constexpr auto ending_before(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::intersection(std::forward<ExprT>(expr),
-   before(std::forward<decltype(key)>(key)));
+ return query::intersection(
+          std::forward<ExprT>(expr), before(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
 constexpr auto without(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::difference(std::forward<ExprT>(expr),
-   at(std::forward<decltype(key)>(key)));
+ return query::difference(
+          std::forward<ExprT>(expr), at(std::forward<decltype(key)>(key)));
 }
 
 template <expression ExprT>
 constexpr auto without_prefix(ExprT&& expr, concepts::libfdb_key auto&& key)
 {
- return query::difference(std::forward<ExprT>(expr),
-   prefix(std::forward<decltype(key)>(key)));
+ return query::difference(
+          std::forward<ExprT>(expr), prefix(std::forward<decltype(key)>(key)));
 }
 
 constexpr auto prefix_starting_at(concepts::libfdb_key auto&& prefix_key,
                                   concepts::libfdb_key auto&& cursor)
 {
- return starting_at(prefix(std::forward<decltype(prefix_key)>(prefix_key)),
-                     std::forward<decltype(cursor)>(cursor));
+ return starting_at(
+          prefix(std::forward<decltype(prefix_key)>(prefix_key)), std::forward<decltype(cursor)>(cursor));
 }
 
 constexpr auto prefix_starting_after(concepts::libfdb_key auto&& prefix_key,
                                      concepts::libfdb_key auto&& cursor)
 {
- return starting_after(prefix(std::forward<decltype(prefix_key)>(prefix_key)),
-                        std::forward<decltype(cursor)>(cursor));
+ return starting_after(
+          prefix(std::forward<decltype(prefix_key)>(prefix_key)), std::forward<decltype(cursor)>(cursor));
 }
 
 } // namespace ceph::libfdb::query

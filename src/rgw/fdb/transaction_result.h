@@ -53,7 +53,7 @@ struct transaction_status final
 
  [[nodiscard]] bool may_commit_later() const noexcept
  {
-  return duplicate_commit_possible or prior_unknown_commit == commit_status::unconfirmed or
+  return duplicate_commit_possible or commit_status::unconfirmed == prior_unknown_commit or
          commit_status::unconfirmed == commit;
  }
 

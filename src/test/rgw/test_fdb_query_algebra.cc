@@ -22,6 +22,7 @@
 #include <array>
 #include <compare>
 #include <concepts>
+#include <iterator>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -41,12 +42,14 @@ struct borrowed_key final
 {
  std::string_view bytes;
 
+ public:
  explicit constexpr borrowed_key(const std::string_view value)
   : bytes(value)
  {}
 
  borrowed_key(const borrowed_key&) = delete;
 
+ public:
  friend constexpr std::string_view libfdb_key_view(const borrowed_key& key) { return key.bytes; }
 
 };
@@ -273,7 +276,7 @@ void check_algebra()
   REQUIRE(ModelT::matches(sets.back(), mask));
  }
 
- const auto& empty = sets.front();
+ const auto& empty_set = sets.front();
  const auto& universe = sets.back();
 
  for (unsigned a = 0; ModelT::universe >= a; ++a) {
@@ -282,7 +285,7 @@ void check_algebra()
   CHECK(ModelT::matches(~x, ModelT::universe ^ a));
   CHECK(ModelT::matches(~~x, a));
   CHECK(ModelT::matches(x & universe, a));
-  CHECK(ModelT::matches(x | empty, a));
+  CHECK(ModelT::matches(x | empty_set, a));
   CHECK(ModelT::matches(x - x, 0));
   CHECK(ModelT::matches(x ^ x, 0));
   CHECK(ModelT::matches(x & ~x, 0));
@@ -292,45 +295,49 @@ void check_algebra()
    const auto& y = sets[b];
    CAPTURE(b);
    const auto intersection = a & b;
-   const auto union_ = a | b;
+   const auto union_mask = a | b;
    const auto difference = a & ~b;
-   const auto xor_ = a ^ b;
+   const auto xor_mask = a ^ b;
 
    CHECK(ModelT::matches(x & y, intersection));
    CHECK(ModelT::matches(y & x, intersection));
-   CHECK(ModelT::matches(x | y, union_));
-   CHECK(ModelT::matches(y | x, union_));
+   CHECK(ModelT::matches(x | y, union_mask));
+   CHECK(ModelT::matches(y | x, union_mask));
    CHECK(ModelT::matches(x - y, difference));
-   CHECK(ModelT::matches(x ^ y, xor_));
-   CHECK(ModelT::matches(y ^ x, xor_));
-   CHECK(ModelT::matches(~(x | y), ModelT::universe ^ union_));
-   CHECK(ModelT::matches(~x & ~y, ModelT::universe ^ union_));
+   CHECK(ModelT::matches(x ^ y, xor_mask));
+   CHECK(ModelT::matches(y ^ x, xor_mask));
+   CHECK(ModelT::matches(~(x | y), ModelT::universe ^ union_mask));
+   CHECK(ModelT::matches(~x & ~y, ModelT::universe ^ union_mask));
    CHECK(ModelT::matches(~(x & y), ModelT::universe ^ intersection));
    CHECK(ModelT::matches(~x | ~y, ModelT::universe ^ intersection));
    CHECK(ModelT::matches(x & (x | y), a));
    CHECK(ModelT::matches(x | (x & y), a));
    CHECK(ModelT::matches(x - y, a & (ModelT::universe ^ b)));
-   CHECK(ModelT::matches((x - y) | (y - x), xor_));
+   CHECK(ModelT::matches((x - y) | (y - x), xor_mask));
    CHECK(ModelT::matches((x ^ y) ^ y, a));
 
    auto assigned = x;
    assigned &= y;
+
    CHECK(ModelT::matches(assigned, intersection));
 
    assigned = x;
    assigned |= y;
-   CHECK(ModelT::matches(assigned, union_));
+
+   CHECK(ModelT::matches(assigned, union_mask));
 
    assigned = x;
    assigned -= y;
+
    CHECK(ModelT::matches(assigned, difference));
 
    assigned = x;
    assigned ^= y;
-   CHECK(ModelT::matches(assigned, xor_));
 
-   for (unsigned key = 0; ModelT::witnesses.size() > key; ++key) {
-    CHECK((0 != (xor_ & (1u << key))) == ModelT::member(x ^ y, ModelT::witnesses[key]));
+   CHECK(ModelT::matches(assigned, xor_mask));
+
+   for (unsigned key = 0; std::size(ModelT::witnesses) > key; ++key) {
+    CHECK((0 != (xor_mask & (1u << key))) == ModelT::member(x ^ y, ModelT::witnesses[key]));
    }
 
    for (unsigned c = 0; ModelT::universe >= c; ++c) {
@@ -442,6 +449,7 @@ TEST_CASE("FDB options and universe survive operator dispatch and mutation", "[f
 
  const auto conflict = q::with_options(right, {.result_limit = 9});
  const auto original = q::compile_intervals(selected);
+
  CHECK_THROWS_AS(selected |= conflict, lfdb::libfdb_exception);
  CHECK_THROWS_AS(selected &= conflict, lfdb::libfdb_exception);
  CHECK_THROWS_AS(selected ^= conflict, lfdb::libfdb_exception);
@@ -557,20 +565,20 @@ TEST_CASE("scalar selector consumers share normalization", "[fdb][algebra][bound
      const auto original = selection;
      const auto reserved = upper.starts_with('\xFF');
      const auto clipped_upper = reserved ? "\xFF"sv : upper;
-     const auto empty = lower > clipped_upper ||
+     const auto expected_empty = lower > clipped_upper ||
        (lower == clipped_upper && !(include_lower && include_upper && !reserved));
 
-     CHECK(empty == q::is_empty(selection));
-     CHECK((empty ? 0 : 1) == q::interval_count(selection));
+     CHECK(expected_empty == q::is_empty(selection));
+     CHECK((expected_empty ? 0 : 1) == q::interval_count(selection));
 
      const auto exported = q::compile_intervals(selection);
      const auto executable = lfdb::detail::intervals(selection);
 
-     CHECK(empty == exported.empty());
+     CHECK(expected_empty == std::empty(exported));
      CHECK(std::ranges::equal(exported, executable));
      CHECK(original == selection);
 
-     if (!empty) {
+     if (!expected_empty) {
       CHECK(clipped_upper == executable.front().end_key);
       CHECK((include_upper && !reserved) == executable.front().end_inclusive);
       CHECK(original.options == executable.front().options);
@@ -696,9 +704,11 @@ TEST_CASE("mutation borrows providers and xor owns each rvalue once", "[fdb][alg
  {
   int count = 0;
 
+  public:
   sink() = default;
   sink(const sink&) = delete;
 
+  public:
   void operator()(const q::interval&) { ++count; }
 
  } emit;
@@ -721,6 +731,7 @@ TEST_CASE("mutation borrows providers and xor owns each rvalue once", "[fdb][alg
 
   std::string lower_key, upper_key;
 
+  public:
   auto lower() const { return core::boundary<domain_type>::closed(lower_key); }
 
   auto upper() const { return core::boundary<domain_type>::open(upper_key); }
@@ -797,6 +808,7 @@ struct checked_domain final
 
  static inline int comparisons_left = -1;
 
+ public:
  static auto compare(const checked_key& lhs, const checked_key& rhs)
  {
   if (0 == comparisons_left) {
@@ -831,6 +843,7 @@ TEST_CASE("canonical predicates and interval counting do not copy keys", "[fdb][
  struct copy_budget_reset final
  {
   ~copy_budget_reset() { checked_key::copies_left = -1; }
+
  } reset;
 
  checked_key::copies_left = 0;
@@ -1022,7 +1035,7 @@ TEST_CASE("dynamic algebra supports immutable keys without default construction 
   const bool a = 0 <= key && 10 >= key, b = 2 < key && 8 > key;
   const std::array expected {a && b, a || b, a && !b, a != b, !a};
 
-  for (unsigned index = 0; results.size() > index; ++index) {
+  for (unsigned index = 0; std::size(results) > index; ++index) {
    CHECK(expected[index] == core::contains(results[index], immutable_key{key}));
   }
  }
@@ -1048,10 +1061,12 @@ TEST_CASE("fixed storage publishes its size after successful assignment", "[fdb]
 
   int value = 0;
 
+  public:
   static auto lower() { return core::boundary<domain_type>::closed(0); }
 
   static auto upper() { return core::boundary<domain_type>::closed(1); }
 
+  public:
   stored_interval& operator=(const stored_interval& other)
   {
    if (0 > other.value) {

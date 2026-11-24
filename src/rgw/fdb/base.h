@@ -43,6 +43,7 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <stop_token>
@@ -615,11 +616,9 @@ inline constexpr option_flag_t option_flag;
 using option_value = std::variant<option_flag_t, std::int64_t, std::string, std::vector<std::uint8_t>>;
 
 // Own option applications in order, including repeated codes:
-// Breaking change: option_map and its associative interface have been removed.
 template <typename OptionCodeT>
-class option_list final
+struct option_list final
 {
- public:
  using value_type = std::pair<OptionCodeT, option_value>;
  using size_type = typename std::vector<value_type>::size_type;
  using const_iterator = typename std::vector<value_type>::const_iterator;
@@ -635,14 +634,14 @@ class option_list final
  {}
 
  public:
- const_iterator begin() const noexcept { return entries.begin(); }
- const_iterator cbegin() const noexcept { return entries.cbegin(); }
+ const_iterator begin() const noexcept { return std::begin(entries); }
+ const_iterator cbegin() const noexcept { return std::cbegin(entries); }
 
- const_iterator end() const noexcept { return entries.end(); }
- const_iterator cend() const noexcept { return entries.cend(); }
+ const_iterator end() const noexcept { return std::end(entries); }
+ const_iterator cend() const noexcept { return std::cend(entries); }
 
- bool empty() const noexcept { return entries.empty(); }
- size_type size() const noexcept { return entries.size(); }
+ bool empty() const noexcept { return std::empty(entries); }
+ size_type size() const noexcept { return std::size(entries); }
 
  void clear() noexcept { entries.clear(); }
  void reserve(const size_type count) { entries.reserve(count); }
@@ -665,11 +664,11 @@ class option_list final
   if constexpr (std::ranges::sized_range<RangeT>) {
    const auto count = std::ranges::size(values);
 
-   if (count > entries.max_size() - entries.size()) {
+   if (entries.max_size() - std::size(entries) < count) {
     throw libfdb_exception(std::errc::value_too_large, "too many option entries");
    }
 
-   entries.reserve(entries.size() + count);
+   entries.reserve(std::size(entries) + count);
   }
 
   std::ranges::copy(values, std::back_inserter(entries));
@@ -686,7 +685,7 @@ class option_list final
   size_type count = 0;
 
   for (auto& entry : entries) {
-   if (entry.first == code) {
+   if (code == entry.first) {
     entry.second = value;
     ++count;
    }
@@ -698,7 +697,7 @@ class option_list final
  size_type erase(const OptionCodeT code)
  {
   return std::erase_if(entries, [code](const auto& entry) {
-   return entry.first == code;
+   return code == entry.first;
   });
  }
 

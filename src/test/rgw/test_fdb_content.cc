@@ -20,6 +20,7 @@
 #include "test/rgw/test_fdb_common.h"
 
 #include <array>
+#include <iterator>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -296,12 +297,12 @@ TEST_CASE("content composition preserves bytes across NUL and size boundaries", 
   const auto prefix = content::key(root, "objects");
   const auto prefix_bytes = tuple_string(root) + tuple_string("objects");
 
-  for (const auto size : {0u, 1u, 12u, 13u, 14u, 15u, 16u, 17u, 30u, 31u, 32u,
-                         63u, 64u, 65u, 127u, 128u, 129u, 255u, 256u, 257u, 1024u, 4096u}) {
+  for (const auto child_size : {0u, 1u, 12u, 13u, 14u, 15u, 16u, 17u, 30u, 31u, 32u,
+                               63u, 64u, 65u, 127u, 128u, 129u, 255u, 256u, 257u, 1024u, 4096u}) {
    for (int pattern = 0; 6 > pattern; ++pattern) {
-    std::string child(size, 'x');
+    std::string child(child_size, 'x');
 
-    if (0 < size) {
+    if (0 < child_size) {
      if (1 == pattern) {
       child.front() = '\0';
      }
@@ -311,11 +312,11 @@ TEST_CASE("content composition preserves bytes across NUL and size boundaries", 
      }
 
      if (3 == pattern) {
-      child[size / 2] = '\0';
+      child[child_size / 2] = '\0';
      }
 
      if (4 == pattern) {
-      for (std::size_t i = 0; size > i; i += 7) {
+      for (std::size_t i = 0; child_size > i; i += 7) {
        child[i] = '\0';
       }
      }
@@ -325,10 +326,10 @@ TEST_CASE("content composition preserves bytes across NUL and size boundaries", 
      }
     }
 
-    CAPTURE(prefix_size, size, pattern);
+    CAPTURE(prefix_size, child_size, pattern);
     const auto expected = prefix_bytes + tuple_string(child);
 
-    CHECK(content::key(prefix, child).size() == expected.size());
+    CHECK(std::size(expected) == std::size(content::key(prefix, child)));
     CHECK(materialized_key(content::key(prefix, child)) == expected);
     CHECK(materialized_key(prefix / child) == expected);
     CHECK(materialized_key(content::key(root, "objects", child)) == expected);

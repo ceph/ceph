@@ -871,7 +871,7 @@ constexpr std::size_t initial_reservation(RangeT& rows, const page p,
                                           const std::size_t max_capacity)
 {
  const auto bounded_count = [p, max_capacity](const auto hint) -> std::size_t {
-  using count_type = std::common_type_t<decltype(hint), uint64_t>;
+  using count_type = std::common_type_t<decltype(hint), std::uint64_t>;
 
   const auto limit = static_cast<count_type>(p.size);
   const auto available = static_cast<count_type>(hint);
@@ -950,7 +950,7 @@ template <std::ranges::input_range RangeT>
   }
 
   // A nonzero approximate hint need not imply that any rows exist.
-  if (out.rows.empty() && 0 != capacity) {
+  if (std::empty(out.rows) && 0 != capacity) {
    out.rows.reserve(capacity);
   }
 
@@ -1219,8 +1219,8 @@ template <typename ValueT = std::string,
 inline AssocT collect(database_handle dbh, const transaction_options& options,
                       SelectionT selection, const read_mode mode = read_mode::serializable)
 {
- return ::ceph::util::collect_as<AssocT>(
-  scan<ValueT>(std::move(dbh), options, std::move(selection), mode));
+ return ceph::util::collect_as<AssocT>(
+          scan<ValueT>(std::move(dbh), options, std::move(selection), mode));
 }
 
 template <typename ValueT = std::string,

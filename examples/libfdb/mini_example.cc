@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <exception>
 #include <expected>
+#include <iterator>
 #include <print>
 #include <stdexcept>
 #include <string>
@@ -78,13 +79,13 @@ enum struct people_error { empty_name, missing_people };
 static auto store_people(lfdb::transaction_handle& txn, const vector<person>& people)
  -> expected<size_t, people_error>
 {
- if (ranges::any_of(people, [](const auto& name) { return name.empty(); }, &person::name)) {
+ if (ranges::any_of(people, [](const auto& name) { return empty(name); }, &person::name)) {
   return unexpected(people_error::empty_name);
  }
 
  lfdb::set(txn, "example/people", people);
 
- return people.size();
+ return size(people);
 }
 
 // Treat a missing key as an application failure so a composed body can stop before
@@ -198,8 +199,8 @@ try
  // and_then skips the write if the read fails; neither borrowed call commits.
  // The same body works under a borrowed or owning invocation, keeping the complete
  // chain inside that invocation's exception boundary:
- auto round_trip = [&](auto& current) {
-  return txr(current, read_people).and_then([&](auto&& people) {
+ auto round_trip = [&txr](auto& current) {
+  return txr(current, read_people).and_then([&txr, &current](auto&& people) {
    return txr(current, store_people, people);
   });
  };
@@ -241,7 +242,7 @@ try
  // vector per attempt and replaces published_people only after confirmed commit:
  vector<person> published_people;
 
- const auto published = txr([&](auto& current, auto& output) {
+ const auto published = txr([&txr](auto& current, auto& output) {
   return txr(current, read_people).transform([&output](auto&& people) {
    output = std::move(people);
   });
@@ -257,7 +258,7 @@ try
   throw runtime_error("staged people did not publish after confirmed commit");
  }
 
- println("staged publication: loaded {} people after commit", published_people.size());
+ println("staged publication: loaded {} people after commit", size(published_people));
 
  // Replacing this key with the same value tolerates repeated commits. Incremental
  // effects need their own idempotency strategy. Opt into replay after an uncertain
@@ -278,7 +279,7 @@ try
  // an application error without submitting a commit:
  if (const auto rejected = txr(store_people, vector<person> {person {}});
      rejected or not holds_alternative<lfdb::application_error<people_error>>(rejected.error().cause) or
-     rejected.error().status.commit != lfdb::commit_status::not_submitted) {
+     lfdb::commit_status::not_submitted != rejected.error().status.commit) {
   throw runtime_error("empty name did not reject the attempt before commit");
  }
 
@@ -310,11 +311,11 @@ try
  // Read the selected key, whose value contains both people:
  const auto rows = lfdb::collect<vector<person>>(dbh, std::move(selected));
 
- if (1 != rows.size() || "example/people" != rows.front().first || rows.front().second != nifty_people) {
+ if (1 != size(rows) || "example/people" != rows.front().first || rows.front().second != nifty_people) {
   throw runtime_error("intersection assignment did not select the stored people");
  }
 
- println("intersection assignment: selected {} key", rows.size());
+ println("intersection assignment: selected {} key", size(rows));
 
  // An interval_set can hold several disjoint ranges. Model a maintenance selection
  // over example and archive records, with private records excluded and a toggle for
@@ -341,12 +342,12 @@ try
  // Read the restored selection to check that the set operations still choose our record:
  const auto selected_people = lfdb::collect<vector<person>>(dbh, excluded);
 
- if (1 != selected_people.size() || "example/people" != selected_people.front().first ||
+ if (1 != size(selected_people) || "example/people" != selected_people.front().first ||
      selected_people.front().second != nifty_people) {
   throw runtime_error("set operators did not select the stored people");
  }
 
- println("set operators: selected {} key", selected_people.size());
+ println("set operators: selected {} key", size(selected_people));
 
  return 0;
 }

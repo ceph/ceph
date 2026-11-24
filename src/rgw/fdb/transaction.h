@@ -316,10 +316,6 @@ struct staged_access final
 
 };
 
-} // namespace detail
-
-namespace detail {
-
 template <typename ResultT>
 struct invocation_result_traits final
 {
@@ -351,7 +347,7 @@ struct invocation_result_traits<std::expected<ValueT, transaction_failure<ErrorT
  static constexpr bool classified_failure = true;
 };
 
-// A bare error tag needs an explicit expected<T, E> body contract.
+// A bare error tag needs an explicit expected<T, E> body contract:
 template <typename ErrorT>
 struct invocation_result_traits<std::unexpected<ErrorT>> final {};
 
@@ -559,24 +555,22 @@ class transaction_source final
 
 [[nodiscard]] inline transaction_result<void> commit(const transaction_handle& txn,
                                                      const versionstamp& stamp) noexcept
-{
- if (not txn or not *txn) {
-  return detail::fail_transaction(fdb_error {std::make_error_code(std::errc::invalid_argument), {}},
-                                  transaction_phase::setup, {});
+try
+ {
+  if (not txn or not *txn) {
+   return detail::fail_transaction(fdb_error {std::make_error_code(std::errc::invalid_argument), {}},
+                                   transaction_phase::setup, {});
+  }
+
+  txn->mark_version(stamp);
+
+  return txn->commit();
  }
-
- try
-  {
-   txn->mark_version(stamp);
-
-   return txn->commit();
-  }
- catch (...)
-  {
-   return detail::fail_transaction(
-            detail::exception_failure(std::current_exception(), transaction_phase::setup, {}));
-  }
-}
+catch (...)
+ {
+  return detail::fail_transaction(
+           detail::exception_failure(std::current_exception(), transaction_phase::setup, {}));
+ }
 
 [[nodiscard]] inline std::string get_key(transaction_handle txn, const key_selector& selector,
                                        const read_mode mode = read_mode::serializable)
@@ -629,7 +623,7 @@ concept transaction_op =
  not invocation_result_traits<
   std::remove_cv_t<transaction_invocation_result_t<FnT, ArgTs...>>>::controlled;
 
-// Borrow synchronous arguments directly. Staged publication belongs to the owner.
+// Borrow synchronous arguments directly. Staged publication belongs to the owner:
 template <typename FnT, typename ...ArgTs>
 concept borrowed_transaction_op =
  (not staged_argument<std::remove_cvref_t<ArgTs>> and ...) and
@@ -688,10 +682,6 @@ auto in_read_transaction(database_handle dbh, const transaction_options& options
 
 template <transaction_op FnT>
 auto in_read_transaction(const transaction_source& source, FnT&& fn) -> operation_result_t<FnT>;
-
-} // namespace detail
-
-namespace detail {
 
 template <typename FnT>
 using managed_result_t = transaction_result<
@@ -950,7 +940,7 @@ auto invoke_body(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcept
  transaction_status status;
  status.attempts = 1;
 
- constexpr auto phase = transaction_phase::body;
+ const auto phase = transaction_phase::body;
 
  try
   {
@@ -964,7 +954,7 @@ auto invoke_body(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcept
     auto value = std::invoke(fn, txn, std::forward<ArgTs>(args)...);
 
     if constexpr (traits::controlled) {
-     return std::move(value).transform_error([&](auto&& error) -> transaction_failure<error_type> {
+     return std::move(value).transform_error([phase, &status](auto&& error) -> transaction_failure<error_type> {
       if constexpr (traits::classified_failure) {
        return std::move(error);
       }
@@ -982,7 +972,7 @@ auto invoke_body(transaction_handle& txn, FnT&& fn, ArgTs&& ...args) noexcept
   }
  catch (...)
   {
-   // The attempt owner retains replay, stamp completion and pending writes:
+   // The attempt owner retains replay, stamp completion, and pending writes:
    return result_type {fail_transaction<error_type>(
                        exception_failure(std::current_exception(), phase, status))};
   }
@@ -1097,27 +1087,25 @@ auto invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn,
 template <typename PolicyT, typename FnT, typename ...ArgTs>
 auto transact(const transaction_source& source, const retry_policy retry, retry_if<PolicyT>& policy,
                FnT&& fn, ArgTs&& ...args) noexcept
-{
- using invocation_t = decltype(bind_transaction_invocation(std::ref(fn), std::forward<ArgTs>(args)...));
- using traits = invocation_result_traits<std::remove_cv_t<transaction_invocation_result_t<invocation_t>>>;
- using error_type = typename traits::error_type;
- using result_type = managed_result_t<invocation_t>;
+try
+ {
+  auto invocation = bind_transaction_invocation(std::ref(fn), std::forward<ArgTs>(args)...);
 
- try
-  {
-   auto invocation = bind_transaction_invocation(std::ref(fn), std::forward<ArgTs>(args)...);
+  auto txn = source.make();
 
-   auto txn = source.make();
+  return invoke_with_retry(txn, invocation,
+           [](const transaction_handle& current) { return ceph::libfdb::commit(current); }, policy, retry);
+ }
+catch (...)
+ {
+  using invocation_t = decltype(bind_transaction_invocation(std::ref(fn), std::forward<ArgTs>(args)...));
+  using traits = invocation_result_traits<std::remove_cv_t<transaction_invocation_result_t<invocation_t>>>;
+  using error_type = typename traits::error_type;
+  using result_type = managed_result_t<invocation_t>;
 
-   return invoke_with_retry(txn, invocation,
-            [](const transaction_handle& current) { return ceph::libfdb::commit(current); }, policy, retry);
-  }
- catch (...)
-  {
-   return result_type {fail_transaction<error_type>(
-                       exception_failure(std::current_exception(), transaction_phase::setup, {}))};
-  }
-}
+  return result_type {fail_transaction<error_type>(
+                      exception_failure(std::current_exception(), transaction_phase::setup, {}))};
+ }
 
 template <transaction_op FnT>
 auto retry_without_commit(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>

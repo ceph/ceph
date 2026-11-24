@@ -695,8 +695,8 @@ namespace detail {
 template <typename LhsT, typename RhsT>
 consteval std::size_t combined_interval_capacity()
 {
- constexpr auto lhs = interval_capacity_v<LhsT>;
- constexpr auto rhs = interval_capacity_v<RhsT>;
+ const auto lhs = interval_capacity_v<LhsT>;
+ const auto rhs = interval_capacity_v<RhsT>;
 
  if (std::dynamic_extent == lhs or std::dynamic_extent == rhs or
      std::numeric_limits<std::size_t>::max() - lhs <= rhs) {
@@ -1252,6 +1252,7 @@ struct materializing_sink final
 {
  OutT& out;
 
+ public:
  template <interval_view IntervalT>
  constexpr void operator()(const IntervalT& x)
  {
@@ -1274,6 +1275,7 @@ struct counting_sink final
 {
  std::size_t count = 0;
 
+ public:
  constexpr void operator()(const auto&)
  {
   ++count;
@@ -1356,6 +1358,7 @@ struct interval_ref final
  boundary_ref<DomainT> lower_bound;
  boundary_ref<DomainT> upper_bound;
 
+ public:
  constexpr const auto& lower() const& noexcept { return lower_bound; }
  const auto& lower() const&& = delete;
 
@@ -1386,6 +1389,7 @@ constexpr void for_each_interval(const detail::difference_expr<LHS_T, RHS_T>& ex
 
  // A view borrows canonical storage or owns one lazily prepared expression:
  using rhs_range = decltype(std::views::all(detail::canonical_intervals(expression.rhs)));
+
  std::optional<rhs_range> rhs_intervals;
 
  interval::for_each_interval(expression.lhs, [&](const auto& lhs) {
@@ -1555,7 +1559,7 @@ constexpr void emit_coalesced_intervals(IntervalsT&& intervals, SinkT&& sink)
   interval::for_each_interval(*current, std::forward<SinkT>(sink));
  };
 
- if constexpr (std::permutable<decltype(intervals.begin())>) {
+ if constexpr (std::permutable<std::ranges::iterator_t<IntervalsT>>) {
   std::ranges::sort(intervals, interval_less<DomainT>);
 
   emit_sorted(intervals);
@@ -1565,8 +1569,8 @@ constexpr void emit_coalesced_intervals(IntervalsT&& intervals, SinkT&& sink)
 
  // Immutable keys remain in place while their indices are sorted. The same
  // coalescer then consumes them; ordinary assignable keys keep the direct sort:
- if constexpr (not std::permutable<decltype(intervals.begin())>) {
-  auto order = std::views::iota(std::size_t{0}, intervals.size()) |
+ if constexpr (not std::permutable<std::ranges::iterator_t<IntervalsT>>) {
+  auto order = std::views::iota(std::size_t{0}, std::ranges::size(intervals)) |
                std::ranges::to<std::vector<std::size_t>>();
 
   std::ranges::sort(order, [&intervals](const auto lhs, const auto rhs) {
@@ -1703,12 +1707,12 @@ class interval_set final : public detail::expression_tag
  }
 
  public:
- constexpr auto begin() const noexcept { return intervals.begin(); }
+ constexpr auto begin() const noexcept { return std::begin(intervals); }
 
- constexpr auto end() const noexcept { return intervals.end(); }
+ constexpr auto end() const noexcept { return std::end(intervals); }
 
- constexpr auto size() const noexcept { return intervals.size(); }
- constexpr bool empty() const noexcept { return intervals.empty(); }
+ constexpr auto size() const noexcept { return std::size(intervals); }
+ constexpr bool empty() const noexcept { return std::empty(intervals); }
 
  constexpr void swap(interval_set& other) noexcept { intervals.swap(other.intervals); }
 
@@ -1952,6 +1956,7 @@ struct lower_endpoint final
  {
   return detail::boundary_for<DomainT>(std::forward_like<decltype(self)>(self.value), self.inclusion);
  }
+
 };
 
 template <ordered_domain DomainT>
@@ -1968,6 +1973,7 @@ struct upper_endpoint final
  {
   return detail::boundary_for<DomainT>(std::forward_like<decltype(self)>(self.value), self.inclusion);
  }
+
 };
 
 template <ordered_domain DomainT, typename ValueT>
@@ -2015,15 +2021,15 @@ constexpr auto between(lower_endpoint<DomainT> lower, upper_endpoint<DomainT> up
 template <ordered_domain DomainT>
 constexpr auto from(lower_endpoint<DomainT> lower)
 {
- return query<DomainT>::between(std::move(lower).as_boundary(),
-                                boundary<DomainT>::positive_infinity());
+ return query<DomainT>::between(
+          std::move(lower).as_boundary(), boundary<DomainT>::positive_infinity());
 }
 
 template <ordered_domain DomainT>
 constexpr auto until(upper_endpoint<DomainT> upper)
 {
- return query<DomainT>::between(boundary<DomainT>::negative_infinity(),
-                                std::move(upper).as_boundary());
+ return query<DomainT>::between(
+          boundary<DomainT>::negative_infinity(), std::move(upper).as_boundary());
 }
 
 template <ordered_domain DomainT, typename ValueT>
@@ -2067,8 +2073,9 @@ requires detail::domain_value_source<DomainT, LowerT> &&
          detail::domain_value_source<DomainT, UpperT>
 constexpr auto between(LowerT&& lower, UpperT&& upper)
 {
- return interval::between(lower_at_or_after<DomainT>(std::forward<LowerT>(lower)),
-                upper_before<DomainT>(std::forward<UpperT>(upper)));
+ return interval::between(
+          lower_at_or_after<DomainT>(std::forward<LowerT>(lower)),
+          upper_before<DomainT>(std::forward<UpperT>(upper)));
 }
 
 template <ordered_domain DomainT, typename LowerT, typename UpperT>
@@ -2076,8 +2083,9 @@ requires detail::domain_value_source<DomainT, LowerT> &&
          detail::domain_value_source<DomainT, UpperT>
 constexpr auto closed_between(LowerT&& lower, UpperT&& upper)
 {
- return interval::between(lower_at_or_after<DomainT>(std::forward<LowerT>(lower)),
-                upper_at_or_before<DomainT>(std::forward<UpperT>(upper)));
+ return interval::between(
+          lower_at_or_after<DomainT>(std::forward<LowerT>(lower)),
+          upper_at_or_before<DomainT>(std::forward<UpperT>(upper)));
 }
 
 template <ordered_domain DomainT, typename LowerT, typename UpperT>
@@ -2085,8 +2093,9 @@ requires detail::domain_value_source<DomainT, LowerT> &&
          detail::domain_value_source<DomainT, UpperT>
 constexpr auto open_between(LowerT&& lower, UpperT&& upper)
 {
- return interval::between(lower_after<DomainT>(std::forward<LowerT>(lower)),
-                upper_before<DomainT>(std::forward<UpperT>(upper)));
+ return interval::between(
+          lower_after<DomainT>(std::forward<LowerT>(lower)),
+          upper_before<DomainT>(std::forward<UpperT>(upper)));
 }
 
 template <successor_domain DomainT, typename ValueT>
@@ -2112,8 +2121,8 @@ constexpr auto starting_at(ExprT&& expression, ValueT&& value)
 {
  using domain_type = expression_domain_t<ExprT>;
 
- return interval::intersection(std::forward<ExprT>(expression),
-                     at_or_after<domain_type>(std::forward<ValueT>(value)));
+ return interval::intersection(
+          std::forward<ExprT>(expression), at_or_after<domain_type>(std::forward<ValueT>(value)));
 }
 
 template <expression ExprT, typename ValueT>
@@ -2122,8 +2131,8 @@ constexpr auto starting_after(ExprT&& expression, ValueT&& value)
 {
  using domain_type = expression_domain_t<ExprT>;
 
- return interval::intersection(std::forward<ExprT>(expression),
-                     after<domain_type>(std::forward<ValueT>(value)));
+ return interval::intersection(
+          std::forward<ExprT>(expression), after<domain_type>(std::forward<ValueT>(value)));
 }
 
 template <expression ExprT, typename ValueT>
@@ -2132,8 +2141,8 @@ constexpr auto ending_at(ExprT&& expression, ValueT&& value)
 {
  using domain_type = expression_domain_t<ExprT>;
 
- return interval::intersection(std::forward<ExprT>(expression),
-                     at_or_before<domain_type>(std::forward<ValueT>(value)));
+ return interval::intersection(
+          std::forward<ExprT>(expression), at_or_before<domain_type>(std::forward<ValueT>(value)));
 }
 
 template <expression ExprT, typename ValueT>
@@ -2142,8 +2151,8 @@ constexpr auto ending_before(ExprT&& expression, ValueT&& value)
 {
  using domain_type = expression_domain_t<ExprT>;
 
- return interval::intersection(std::forward<ExprT>(expression),
-                     before<domain_type>(std::forward<ValueT>(value)));
+ return interval::intersection(
+          std::forward<ExprT>(expression), before<domain_type>(std::forward<ValueT>(value)));
 }
 
 template <expression ExprT, typename ValueT>
@@ -2152,8 +2161,8 @@ constexpr auto without(ExprT&& expression, ValueT&& value)
 {
  using domain_type = expression_domain_t<ExprT>;
 
- return interval::difference(std::forward<ExprT>(expression),
-                   at<domain_type>(std::forward<ValueT>(value)));
+ return interval::difference(
+          std::forward<ExprT>(expression), at<domain_type>(std::forward<ValueT>(value)));
 }
 
 template <expression ExprT, typename ValueT>
@@ -2162,8 +2171,8 @@ constexpr auto without_prefix(ExprT&& expression, ValueT&& value)
 {
  using domain_type = expression_domain_t<ExprT>;
 
- return interval::difference(std::forward<ExprT>(expression),
-                   prefix<domain_type>(std::forward<ValueT>(value)));
+ return interval::difference(
+          std::forward<ExprT>(expression), prefix<domain_type>(std::forward<ValueT>(value)));
 }
 
 template <successor_domain DomainT, typename PrefixT, typename CursorT>
@@ -2171,8 +2180,8 @@ requires detail::domain_value_source<DomainT, PrefixT> &&
          detail::domain_value_source<DomainT, CursorT>
 constexpr auto prefix_starting_at(PrefixT&& prefix_value, CursorT&& cursor)
 {
- return interval::starting_at(prefix<DomainT>(std::forward<PrefixT>(prefix_value)),
-                    std::forward<CursorT>(cursor));
+ return interval::starting_at(
+          prefix<DomainT>(std::forward<PrefixT>(prefix_value)), std::forward<CursorT>(cursor));
 }
 
 template <successor_domain DomainT, typename PrefixT, typename CursorT>
@@ -2180,8 +2189,8 @@ requires detail::domain_value_source<DomainT, PrefixT> &&
          detail::domain_value_source<DomainT, CursorT>
 constexpr auto prefix_starting_after(PrefixT&& prefix_value, CursorT&& cursor)
 {
- return interval::starting_after(prefix<DomainT>(std::forward<PrefixT>(prefix_value)),
-                       std::forward<CursorT>(cursor));
+ return interval::starting_after(
+          prefix<DomainT>(std::forward<PrefixT>(prefix_value)), std::forward<CursorT>(cursor));
 }
 
 template <expression LHS_T, expression RHS_T>
@@ -2213,7 +2222,7 @@ requires same_expression_domain<OuterT, InnerT>
 constexpr bool encloses(const OuterT& outer, const InnerT& inner)
 {
  return interval::is_empty_expression(
-  detail::difference_expr<const InnerT&, const OuterT&> {.lhs = inner, .rhs = outer});
+          detail::difference_expr<const InnerT&, const OuterT&> {.lhs = inner, .rhs = outer});
 }
 
 namespace detail {

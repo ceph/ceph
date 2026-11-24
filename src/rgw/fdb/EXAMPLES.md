@@ -107,6 +107,7 @@ The examples use aliases to keep the code readable:
 #include "rgw/fdb/fdb.h"
 
 #include <iostream>
+#include <iterator>
 #include <map>
 
 namespace lfdb = ceph::libfdb;
@@ -245,9 +246,11 @@ options.append({
   {FDB_TR_OPTION_AUTO_THROTTLE_TAG, "b"},
   {FDB_TR_OPTION_TAG, "c"}
 });
+
 const std::array more {
   lfdb::transaction_options::value_type {FDB_TR_OPTION_MAX_RETRY_DELAY, std::int64_t {1}}
 };
+
 options.append_range(more);
 
 // Change both TAG entries without moving their positions:
@@ -458,7 +461,7 @@ const auto txr = lfdb::make_transactor(dbh);
 const auto updated = txr([](auto& txn, const std::string& name) {
   lfdb::set(txn, "person/frances-allen/name", name);
 
-  return name.size();
+  return std::size(name);
 }, std::string {"Frances Allen"});
 
 if (updated) {
@@ -495,13 +498,13 @@ enum struct update_error { empty_name };
 auto update_name(lfdb::transaction_handle& txn, const std::string& name)
   -> std::expected<std::size_t, update_error>
 {
-  if (name.empty()) {
+  if (std::empty(name)) {
     return std::unexpected(update_error::empty_name);
   }
 
   lfdb::set(txn, "person/frances-allen/name", name);
 
-  return name.size();
+  return std::size(name);
 }
 
 const auto txr = lfdb::make_transactor(dbh);
@@ -572,13 +575,13 @@ auto write_profile(lfdb::transaction_handle& txn, const std::string& key,
                    const std::map<std::string, std::string>& fields)
   -> std::expected<std::size_t, profile_error>
 {
-  if (fields.empty()) {
+  if (std::empty(fields)) {
     return std::unexpected(profile_error::empty);
   }
 
   lfdb::set(txn, key, fields);
 
-  return fields.size();
+  return std::size(fields);
 }
 
 void reuse_profile(const lfdb::database_handle& dbh)
@@ -589,8 +592,8 @@ void reuse_profile(const lfdb::database_handle& dbh)
 
   const auto txr = lfdb::make_transactor(dbh);
 
-  auto update_profile = [&](auto& txn) {
-    return txr(txn, read_profile, key).and_then([&](auto&& fields) {
+  auto update_profile = [&txr, &key](auto& txn) {
+    return txr(txn, read_profile, key).and_then([&txr, &txn, &key](auto&& fields) {
       fields["name"] = "Frances Allen";
 
       return txr(txn, write_profile, key, fields);
@@ -655,9 +658,9 @@ the next step is a native operation without an application rejection channel:
 ~~~cpp
 const auto txr = lfdb::make_transactor(dbh);
 
-const auto completed = txr([&](auto& txn) {
+const auto completed = txr([&txr](auto& txn) {
   return txr(txn, read_profile, std::string {"example/reuse/profile"})
-    .transform([&](auto&& fields) {
+    .transform([&txn](auto&& fields) {
       fields["name"] = "Frances Allen";
       lfdb::set(txn, "example/reuse/profile", fields);
     });
@@ -1629,7 +1632,7 @@ std::size_t encoded_bytes = 0;
 lfdb::for_each(lfdb::raw, dbh, q::prefix("person/"),
   [&encoded_bytes](std::span<const std::uint8_t> key,
                    std::span<const std::uint8_t> value) {
-    encoded_bytes += key.size() + value.size();
+    encoded_bytes += std::size(key) + std::size(value);
   });
 ```
 
@@ -1774,7 +1777,7 @@ must be released within the constant evaluation; database reads remain runtime:
 static_assert([] {
   const auto page = lfdb::collect(std::array{10, 20, 30}, lfdb::page{2});
 
-  return page.has_more && 2 == page.size() && 10 == page.rows.front();
+  return page.has_more and 2 == page.size() and 10 == page.rows.front();
 }());
 ```
 
