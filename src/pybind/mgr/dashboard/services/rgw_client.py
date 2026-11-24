@@ -2912,16 +2912,18 @@ class RgwMultisite:
             is_multisite_configured = False
         return is_multisite_configured
 
-    def get_multisite_sync_status(self, daemon_name: str):
+    def get_multisite_sync_status(self, daemon_name: Optional[str] = None):
         rgw_multisite_sync_status_cmd = ['sync', 'status']
-        daemons = _get_daemons()
-        try:
-            realm_name = daemons[daemon_name].realm_name
-        except (KeyError, AttributeError):
-            raise DashboardException('Unable to get realm name from daemon',
-                                     http_status_code=500, component='rgw')
-        if realm_name:
-            rgw_multisite_sync_status_cmd.extend(['--rgw-realm', realm_name])
+        if daemon_name is not None:
+            if not daemon_name:
+                raise DashboardException('daemon_name must not be empty',
+                                         http_status_code=400, component='rgw')
+            daemon = _get_daemons().get(daemon_name)
+            if daemon is None:
+                raise DashboardException(f'RGW daemon {daemon_name!r} not found',
+                                         http_status_code=404, component='rgw')
+            if daemon.realm_name:
+                rgw_multisite_sync_status_cmd.extend(['--rgw-realm', daemon.realm_name])
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
             if exit_code > 0:

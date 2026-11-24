@@ -217,6 +217,26 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
         }
         self.assertEqual(expected_result, instance.get_placement_targets())
 
+    @patch.object(mgr, 'send_rgwadmin_command', return_value=(0, '', ''))
+    def test_get_multisite_sync_status(self, send):
+        multisite = RgwMultisite()
+
+        multisite.get_multisite_sync_status()
+        send.assert_called_with(['sync', 'status'], False)
+
+        send.reset_mock()
+        with self.assertRaises(DashboardException) as cm:
+            multisite.get_multisite_sync_status('')
+        self.assertEqual(400, cm.exception.status)
+        send.assert_not_called()
+
+        multisite.get_multisite_sync_status('daemon1')
+        send.assert_called_with(['sync', 'status', '--rgw-realm', 'realm1'], False)
+
+        with self.assertRaises(DashboardException) as cm:
+            multisite.get_multisite_sync_status('nosuchdaemon')
+        self.assertEqual(404, cm.exception.status)
+
     @patch.object(RgwClient, '_get_realms_info')
     def test_get_realms(self, realms_info):
         realms_info.side_effect = [
