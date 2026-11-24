@@ -223,6 +223,7 @@ enum {
   l_osdc_core_con_close,
   l_osdc_core_linger_resend,
   l_osdc_core_hint_over_limit,
+  l_osdc_core_hint_to_main,
 
   l_osdc_last,
 };
@@ -624,6 +625,9 @@ void Objecter::init()
                         "Hints not followed, naming a new core of an OSD with "
                         "objecter_osd_core_max_connections connections to its "
                         "cores already");
+    pcb.add_u64_counter(l_osdc_core_hint_to_main, "core_hint_to_main",
+                        "PGs sent back to the main connection, their OSD core "
+                        "being too busy to take direct connections for now");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2806,8 +2810,8 @@ void Objecter::_session_apply_core_hint(OSDSession *s,
     return;
   case what_t::invalid:
     ldout(cct, 1) << fmt::format(
-      "{} osd.{} pg {}: ignoring hint {}: no port (or the main "
-      "connection's), or no msgr2 address in {}",
+      "{} osd.{} pg {}: ignoring hint {}: the main connection's port, or "
+      "no msgr2 address in {}",
       __func__, s->osd, pgid, hint,
       s->con ? s->con->get_peer_addrs() : entity_addrvec_t{}) << dendl;
     return;
@@ -2817,6 +2821,15 @@ void Objecter::_session_apply_core_hint(OSDSession *s,
       "(objecter_osd_core_max_connections)",
       __func__, s->osd, pgid, hint, s->core_routes.num_core_cons()) << dendl;
     logger->inc(l_osdc_core_hint_over_limit);
+    return;
+  case what_t::to_main:
+    // the PG's core is too busy for direct connections: back to the main
+    // connection, once the PG's ops drain (see _op_route_or_hold())
+    ldout(cct, 10) << fmt::format(
+      "{} osd.{} pg {}: core {} busy: back to the main connection",
+      __func__, s->osd, pgid,
+      out.prev_core ? std::to_string(*out.prev_core) : "none") << dendl;
+    logger->inc(l_osdc_core_hint_to_main);
     return;
   case what_t::connect_failed:
     ldout(cct, 1) << fmt::format(

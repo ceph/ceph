@@ -245,6 +245,20 @@ protected:
     poll();
   }
 
+  /// the OSD's reply to tid, on con, from a PG core too busy to take
+  /// direct connections for now (a hint without a port)
+  void reply_core_busy(const ceph::ref_t<RecordingConnection>& con,
+                       ceph_tid_t tid)
+  {
+    auto r = ceph::make_message<MOSDOpReply>();
+    r->set_tid(tid);
+    r->set_op_returns(std::vector<pg_log_op_return_item_t>(1));
+    r->set_core_hint(osd_core_hint_t(pg_core, 0));
+    r->set_connection(con);
+    objecter->ms_fast_dispatch2(r);
+    poll();
+  }
+
   /// a watch on the object 'name' (of the single PG); its registration op
   /// is sent, not answered yet
   boost::intrusive_ptr<Objecter::LingerOp> watch(const std::string& name = "obj")
@@ -390,6 +404,29 @@ TEST_F(TestObjecterCoreRoutes, IdlePgSwitches)
   EXPECT_EQ(0u, counter("op_send_switch_pending"));
   // not delayed
   EXPECT_EQ(0u, time_avg("core_switch_delay").first);
+}
+
+// a PG core too busy for direct connections sends the PG back to the main
+// connection; hinted again, the PG returns to the (kept) core connection
+TEST_F(TestObjecterCoreRoutes, BusyCoreSendsPgBackToMain)
+{
+  no_holds();
+  auto a = submit();
+  reply(main_con, a);
+  auto b = submit();
+  ASSERT_EQ((tids_t{b}), core_con->tids());
+
+  reply_core_busy(core_con, b);
+  EXPECT_EQ(1u, counter("core_hint_to_main"));
+  auto c = submit();
+  EXPECT_EQ((tids_t{a, c}), main_con->tids());
+  EXPECT_EQ(2u, counter("core_route_switch"));
+
+  reply(main_con, c);
+  auto d = submit();
+  EXPECT_EQ((tids_t{b, d}), core_con->tids());
+  EXPECT_EQ(3u, counter("core_route_switch"));
+  EXPECT_EQ(0u, counter("core_con_close"));
 }
 
 // a core connection is not routed to until it connects (see
