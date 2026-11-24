@@ -1216,13 +1216,23 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
     return crimson::ct_error::file_too_large::make();
   }
-  return crimson::os::with_store<
-    &crimson::os::FuturizedStore::Shard::get_max_attr_name_length
-  >(store).then([this, &os, &osd_op, &txn, &delta_stats, &attr_cache](unsigned store_max_name_len) {
+  return interruptor::make_interruptible(
+    setxattr_errorator::future<store_kv_limits_t>(get_store_kv_limits())
+  ).safe_then_interruptible([this, &os, &osd_op, &txn, &delta_stats, &attr_cache](
+      store_kv_limits_t limits) -> setxattr_ierrorator::future<> {
     const auto max_name_len = std::min<uint64_t>(
-      store_max_name_len, local_conf()->osd_max_attr_name_len);
+      limits.max_attr_name_len, local_conf()->osd_max_attr_name_len);
     if (osd_op.op.xattr.name_len > max_name_len) {
       return setxattr_ierrorator::future<>(crimson::ct_error::enametoolong::make());
+    }
+    // The store keeps the name with a "_" prefix. A store transaction
+    // cannot fail, so reject an entry that the store cannot keep here.
+    const uint64_t kv_len =
+      uint64_t(1) + osd_op.op.xattr.name_len + osd_op.op.xattr.value_len;
+    if (kv_len > limits.max_kv_len) {
+      logger().info("setxattr on obj={}: name + value {} > store limit {}",
+                    os.oi.soid, kv_len, limits.max_kv_len);
+      return setxattr_ierrorator::future<>(crimson::ct_error::file_too_large::make());
     }
 
     maybe_create_new_object(os, txn, delta_stats);
@@ -1778,7 +1788,21 @@ PGBackend::omap_get_vals_by_keys(
     );
 }
 
-PGBackend::interruptible_future<>
+seastar::future<PGBackend::store_kv_limits_t>
+PGBackend::get_store_kv_limits()
+{
+  if (store_kv_limits) {
+    return seastar::make_ready_future<store_kv_limits_t>(*store_kv_limits);
+  }
+  return crimson::os::with_store<
+    &crimson::os::FuturizedStore::Shard::get_kv_limits
+  >(store).then([this](store_kv_limits_t limits) {
+    store_kv_limits = limits;
+    return limits;
+  });
+}
+
+PGBackend::omap_set_ierrorator::future<>
 PGBackend::omap_set_vals(
   ObjectState& os,
   const OSDOp& osd_op,
@@ -1786,29 +1810,66 @@ PGBackend::omap_set_vals(
   osd_op_params_t& osd_op_params,
   object_stat_sum_t& delta_stats)
 {
-  maybe_create_new_object(os, txn, delta_stats);
-
   ceph::bufferlist to_set_bl;
+  // Largest key and largest key + value in the request, for the store
+  // limits below
+  uint64_t max_key_len = 0;
+  uint64_t max_kv_len = 0;
   try {
     auto p = osd_op.indata.cbegin();
     decode_str_str_map_to_bl(p, &to_set_bl);
+    // to_set_bl holds the encoded map<string, bufferlist>: read only the
+    // length of each key and value, and skip their bytes.
+    auto q = to_set_bl.cbegin();
+    uint32_t num;
+    decode(num, q);
+    while (num--) {
+      uint32_t klen, vlen;
+      decode(klen, q);
+      q += klen;
+      decode(vlen, q);
+      q += vlen;
+      max_key_len = std::max<uint64_t>(max_key_len, klen);
+      max_kv_len = std::max<uint64_t>(max_kv_len, uint64_t(klen) + vlen);
+    }
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
 
-  txn.omap_setkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_set_bl);
-  osd_op_params.clean_regions.mark_omap_dirty();
-  delta_stats.num_wr++;
-  delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
-  if (!os.oi.is_omap()) {
-    os.oi.set_flag(object_info_t::FLAG_OMAP);
-    delta_stats.num_objects_omap++;
-  }
-  os.oi.clear_omap_digest();
-  return seastar::now();
+  return interruptor::make_interruptible(
+    omap_set_errorator::future<store_kv_limits_t>(get_store_kv_limits())
+  ).safe_then_interruptible([this, &os, &txn, &osd_op_params, &delta_stats,
+                             max_key_len, max_kv_len,
+                             to_set_bl=std::move(to_set_bl)](
+      store_kv_limits_t limits) mutable -> omap_set_ierrorator::future<> {
+    // A store transaction cannot fail, so reject an entry that the
+    // store cannot keep here, before the transaction has any of it.
+    if (max_key_len > limits.max_omap_key_len) {
+      logger().info("omap_set_vals on obj={}: key {} > store limit {}",
+                    os.oi.soid, max_key_len, limits.max_omap_key_len);
+      return crimson::ct_error::enametoolong::make();
+    }
+    if (max_kv_len > limits.max_kv_len) {
+      logger().info("omap_set_vals on obj={}: key + value {} > store limit {}",
+                    os.oi.soid, max_kv_len, limits.max_kv_len);
+      return crimson::ct_error::file_too_large::make();
+    }
+
+    maybe_create_new_object(os, txn, delta_stats);
+    txn.omap_setkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_set_bl);
+    osd_op_params.clean_regions.mark_omap_dirty();
+    delta_stats.num_wr++;
+    delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
+    if (!os.oi.is_omap()) {
+      os.oi.set_flag(object_info_t::FLAG_OMAP);
+      delta_stats.num_objects_omap++;
+    }
+    os.oi.clear_omap_digest();
+    return omap_set_ierrorator::future<>(seastar::now());
+  });
 }
 
-PGBackend::interruptible_future<>
+PGBackend::omap_set_ierrorator::future<>
 PGBackend::omap_set_header(
   ObjectState& os,
   const OSDOp& osd_op,
@@ -1816,16 +1877,30 @@ PGBackend::omap_set_header(
   osd_op_params_t& osd_op_params,
   object_stat_sum_t& delta_stats)
 {
-  maybe_create_new_object(os, txn, delta_stats);
-  txn.omap_setheader(coll->get_cid(), ghobject_t{os.oi.soid}, osd_op.indata);
-  osd_op_params.clean_regions.mark_omap_dirty();
-  delta_stats.num_wr++;
-  if (!os.oi.is_omap()) {
-    os.oi.set_flag(object_info_t::FLAG_OMAP);
-    delta_stats.num_objects_omap++;
-  }
-  os.oi.clear_omap_digest();
-  return seastar::now();
+  return interruptor::make_interruptible(
+    omap_set_errorator::future<store_kv_limits_t>(get_store_kv_limits())
+  ).safe_then_interruptible([this, &os, &osd_op, &txn, &osd_op_params,
+                             &delta_stats](
+      store_kv_limits_t limits) -> omap_set_ierrorator::future<> {
+    // A store transaction cannot fail, so reject a header that the
+    // store cannot keep here.
+    if (osd_op.indata.length() > limits.max_omap_header_len) {
+      logger().info("omap_set_header on obj={}: header {} > store limit {}",
+                    os.oi.soid, osd_op.indata.length(),
+                    limits.max_omap_header_len);
+      return crimson::ct_error::file_too_large::make();
+    }
+    maybe_create_new_object(os, txn, delta_stats);
+    txn.omap_setheader(coll->get_cid(), ghobject_t{os.oi.soid}, osd_op.indata);
+    osd_op_params.clean_regions.mark_omap_dirty();
+    delta_stats.num_wr++;
+    if (!os.oi.is_omap()) {
+      os.oi.set_flag(object_info_t::FLAG_OMAP);
+      delta_stats.num_objects_omap++;
+    }
+    os.oi.clear_omap_digest();
+    return omap_set_ierrorator::future<>(seastar::now());
+  });
 }
 
 PGBackend::interruptible_future<> PGBackend::omap_remove_range(

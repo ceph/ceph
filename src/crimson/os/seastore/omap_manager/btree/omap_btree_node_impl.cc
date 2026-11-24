@@ -1084,4 +1084,15 @@ extent_len_t get_leaf_size(omap_type_t type) {
   return OMAP_LEAF_BLOCK_SIZE;
 }
 
+uint64_t get_max_kv_length() {
+  // Same rule as OMapLeafNode::exceeds_max_kv_limit()
+  return (OMAP_LEAF_BLOCK_SIZE - StringKVLeafNodeLayout::header_size()) / 4;
+}
+
+uint64_t get_max_key_length() {
+  // Same rule as OMapInnerNode::exceeds_max_kv_limit()
+  return (OMAP_INNER_BLOCK_SIZE - StringKVInnerNodeLayout::header_size()) / 4
+    - sizeof(laddr_le_t);
+}
+
 }

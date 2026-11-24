@@ -211,6 +211,18 @@ public:
       return 256;
     }
 
+    kv_limits_t get_kv_limits() const override final {
+      const uint64_t max_kv_len = omap_manager::get_max_kv_length();
+      return kv_limits_t{
+        .max_attr_name_len = get_max_attr_name_length(),
+        .max_kv_len = max_kv_len,
+        .max_omap_key_len = omap_manager::get_max_key_length(),
+        // The header is kept in the xattr tree with the key
+        // OMAP_HEADER_XATTR_KEY (see _omap_set_header()).
+        .max_omap_header_len = max_kv_len - OMAP_HEADER_XATTR_KEY.size(),
+      };
+    }
+
     bool is_storage_full() const override final {
       return transaction_manager ? transaction_manager->is_storage_full() : false;
     }
