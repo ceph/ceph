@@ -196,6 +196,10 @@ class TestCephadm(object):
         match_glob(new_mon, 'myhost')
         new_mgr = cephadm_module.get_unique_name('mgr', 'myhost', existing)
         match_glob(new_mgr, 'myhost.*')
+        # crash (and other host daemons) keep a stable id: the short hostname
+        crash_id = cephadm_module.get_unique_name(
+            'crash', 'node1.example.org', [])
+        assert crash_id == 'node1'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_valid_url(self, cephadm_module):
@@ -1018,6 +1022,7 @@ class TestCephadm(object):
                         "image": '',
                         "deploy_arguments": [],
                         "params": {
+                            'auth_entity': 'client.crash.test',
                             'extra_container_args': [
                                 "--cpus=2",
                                 "--quiet",
@@ -1044,6 +1049,32 @@ class TestCephadm(object):
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_crash_fqdn_host_keyring_uses_inventory_host(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # The daemon id is the short hostname. The cephx key stays
+        # client.crash.<inventory host>, which is the FQDN here.
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        host = 'node1.example.org'
+        with with_host(cephadm_module, host):
+            with with_service(cephadm_module, ServiceSpec(service_type='crash'), CephadmOrchestrator.apply_crash):
+                deploys = [
+                    call for call in _run_cephadm.call_args_list
+                    if len(call.args) >= 3
+                    and call.args[1] == 'crash.node1'
+                    and call.args[2] == ['_orch', 'deploy']
+                ]
+                assert len(deploys) == 1
+                assert deploys[0].args[0] == host
+                payload = json.loads(deploys[0].kwargs['stdin'])
+                assert payload['name'] == 'crash.node1'
+                # the mgr passes the auth entity explicitly so the binary
+                # does not have to work it out from the keyring text
+                assert payload['params']['auth_entity'] == \
+                    'client.crash.node1.example.org'
+                assert payload['config_blobs']['keyring'].startswith(
+                    '[client.crash.node1.example.org]\n')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_extra_entrypoint_args(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
