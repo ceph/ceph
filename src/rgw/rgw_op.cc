@@ -4616,18 +4616,14 @@ int RGWPutObj::init_processing(optional_yield y) {
     }
   } /* copy_source */
 
-  // reject public canned acls
-  if (s->public_access_block.BlockPublicAcls &&
-      (s->canned_acl == "public-read" ||
-       s->canned_acl == "public-read-write" ||
-       s->canned_acl == "authenticated-read")) {
-    return -EACCES;
-  }
-
   ret = get_params(y);
   if (ret < 0) {
     ldpp_dout(this, 20) << "get_params() returned ret=" << ret << dendl;
     return ret;
+  }
+
+  if (s->public_access_block.BlockPublicAcls && policy.is_public(this)) {
+    return -EACCES;
   }
 
   return RGWOp::init_processing(y);
@@ -5476,6 +5472,11 @@ int RGWPostObj::init_processing(optional_yield y)
   ret = verify_params();
   if (ret < 0) {
     return ret;
+  }
+
+  // the POST form's acl is parsed into policy, not s->canned_acl
+  if (s->public_access_block.BlockPublicAcls && policy.is_public(this)) {
+    return -EACCES;
   }
 
   return RGWOp::init_processing(y);
@@ -6689,6 +6690,12 @@ int RGWCopyObj::init_common()
     unmod_ptr = &unmod_time;
   }
 
+  // outside verify_permission(), where admin requests can override -EACCES
+  if (s->public_access_block.BlockPublicAcls && dest_policy.is_public(this)) {
+    op_ret = -EACCES;
+    return op_ret;
+  }
+
   bufferlist aclbl;
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
@@ -7646,6 +7653,12 @@ void RGWInitMultipart::execute(optional_yield y)
 
   op_ret = get_params(y);
   if (op_ret < 0) {
+    return;
+  }
+
+  // the acl set here is applied to the completed object
+  if (s->public_access_block.BlockPublicAcls && policy.is_public(this)) {
+    op_ret = -EACCES;
     return;
   }
 
