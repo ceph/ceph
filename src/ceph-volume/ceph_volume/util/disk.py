@@ -825,6 +825,19 @@ def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
 
 
+def is_ram_disk(dev_name: str) -> bool:
+    """
+    Kernel RAM disks (``ram0``, ``ram1``, ...) and compressed RAM disks
+    (``zram0``, ...) are volatile: their contents are lost on reboot, so they
+    are never valid OSD targets. Only the kernel names (prefix + digits) are
+    matched, so a device that merely starts with "ram" is not skipped.
+    """
+    for prefix in ('ram', 'zram'):
+        if dev_name.startswith(prefix) and dev_name[len(prefix):].isdigit():
+            return True
+    return False
+
+
 def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_path: str = '/sys/dev/block', device: str = '') -> List[List[str]]:
     def holder_inner_loop() -> bool:
         for holder in holders:
@@ -849,9 +862,8 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         # These are not physical disks and are not valid OSD targets, so skip them.
         if get_file_contents(os.path.join(_sys_block_path, dev, 'device/type'), '').strip() == '5':
             continue
-        # Skip kernel RAM disks (/dev/ram*); these are not valid OSD targets.
-        # Only matches 'ram' + digits (ram0, ram1, etc.).
-        if dev.startswith('ram') and dev[3:].isdigit():
+        # Skip kernel RAM disks (/dev/ram*, /dev/zram*).
+        if is_ram_disk(dev):
             continue
         type_: str = 'disk'
         holders: List[str] = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
@@ -874,9 +886,9 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
     # Next, look for devices that _are_ partitions
     partitions: Dict[str, str] = get_partitions()
     for partition in partitions.keys():
-        # Skip partitions that belong to kernel RAM disks (/dev/ram*).
+        # Skip partitions that belong to kernel RAM disks (/dev/ram*, /dev/zram*).
         parent = partitions[partition]
-        if parent.startswith('ram') and parent[3:].isdigit():
+        if is_ram_disk(parent):
             continue
         name = kname = os.path.join("/dev", partition)
         result.append([name, kname, "part", partitions[partition]])

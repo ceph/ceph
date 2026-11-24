@@ -556,6 +556,46 @@ class TestGetBlockDevsSysfs(object):
         assert '/dev/ram0' not in paths
         assert '/dev/ram0p1' not in paths
 
+    def test_zram_device_is_skipped(self, fake_filesystem):
+        # zram0 is a compressed RAM disk (often used as swap), not a usable disk.
+        fake_filesystem.create_file('/dev/zram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/zram0/holders')
+
+        assert disk.get_block_devs_sysfs(device='zram0') == []
+
+    def test_zram_devices_are_skipped_in_full_scan(self, fake_filesystem):
+        fake_filesystem.create_dir('/sys/dev/block')
+
+        fake_filesystem.create_file('/dev/zram0')
+        fake_filesystem.create_dir('/sys/block/zram0/holders')
+
+        fake_filesystem.create_file('/dev/sda')
+        fake_filesystem.create_dir('/sys/block/sda/holders')
+
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"zram0p1": "zram0"})):
+            result = disk.get_block_devs_sysfs()
+
+        paths = [row[0] for row in result]
+        assert '/dev/sda' in paths
+        assert '/dev/zram0' not in paths
+        assert '/dev/zram0p1' not in paths
+
+    @pytest.mark.parametrize('dev_name,expected', [
+        ('ram0', True),
+        ('ram15', True),
+        ('zram0', True),
+        ('zram12', True),
+        ('ram', False),
+        ('zram', False),
+        ('ramdisk', False),
+        ('zramfoo', False),
+        ('sda', False),
+        ('nvme0n1', False),
+    ])
+    def test_is_ram_disk(self, dev_name, expected):
+        assert disk.is_ram_disk(dev_name) is expected
+
     def test_regular_device_is_not_skipped(self, fake_filesystem):
         # normal disk should still be reported.
         fake_filesystem.create_file('/dev/sda')
