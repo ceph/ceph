@@ -12,7 +12,11 @@ find_package(Python3 ${WITH_PYTHON3} EXACT
   COMPONENTS Interpreter)
 
 function(distutils_install_module name)
-  set(py_srcs setup.py README.rst requirements.txt test-requirements.txt bin ${name})
+  cmake_parse_arguments(DU "" "INSTALL_SCRIPT" "EXTRA_SRCS" ${ARGN})
+  # setup.py runs from the binary dir, so every source it installs has to be
+  # linked there; EXTRA_SRCS covers modules that are not named after ${name}
+  set(py_srcs setup.py README.rst requirements.txt test-requirements.txt bin ${name}
+    ${DU_EXTRA_SRCS})
   foreach(src ${py_srcs})
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${src})
       list(APPEND py_clone ${CMAKE_CURRENT_BINARY_DIR}/${src})
@@ -26,7 +30,6 @@ function(distutils_install_module name)
     add_custom_target(${name}-clone ALL
       DEPENDS ${py_clone})
   endif()
-  cmake_parse_arguments(DU "" "INSTALL_SCRIPT" "" ${ARGN})
   install(CODE "
     set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
