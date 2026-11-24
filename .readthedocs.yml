@@ -11,6 +11,15 @@ build:
   apt_packages:
     - ditaa
     - graphviz
+    - ant
+    - default-jdk-headless
+  jobs:
+    post_build:
+      - >-
+        ant -buildfile src/java/build.xml
+        -Ddoc.dir="$(realpath "$READTHEDOCS_OUTPUT/html")/cephfs/api/libcephfs-java/javadoc"
+        docs
+      - test -s "$READTHEDOCS_OUTPUT/html/cephfs/api/libcephfs-java/javadoc/index.html"
 python:
   install:
     - requirements: admin/doc-requirements.txt
