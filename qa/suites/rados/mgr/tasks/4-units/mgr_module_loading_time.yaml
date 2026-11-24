@@ -3,7 +3,6 @@ overrides:
     log-ignorelist:
       - CEPHADM_STRAY_DAEMON
       - CEPHADM_STRAY_HOST
-      - MGR_DOWN
       - evicting unresponsive client
       - MGR_MODULE_ERROR
 tasks:

@@ -7,6 +7,4 @@ tasks:
         - overall HEALTH_
         - \(MGR_DOWN\)
         - \(PG_
-        - replacing it with standby
-        - No standby daemons available
         - \(POOL_APP_NOT_ENABLED\)
