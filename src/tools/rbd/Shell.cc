@@ -115,8 +115,31 @@ std::vector<Shell::Action *>& Shell::get_actions() {
   return actions;
 }
 
-std::set<std::string>& Shell::get_switch_arguments() {
-  static std::set<std::string> switch_arguments;
+const std::set<std::string>& Shell::get_switch_arguments() {
+  // Options that take no value, derived from every action's option
+  // definitions so that get_command_spec() doesn't depend on a hand-kept
+  // list that can miss a newly added switch.
+  static const std::set<std::string> switch_arguments = [] {
+    std::set<std::string> switches;
+    for (auto action : get_actions()) {
+      po::options_description positional_opts;
+      po::options_description command_opts;
+      (*action->get_arguments)(&positional_opts, &command_opts);
+      for (auto &option : command_opts.options()) {
+        if (option->semantic()->max_tokens() != 0) {
+          continue;
+        }
+        switches.insert(option->canonical_display_name(
+          po::command_line_style::allow_long));
+        auto short_name = option->canonical_display_name(
+          po::command_line_style::allow_dash_for_short);
+        if (short_name.size() == 2 && short_name[0] == '-') {
+          switches.insert(short_name);
+        }
+      }
+    }
+    return switches;
+  }();
 
   return switch_arguments;
 }
@@ -284,12 +307,10 @@ void Shell::get_command_spec(const std::vector<std::string> &arguments,
       return;
     } else if (arg[0] == '-') {
       // if the option is not a switch, skip its value
+      std::string name = (arg.size() >= 2 && arg[1] != '-') ?
+        arg.substr(0, 2) : arg;
       if (arg.size() >= 2 &&
-          (arg[1] == '-' ||
-	   get_switch_arguments().count(arg.substr(1, 1)) == 0) &&
-          (arg[1] != '-' ||
-	   get_switch_arguments().count(arg.substr(2, std::string::npos)) == 0) &&
-          at::SWITCH_ARGUMENTS.count(arg.substr(2, std::string::npos)) == 0 &&
+          get_switch_arguments().count(name) == 0 &&
           arg.find('=') == std::string::npos) {
         ++i;
       }

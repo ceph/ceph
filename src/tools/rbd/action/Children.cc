@@ -170,7 +170,6 @@ int execute(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"all", "a", "descendants"});
 Shell::Action action(
   {"children"}, {}, "Display children of an image or its snapshot.", "",
   &get_arguments, &execute);
