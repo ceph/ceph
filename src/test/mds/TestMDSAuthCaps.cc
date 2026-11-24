@@ -17,6 +17,7 @@
 
 #include "include/stringify.h"
 #include "mds/MDSAuthCaps.h"
+#include "mds/QueryPermissions.h"
 
 #include "gtest/gtest.h"
 
@@ -538,4 +539,112 @@ TEST(MDSAuthCaps, QuarantineOutputParsed) {
     ASSERT_TRUE(cap.parse(test_values[i].input, &cout));
     ASSERT_EQ(test_values[i].output, stringify(cap));
   }
+}
+
+TEST(MDSAuthCaps, QueryPermissionsCephxOnly) {
+  // A uid-restricted grant still consults Unix mode. QUERY_PERMISSIONS must
+  // not: mode 0 has no Unix READ, but the CephX read grant is enough.
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow r uid=10", NULL));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0, 10, 10, NULL,
+                              MAY_READ, 0, 0, addr, "foo", false, false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0, 10, 10, NULL,
+                             MAY_READ, 0, 0, addr, "foo", false, true));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0777, 10, 10, NULL,
+                              MAY_WRITE, 0, 0, addr, "foo", false, true));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0777, 11, 11, NULL,
+                              MAY_READ, 0, 0, addr, "foo", false, true));
+
+  // No q/Q, so a quarantine check fails even though CephX read matches.
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0777, 10, 10, NULL,
+                              MAY_READ, 0, 0, addr, "foo", true, true));
+
+  ASSERT_TRUE(cap.parse("allow rq uid=10", NULL));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0, 10, 10, NULL,
+                             MAY_READ, 0, 0, addr, "foo", true, true));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0, 10, 10, NULL,
+                              MAY_READ, 0, 0, addr, "foo", true, false));
+
+  // allow * does not imply quarantine access.
+  ASSERT_TRUE(cap.parse("allow *", NULL));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0, 0, 0, NULL,
+                             MAY_READ, 0, 0, addr, "foo", false, true));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL,
+                              MAY_READ, 0, 0, addr, "foo", true, true));
+
+  // A broad grant without q must not hide a later grant that has q.
+  ASSERT_TRUE(cap.parse("allow r, allow rq path=/sandbox", NULL));
+  ASSERT_TRUE(cap.is_capable(fsname, "sandbox/file", 0, 0, 0, 5, 5, NULL,
+                             MAY_READ, 0, 0, addr, "sandbox/file", true, true));
+  ASSERT_FALSE(cap.is_capable(fsname, "other", 0, 0, 0777, 5, 5, NULL,
+                              MAY_READ, 0, 0, addr, "other", true, true));
+  ASSERT_TRUE(cap.is_capable(fsname, "other", 0, 0, 0, 5, 5, NULL,
+                             MAY_READ, 0, 0, addr, "other", false, true));
+
+  // Root squash still applies to a write check.
+  ASSERT_TRUE(cap.parse("allow rw root_squash", NULL));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL,
+                              MAY_WRITE, 0, 0, addr, "foo", false, true));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL,
+                             MAY_READ, 0, 0, addr, "foo", false, true));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 1, 1, NULL,
+                             MAY_WRITE, 0, 0, addr, "foo", false, true));
+}
+
+TEST(QueryPermissions, ReplyEncoding) {
+  QueryPermissionsReply none;
+  none.ino = 42;
+  none.state = CEPH_QUERY_PERM_NOT_RETURNED;
+  bufferlist bl;
+  encode(none, bl);
+  // version header (6) + ino (8) + state (1), and no tuple
+  ASSERT_EQ(bl.length(), 15u);
+
+  QueryPermissionsReply skipped;
+  skipped.tuple_version = 99;
+  auto p = bl.cbegin();
+  decode(skipped, p);
+  ASSERT_EQ(skipped.ino.val, 42u);
+  ASSERT_EQ(skipped.state, CEPH_QUERY_PERM_NOT_RETURNED);
+  ASSERT_EQ(skipped.tuple_version, 99u);
+
+  QueryPermissionsReply noacl;
+  noacl.ino = 7;
+  noacl.state = CEPH_QUERY_PERM_NO_ACL;
+  noacl.tuple_version = 11;
+  noacl.mode = 0755;
+  noacl.uid = 1000;
+  noacl.gid = 1001;
+  bufferlist bl2;
+  encode(noacl, bl2);
+  // previous body plus version, mode, uid, gid, and an empty ACL length
+  ASSERT_EQ(bl2.length(), 39u);
+  QueryPermissionsReply got;
+  auto p2 = bl2.cbegin();
+  decode(got, p2);
+  ASSERT_EQ(got.ino.val, 7u);
+  ASSERT_EQ(got.state, CEPH_QUERY_PERM_NO_ACL);
+  ASSERT_EQ(got.tuple_version, 11u);
+  ASSERT_EQ(got.mode, 0755u);
+  ASSERT_EQ(got.uid, 1000u);
+  ASSERT_EQ(got.gid, 1001u);
+  ASSERT_EQ(got.acl.length(), 0u);
+
+  QueryPermissionsReply with;
+  with.ino = 9;
+  with.state = CEPH_QUERY_PERM_ACL;
+  with.tuple_version = 3;
+  with.mode = 0700;
+  with.uid = 2;
+  with.gid = 3;
+  with.acl.append("acl!");
+  bufferlist bl3;
+  encode(with, bl3);
+  ASSERT_EQ(bl3.length(), 43u);
+  QueryPermissionsReply got_acl;
+  auto p3 = bl3.cbegin();
+  decode(got_acl, p3);
+  ASSERT_EQ(got_acl.state, CEPH_QUERY_PERM_ACL);
+  ASSERT_EQ(got_acl.tuple_version, 3u);
+  ASSERT_EQ(string(got_acl.acl.c_str(), got_acl.acl.length()), "acl!");
 }
