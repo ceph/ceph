@@ -677,6 +677,27 @@ TEST_P(AllocTest, test_init_rm_free_unbound)
   }
 }
 
+TEST_P(AllocTest, test_init_rm_free_cross_bin_merge)
+{
+  // StupidAllocator: [0,8) and [8,24) touch but sit in different bins
+  // (bin 4 and bin 5). Removing [16,24) leaves [8,16), which moves to bin 4,
+  // merges with [0,8), and is promoted back into bin 5 while erase() still
+  // holds [8,24) there.
+  int64_t block_size = 4096;
+  init_alloc(32 * block_size, block_size);
+  alloc->init_add_free(0, 8 * block_size);
+  alloc->init_add_free(8 * block_size, 16 * block_size);
+
+  alloc->init_rm_free(16 * block_size, 8 * block_size);
+
+  interval_set<uint64_t> f;
+  alloc->foreach([&](uint64_t off, uint64_t len) { f.insert(off, len); });
+  interval_set<uint64_t> expected;
+  expected.insert(0, 16 * block_size);
+  EXPECT_EQ(expected, f);
+  EXPECT_EQ(16u * block_size, alloc->get_free());
+}
+
 TEST_P(AllocTest, test_alloc_spatial_locality)
 {
   if (GetParam() == string("hybrid_btree2")) {

@@ -679,6 +679,9 @@ class interval_set {
    * intervals should also be erased. This variant will assert that the
    * intersection of the interval (start~len) is entirely contained by a single
    * interval in *this.
+   *
+   * claim() must not modify *this: it may be called while the original
+   * interval is still in the map.
    */
   void erase(T start, T len,
     std::function<bool(T, T)> claim = {}) requires (strict) {
