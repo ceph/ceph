@@ -336,7 +336,7 @@ Caveats:
 * The device must be manually partitioned.
 
 * An unsupported user-contributed script that demonstrates this process may be found here:
-  https://github.com/ceph/ceph/blob/master/src/script/contrib/ceph-migrate-bluestore.bash
+  https://github.com/ceph/ceph/blob/main/src/tools/contrib/ceph-migrate-bluestore.bash
 
 Advantages:
 

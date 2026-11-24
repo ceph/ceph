@@ -126,4 +126,4 @@ The following D3N-related settings can be added to the Ceph configuration file
 
 
 .. _MOC D3N (Datacenter-scale Data Delivery Network): https://massopen.cloud/research-and-development/cloud-research/d3n/
-.. _Red Hat Research D3N Cache for Data Centers: https://research.redhat.com/blog/research_project/d3n-multilayer-cache/
+.. _Red Hat Research D3N Cache for Data Centers: https://www.bu.edu/rhcollab/projects/testing-operations/d3n/

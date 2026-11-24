@@ -243,4 +243,4 @@ The following QAT-related settings can be added to the Ceph configuration file
 .. _QATlib System Requirements: https://intel.github.io/quickassist/qatlib/requirements.html
 .. _QATlib Installation: https://intel.github.io/quickassist/qatlib/install.html
 .. _QATlib Configuration and Tuning: https://intel.github.io/quickassist/qatlib/configuration.html
-.. _QATlib Kernel Driver Releases: https://intel.github.io/quickassist/RN/In-Tree/in_tree_firmware_RN.html#qat-kernel-driver-releases-features
+.. _QATlib Kernel Driver Releases: https://intel.github.io/quickassist/RN/In-Tree/in_tree_firmware_RN.html#linux-kernel-release-timeline-features-overview

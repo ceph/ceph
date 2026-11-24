@@ -404,7 +404,7 @@ class Osd(RESTController):
         only use it to keep your cluster running while you’re ordering more
         hardware.
 
-        - Craig Lewis (http://lists.ceph.com/pipermail/ceph-users-ceph.com/2014-June/040967.html)
+        - Craig Lewis (https://www.mail-archive.com/ceph-users@lists.ceph.com/msg10964.html)
         """
         CephService.send_command(
             'mon',

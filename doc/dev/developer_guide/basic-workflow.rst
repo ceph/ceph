@@ -106,7 +106,7 @@ Creating a Fork of the Ceph Repository
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 See the `GitHub documentation
-<https://help.github.com/articles/fork-a-repo/#platform-linux>`_ for
+<https://docs.github.com/en/pull-requests/how-tos/work-with-forks/fork-a-repo?platform=linux>`_ for
 detailed instructions on forking. In short, if your GitHub username is
 "mygithubaccount", your fork of the upstream repo will appear at
 ``https://github.com/mygithubaccount/ceph``. 
@@ -330,10 +330,10 @@ pull request tutorial`_.
    https://help.github.com/articles/using-pull-requests/
 
 To learn what constitutes a "good" pull request, see
-the `Git Commit Good Practice`_ article at the `OpenStack Project Wiki`_.
+the `Git Commit Good Practice`_ section of the `OpenStack Contributor Guide`_.
 
-.. _`Git Commit Good Practice`: https://wiki.openstack.org/wiki/GitCommitMessages
-.. _`OpenStack Project Wiki`: https://wiki.openstack.org/wiki/Main_Page
+.. _`Git Commit Good Practice`: https://docs.openstack.org/contributors/common/git.html#commit-messages
+.. _`OpenStack Contributor Guide`: https://docs.openstack.org/contributors/
 
 See also Ceph's own `Submitting Patches
 <https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst>`_ document.

@@ -61,8 +61,8 @@ To generate the doxygen documentation in HTML format use:
 
 HTML output will be under: ``build-doc/doxygen/html`` 
 
-.. _`librados C API`: https://github.com/ceph/ceph/blob/master/src/include/rados/librados.h
-.. _`librados.rst`: https://github.com/ceph/ceph/raw/master/doc/rados/api/librados.rst
+.. _`librados C API`: https://github.com/ceph/ceph/blob/main/src/include/rados/librados.h
+.. _`librados.rst`: https://github.com/ceph/ceph/blob/main/doc/rados/api/librados.rst
 
 Drawing diagrams
 ================

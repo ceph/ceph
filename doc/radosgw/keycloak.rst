@@ -29,7 +29,7 @@ Fetching a web token with Keycloak
 ==================================
 
 Several examples of apps authenticating with Keycloak can be found here:
-https://github.com/keycloak/keycloak-quickstarts/blob/latest/docs/getting-started.md.
+https://github.com/keycloak/keycloak-quickstarts/blob/release/21.1/docs/getting-started.md.
 
 Here you might consider the example of the app-profile-jee-jsp app (in the link
 above). To fetch the access token (web token) for such an application using the
