@@ -1188,6 +1188,10 @@ If the NFS service is running on a non-standard port number:
 
 .. note:: Only NFSv4.0+ is supported.
 
+.. note:: If files on a mounted export appear to be owned by ``nobody`` and
+   ``nogroup``, the client and the NFS-Ganesha server are mapping owner names
+   in different NFSv4 domains. See :ref:`cephadm-nfs-idmap`.
+
 .. note:: As of this writing (01 Jan 2024), no version of Microsoft Windows
    supports mouting an NFSv4.x export natively.
 

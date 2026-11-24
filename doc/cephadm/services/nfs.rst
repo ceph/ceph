@@ -82,6 +82,37 @@ is met, the default binding will happen on all available network interfaces.
 By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
 ``enable_nfsv3`` to ``true`` in the service specification.
 
+.. _cephadm-nfs-idmap:
+
+ID Mapping
+----------
+
+NFSv4 identifies file owners and groups by name, for example
+``root@example.com``, not by number. If the NFS-Ganesha server and a client
+map names in different NFSv4 domains, the client shows files as owned by
+``nobody`` and ``nogroup`` (or ``nfsnobody``). To make them agree, set the same
+``Domain`` on the server and on the clients.
+
+On the server, set ``idmap_conf`` in the service specification. ``cephadm``
+writes each section and its settings to ``/etc/ganesha/idmap.conf`` in the
+NFS-Ganesha container and points NFS-Ganesha at that file:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+        - host1
+    spec:
+      idmap_conf:
+        General:
+          Domain: example.com
+
+On each client, set ``Domain`` in the ``[General]`` section of
+``/etc/idmapd.conf``. For the other settings, see the idmapd.conf(5),
+nfsidmap(8), and rpc.idmapd(8) man pages.
+
 CephFS client logging
 ---------------------
 
