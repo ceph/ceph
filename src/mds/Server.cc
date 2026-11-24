@@ -7986,9 +7986,17 @@ void Server::handle_client_mknod_batch(const MDRequestRef& mdr)
       frag_t fg = diri->pick_dirfrag(name);
       CDir *dir = diri->get_dirfrag(fg);
       if (!dir) {
+	if (!diri->is_auth()) {
+	  // only the auth of the inode may open a dirfrag; whoever is auth
+	  // for this one, it is not us
+	  dout(7) << "mknod_batch " << fg << " of " << *diri
+		  << " is not open and the inode is not auth, EXDEV" << dendl;
+	  respond_to_request(mdr, -EXDEV);
+	  return;
+	}
 	if (diri->is_frozen()) {
 	  dout(7) << "mknod_batch " << *diri << " is frozen, waiting" << dendl;
-	  diri->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	  diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	  return;
 	}
 	dir = diri->get_or_open_dirfrag(mdcache, fg);
@@ -9512,9 +9520,17 @@ void Server::handle_client_unlink_batch(const MDRequestRef& mdr)
     frag_t fg = diri->pick_dirfrag(name);
     CDir *dir = diri->get_dirfrag(fg);
     if (!dir) {
+      if (!diri->is_auth()) {
+	// only the auth of the inode may open a dirfrag; whoever is auth
+	// for this one, it is not us
+	dout(7) << "unlink_batch " << fg << " of " << *diri
+		<< " is not open and the inode is not auth, EXDEV" << dendl;
+	respond_to_request(mdr, -EXDEV);
+	return;
+      }
       if (diri->is_frozen()) {
 	dout(7) << "unlink_batch " << *diri << " is frozen, waiting" << dendl;
-	diri->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
       dir = diri->get_or_open_dirfrag(mdcache, fg);
