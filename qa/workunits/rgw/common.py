@@ -9,7 +9,7 @@ import boto3.s3.transfer
 import botocore.exceptions
 import random
 import json
-from time import sleep
+from time import sleep, monotonic
 
 log.basicConfig(format = '%(message)s', level=log.DEBUG)
 log.getLogger('botocore').setLevel(log.CRITICAL)
@@ -143,6 +143,31 @@ def upload_object(client, bucket_name, object_key, body, extra_args):
     else:
         client.put_object(Bucket=bucket_name, Key=object_key, Body=body,
                           **extra_args)
+
+def has_pending_write(bucket_name, object_key):
+    """
+    True if a write to the key has a pending bucket index entry: one that
+    it prepared and has not completed or canceled yet.
+    """
+    out = exec_cmd(f'radosgw-admin bi list --bucket={bucket_name} --object={object_key}')
+    entries = json.loads(out.replace(b'\x80', b'0x80'))
+    return any(e['entry'].get('pending_map') for e in entries)
+
+def wait_for_pending_write(bucket_name, object_key, writer=None, timeout=60):
+    """
+    Wait until a write to the key has a pending bucket index entry. A write
+    prepares it before its head write, and keeps it while held there. If
+    writer, the thread that does the write, finishes first, the write was
+    not held.
+    """
+    deadline = monotonic() + timeout
+    while monotonic() < deadline:
+        if has_pending_write(bucket_name, object_key):
+            return
+        if writer is not None and not writer.is_alive():
+            raise AssertionError(f'write to {object_key} was not held')
+        sleep(0.5)
+    raise AssertionError(f'timed out waiting for a pending write to {object_key}')
 
 def put_objects(bucket, key_list):
     objs = []
