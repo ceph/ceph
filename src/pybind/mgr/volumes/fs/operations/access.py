@@ -1,6 +1,23 @@
 import errno
 import json
+import logging
 from typing import List
+
+from ..exception import VolumeException
+
+log = logging.getLogger(__name__)
+
+
+def _check_mon_command(mgr, cmd):
+    # Like MgrModule.check_mon_command(), but raise a VolumeException that
+    # carries the monitor's errno, which is what the command handlers in
+    # volume.py catch and report back to the caller.
+    ret, out, err = mgr.mon_command(cmd)
+    if ret != 0:
+        log.error("'{0}' for {1} failed: {2}".format(
+            cmd['prefix'], cmd.get('entity'), err))
+        raise VolumeException(ret, err)
+    return out
 
 
 def prepare_updated_caps_list(existing_caps, mds_cap_str, osd_cap_str, authorize=True):
@@ -27,7 +44,7 @@ def prepare_updated_caps_list(existing_caps, mds_cap_str, osd_cap_str, authorize
 def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
                  unwanted_mds_cap, unwanted_osd_cap, existing_caps):
     if existing_caps is None:
-        ret, out, err = mgr.mon_command({
+        out = _check_mon_command(mgr, {
             "prefix": "auth get-or-create",
             "entity": client_entity,
             "caps": ['mds', want_mds_cap, 'osd', want_osd_cap, 'mon', 'allow r'],
@@ -65,13 +82,15 @@ def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
             unwanted_mds_cap, unwanted_osd_cap)
 
         caps_list = prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str)
-        mgr.mon_command(
+        _check_mon_command(
+            mgr,
             {
                 "prefix": "auth caps",
                 'entity': client_entity,
                 'caps': caps_list
             })
-        ret, out, err = mgr.mon_command(
+        out = _check_mon_command(
+            mgr,
             {
                 'prefix': 'auth get',
                 'entity': client_entity,
@@ -106,6 +125,9 @@ def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
     if ret == -errno.ENOENT:
         # Already gone, great.
         return
+    if ret != 0:
+        log.error("'auth get' for {0} failed: {1}".format(client_entity, err))
+        raise VolumeException(ret, err)
 
     def cap_remove(orig_mds_caps, orig_osd_caps, want_mds_caps, want_osd_caps):
         mds_cap_tokens = [x.strip() for x in orig_mds_caps.split(",")]
@@ -132,13 +154,15 @@ def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
 
     caps_list = prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str, authorize=auth)
     if not caps_list:
-        mgr.mon_command(
+        _check_mon_command(
+            mgr,
             {
                 'prefix': 'auth rm',
                 'entity': client_entity
             })
     else:
-        mgr.mon_command(
+        _check_mon_command(
+            mgr,
             {
                 "prefix": "auth caps",
                 'entity': client_entity,
