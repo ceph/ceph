@@ -930,18 +930,19 @@ bool OSDService::_check_full(DoutPrefixProvider *dpp, s_names type) const
   return cur_state >= type;
 }
 
-bool OSDService::_tentative_full(DoutPrefixProvider *dpp, s_names type, uint64_t adjust_used, osd_stat_t adjusted_stat)
+bool OSDService::_tentative_full(
+  DoutPrefixProvider *dpp,
+  s_names type,
+  adjusted_ratio_t adjusted_ratio)
 {
-  ldpp_dout(dpp, 20) << __func__ << " type " << get_full_state_name(type) << " adjust_used " << (adjust_used >> 10) << "KiB" << dendl;
+  auto [pratio, ratio] = adjusted_ratio;
+  ldpp_dout(dpp, 20) << __func__ << " type " << get_full_state_name(type) << " adjust_ratio " << (ratio - pratio) << dendl;
   {
     std::lock_guard l(full_status_lock);
     if (_check_inject_full(dpp, type)) {
       return true;
     }
   }
-
-  float pratio;
-  float ratio = compute_adjusted_ratio(adjusted_stat, &pratio, adjust_used);
 
   string notused;
   s_names tentative_state = recalc_full_state(ratio, pratio, notused);
@@ -962,9 +963,11 @@ bool OSDService::check_full(DoutPrefixProvider *dpp) const
   return _check_full(dpp, FULL);
 }
 
-bool OSDService::tentative_backfill_full(DoutPrefixProvider *dpp, uint64_t adjust_used, osd_stat_t stats)
+bool OSDService::tentative_backfill_full(
+  DoutPrefixProvider *dpp,
+  adjusted_ratio_t adjusted_ratio)
 {
-  return _tentative_full(dpp, BACKFILLFULL, adjust_used, stats);
+  return _tentative_full(dpp, BACKFILLFULL, adjusted_ratio);
 }
 
 bool OSDService::check_backfill_full(DoutPrefixProvider *dpp) const
@@ -1087,10 +1090,11 @@ void OSDService::set_osd_stat_repaired(int64_t count)
   osd_stat.num_shards_repaired = count;
 }
 
-float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
-				         uint64_t adjust_used)
+OSDService::adjusted_ratio_t OSDService::compute_adjusted_ratio(
+  osd_stat_t new_stat, uint64_t adjust_used)
 {
-  *pratio =
+  adjusted_ratio_t adjusted_ratio;
+  adjusted_ratio.pratio =
    ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
 
   if (adjust_used) {
@@ -1112,7 +1116,9 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
   if (backfill_adjusted) {
     dout(20) << __func__ << " backfill adjusted " << new_stat << dendl;
   }
-  return ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
+  adjusted_ratio.ratio =
+    ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
+  return adjusted_ratio;
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
@@ -6280,8 +6286,7 @@ void OSD::heartbeat()
   dout(5) << __func__ << " " << new_stat << dendl;
   ceph_assert(new_stat.statfs.total);
 
-  float pratio;
-  float ratio = service.compute_adjusted_ratio(new_stat, &pratio);
+  auto [pratio, ratio] = service.compute_adjusted_ratio(new_stat);
 
   service.check_full_status(ratio, pratio);
 

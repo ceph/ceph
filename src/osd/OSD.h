@@ -748,7 +748,11 @@ public:
   osd_stat_t set_osd_stat(std::vector<int>& hb_peers, int num_pgs);
   void inc_osd_stat_repaired(void);
   void set_osd_stat_repaired(int64_t count);
-  float compute_adjusted_ratio(osd_stat_t new_stat, float *pratio, uint64_t adjust_used = 0);
+  struct adjusted_ratio_t {
+    float pratio = 0.0; // the usage ratio before the adjustment
+    float ratio = 0.0; // the usage ratio after the adjustment
+  };
+  adjusted_ratio_t compute_adjusted_ratio(osd_stat_t new_stat, uint64_t adjust_used = 0);
   osd_stat_t get_osd_stat() {
     std::lock_guard l(stat_lock);
     ++seq;
@@ -805,10 +809,15 @@ private:
 public:
   void check_full_status(float ratio, float pratio);
   s_names recalc_full_state(float ratio, float pratio, std::string &inject);
-  bool _tentative_full(DoutPrefixProvider *dpp, s_names type, uint64_t adjust_used, osd_stat_t);
+  bool _tentative_full(
+    DoutPrefixProvider *dpp,
+    s_names type,
+    adjusted_ratio_t adjusted_ratio);
   bool check_failsafe_full(DoutPrefixProvider *dpp) const;
   bool check_full(DoutPrefixProvider *dpp) const;
-  bool tentative_backfill_full(DoutPrefixProvider *dpp, uint64_t adjust_used, osd_stat_t);
+  bool tentative_backfill_full(
+    DoutPrefixProvider *dpp,
+    adjusted_ratio_t);
   bool check_backfill_full(DoutPrefixProvider *dpp) const;
   bool check_nearfull(DoutPrefixProvider *dpp) const;
   bool is_failsafe_full() const;

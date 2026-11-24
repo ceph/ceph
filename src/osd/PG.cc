@@ -1791,16 +1791,17 @@ bool PG::try_reserve_recovery_space(
     dout(10) << "backfill reservation rejected: failure injection"
 	     << dendl;
     return false;
-  } else if (!cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-      osd->tentative_backfill_full(this, pending_adjustment, cur_stat)) {
+  } else if (auto adjusted_ratio = osd->compute_adjusted_ratio(
+               cur_stat, pending_adjustment);
+             !cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+             osd->tentative_backfill_full(this, adjusted_ratio)) {
     dout(10) << "backfill reservation rejected: backfill full"
 	     << dendl;
     return false;
   } else {
-    if (space_info) {
-      float before = 0;
-      const float after = osd->compute_adjusted_ratio(
-	cur_stat, &before, pending_adjustment);
+    if (space_info &&
+        cct->_conf.get_val<bool>("osd_space_aware_backfill_priority")) {
+      const auto [before, after] = adjusted_ratio;
       space_info->target_usage_before =
 	backfill_reservation_space_info_t::encode_usage_ratio(before);
       space_info->target_usage_after =
