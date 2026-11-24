@@ -1560,9 +1560,39 @@ the zone name. For example::
 
     default.rgw.control
 
-To change the defaults, include the following settings in your Ceph
-configuration file under each ``[client.radosgw.{instance-name}]``
-instance.
+``rgw_zone`` and ``rgw_zonegroup`` select the zone and the zonegroup
+of a specific gateway, and belong into that instance's section in
+the Ceph configuration file, e.g.
+``[client.radosgw.{instance-name}]``.  The remaining settings name
+the pools that hold the multisite metadata itself.  If RGW is
+deployed with cephadm, or the default locations are kept, there is
+nothing to configure here: the compiled-in defaults are the same
+for every Ceph identity.
+
+These locations are special because commands and services alike
+have to agree on them, and they do not all use the same Ceph
+identity:
+
+* ``radosgw-admin`` creates the realm, zonegroup and zone, and is
+  run again later to inspect them.  It uses ``client.admin`` unless
+  a different name is given on the command line.
+* The gateway services use ``client.radosgw.{instance-name}``.
+* The ceph-mgr dashboard collects the multisite status by running
+  ``radosgw-admin`` on its own, under the ``mgr.<id>`` identity.
+
+.. note:: A location change that only some of them can see makes
+   the others fall back to the default, so the pool written at
+   creation time is not the pool a later lookup reads, and
+   ``radosgw-admin`` reports the realm, zonegroup or zone as
+   missing.  The dashboard is the easy one to overlook, since its
+   ``radosgw-admin`` run is not typed by anyone: what a shell finds
+   can still be reported as missing by the dashboard.  Put location
+   changes where all of them can see them, unlike the per-instance
+   sections above, e.g. in the ``[global]`` section of the Ceph
+   configuration file or in the ``global`` section of the
+   configuration database::
+
+      ceph config set global rgw_zonegroup_root_pool <pool>
 
 +-------------------------------------+-----------------------------------+---------+-----------------------+
 | Name                                | Description                       | Type    | Default               |
