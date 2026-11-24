@@ -440,10 +440,13 @@ void ImageMap<I>::update_entities_added(
       if (m_policy->add_entity(global_id, entity.count)) {
         schedule_action(global_id);
       }
-    } else if (result.second && !mirror_uuid.empty() &&
+    } else if (result.second &&
+               (entity.type == MIRROR_ENTITY_TYPE_IMAGE ?
+                  (mirror_uuid.empty() || !m_peer_map[global_id].contains("")) :
+                  !mirror_uuid.empty()) &&
                m_policy->modify_entity(global_id, entity.count)) {
-      // Use the remote state when the local and remote watchers report
-      // different group membership.
+      // Local image ownership wins over a remote membership change. A remote
+      // DETACH must not start standalone replay before local group cleanup.
       schedule_action(global_id);
     }
   }
@@ -536,8 +539,18 @@ void ImageMap<I>::update_entities_modified(const std::string &mirror_uuid,
     auto weight_it = peer_it->second.find(mirror_uuid);
     if (weight_it != peer_it->second.end()) {
       weight_it->second = entity.count;
+    } else if (mirror_uuid.empty() && entity.type == MIRROR_ENTITY_TYPE_IMAGE) {
+      // Local membership notification can precede local pool discovery.
+      // Remember that ownership so a later remote update cannot override it.
+      peer_it->second.emplace(mirror_uuid, entity.count);
     }
 
+    if (entity.type == MIRROR_ENTITY_TYPE_IMAGE && !mirror_uuid.empty() &&
+        peer_it->second.contains("")) {
+      // Remember the peer's weight, but wait for the local ATTACH or DETACH
+      // notification to change an existing local image's ownership.
+      continue;
+    }
     if (m_policy->modify_entity(global_id, entity.count)) {
       schedule_action(global_id);
     }

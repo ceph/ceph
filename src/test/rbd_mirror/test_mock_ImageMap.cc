@@ -833,95 +833,91 @@ TEST_F(TestMockImageMap, GroupMembershipUpdatesImageWeight) {
 }
 
 // Test sequence:
-// 1. Discover a local group member with weight zero.
-// 2. Discover the same image remotely as standalone with weight one.
-// Expected: The remote standalone state causes the image replayer to be
-//   acquired.
-TEST_F(TestMockImageMap, RemoteStandaloneImageOverridesLocalGroupMember) {
+// 1. Discover a local group member, then discover a remote standalone image.
+// 2. Repeat the remote DETACH update while local cleanup is still pending.
+// 3. Send local DETACH after cleanup.
+// Expected: Only local DETACH starts standalone replay.
+TEST_F(TestMockImageMap, RemoteDetachWaitsForLocalDetach) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
-
   InSequence seq;
-
   MockLoadRequest mock_load_request;
   expect_load_request(mock_load_request, 0);
-
   MockListener mock_listener(this);
-
   std::unique_ptr<MockImageMap> mock_image_map{
     MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
                          mock_listener)};
-
   C_SaferCond cond;
   mock_image_map->init(&cond);
   ASSERT_EQ(0, cond.wait());
-
-  std::set<std::string> global_image_ids{"global image id"};
   MockUpdateRequest mock_update_request;
-  std::map<std::string, Context*> image_acquire_ack_ctxs;
-
   expect_add_event(mock_threads);
   expect_update_request(mock_update_request, 0);
-
-  MirrorEntities entities{
-    {MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
+  MirrorEntities entities{{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
   mock_image_map->update_entities("", std::move(entities), {}, {});
   ASSERT_TRUE(wait_for_map_update(1));
+  wait_for_scheduled_task();
+
+  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}};
+  mock_image_map->update_entities("uuid1", std::move(entities), {}, {});
+  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}};
+  mock_image_map->update_entities("uuid1", {}, {}, std::move(entities));
   wait_for_scheduled_task();
 
   expect_add_event(mock_threads);
   expect_update_request(mock_update_request, 0);
   expect_add_event(mock_threads);
-  listener_acquire_images(mock_listener, global_image_ids,
-                          &image_acquire_ack_ctxs);
-
+  std::set<std::string> ids{"global image id"};
+  std::map<std::string, Context*> ack_ctxs;
+  listener_acquire_images(mock_listener, ids, &ack_ctxs);
   entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}};
-  mock_image_map->update_entities("uuid1", std::move(entities), {}, {});
+  mock_image_map->update_entities("", {}, {}, std::move(entities));
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(1));
-  remote_peer_ack_nowait(mock_image_map.get(), global_image_ids, 0,
-                         &image_acquire_ack_ctxs);
-
+  remote_peer_ack_nowait(mock_image_map.get(), ids, 0, &ack_ctxs);
   wait_for_scheduled_task();
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
 }
 
 // Test sequence:
-// 1. Discover a remote group member with weight zero.
-// 2. Discover the same image locally as standalone.
-// Expected: The local state does not override remote group ownership.
-TEST_F(TestMockImageMap, LocalStandaloneImageDoesNotOverrideRemoteGroupMember) {
+// 1. Discover a remote group member, then its local standalone image.
+// 2. Report another remote group membership update.
+// Expected: Local standalone ownership wins until the local ATTACH arrives.
+TEST_F(TestMockImageMap, LocalStandaloneImageOverridesRemoteGroupMember) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
-
   InSequence seq;
-
   MockLoadRequest mock_load_request;
   expect_load_request(mock_load_request, 0);
-
   MockListener mock_listener(this);
-
   std::unique_ptr<MockImageMap> mock_image_map{
     MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
                          mock_listener)};
-
   C_SaferCond cond;
   mock_image_map->init(&cond);
   ASSERT_EQ(0, cond.wait());
-
   MockUpdateRequest mock_update_request;
   expect_add_event(mock_threads);
   expect_update_request(mock_update_request, 0);
-
-  MirrorEntities entities{
-    {MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
+  MirrorEntities entities{{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
   mock_image_map->update_entities("uuid1", std::move(entities), {}, {});
   ASSERT_TRUE(wait_for_map_update(1));
   wait_for_scheduled_task();
 
+  expect_add_event(mock_threads);
+  expect_update_request(mock_update_request, 0);
+  expect_add_event(mock_threads);
+  std::set<std::string> ids{"global image id"};
+  std::map<std::string, Context*> ack_ctxs;
+  listener_acquire_images(mock_listener, ids, &ack_ctxs);
   entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}};
   mock_image_map->update_entities("", std::move(entities), {}, {});
-
+  ASSERT_TRUE(wait_for_map_update(1));
+  ASSERT_TRUE(wait_for_listener_notify(1));
+  remote_peer_ack_nowait(mock_image_map.get(), ids, 0, &ack_ctxs);
+  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
+  mock_image_map->update_entities("uuid1", {}, {}, std::move(entities));
+  wait_for_scheduled_task();
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
 }
 
@@ -1030,12 +1026,6 @@ TEST_F(TestMockImageMap, RemoteRemovalRestoresLocalStandaloneWeight) {
   ASSERT_TRUE(wait_for_map_update(1));
   wait_for_scheduled_task();
 
-  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}};
-  mock_image_map->update_entities("", std::move(entities), {}, {});
-
-  EXPECT_CALL(mock_listener,
-              mock_remove_image("uuid1", "global image id", _))
-    .WillOnce(WithArg<2>(Invoke([](Context* ctx) { ctx->complete(0); })));
   expect_add_event(mock_threads);
   expect_update_request(mock_update_request, 0);
   expect_add_event(mock_threads);
@@ -1043,12 +1033,19 @@ TEST_F(TestMockImageMap, RemoteRemovalRestoresLocalStandaloneWeight) {
   std::map<std::string, Context*> image_acquire_ack_ctxs;
   listener_acquire_images(mock_listener, global_image_ids,
                           &image_acquire_ack_ctxs);
-  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
-  mock_image_map->update_entities("uuid1", {}, std::move(entities), {});
+  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}};
+  mock_image_map->update_entities("", std::move(entities), {}, {});
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(1));
   remote_peer_ack_nowait(mock_image_map.get(), global_image_ids, 0,
                          &image_acquire_ack_ctxs);
+  wait_for_scheduled_task();
+
+  EXPECT_CALL(mock_listener,
+              mock_remove_image("uuid1", "global image id", _))
+    .WillOnce(WithArg<2>(Invoke([](Context* ctx) { ctx->complete(0); })));
+  entities = {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0}};
+  mock_image_map->update_entities("uuid1", {}, std::move(entities), {});
 
   wait_for_scheduled_task();
   std::map<std::string, Context*> image_release_ack_ctxs;

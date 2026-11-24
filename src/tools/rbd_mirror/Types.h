@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <memory>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -194,6 +195,11 @@ struct GroupCtx {
   bool primary = false;
   mutable librados::IoCtx io_ctx;
   Listener *listener = nullptr;
+
+  // global image-id -> {local image-id, remote image-id}. These members are
+  // excluded from the selected snapshot but retained for older snapshot cleanup.
+  // Bootstrap rebuilds this from saved membership and snapshots after restart.
+  std::map<std::string, std::pair<std::string, std::string>> pending_detach_images;
 
   GroupCtx() {
   }

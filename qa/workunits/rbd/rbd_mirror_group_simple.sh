@@ -2030,6 +2030,7 @@ test_create_group_with_large_image()
   fi
 
   remove_image_retry "${primary_cluster}" "${pool0}" "${big_image}"
+  wait_for_image_present "${secondary_cluster}" "${pool0}" "${big_image}" deleted
 
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool0}/${group}"
   test_images_in_latest_synced_group "${secondary_cluster}" "${pool0}/${group}" 1
@@ -2614,22 +2615,20 @@ test_create_multiple_groups_do_io()
   done
 }
 
-declare -a test_prune_snapshot_after_group_move_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}")
-test_prune_snapshot_after_group_move_scenarios=1
+declare -a test_prune_snapshot_after_group_move_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" false)
+declare -a test_prune_snapshot_after_group_move_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" true)
+test_prune_snapshot_after_group_move_scenarios=2
 
 # Test sequence:
-# 1. Create grp1 with two images and an empty grp2 on the primary.
-#    Enable mirroring and wait for both groups to sync to the secondary.
-# 2. Pause pruning of one image's snapshots on the secondary using a test gate.
-# 3. On the primary, detach that image from grp1 and attach it to grp2.
-# 4. Wait for grp2 to sync to the secondary, then confirm grp1's old non-primary
-#    snapshot remains because the moved image's snapshot has not been pruned.
-# 5. Release the gate and wait for the old snapshots to be pruned on the secondary.
-# 6. Verify grp2's secondary membership and compare the image on both sites.
-# Expected: grp2's secondary image lock owner accepts grp1's snapshot removal
-#   request while retaining its lock. Cleanup completes without changing grp2's
-#   membership. Without the policy exception, removal returns -EROFS and
-#   grp1's old snapshot remains on the secondary.
+# 1. Create grp1 with two images and an empty grp2 on the primary, sync both.
+# 2. Gate the moved image's old snapshot pruning on the secondary.
+# 3. Detach on the primary and complete the DETACH snapshot on the secondary.
+# 4. Keep the image in secondary grp1 while old snapshot references remain.
+#    Scenario 2 also kills and restarts the secondary daemon during this wait.
+# 5. Attach to primary grp2, secondary grp2 must wait for grp1's cleanup.
+# 6. Release pruning, wait for membership to move, then compare image data.
+# Expected: grp1 retains cleanup ownership until all its references are gone.
+#   grp2 then syncs without forwarding snapshot removal to another owner.
 test_prune_snapshot_after_group_move()
 {
   skip_without_dynamic_groups "${FUNCNAME[0]}" && return 0
@@ -2641,6 +2640,7 @@ test_prune_snapshot_after_group_move()
   local primary_cluster=$1 ; shift
   local secondary_cluster=$1 ; shift
   local pool=$1 ; shift
+  local restart_secondary=$1 ; shift
   local old_group=prune-group1 new_group=prune-group2
   local moved_image=prune-moved keeper_image=prune-keeper
   local image_id old_snap_id image
@@ -2666,19 +2666,27 @@ test_prune_snapshot_after_group_move()
   printf '%s\n' "${image_id}" > "${RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE}"
 
   group_image_remove "${primary_cluster}" "${pool}/${old_group}" "${pool}/${moved_image}"
-  wait_for_group_present "${secondary_cluster}" "${pool}" "${old_group}" 1
   wait_for_group_synced "${primary_cluster}" "${pool}/${old_group}" "${secondary_cluster}" "${pool}/${old_group}"
+  test_group_present "${secondary_cluster}" "${pool}" "${old_group}" 1 2
+  if [ "${restart_secondary}" = true ]; then
+    stop_mirrors "${secondary_cluster}" -9
+    start_mirrors "${secondary_cluster}"
+    wait_for_group_replay_started "${secondary_cluster}" "${pool}/${old_group}" 2
+    test_group_present "${secondary_cluster}" "${pool}" "${old_group}" 1 2
+    test_group_snap_present "${secondary_cluster}" "${pool}/${old_group}" "${old_snap_id}" 1
+  fi
   mirror_group_snapshot "${primary_cluster}" "${pool}/${old_group}"
   wait_for_group_image_add "${primary_cluster}" "${pool}/${new_group}" "${pool}/${moved_image}"
-  wait_for_group_present "${secondary_cluster}" "${pool}" "${new_group}" 1
-  wait_for_group_synced "${primary_cluster}" "${pool}/${new_group}" "${secondary_cluster}" "${pool}/${new_group}"
-  # A completed grp2 snapshot on the secondary confirms its image replayer has run.
-  # grp1's old non-primary snapshot must still exist at this point, otherwise the
-  # test has not reproduced the required ordering.
+  # grp2 must try bootstrap before we check that grp1 still owns the image.
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${new_group}" 'up+error' "" "error bootstrapping replay"
+  test_group_present "${secondary_cluster}" "${pool}" "${old_group}" 1 2
+  test_group_present "${secondary_cluster}" "${pool}" "${new_group}" 1 0
   test_group_snap_present "${secondary_cluster}" "${pool}/${old_group}" "${old_snap_id}" 1
   rm "${RBD_MIRROR_TEST_GROUP_SNAPSHOT_PRUNE_FILE}"
   wait_for_group_snap_not_present "${secondary_cluster}" "${pool}/${old_group}" "${old_snap_id}"
-  test_group_present "${secondary_cluster}" "${pool}" "${new_group}" 1 1
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${old_group}" 1
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${new_group}" 1
+  wait_for_group_synced "${primary_cluster}" "${pool}/${new_group}" "${secondary_cluster}" "${pool}/${new_group}"
   compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${moved_image}"
 
   for image in "${old_group}" "${new_group}"; do
@@ -4609,7 +4617,8 @@ test_image_detach_before_image_creation()
   wait_for_group_id_changed "${primary_cluster}" "${pool}/${group0}" "${group_id_before_resync}"
   wait_for_image_present "${primary_cluster}" "${pool}" "${new_image}" deleted "${old_image_id}"
   wait_for_group_snap_sync_complete "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}"
-  test_group_present "${primary_cluster}" "${pool}" "${group0}" 1 2
+  # DETACH completes before historical image snapshot cleanup releases membership.
+  wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" 2
   get_group_snap_name "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" group_snap_name
   get_images_from_group_snap_info "${primary_cluster}" "${pool}/${group0}@${group_snap_name}" actual_members
   actual_members=$(tr ' ' '\n' <<< "${actual_members}" | sed '/^$/d' | LC_ALL=C sort)
