@@ -21,10 +21,10 @@ export enum Icons {
   deepCheck = 'settings', // Deep Scrub, Setting, Configuration
   cogs = 'settings--adjust', // Multiple Settings, Configurations
   reweight = 'scales', // Reweight
-  up = 'arrow--up', // Up
+  up = 'arrow--up', // Up, Promote
   left = 'arrow--left', // Mark out
   right = 'arrow--right', // Mark in
-  down = 'arrow--down', // Mark Down
+  down = 'arrow--down', // Mark Down, Demote
   erase = 'erase', // Purge  color: bd.$white;
   expand = 'maximize', // Expand cluster
   user = 'user', // User, Initiators
