@@ -30,10 +30,10 @@ struct record_input {
   std::string* journal_err_out{nullptr};
 
   // Standard-mode-only fields. Views point at request-lifetime storage in
-  // req_state / env_map. The four std::string fields below are built in
+  // req_state / env_map. The std::string fields below are built in
   // place by the populate code and therefore cannot be views.
   std::chrono::milliseconds time_elapsed{};
-  std::string_view remote_addr;
+  std::string remote_addr;   // client address, may be cut from X-Forwarded-For
   std::string_view trans_id;
   std::string_view method;
   std::string_view request_uri;

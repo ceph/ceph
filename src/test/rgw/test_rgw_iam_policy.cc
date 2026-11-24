@@ -1864,3 +1864,67 @@ TEST_F(ConditionTest, KeystoneUserIdStringEquals)
   EXPECT_TRUE(cond.eval({{key, "user-123"}}, nullptr));
   EXPECT_FALSE(cond.eval({{key, "user-456"}}, nullptr));
 }
+
+class RemoteAddrTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+  RGWEnv env;
+public:
+  RemoteAddrTest() {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false);
+    env.init(cct.get());
+    env.set("REMOTE_ADDR", "fd00::134");
+  }
+  void set_param(const std::string& val) {
+    cct->_conf.set_val_or_die("rgw_remote_addr_param", val);
+  }
+  std::string addr(const RGWEnv& e) {
+    return rgw_get_remote_addr(cct.get(), e).value_or("<none>");
+  }
+};
+
+TEST_F(RemoteAddrTest, DefaultUsesSocketPeer)
+{
+  EXPECT_EQ(addr(env), "fd00::134");
+}
+
+TEST_F(RemoteAddrTest, DefaultMissingReturnsNone)
+{
+  RGWEnv empty;
+  empty.init(cct.get());
+  EXPECT_EQ(addr(empty), "<none>");
+}
+
+TEST_F(RemoteAddrTest, ForwardedForSingleEntry)
+{
+  set_param("HTTP_X_FORWARDED_FOR");
+  env.set("HTTP_X_FORWARDED_FOR", "192.0.2.10");
+  EXPECT_EQ(addr(env), "192.0.2.10");
+}
+
+TEST_F(RemoteAddrTest, ForwardedForTakesFirstEntry)
+{
+  set_param("HTTP_X_FORWARDED_FOR");
+  env.set("HTTP_X_FORWARDED_FOR", " 192.0.2.10 , 198.51.100.1, fd00::134");
+  EXPECT_EQ(addr(env), "192.0.2.10");
+}
+
+TEST_F(RemoteAddrTest, ForwardedForParamIgnoresCase)
+{
+  set_param("http_x_forwarded_for");
+  env.set("HTTP_X_FORWARDED_FOR", "192.0.2.10, 198.51.100.1");
+  EXPECT_EQ(addr(env), "192.0.2.10");
+}
+
+TEST_F(RemoteAddrTest, ParamSetHeaderMissingReturnsNone)
+{
+  set_param("HTTP_X_FORWARDED_FOR");
+  EXPECT_EQ(addr(env), "<none>");
+}
+
+TEST_F(RemoteAddrTest, OtherHeaderIsNotSplit)
+{
+  set_param("HTTP_X_REAL_IP");
+  env.set("HTTP_X_REAL_IP", "192.0.2.10,x");
+  EXPECT_EQ(addr(env), "192.0.2.10,x");
+}

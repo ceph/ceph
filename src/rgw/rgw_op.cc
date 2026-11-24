@@ -1010,23 +1010,8 @@ void rgw_build_iam_environment(req_state* s)
     s->env.emplace("aws:SecureTransport", "true");
   }
 
-  const auto remote_addr_param = s->cct->_conf->rgw_remote_addr_param;
-  if (remote_addr_param.length()) {
-    i = m.find(remote_addr_param);
-  } else {
-    i = m.find("REMOTE_ADDR");
-  }
-  if (i != m.end()) {
-    const string* ip = &(i->second);
-    string temp;
-    if (remote_addr_param == "HTTP_X_FORWARDED_FOR") {
-      const auto comma = ip->find(',');
-      if (comma != string::npos) {
-	temp.assign(*ip, 0, comma);
-	ip = &temp;
-      }
-    }
-    s->env.emplace("aws:SourceIp", *ip);
+  if (auto ip = rgw_get_remote_addr(s->cct, *s->info.env); ip) {
+    s->env.emplace("aws:SourceIp", std::move(*ip));
   }
 
   i = m.find("HTTP_USER_AGENT"); {

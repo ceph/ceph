@@ -494,7 +494,9 @@ int log_record(rgw::sal::Driver* driver,
   }
   rgw::auth::s3::get_aws_version_and_auth_type(s, input.aws_version, input.auth_type);
   input.time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed());
-  input.remote_addr = s->info.env->get("REMOTE_ADDR", "-");
+  // same client address as policy evaluation (aws:SourceIp), so records
+  // show the client and not a reverse proxy in front of RGW
+  input.remote_addr = rgw_get_remote_addr(s->cct, *s->info.env).value_or("-");
   input.trans_id = s->trans_id;
   input.method = s->info.method;
   input.request_uri = s->info.request_uri;

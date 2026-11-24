@@ -27,6 +27,7 @@
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/optional.hpp>
 
 #include "include/neorados/RADOS.hpp"
 
@@ -543,6 +544,12 @@ public:
 // return true if the connection is secure. this either means that the
 // connection arrived via ssl, or was forwarded as https by a trusted proxy
 bool rgw_transport_is_secure(CephContext *cct, const RGWEnv& env);
+
+// return the client address of the request. reads the header named by
+// rgw_remote_addr_param if set (only the first entry of X-Forwarded-For),
+// else REMOTE_ADDR. returns boost::none if that value is missing
+boost::optional<std::string> rgw_get_remote_addr(CephContext *cct,
+                                                 const RGWEnv& env);
 
 enum http_op {
   OP_GET,
