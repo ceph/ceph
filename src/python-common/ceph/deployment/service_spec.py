@@ -2141,6 +2141,43 @@ class RGWSpec(ServiceSpec):
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
 
+# SPDK cpuset: hex ``0xF0`` or a list ``[4-7]``, ``[4,5,6,7]``.
+_LIBRBD_CORE_MASK_RE = re.compile(
+    r'(?:0x[0-9a-fA-F]+|\['
+    r'\s*\d+(?:\s*-\s*\d+)?'
+    r'(?:\s*,\s*\d+(?:\s*-\s*\d+)?)*'
+    r'\s*\])'
+)
+
+
+def _validate_librbd_core_mask(mask: Any) -> None:
+    """Require an SPDK cpuset when the field is set.
+
+    Unquoted YAML turns ``0xF0`` into an int and ``[4-7]`` into a list,
+    and a falsy value would otherwise skip this check. SPDK also rejects
+    a reversed range and a hex mask with no bits set.
+    """
+    if mask is None:
+        return
+    verify_non_empty_string(mask, 'librbd_core_mask')
+    if not _LIBRBD_CORE_MASK_RE.fullmatch(mask):
+        raise SpecValidationError(
+            'librbd_core_mask must be an SPDK cpuset, for example [4-7] or 0xF0'
+        )
+    if mask.startswith('0x'):
+        if int(mask, 16) == 0:
+            raise SpecValidationError(
+                'librbd_core_mask must select at least one CPU'
+            )
+        return
+    for term in mask[1:-1].split(','):
+        pieces = term.split('-')
+        if len(pieces) == 2 and int(pieces[0]) > int(pieces[1]):
+            raise SpecValidationError(
+                'librbd_core_mask range must be low-high, for example [4-7]'
+            )
+
+
 class NvmeofServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'nvmeof',
@@ -2233,6 +2270,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_dsa_acceleration: bool = False,
                  rbd_with_crc32c: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
+                 librbd_core_mask: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  sock_impl_options: Optional[Dict[str, Dict[str, int]]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
@@ -2463,6 +2501,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.rbd_with_crc32c = rbd_with_crc32c
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
+        #: ``librbd_core_mask`` SPDK cpuset for librados messenger threads.
+        #: Keeps those threads off the reactor cores. Quote it in YAML.
+        #: Examples: ``"[4-7]"``, ``"0xF0"``.
+        self.librbd_core_mask = librbd_core_mask
         #: List of extra arguments for SPDK iobuf in the form opt=value
         self.iobuf_options: Optional[Dict[str, int]] = iobuf_options
         #: List of extra arguments for SPDK socket implementation options
@@ -2718,6 +2760,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
         verify_boolean(self.enable_dsa_acceleration, "Enable DSA acceleration")
         verify_boolean(self.rbd_with_crc32c, "Enable RBD CRC32C checksum reuse")
+        _validate_librbd_core_mask(self.librbd_core_mask)
         verify_positive_int(self.spdk_mem_size, "SPDK memory size")
         verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
         if self.spdk_mem_size and self.spdk_huge_pages:

@@ -12,6 +12,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeplo
 from cephadm.module import CephadmOrchestrator
 from orchestrator import DaemonDescriptionStatus
 from cephadm import utils
+from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.service_spec import NvmeofServiceSpec, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, wait, _run_cephadm, async_side_effect
 from orchestrator import OrchestratorError, DaemonDescription
@@ -292,6 +293,40 @@ timeout = 1.0\n"""
                     use_current_daemon_image=False,
                 )
 
+    @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
+    def test_nvmeof_config_librbd_core_mask(self, _get_name, _run_cephadm,
+                                            cephadm_module: CephadmOrchestrator):
+        pool = 'testpool'
+        group = 'mygroup'
+        nvmeof_daemon_id = f'{pool}.{group}.test.qwert'
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        _get_name.return_value = nvmeof_daemon_id
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'pools': [{'pool': 1, 'pool_name': pool, 'type': 1}]
+        })
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, NvmeofServiceSpec(
+                    service_id=f'{pool}.{group}',
+                    group=group,
+                    pool=pool,
+                    librbd_core_mask='[4-7]')):
+                conf = json.loads(_run_cephadm.call_args.kwargs['stdin'])
+                gw_conf = conf['config_blobs']['files']['ceph-nvmeof.conf']
+                assert 'librbd_core_mask = [4-7]\n' in gw_conf
+
+    def test_librbd_core_mask_validation(self):
+        for mask in ('[4-7]', '0xF0', '[4,5,6,7]', '[4-4]', '[4-7,8-11]'):
+            NvmeofServiceSpec(service_id='p.g', group='g', pool='p',
+                              librbd_core_mask=mask).validate()
+        for mask in ('cpus 4-7', 0xF0, ['4-7'], False, 0, '',
+                     '[7-4]', '[4-7,8-1]', '0x0', '0x00'):
+            with pytest.raises(SpecValidationError, match='librbd_core_mask'):
+                NvmeofServiceSpec(service_id='p.g', group='g', pool='p',
+                                  librbd_core_mask=mask).validate()
+
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_nvmeof_config_bind_addr(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
@@ -354,6 +389,21 @@ timeout = 1.0\n"""
         # `networks` is left to the placement, which the scheduler already
         # compares against the daemon it deployed.
         assert deps(networks=['10.0.0.0/24']) == []
+
+    def test_nvmeof_librbd_core_mask_dependencies(self, cephadm_module: CephadmOrchestrator):
+        def deps(**kwargs: Any) -> List[str]:
+            spec = NvmeofServiceSpec(service_id='testpool.groupa', group='groupa',
+                                     pool='testpool', **kwargs)
+            return NvmeofService.get_dependencies(cephadm_module, spec, 'nvmeof')
+
+        unset = deps()
+        added = deps(librbd_core_mask='[4-7]')
+        modified = deps(librbd_core_mask='[8-11]')
+        assert unset == []
+        assert added == ['librbd_core_mask: [4-7]']
+        assert modified == ['librbd_core_mask: [8-11]']
+        # Removing the mask drops the dep, so the daemon is reconfigured.
+        assert deps() == unset
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):

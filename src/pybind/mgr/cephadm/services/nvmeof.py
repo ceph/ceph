@@ -106,6 +106,12 @@ class NvmeofService(CephService):
         if nvmeof_spec.discovery_addr_map:
             deps.append(
                 f'discovery_addr_map: {sorted(nvmeof_spec.discovery_addr_map.items())}')
+        # Applied when the gateway starts and registers the cluster, so a
+        # change has to reach the daemon as a reconfig. Only when set, so
+        # a spec that leaves it unset does not reconfigure existing
+        # gateways on upgrade.
+        if nvmeof_spec.librbd_core_mask:
+            deps.append(f'librbd_core_mask: {nvmeof_spec.librbd_core_mask}')
         return deps
 
     def choose_next_action(
