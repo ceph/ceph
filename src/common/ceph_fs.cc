@@ -11,6 +11,13 @@
 #include "include/ceph_fs.h"
 #include "include/encoding.h"
 
+/*
+ * query_permissions is overlaid on the existing args union. Growing that
+ * union would move ext_num_retry in ceph_mds_request_head.
+ */
+static_assert(sizeof(ceph_mds_request_args) == 56,
+              "ceph_mds_request_args size is part of the MDS request ABI");
+
 void encode(const struct ceph_mds_request_head& h, ceph::buffer::list& bl) {
   using ceph::encode;
   encode(h.version, bl);

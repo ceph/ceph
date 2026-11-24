@@ -14,6 +14,7 @@
  */
 
 #include "Server.h"
+#include "QueryPermissions.h"
 #include "RetryMessage.h"
 #include "RetryRequest.h"
 #include "BatchOp.h"
@@ -232,6 +233,8 @@ void Server::create_logger()
                    "Request type set directory layout latency");
   plb.add_time_avg(l_mdss_req_getvxattr_latency, "req_getvxattr_latency",
                    "Request type get virtual extended attribute latency");
+  plb.add_time_avg(l_mdss_req_query_permissions_latency, "req_query_permissions_latency",
+                   "Request type query permissions latency");
   plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
                    "Request type set extended attribute latency");
   plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
@@ -2227,6 +2230,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_GETVXATTR:
     code = l_mdss_req_getvxattr_latency;
     break;
+  case CEPH_MDS_OP_QUERY_PERMISSIONS:
+    code = l_mdss_req_query_permissions_latency;
+    break;
   case CEPH_MDS_OP_SETXATTR:
     code = l_mdss_req_setxattr_latency;
     break;
@@ -2863,6 +2869,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   case CEPH_MDS_OP_GETVXATTR:
     handle_client_getvxattr(mdr);
     break;
+  case CEPH_MDS_OP_QUERY_PERMISSIONS:
+    handle_client_query_permissions(mdr);
+    break;
 
   case CEPH_MDS_OP_SETATTR:
     handle_client_setattr(mdr);
@@ -3497,7 +3506,8 @@ void Server::handle_peer_auth_pin_ack(const MDRequestRef& mdr, const cref_t<MMDS
  * by mask on the given inode, based on the capability in the mdr's
  * session.
  */
-bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
+bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask,
+                          bool cephx_only)
 {
   if (mdr->session) {
     std::string_view fs_name = mds->mdsmap->get_fs_name();
@@ -3510,7 +3520,7 @@ bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
       &mdr->client_request->get_caller_gid_list(),
       mdr->client_request->head.args.setattr.uid,
       mdr->client_request->head.args.setattr.gid,
-      check_qtine);
+      check_qtine, cephx_only);
     if (r < 0) {
       respond_to_request(mdr, r);
       return false;
@@ -4416,7 +4426,16 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
-  if (!check_access(mdr, ref, MAY_READ))
+  /*
+   * LOOKUP with no shared getattr mask only resolves the dentry. The
+   * client uses that before QUERY_PERMISSIONS so a mode 000 inode can
+   * still be named. Search was already required on the parent.
+   */
+  unsigned access = MAY_READ;
+  if (is_lookup &&
+      !(mask & (CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT)))
+    access = 0;
+  if (!check_access(mdr, ref, access))
     return;
 
   utime_t now = ceph_clock_now();
@@ -4650,6 +4669,138 @@ void Server::_lookup_ino_2(const MDRequestRef& mdr, int r)
   if (r == -ENOENT || r == -ENODATA)
     r = -ESTALE;
   respond_to_request(mdr, r);
+}
+
+/*
+ * One-shot CephX check for a live inode.
+ *
+ * The reply is QueryPermissionsReply in the extra buffer. tracei stays
+ * null, so respond_to_request does not call encode_inodestat and does not
+ * touch Capability::client_xattr_version. No cap is issued.
+ */
+void Server::handle_client_query_permissions(const MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  if (!mdr->session ||
+      !mdr->session->info.has_feature(CEPHFS_FEATURE_QUERY_PERMISSIONS)) {
+    dout(10) << "query_permissions unsupported by client" << dendl;
+    respond_to_request(mdr, -EOPNOTSUPP);
+    return;
+  }
+
+  if (mdr->snapid != CEPH_NOSNAP) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  const uint32_t format = req->head.args.query_permissions.format;
+  const uint32_t rights = req->head.args.query_permissions.rights;
+  const uint32_t flags = req->head.args.query_permissions.flags;
+  if (format != CEPH_QUERY_PERM_FORMAT) {
+    dout(10) << "query_permissions format " << format << dendl;
+    respond_to_request(mdr, -EOPNOTSUPP);
+    return;
+  }
+
+  unsigned mask = 0;
+  if (rights & CEPH_QUERY_PERM_READ)
+    mask |= MAY_READ;
+  if (rights & CEPH_QUERY_PERM_WRITE)
+    mask |= MAY_WRITE;
+  if ((rights & ~(CEPH_QUERY_PERM_READ | CEPH_QUERY_PERM_WRITE)) ||
+      (mask != MAY_READ && mask != MAY_WRITE)) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  if (flags & ~CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  inodeno_t ino = req->get_filepath().get_ino();
+  if (MDS_IS_PRIVATE_INO(ino.val)) {
+    respond_to_request(mdr, -ESTALE);
+    return;
+  }
+
+  CInode *in = mdcache->get_inode(ino);
+  if (in && in->state_test(CInode::STATE_PURGING)) {
+    respond_to_request(mdr, -ESTALE);
+    return;
+  }
+  if (!in) {
+    mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
+    return;
+  }
+  if (!in->is_head()) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  if (!in->is_auth()) {
+    if (in->is_ambiguous_auth()) {
+      dout(10) << "query_permissions waiting for single auth on " << *in << dendl;
+      in->add_waiter(CInode::WAIT_SINGLEAUTH,
+                     new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    mdcache->request_forward(mdr, in->authority().first);
+    return;
+  }
+
+  /*
+   * A one-shot answer, never a park. Quarantine-aware sessions are checked
+   * below and get -EACCES with no payload when the grant has no q/Q.
+   * A session that can send this op but does not advertise quarantine is
+   * still not allowed to observe a quarantined inode.
+   */
+  if (in->is_under_quarantine() &&
+      !mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE)) {
+    respond_to_request(mdr, -EACCES);
+    return;
+  }
+
+  // CephX read or write, plus quarantine q/Q. Not Unix mode.
+  if (!check_access(mdr, in, mask, true))
+    return;
+
+  const bool want_tuple = flags & CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT;
+  if (want_tuple && !(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&in->authlock);
+    lov.add_rdlock(&in->xattrlock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+    mdr->locking_state |= MutationImpl::ALL_LOCKED;
+  }
+
+  QueryPermissionsReply payload;
+  payload.ino = in->ino();
+  if (want_tuple) {
+    const auto& pi = in->get_projected_inode();
+    payload.tuple_version = in->get_projected_version();
+    payload.mode = pi->mode;
+    payload.uid = pi->uid;
+    payload.gid = pi->gid;
+    payload.state = CEPH_QUERY_PERM_NO_ACL;
+    const auto& xattrs = in->get_projected_xattrs();
+    if (xattrs) {
+      for (const auto& kv : *xattrs) {
+        if (std::string_view(kv.first) == "system.posix_acl_access" &&
+            kv.second.length()) {
+          payload.acl.append(kv.second.c_str(), kv.second.length());
+          payload.state = CEPH_QUERY_PERM_ACL;
+          break;
+        }
+      }
+    }
+  }
+
+  encode(payload, mdr->reply_extra_bl);
+  dout(10) << "query_permissions ino " << in->ino()
+           << " state " << (int)payload.state
+           << " version " << payload.tuple_version << dendl;
+  respond_to_request(mdr, 0);
 }
 
 

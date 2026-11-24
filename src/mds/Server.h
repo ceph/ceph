@@ -129,6 +129,7 @@ enum {
   l_mdss_global_recall_throttle,
   l_mdss_cap_acquisition_throttle,
   l_mdss_req_getvxattr_latency,
+  l_mdss_req_query_permissions_latency,
   l_mdss_req_file_blockdiff_latency,
   l_mdss_last,
 };
@@ -229,7 +230,8 @@ public:
   // some helpers
   bool check_fragment_space(const MDRequestRef& mdr, CDir *in);
   bool check_dir_max_entries(const MDRequestRef& mdr, CDir *in);
-  bool check_access(const MDRequestRef& mdr, CInode *in, unsigned mask);
+  bool check_access(const MDRequestRef& mdr, CInode *in, unsigned mask,
+                    bool cephx_only = false);
   bool check_quarantine_block(const MDRequestRef& mdr, CInode *in);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
@@ -255,6 +257,7 @@ public:
   void handle_client_getattr(const MDRequestRef& mdr, bool is_lookup);
   void handle_client_lookup_ino(const MDRequestRef& mdr,
 				bool want_parent, bool want_dentry);
+  void handle_client_query_permissions(const MDRequestRef& mdr);
   void _lookup_snap_ino(const MDRequestRef& mdr);
   void _lookup_ino_2(const MDRequestRef& mdr, int r);
   void handle_client_readdir(const MDRequestRef& mdr);

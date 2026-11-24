@@ -415,6 +415,10 @@ public:
     }
     if (head.op == CEPH_MDS_OP_GETATTR)
       out << " " << ccap_string(head.args.getattr.mask);
+    if (head.op == CEPH_MDS_OP_QUERY_PERMISSIONS)
+      out << " format=" << head.args.query_permissions.format
+          << " rights=" << head.args.query_permissions.rights
+          << " flags=" << head.args.query_permissions.flags;
     if (head.op == CEPH_MDS_OP_SETATTR) {
       if (head.args.setattr.mask & CEPH_SETATTR_MODE)
 	out << " mode=0" << std::oct << head.args.setattr.mode << std::dec;

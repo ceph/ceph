@@ -273,7 +273,8 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
 			     uid_t new_uid, gid_t new_gid,
 			     const entity_addr_t& addr,
 			     string_view trimmed_inode_path,
-                             bool check_quarantine_access) const
+                             bool check_quarantine_access,
+                             bool cephx_only) const
 {
   ldout(g_ceph_context, 10) << __func__ << " fs_name " << fs_name
 		 << " inode(path /" << trimmed_inode_path
@@ -337,6 +338,16 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
         if (!grant.spec.allow_full()) {
           continue;
         }
+      }
+
+      /*
+       * QUERY_PERMISSIONS stops here. The grant matches the path, the
+       * requested CephX right, root squash, and quarantine q/Q. Unix owner,
+       * group, and other mode bits are not a CephX decision; the client
+       * applies those, and any named POSIX ACL, to the returned tuple.
+       */
+      if (cephx_only) {
+        return true;
       }
 
       // check unix permissions?

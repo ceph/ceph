@@ -1110,7 +1110,8 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 			  int caller_uid, int caller_gid,
 			  const vector<uint64_t> *caller_gid_list,
 			  int new_uid, int new_gid,
-                          bool check_quarantine_access)
+                          bool check_quarantine_access,
+                          bool cephx_only)
 {
   dout(20) << __func__ << ": " << *in
            << " caller_uid=" << caller_uid
@@ -1164,7 +1165,7 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
   if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid, info.inst.addr, trimmed_path,
-                            check_quarantine_access)) {
+                            check_quarantine_access, cephx_only)) {
     return -EACCES;
   }
   return 0;
