@@ -1,4 +1,6 @@
 overrides:
+  kernel:
+    hwe: true
   ceph:
     conf:
       global:
