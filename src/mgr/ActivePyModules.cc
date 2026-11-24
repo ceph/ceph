@@ -212,14 +212,14 @@ int ActivePyModules::ceph_cache_map_erase(std::string_view what)
   return 0;
 }
 
-PyObject *ActivePyModules::cacheable_get_python(std::string_view what, const bool get_mutable)
+PyObjectRef ActivePyModules::cacheable_get_python(std::string_view what, bool get_mutable)
 {
   const bool use_cache =
     !get_mutable &&
     api_cache.is_enabled() &&
     api_cache.is_cacheable(what);
   if (use_cache) {
-    PyObject* cached = api_cache.get(what);
+    auto cached = api_cache.get(what);
     if (cached) {
       dout(20) << ": api cache hit for " << what << " hit/miss "
                << api_cache.get_hits() << "/" << api_cache.get_misses()
@@ -228,21 +228,18 @@ PyObject *ActivePyModules::cacheable_get_python(std::string_view what, const boo
     }
   }
 
-  PyObject *obj = get_python(what, get_mutable);
+  const auto generation = use_cache ? api_cache.generation(what) : 0;
+
+  auto obj = PyObjectRef::adopt_new_reference(
+    get_python(what, use_cache));
   if (use_cache && obj) {
-    api_cache.insert(what, obj);
+    api_cache.insert_if_generation(what, obj.clone(), generation);
   }
   return obj;
 }
 
-PyObject *ActivePyModules::get_python(std::string_view what, const bool get_mutable)
+PyObject *ActivePyModules::get_python(std::string_view what, bool use_cache)
 {
-  const bool use_cache =
-    !get_mutable &&
-    api_cache.is_enabled() &&
-    api_cache.is_cacheable(what) &&
-    PyGILState_Check();
-
   PyFormatter py_formatter;
   PyFormatterRO py_formatter_ro;
   PyFormatter &f = use_cache ? (PyFormatter&)py_formatter_ro :

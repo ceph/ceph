@@ -14,7 +14,10 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <concepts>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -22,11 +25,13 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
+#include "PyObjectRef.h"
 #include "common/config_obs.h"
 #include "common/perf_counters.h"
 #include "mgr/mgr_perf_counters.h"
-#include "PyUtil.h"
 
 // Transparent hash so unordered containers accept std::string_view lookups
 // without constructing a std::string.
@@ -42,45 +47,55 @@ class LFUCache {
   struct Entry {
     Value val;
     mutable std::atomic<size_t> hits{0};
+    bool valid = true;
 
-    Entry() = default;
     Entry(Value v) : val(std::move(v)), hits(0) {}
-    Entry(const Entry& o) : val(o.val), hits(o.hits.load()) {}
-    Entry(Entry&& o) noexcept : val(std::move(o.val)), hits(o.hits.load()) {}
   };
   std::atomic<uint64_t> hits{0}, misses{0};
   const std::unordered_set<std::string, StringViewHash, std::equal_to<>> allowed_keys;
-
-protected:
   std::unordered_map<std::string, Entry, StringViewHash, std::equal_to<>> cache_data;
+  std::unordered_map<std::string, uint64_t, StringViewHash, std::equal_to<>> generations;
   const size_t capacity;
   std::atomic<bool> enabled{true};
   mutable std::shared_mutex m;
 
   void mark_miss() {
     misses++;
-    if (perfcounter)
+    if (perfcounter) {
       perfcounter->inc(l_mgr_cache_miss);
+    }
   }
 
   void mark_hit() {
     hits++;
-    if (perfcounter)
+    if (perfcounter) {
       perfcounter->inc(l_mgr_cache_hit);
+    }
   }
 
 public:
   explicit LFUCache(std::unordered_set<std::string> keys,
                     size_t cap = UINT16_MAX,
                     bool ena = true)
-      : allowed_keys(keys.begin(), keys.end()), capacity{cap}, enabled{ena} {}
-  virtual ~LFUCache() = default;
+      : allowed_keys(keys.begin(), keys.end()), capacity{cap}, enabled{ena} {
+    for (const auto& key : allowed_keys) {
+      generations.emplace(key, 0);
+    }
+  }
 
-  void set_enabled(bool e) {
+  uint64_t generation(std::string_view key) const {
+    std::shared_lock l(m);
+    auto it = generations.find(key);
+    return it == generations.end() ? 0 : it->second;
+  }
+
+  // Return retired owners so the caller controls their destruction context.
+  std::vector<Value> set_enabled(bool e) {
     enabled.store(e);
     if (!e) {
-      clear();
+      return clear();
     }
+    return {};
   }
 
   bool is_enabled() const noexcept {
@@ -89,15 +104,12 @@ public:
 
   size_t size() const {
     std::shared_lock l(m);
-    return cache_data.size();
+    return std::count_if(cache_data.begin(), cache_data.end(),
+                         [](const auto& entry) { return entry.second.valid; });
   }
 
   bool is_cacheable(std::string_view key) const noexcept {
     return allowed_keys.find(key) != allowed_keys.end();
-  }
-
-  bool can_read_cache(std::string_view key) const noexcept {
-    return is_enabled() && is_cacheable(key) && exists(key);
   }
 
   bool can_write_cache(std::string_view key) const noexcept {
@@ -110,30 +122,63 @@ public:
     std::optional<Value> evicted;  // set if an entry was evicted to make room
   };
 
-  bool try_get(std::string_view k, Value* out, bool count_hit = true) noexcept;
-  InsertRes insert(std::string_view key, Value value);
-
-  bool erase(std::string_view key) {
+  // Cloning a live value and extracting a stale owner are both protected by
+  // the lock. Retired owners are destroyed after that lock has been released.
+  template <typename Clone>
+  std::optional<Value> lookup(std::string_view key, Clone&& clone, bool count_hit = true) {
+    [[maybe_unused]] Value retired{};
     std::unique_lock l(m);
     auto it = cache_data.find(key);
-    if (it == cache_data.end()) return false;
-    cache_data.erase(it);
-    return true;
+    if (!is_enabled() || it == cache_data.end()) {
+      if (count_hit) {
+        mark_miss();
+      }
+      return std::nullopt;
+    }
+    if (!it->second.valid) {
+      retired = std::move(it->second.val);
+      cache_data.erase(it);
+      if (count_hit) {
+        mark_miss();
+      }
+      return std::nullopt;
+    }
+    if (count_hit) {
+      it->second.hits.fetch_add(1, std::memory_order_relaxed);
+      mark_hit();
+    }
+    return std::forward<Clone>(clone)(std::as_const(it->second.val));
   }
 
+  bool try_get(std::string_view k, Value* out, bool count_hit = true) noexcept
+    requires std::copyable<Value>;
+  InsertRes insert(std::string_view key, Value value,
+                   std::optional<uint64_t> generation = std::nullopt);
+  bool erase(std::string_view key);
   bool extract(std::string_view k, Value* out) noexcept;
-  void drain(std::vector<Value>& out) noexcept;
+  void drain(std::vector<Value>& out);
+  std::vector<Value> clear();
 
-  virtual void clear() {
+  // Invalidation never destroys a value and is safe without its runtime lock.
+  // A key retains at most one stale owner until lookup, replacement or clear.
+  bool invalidate(std::string_view key) noexcept {
     std::unique_lock l(m);
-    cache_data.clear();
-    hits.store(0);
-    misses.store(0);
+    auto generation = generations.find(key);
+    if (generation != generations.end()) {
+      ++generation->second;
+    }
+    auto it = cache_data.find(key);
+    if (it == cache_data.end() || !it->second.valid) {
+      return false;
+    }
+    it->second.valid = false;
+    return true;
   }
 
   bool exists(std::string_view key) const noexcept {
     std::shared_lock l(m);
-    return cache_data.find(key) != cache_data.end();
+    auto it = cache_data.find(key);
+    return it != cache_data.end() && it->second.valid;
   }
 
   uint64_t get_hits() const noexcept {
@@ -144,52 +189,41 @@ public:
     return misses.load();
   }
 
-  Value get(std::string_view k);
+  Value get(std::string_view k) requires std::copy_constructible<Value>;
 };
 
+// Insertion consumes an owner. Lookup clones a live owner under the cache lock.
+// Notification paths only mark entries stale; Python requests reclaim them.
+class MgrMapCache : public md_config_obs_t {
+  LFUCache<PyObjectRef> cache;
 
-// ---------- MgrMapCache generic ----------
-template <class Value>
-class MgrMapCache : public LFUCache<Value>,
-                   public md_config_obs_t {
-  using CacheImp = LFUCache<Value>;
 public:
-  explicit MgrMapCache(uint16_t sz = UINT16_MAX);
-  ~MgrMapCache();
-  bool try_get(std::string_view k, Value* out, bool count_hit = true) noexcept {
-    return CacheImp::try_get(k, out, count_hit);
-  }
-  void insert(std::string_view k, Value v) { CacheImp::insert(k, v); }
-  bool extract(std::string_view k, Value* out) noexcept { return CacheImp::extract(k, out); }
-  void erase(std::string_view k) noexcept { Value v{}; (void)CacheImp::extract(k, &v); }
-  void clear() noexcept { CacheImp::clear(); }
-private:
-  std::vector<std::string> get_tracked_keys() const noexcept override { return {"mgr_map_cache_enabled"}; }
-  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
-};
-
-// ------- Full template specialization for PyObject*. with GIL rules ----------
-template <>
-class MgrMapCache<PyObject*> : public LFUCache<PyObject*>,
-                               public md_config_obs_t {
-  using CacheImp = LFUCache<PyObject*>;
-public:
-  MgrMapCache(uint16_t size = UINT16_MAX);
-  ~MgrMapCache();
-  bool try_get(std::string_view k, PyObject** out, bool count_hit = true) noexcept = delete;
-  PyObject* get(std::string_view key);
+  explicit MgrMapCache(uint16_t size = UINT16_MAX);
+  ~MgrMapCache() override;
+  // Lookup, insertion and physical erasure require the GIL. Invalidation does
+  // not. Clear, disable and destruction may acquire the GIL: callers must not
+  // hold manager locks. Before Python 3.13, a subinterpreter caller must use
+  // clear_with_gil() before destruction. Owners die outside the cache lock.
+  [[nodiscard]] PyObjectRef get(std::string_view key);
+  void insert(std::string_view key, PyObjectRef value);
   void erase(std::string_view key) noexcept;
-  void clear() noexcept override;
-  void insert(std::string_view key, PyObject* value);
-  void invalidate(std::string_view key) {
-    erase(key);
-  }
-private:
-  // erased objects waiting for a caller that holds the GIL to drop them
-  std::mutex release_lock;
-  std::vector<PyObject*> to_release;
-  void release_pending();
+  void invalidate(std::string_view key) noexcept { cache.invalidate(key); }
+  uint64_t generation(std::string_view key) const { return cache.generation(key); }
+  bool insert_if_generation(std::string_view key, PyObjectRef value, uint64_t generation);
+  void clear();
+  // Requires the GIL and preserves the caller's interpreter.
+  void clear_with_gil();
+  void set_enabled(bool enabled);
+  bool is_enabled() const noexcept { return cache.is_enabled(); }
+  bool is_cacheable(std::string_view key) const noexcept { return cache.is_cacheable(key); }
+  bool exists(std::string_view key) const noexcept { return cache.exists(key); }
+  size_t size() const { return cache.size(); }
+  uint64_t get_hits() const noexcept { return cache.get_hits(); }
+  uint64_t get_misses() const noexcept { return cache.get_misses(); }
 
-  std::vector<std::string> get_tracked_keys() const noexcept override { return {"mgr_map_cache_enabled"}; }
-  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
+private:
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {"mgr_map_cache_enabled"};
+  }
+  void handle_conf_change(const ConfigProxy&, const std::set<std::string>&) override;
 };

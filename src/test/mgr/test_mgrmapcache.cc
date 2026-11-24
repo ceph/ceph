@@ -14,16 +14,19 @@
  */
 
 #include <atomic>
+#include <chrono>
+#include <future>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
-#include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/perf_counters.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
 
 #include "mgr/mgr_perf_counters.h"
 #include "mgr/MgrMapCache.h"
+#include "include/scope_guard.h"
 
 #include "gtest/gtest.h"
 
@@ -182,6 +185,13 @@ TEST(LFUCache, InsertResRejectedForUnknownKey) {
   ASSERT_EQ(c.size(), 0);
 }
 
+TEST(LFUCache, ZeroCapacityRejectsInsertion) {
+  LFUCache<int> cache{{"foo"}, 0};
+  EXPECT_FALSE(cache.insert("foo", 1).inserted);
+  EXPECT_EQ(cache.size(), 0);
+  EXPECT_FALSE(cache.exists("foo"));
+}
+
 TEST(LFUCache, InsertResRejectedAfterDisableDuringWait) {
   // Simulate the post-lock enabled re-check: disable the cache, then call
   // insert directly on LFUCache (bypassing the outer can_write_cache guard)
@@ -217,208 +227,489 @@ TEST(LFUCache, ConcurrentReads) {
     });
   }
 
-  for (auto& t : threads) t.join();
+  for (auto& t : threads) {
+    t.join();
+  }
 
   ASSERT_EQ(success_count, 10000);
   ASSERT_EQ(c.get_hits(), 10000);
 }
 
-// MgrMapCache<PyObject*> refcount tests. Each test holds the GIL.
-struct PyCache : public ::testing::Test {
+TEST(LFUCache, MoveOnlyValues) {
+  LFUCache<std::unique_ptr<int>> cache{{"first", "second"}, 1};
+  cache.insert("first", std::make_unique<int>(1));
+  auto replaced = cache.insert("first", std::make_unique<int>(2));
+  ASSERT_TRUE(replaced.replaced.has_value());
+  EXPECT_EQ(**replaced.replaced, 1);
+  auto evicted = cache.insert("second", std::make_unique<int>(3));
+  ASSERT_TRUE(evicted.evicted.has_value());
+  EXPECT_EQ(**evicted.evicted, 2);
+  auto copied = cache.lookup("second", [](const auto& value) {
+    return std::make_unique<int>(*value);
+  });
+  ASSERT_TRUE(copied);
+  EXPECT_EQ(**copied, 3);
+
+  std::unique_ptr<int> extracted;
+  EXPECT_TRUE(cache.extract("second", &extracted));
+  EXPECT_EQ(*extracted, 3);
+  EXPECT_EQ(cache.size(), 0);
+  cache.insert("first", std::make_unique<int>(4));
+  std::vector<std::unique_ptr<int>> drained;
+  drained.push_back(std::make_unique<int>(5));
+  cache.drain(drained);
+  ASSERT_EQ(drained.size(), 2);
+  EXPECT_EQ(*drained[0], 5);
+  EXPECT_EQ(*drained[1], 4);
+  EXPECT_EQ(cache.size(), 0);
+}
+
+TEST(LFUCache, EvictionPrefersStaleEntries) {
+  LFUCache<int> cache{{"first", "second", "third"}, 2};
+  cache.insert("first", 1);
+  cache.insert("second", 2);
+  for (int i = 0; i < 10; ++i) {
+    cache.get("first");
+  }
+  EXPECT_TRUE(cache.invalidate("first"));
+  EXPECT_FALSE(cache.invalidate("first"));
+  EXPECT_FALSE(cache.exists("first"));
+  EXPECT_EQ(cache.size(), 1);
+  auto result = cache.insert("third", 3);
+  ASSERT_TRUE(result.evicted);
+  EXPECT_EQ(*result.evicted, 1);
+  EXPECT_EQ(cache.get("second"), 2);
+  EXPECT_EQ(cache.get("third"), 3);
+}
+
+// Ownership contracts are checked by the type system, including at callers.
+static_assert(!std::is_copy_constructible_v<PyObjectRef>);
+static_assert(!std::is_constructible_v<PyObjectRef, PyObject*>);
+static_assert(!std::is_convertible_v<PyObjectRef, PyObject*>);
+static_assert(!std::is_invocable_v<decltype(&MgrMapCache::insert),
+                                 MgrMapCache&, std::string_view, PyObject*>);
+static_assert(!std::is_invocable_v<decltype(&MgrMapCache::insert),
+                                 MgrMapCache&, std::string_view, PyObjectRef&>);
+static_assert(std::is_invocable_v<decltype(&MgrMapCache::insert),
+                                MgrMapCache&, std::string_view, PyObjectRef>);
+template <typename T>
+concept CanInspectTemporary = requires(T owner) { std::move(owner).get(); };
+template <typename T>
+concept CanTransferLvalue = requires(T owner) { owner.into_python(); };
+static_assert(!CanInspectTemporary<PyObjectRef>);
+static_assert(!CanTransferLvalue<PyObjectRef>);
+
+class PyMapCache : public ::testing::Test {
+protected:
   static void SetUpTestSuite() {
-    if (!Py_IsInitialized()) {
-      Py_Initialize();
-    }
+    g_ceph_context = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+    Py_Initialize();
   }
-  void SetUp() override {
-    gstate = PyGILState_Ensure();
+  static void TearDownTestSuite() {
+    Py_Finalize();
+    g_ceph_context->put();
+    g_ceph_context = nullptr;
   }
-  void TearDown() override {
-    PyGILState_Release(gstate);
+  PyObjectRef make_dict() {
+    return PyObjectRef::adopt_new_reference(PyDict_New());
   }
-private:
-  PyGILState_STATE gstate{};
 };
 
-TEST_F(PyCache, InsertAndGet) {
-  PyObject* o = PyList_New(0);
+TEST_F(PyMapCache, InsertConsumesOwnerAndGetReturnsIndependentOwner) {
+  MgrMapCache cache;
+  auto value = make_dict();
+  PyObject* identity = value.get();
+  cache.insert("pg_dump", std::move(value));
+  EXPECT_FALSE(value);
+  auto result = cache.get("pg_dump");
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result.get(), identity);
+  EXPECT_EQ(Py_REFCNT(result.get()), 2);
+  cache.clear();
+  EXPECT_EQ(Py_REFCNT(result.get()), 1);
+}
+
+TEST_F(PyMapCache, ReplacementAndEvictionReleaseReferences) {
+  MgrMapCache cache(1);
+  auto first = make_dict();
+  auto second = make_dict();
+  auto third = make_dict();
+  cache.insert("osd_map", first.clone());
+  cache.insert("osd_map", second.clone());
+  EXPECT_EQ(Py_REFCNT(first.get()), 1);
+  cache.insert("pg_dump", third.clone());
+  EXPECT_EQ(Py_REFCNT(second.get()), 1);
+  cache.clear();
+  EXPECT_EQ(Py_REFCNT(third.get()), 1);
+}
+
+TEST_F(PyMapCache, RepeatedInvalidationRetainsOnlyOneStaleOwnerPerKey) {
+  MgrMapCache cache;
+  auto value = make_dict();
+  cache.insert("pg_dump", value.clone());
+  auto* state = PyEval_SaveThread();
+  for (int i = 0; i < 10000; ++i) {
+    cache.invalidate("pg_dump");
+  }
+  PyEval_RestoreThread(state);
+  EXPECT_EQ(cache.size(), 0);
+  EXPECT_FALSE(cache.exists("pg_dump"));
+  EXPECT_EQ(Py_REFCNT(value.get()), 2);
+  // A normal Python lookup retires the stale entry outside the cache lock.
+  EXPECT_FALSE(cache.get("pg_dump"));
+  EXPECT_EQ(Py_REFCNT(value.get()), 1);
+}
+
+TEST_F(PyMapCache, RepeatedInsertInvalidateAndLookupDoesNotRetainOldMaps) {
+  MgrMapCache cache;
+  for (int i = 0; i < 128; ++i) {
+    auto value = make_dict();
+    cache.insert("pg_dump", value.clone());
+    auto* state = PyEval_SaveThread();
+    std::thread notifier([&] { cache.invalidate("pg_dump"); });
+    notifier.join();
+    PyEval_RestoreThread(state);
+    EXPECT_FALSE(cache.get("pg_dump"));
+    EXPECT_EQ(Py_REFCNT(value.get()), 1);
+  }
+}
+
+TEST_F(PyMapCache, ReplacementReclaimsStaleOwnerWithoutLookup) {
+  MgrMapCache cache;
+  auto old_value = make_dict();
+  auto new_value = make_dict();
+  cache.insert("pg_dump", old_value.clone());
+  auto* state = PyEval_SaveThread();
+  cache.invalidate("pg_dump");
+  PyEval_RestoreThread(state);
+  cache.insert("pg_dump", new_value.clone());
+  EXPECT_EQ(Py_REFCNT(old_value.get()), 1);
+  EXPECT_EQ(Py_REFCNT(new_value.get()), 2);
+  EXPECT_TRUE(cache.exists("pg_dump"));
+  EXPECT_EQ(cache.size(), 1);
+}
+
+TEST_F(PyMapCache, ClearReleasesLiveAndStaleOwnersWithoutCallerGil) {
+  MgrMapCache cache;
+  auto cached = make_dict();
+  auto invalidated = make_dict();
+  cache.insert("osd_map", cached.clone());
+  cache.insert("pg_dump", invalidated.clone());
+  auto* state = PyEval_SaveThread();
+  cache.invalidate("pg_dump");
+  cache.clear();
+  PyEval_RestoreThread(state);
+  EXPECT_EQ(Py_REFCNT(cached.get()), 1);
+  EXPECT_EQ(Py_REFCNT(invalidated.get()), 1);
+}
+
+TEST_F(PyMapCache, DisableReleasesReferencesAndRejectedWritesConsumeOwners) {
+  MgrMapCache cache;
+  auto value = make_dict();
+  cache.insert("pg_dump", value.clone());
+  auto* state = PyEval_SaveThread();
+  cache.set_enabled(false);
+  PyEval_RestoreThread(state);
+  EXPECT_EQ(Py_REFCNT(value.get()), 1);
+  auto rejected = value.clone();
+  cache.insert("pg_dump", std::move(rejected));
+  EXPECT_FALSE(rejected);
+  EXPECT_EQ(Py_REFCNT(value.get()), 1);
+  EXPECT_EQ(cache.size(), 0);
+  cache.set_enabled(true);
+  cache.insert("not_cacheable", value.clone());
+  EXPECT_EQ(Py_REFCNT(value.get()), 1);
+  EXPECT_EQ(cache.size(), 0);
+}
+
+TEST_F(PyMapCache, SameObjectCanHaveMultipleExplicitOwners) {
+  MgrMapCache cache;
+  auto value = make_dict();
+  cache.insert("pg_dump", value.clone());
+  cache.insert("osd_map", value.clone());
+  EXPECT_EQ(Py_REFCNT(value.get()), 3);
+  cache.insert("pg_dump", value.clone());
+  EXPECT_EQ(Py_REFCNT(value.get()), 3);
+  auto* state = PyEval_SaveThread();
+  cache.invalidate("pg_dump");
+  cache.invalidate("osd_map");
+  PyEval_RestoreThread(state);
+  cache.clear();
+  EXPECT_EQ(Py_REFCNT(value.get()), 1);
+}
+
+TEST_F(PyMapCache, ReturnedOwnerOutlivesCache) {
+  PyObjectRef result;
   {
-    MgrMapCache<PyObject*> c;
-    c.insert("pg_dump", o);
-    ASSERT_EQ(Py_REFCNT(o), 2);
-    PyObject* got = c.get("pg_dump");
-    ASSERT_EQ(got, o);
-    ASSERT_EQ(Py_REFCNT(o), 3);
-    Py_DECREF(got);
+    MgrMapCache cache;
+    cache.insert("pg_dump", make_dict());
+    result = cache.get("pg_dump");
+    ASSERT_TRUE(result);
   }
-  // destructor drops the cache's ref
-  ASSERT_EQ(Py_REFCNT(o), 1);
-  Py_DECREF(o);
+  EXPECT_TRUE(PyDict_Check(result.get()));
+  EXPECT_EQ(Py_REFCNT(result.get()), 1);
 }
 
-TEST_F(PyCache, ReplaceDropsOld) {
-  PyObject* a = PyList_New(0);
-  PyObject* b = PyList_New(0);
-  MgrMapCache<PyObject*> c;
-  c.insert("pg_dump", a);
-  c.insert("pg_dump", b);
-  ASSERT_EQ(Py_REFCNT(a), 1);
-  ASSERT_EQ(Py_REFCNT(b), 2);
-  c.clear();
-  ASSERT_EQ(Py_REFCNT(b), 1);
-  Py_DECREF(a);
-  Py_DECREF(b);
+TEST_F(PyMapCache, DestructionWithoutGilReleasesAllReferences) {
+  auto cached = make_dict();
+  auto invalidated = make_dict();
+  auto cache = std::make_unique<MgrMapCache>();
+  cache->insert("osd_map", cached.clone());
+  cache->insert("pg_dump", invalidated.clone());
+  auto* state = PyEval_SaveThread();
+  cache->invalidate("pg_dump");
+  cache.reset();
+  PyEval_RestoreThread(state);
+  EXPECT_EQ(Py_REFCNT(cached.get()), 1);
+  EXPECT_EQ(Py_REFCNT(invalidated.get()), 1);
 }
 
-TEST_F(PyCache, EvictDropsOld) {
-  PyObject* a = PyList_New(0);
-  PyObject* b = PyList_New(0);
-  MgrMapCache<PyObject*> c{1};
-  c.insert("pg_dump", a);
-  c.insert("osd_map", b);
-  ASSERT_EQ(c.size(), 1);
-  ASSERT_EQ(Py_REFCNT(a), 1);
-  ASSERT_EQ(Py_REFCNT(b), 2);
-  c.clear();
-  Py_DECREF(a);
-  Py_DECREF(b);
-}
-
-// erase() runs without the GIL in the mgr, so it only queues the object.
-// The next get() or insert() must drop the cache's ref.
-TEST_F(PyCache, EraseReleasedOnGet) {
-  PyObject* o = PyList_New(0);
-  MgrMapCache<PyObject*> c;
-  c.insert("pg_dump", o);
-  ASSERT_EQ(Py_REFCNT(o), 2);
-
-  PyThreadState* ts = PyEval_SaveThread();
-  c.erase("pg_dump");
-  PyEval_RestoreThread(ts);
-  ASSERT_EQ(c.size(), 0);
-  ASSERT_EQ(Py_REFCNT(o), 2);
-
-  ASSERT_EQ(c.get("pg_dump"), nullptr);
-  ASSERT_EQ(Py_REFCNT(o), 1);
-  Py_DECREF(o);
-}
-
-TEST_F(PyCache, EraseReleasedOnInsert) {
-  PyObject* a = PyList_New(0);
-  PyObject* b = PyList_New(0);
-  MgrMapCache<PyObject*> c;
-  c.insert("pg_dump", a);
-
-  PyThreadState* ts = PyEval_SaveThread();
-  c.erase("pg_dump");
-  PyEval_RestoreThread(ts);
-  ASSERT_EQ(Py_REFCNT(a), 2);
-
-  c.insert("osd_map", b);
-  ASSERT_EQ(Py_REFCNT(a), 1);
-  ASSERT_EQ(Py_REFCNT(b), 2);
-  c.clear();
-  Py_DECREF(a);
-  Py_DECREF(b);
-}
-
-TEST_F(PyCache, ClearDropsCachedAndQueued) {
-  PyObject* a = PyList_New(0);
-  PyObject* b = PyList_New(0);
-  MgrMapCache<PyObject*> c;
-  c.insert("pg_dump", a);
-  c.insert("osd_map", b);
-
-  PyThreadState* ts = PyEval_SaveThread();
-  c.erase("pg_dump");
-  PyEval_RestoreThread(ts);
-
-  c.clear();
-  ASSERT_EQ(Py_REFCNT(a), 1);
-  ASSERT_EQ(Py_REFCNT(b), 1);
-  // nothing left to release twice
-  c.clear();
-  ASSERT_EQ(c.get("pg_dump"), nullptr);
-  ASSERT_EQ(Py_REFCNT(a), 1);
-  Py_DECREF(a);
-  Py_DECREF(b);
-}
-
-// Reproducer for https://tracker.ceph.com/issues/81794: prometheus builds a
-// new pg_dump each scrape, and every new PG map invalidates it.
-TEST_F(PyCache, InsertGetEraseLoop) {
-  constexpr int n = 1000;
-  MgrMapCache<PyObject*> c;
-  std::vector<PyObject*> objs;
-  for (int i = 0; i < n; ++i) {
-    PyObject* o = PyList_New(0);
-    objs.push_back(o);
-    c.insert("pg_dump", o);
-    PyObject* got = c.get("pg_dump");
-    ASSERT_EQ(got, o);
-    Py_DECREF(got);
-
-    PyThreadState* ts = PyEval_SaveThread();
-    c.erase("pg_dump");
-    PyEval_RestoreThread(ts);
-  }
-  // drain the last erase
-  ASSERT_EQ(c.get("pg_dump"), nullptr);
-  for (auto* o : objs) {
-    ASSERT_EQ(Py_REFCNT(o), 1);
-    Py_DECREF(o);
+TEST_F(PyMapCache, InvalidationRejectsAnInFlightSnapshot) {
+  for (bool existing_entry : {false, true}) {
+    MgrMapCache cache;
+    if (existing_entry) {
+      cache.insert("osd_map", make_dict());
+    }
+    const auto generation = cache.generation("osd_map");
+    auto snapshot = make_dict();
+    auto* state = PyEval_SaveThread();
+    std::thread notifier([&] { cache.invalidate("osd_map"); });
+    notifier.join();
+    PyEval_RestoreThread(state);
+    EXPECT_FALSE(cache.insert_if_generation("osd_map", snapshot.clone(), generation));
+    EXPECT_EQ(Py_REFCNT(snapshot.get()), 1);
+    EXPECT_FALSE(cache.get("osd_map"));
+    auto current = make_dict();
+    EXPECT_TRUE(cache.insert_if_generation("osd_map", current.clone(),
+                                          cache.generation("osd_map")));
+    auto result = cache.get("osd_map");
+    EXPECT_EQ(result.get(), current.get());
   }
 }
 
-// insert() and get() take the GIL, erase() runs without it, like the
-// notify paths. Every ref the cache took must be dropped exactly once.
-TEST_F(PyCache, Concurrent) {
-  constexpr int iters = 2000;
-  PyObject* a = PyList_New(0);
-  PyObject* b = PyList_New(0);
-  MgrMapCache<PyObject*> c;
+TEST_F(PyMapCache, ClearAndDisableRejectInFlightSnapshots) {
+  for (int operation = 0; operation < 3; ++operation) {
+    MgrMapCache cache;
+    const auto generation = cache.generation("osd_map");
+    if (operation == 0) {
+      cache.clear();
+    } else if (operation == 1) {
+      cache.set_enabled(false);
+      cache.set_enabled(true);
+    } else {
+      cache.erase("osd_map");
+    }
+    EXPECT_FALSE(cache.insert_if_generation("osd_map", make_dict(), generation));
+  }
+}
 
-  PyThreadState* ts = PyEval_SaveThread();
+TEST_F(PyMapCache, FinalizersRunOutsideCacheAndCallerLocks) {
+  struct State {
+    MgrMapCache* cache;
+    std::mutex caller_lock;
+    bool finalized = false;
+    size_t expected_size = 0;
+  };
+  for (int operation = 0; operation < 5; ++operation) {
+    MgrMapCache cache(1);
+    State state{&cache};
+    state.expected_size = operation >= 3 ? 1 : 0;
+    auto value = PyObjectRef::adopt_new_reference(
+      PyCapsule_New(&state, "cache_finalizer", [](PyObject* capsule) {
+        auto* state = static_cast<State*>(PyCapsule_GetPointer(capsule, "cache_finalizer"));
+        EXPECT_NE(PyThreadState_Get(), nullptr);
+        std::lock_guard l(state->caller_lock);
+        EXPECT_EQ(state->cache->size(), state->expected_size);
+        state->cache->clear();
+        state->finalized = true;
+      }));
+    ASSERT_TRUE(value);
+    cache.insert("pg_dump", std::move(value));
+    if (operation == 0) {
+      auto* ts = PyEval_SaveThread();
+      {
+        std::lock_guard l(state.caller_lock);
+        cache.invalidate("pg_dump");
+      }
+      PyEval_RestoreThread(ts);
+      EXPECT_FALSE(state.finalized);
+      EXPECT_FALSE(cache.get("pg_dump"));
+    } else if (operation == 1) {
+      cache.erase("pg_dump");
+    } else if (operation == 2) {
+      cache.clear();
+    } else if (operation == 3) {
+      cache.insert("pg_dump", make_dict());
+    } else {
+      cache.insert("osd_map", make_dict());
+    }
+    EXPECT_TRUE(state.finalized);
+  }
+}
+
+TEST_F(PyMapCache, ConcurrentCacheTurnoverReleasesAllReferences) {
+  MgrMapCache cache(1);
+  auto first = make_dict();
+  auto second = make_dict();
+  constexpr int iterations = 2000;
+  auto* state = PyEval_SaveThread();
   std::vector<std::thread> threads;
-  for (int t = 0; t < 2; ++t) {
-    threads.emplace_back([&c, a, b, t] {
-      for (int i = 0; i < iters; ++i) {
-        PyGILState_STATE st = PyGILState_Ensure();
-        c.insert(i % 2 ? "pg_dump" : "osd_map", t ? a : b);
-        PyGILState_Release(st);
-      }
-    });
-    threads.emplace_back([&c] {
-      for (int i = 0; i < iters; ++i) {
-        PyGILState_STATE st = PyGILState_Ensure();
-        PyObject* o = c.get(i % 2 ? "pg_dump" : "osd_map");
-        Py_XDECREF(o);
-        PyGILState_Release(st);
-      }
-    });
-    threads.emplace_back([&c] {
-      for (int i = 0; i < iters; ++i) {
-        c.erase(i % 2 ? "osd_map" : "pg_dump");
+  for (const auto* value : {&first, &second}) {
+    threads.emplace_back([&, value] {
+      for (int i = 0; i < iterations; ++i) {
+        auto gil = PyGILState_Ensure();
+        {
+          cache.insert(i % 2 ? "pg_dump" : "osd_map", value->clone());
+          auto result = cache.get(i % 2 ? "pg_dump" : "osd_map");
+        }
+        PyGILState_Release(gil);
       }
     });
   }
-  for (auto& th : threads) th.join();
-  PyEval_RestoreThread(ts);
-
-  c.clear();
-  ASSERT_EQ(Py_REFCNT(a), 1);
-  ASSERT_EQ(Py_REFCNT(b), 1);
-  Py_DECREF(a);
-  Py_DECREF(b);
+  threads.emplace_back([&] {
+    for (int i = 0; i < iterations; ++i) {
+      cache.invalidate("pg_dump");
+      cache.invalidate("osd_map");
+    }
+  });
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  // clear() acquires the GIL after extracting the owners from the cache.
+  cache.clear();
+  PyEval_RestoreThread(state);
+  EXPECT_EQ(Py_REFCNT(first.get()), 1);
+  EXPECT_EQ(Py_REFCNT(second.get()), 1);
 }
 
-int main(int argc, char **argv)
-{
-  auto args = argv_to_vec(argc, argv);
-  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY,
-                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+TEST_F(PyMapCache, AdoptingAndMovingDoNotIncrementPythonRefcount) {
+  PyObject* value = PyDict_New();
+  auto first = PyObjectRef::adopt_new_reference(value);
+  EXPECT_EQ(Py_REFCNT(value), 1);
+  auto second = std::move(first);
+  EXPECT_FALSE(first);
+  EXPECT_EQ(second.get(), value);
+  EXPECT_EQ(Py_REFCNT(value), 1);
+}
+
+TEST_F(PyMapCache, ExplicitCloneCreatesOneIndependentPythonReference) {
+  auto value = make_dict();
+  auto duplicate = value.clone();
+  EXPECT_EQ(duplicate.get(), value.get());
+  EXPECT_EQ(Py_REFCNT(value.get()), 2);
+  duplicate.reset();
+  EXPECT_EQ(Py_REFCNT(value.get()), 1);
+}
+
+TEST_F(PyMapCache, MoveAssignmentReleasesPreviousOwner) {
+  auto original = make_dict();
+  auto replacement = make_dict();
+  auto owner = original.clone();
+  owner = std::move(replacement);
+  EXPECT_FALSE(replacement);
+  EXPECT_EQ(Py_REFCNT(original.get()), 1);
+  EXPECT_EQ(Py_REFCNT(owner.get()), 1);
+}
+
+TEST_F(PyMapCache, TransferToPythonConsumesOwnerWithoutChangingRefcount) {
+  auto value = make_dict();
+  PyObject* result = std::move(value).into_python();
+  EXPECT_FALSE(value);
+  EXPECT_EQ(Py_REFCNT(result), 1);
+  Py_DECREF(result);
+}
+
+TEST_F(PyMapCache, NullReferencesPreservePythonErrors) {
+  PyErr_SetString(PyExc_RuntimeError, "test error");
+  auto value = PyObjectRef::adopt_new_reference(nullptr);
+  EXPECT_FALSE(value);
+  auto duplicate = value.clone();
+  EXPECT_FALSE(duplicate);
+  EXPECT_EQ(std::move(value).into_python(), nullptr);
+  EXPECT_EQ(PyErr_Occurred(), PyExc_RuntimeError);
+  PyErr_Clear();
+}
+
+TEST_F(PyMapCache, MovingOwnerWithoutGilDoesNotTouchRefcounts) {
+  auto source = make_dict();
+  auto* identity = source.get();
+  PyObjectRef destination;
+  auto* state = PyEval_SaveThread();
+  destination = std::move(source);
+  PyEval_RestoreThread(state);
+  EXPECT_FALSE(source);
+  EXPECT_EQ(destination.get(), identity);
+  EXPECT_EQ(Py_REFCNT(identity), 1);
+}
+
+TEST_F(PyMapCache, CleanupPreservesAnAttachedSubinterpreter) {
+  struct State {
+    PyInterpreterState* finalized_in = nullptr;
+  } state;
+  auto* main = PyThreadState_Get();
+  auto* sub = Py_NewInterpreter();
+  ASSERT_NE(sub, nullptr);
+  auto* origin = PyThreadState_GetInterpreter(sub);
+  const auto end_subinterpreter = make_scope_guard([&] {
+    PyThreadState_Swap(sub);
+    Py_EndInterpreter(sub);
+    PyThreadState_Swap(main);
+  });
+#if PY_VERSION_HEX >= 0x030d0000
+  constexpr int operations = 3;
+#else
+  constexpr int operations = 1;
+#endif
+  for (int operation = 0; operation < operations; ++operation) {
+    state.finalized_in = nullptr;
+    auto cache = std::make_unique<MgrMapCache>();
+    auto value = PyObjectRef::adopt_new_reference(
+      PyCapsule_New(&state, "interpreter_finalizer", [](PyObject* capsule) {
+        auto* state = static_cast<State*>(
+          PyCapsule_GetPointer(capsule, "interpreter_finalizer"));
+        state->finalized_in = PyThreadState_GetInterpreter(PyThreadState_Get());
+      }));
+    ASSERT_TRUE(value);
+    cache->insert("pg_dump", std::move(value));
+#if PY_VERSION_HEX >= 0x030d0000
+    if (operation == 0) {
+      cache->clear();
+    } else if (operation == 1) {
+      cache->set_enabled(false);
+    } else {
+      cache.reset();
+    }
+#else
+    cache->clear_with_gil();
+#endif
+    EXPECT_EQ(state.finalized_in, origin);
+    EXPECT_EQ(PyThreadState_Get(), sub);
+  }
+}
+
+TEST_F(PyMapCache, CleanupWithoutGilWhileAnotherThreadHoldsGil) {
+  for (int operation = 0; operation < 3; ++operation) {
+    auto value = make_dict();
+    auto cache = std::make_unique<MgrMapCache>();
+    cache->insert("osd_map", value.clone());
+    std::promise<void> holding_gil;
+    auto* state = PyEval_SaveThread();
+    std::thread holder([&] {
+      auto gil = PyGILState_Ensure();
+      holding_gil.set_value();
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      PyGILState_Release(gil);
+    });
+    holding_gil.get_future().wait();
+    if (operation == 0) {
+      cache->clear();
+    } else if (operation == 1) {
+      cache->set_enabled(false);
+    } else {
+      cache.reset();
+    }
+    holder.join();
+    PyEval_RestoreThread(state);
+    EXPECT_EQ(Py_REFCNT(value.get()), 1);
+  }
 }
