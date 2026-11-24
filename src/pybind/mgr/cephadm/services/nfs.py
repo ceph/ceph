@@ -415,6 +415,10 @@ class NFSService(CephService):
                 val = getattr(nfs_spec, field, None)
                 if val:
                     deps.append(f'{field}: {hashlib.sha256(val.encode()).hexdigest()[:8]}')
+        if nfs_spec.grpc_port is not None:
+            deps.append(f'grpc_port: {nfs_spec.grpc_port}')
+        if nfs_spec.grpc_addr is not None:
+            deps.append(f'grpc_addr: {nfs_spec.grpc_addr}')
 
         return sorted(deps)
 
@@ -608,6 +612,15 @@ class NFSService(CephService):
         elif nfs_spec.enable_rdma:
             rdma_port = nfs_spec.rdma_port
 
+        # ports layout: [nfs, monitoring, cluster_qos, (rdma), grpc]
+        grpc_port_index = 4 if nfs_spec.enable_rdma else 3
+        grpc_port = None
+        if daemon_spec.ports and len(daemon_spec.ports) > grpc_port_index:
+            grpc_port = daemon_spec.ports[grpc_port_index]
+        elif nfs_spec.grpc_port:
+            grpc_port = nfs_spec.grpc_port
+        grpc_addr = nfs_spec.grpc_addr
+
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
                 "user": rados_user,
@@ -649,6 +662,8 @@ class NFSService(CephService):
                 ),
                 "mem_stats_disable": nfs_spec.mem_stats_disable,
                 "clients_per_pool": nfs_spec.clients_per_pool,
+                "grpc_port": grpc_port,
+                "grpc_addr": grpc_addr,
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()

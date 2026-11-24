@@ -135,6 +135,12 @@ GRPC {
         GRPC_Server_Cert = "/etc/ganesha/certs/server.crt";
         GRPC_Server_Key  = "/etc/ganesha/certs/server.key";
         GRPC_CA_Cert     = "/etc/ganesha/certs/ca.crt";
+{% if grpc_port %}
+        Grpc_Port = {{ grpc_port }};
+{% endif %}
+{% if grpc_addr %}
+        Grpc_Addr = {{ grpc_addr }};
+{% endif %}
 }
 
 %url    {{ url }}

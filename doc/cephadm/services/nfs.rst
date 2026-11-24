@@ -508,6 +508,14 @@ gRPC Parameters
   server to verify client certificates. Required when using ``inline``
   certificate source.
 
+* ``grpc_port`` (integer, default ``50051``): The port the gRPC server
+  listens on. Must be between 1 and 65535.
+
+* ``grpc_addr`` (string): The IPv4 or IPv6 address the gRPC server binds to.
+  If not set, the server binds to all addresses (``0.0.0.0``). The same
+  address is used by every daemon of the service, so it must be assigned to
+  each host that runs one.
+
 .. note::
    When ``grpc_certificate_source`` is set to ``inline``, all five fields
    (``grpc_server_cert``, ``grpc_server_key``, ``grpc_client_cert``,
@@ -554,7 +562,7 @@ Use the certificates with ``grpcurl`` to connect to the NFS gRPC server:
 .. prompt:: bash #
 
    cd /srv/ceph/<fsid>/nfs_grpc-client-certs/cephadm-signed/
-   grpcurl -cacert ca.crt -cert client.crt -key client.key <NFS-Node-IP>:50051 list
+   grpcurl -cacert ca.crt -cert client.crt -key client.key <NFS-Node-IP>:<grpc_port> list
 
 .. note::
    Certificates are deployed to all admin nodes automatically. No manual

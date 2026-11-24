@@ -1453,6 +1453,8 @@ class NFSServiceSpec(ServiceSpec):
                  grpc_client_cert: Optional[str] = None,
                  grpc_client_key: Optional[str] = None,
                  grpc_ca_cert: Optional[str] = None,
+                 grpc_port: Optional[int] = None,
+                 grpc_addr: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1540,6 +1542,8 @@ class NFSServiceSpec(ServiceSpec):
         self.grpc_client_cert = grpc_client_cert
         self.grpc_client_key = grpc_client_key
         self.grpc_ca_cert = grpc_ca_cert
+        self.grpc_port = grpc_port
+        self.grpc_addr = grpc_addr
 
     def get_colocation_port_fields(self) -> List[str]:
         """Return port fields for colocation; include rdma_port when RDMA is enabled."""
@@ -1548,9 +1552,29 @@ class NFSServiceSpec(ServiceSpec):
         return self.COLOCATION_PORT_FIELDS
 
     def get_port_start(self) -> List[int]:
-        ports = [self.port or 2049, self.monitoring_port or 9587, self.cluster_qos_port or 31311]
+        ports = [self.port or 2049, self.monitoring_port or 9587,
+                 self.cluster_qos_port or 31311]
         if self.enable_rdma:
             ports.append(self.rdma_port or 20049)
+        # Appended last so the layout of already deployed daemons stays a prefix.
+        ports.append(self.grpc_port or 50051)
+        return ports
+
+    def _build_colocation_port_list(self, port_dict: Dict[str, int], idx: int) -> List[int]:
+        """Build a complete port list for a colocated daemon.
+
+        Extracts mandatory fields, then appends optional ports. If an optional
+        port is not in port_dict, it is auto-incremented from its base default.
+        Reusable for any future optional port by adding entries to the
+        optional_ports list below.
+        """
+        fields = self.get_colocation_port_fields()
+        ports = [port_dict[field] for field in fields]
+        optional_ports = [
+            ('grpc_port', self.grpc_port or 50051),
+        ]
+        for field, base_default in optional_ports:
+            ports.append(port_dict.get(field, base_default + idx + 1))
         return ports
 
     def get_colocation_ports_list(self) -> List[List[int]]:
@@ -1560,9 +1584,8 @@ class NFSServiceSpec(ServiceSpec):
         """
         if not self.colocation_ports:
             return []
-        fields = self.get_colocation_port_fields()
-        return [[port_dict[field] for field in fields]
-                for port_dict in self.colocation_ports]
+        return [self._build_colocation_port_list(port_dict, idx)
+                for idx, port_dict in enumerate(self.colocation_ports)]
 
     def rados_config_name(self):
         # type: () -> str
@@ -1689,6 +1712,19 @@ class NFSServiceSpec(ServiceSpec):
             if not all(grpc_fields):
                 raise SpecValidationError(
                     f'All of {grpc_field_names} must be set when using inline certificate source'
+                )
+        if self.grpc_port is not None:
+            if not isinstance(self.grpc_port, int) or not (1 <= self.grpc_port <= 65535):
+                raise SpecValidationError(
+                    f"Invalid grpc_port '{self.grpc_port}'. Must be an integer between 1 and 65535"
+                )
+        if self.grpc_addr is not None:
+            try:
+                import ipaddress
+                ipaddress.ip_address(self.grpc_addr)
+            except ValueError:
+                raise SpecValidationError(
+                    f"Invalid grpc_addr '{self.grpc_addr}'. Must be a valid IPv4 or IPv6 address"
                 )
 
         # validate qos dict
