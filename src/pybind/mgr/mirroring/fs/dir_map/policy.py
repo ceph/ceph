@@ -42,6 +42,10 @@ class Policy:
         self.requires_per_share = requires_per_share or (lambda dir_path: False)
         self.lock = Lock()
 
+    def is_per_share_instance(self, instance_id):
+        with self.lock:
+            return instance_id in self.per_share_instances
+
     @staticmethod
     def is_instance_action(action_type):
         return action_type in (ActionType.ACQUIRE,

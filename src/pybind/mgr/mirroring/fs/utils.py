@@ -26,8 +26,9 @@ SYNC_STAT_KEY_PREFIX = "sync_stat"
 PEER_KEY_PREFIX = "peer_"
 SHARE_KEY_PREFIX = "share_"
 
-# advertised in a mirror daemon's heartbeat reply when it routes each
-# directory to the peer named in its acquire message
+# advertised in a mirror daemon's heartbeat reply when it understands version
+# 2 acquire messages: it routes each directory to the peer named in the
+# message and syncs the snapshot directories the message lists
 PER_SHARE_FEATURE = "per_share"
 
 log = logging.getLogger(__name__)

@@ -239,6 +239,22 @@ def test_policy_stalls_and_retries_mapped_dir():
     assert policy.lookup('/m')['instance_id'] == 'i2'
 
 
+def test_fspolicy_acquire_message_versions(fspolicy):
+    fspolicy.policy.add_instances(['i1', 'i2'], initial_update=True, per_share=['i2'])
+    fspolicy.add_dir('/volumes/g/sv1', P1)
+    fspolicy.add_dir('/volumes/g/sv2')
+    # an instance without per-share support gets today's message
+    assert json.loads(fspolicy.acquire_message('/volumes/g/sv2', 'i1')) == \
+        {'dir_path': '/volumes/g/sv2', 'mode': 'acquire'}
+    # a per-share instance gets version 2, for mapped and unmapped directories
+    assert json.loads(fspolicy.acquire_message('/volumes/g/sv1', 'i2')) == \
+        {'version': 2, 'dir_path': '/volumes/g/sv1', 'mode': 'acquire',
+         'snap_dirs': ['/volumes/g/sv1'], 'peer_uuid': P1}
+    assert json.loads(fspolicy.acquire_message('/volumes/g/sv2', 'i2')) == \
+        {'version': 2, 'dir_path': '/volumes/g/sv2', 'mode': 'acquire',
+         'snap_dirs': ['/volumes/g/sv2']}
+
+
 def test_policy_forgets_removed_per_share_instance():
     policy = Policy()
     policy.add_instances(['i1'], initial_update=True, per_share=['i1'])

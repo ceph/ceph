@@ -302,11 +302,30 @@ class FSPolicy:
             finally:
                 self.op_tracker.finish_async_op()
 
+    def acquire_message(self, dir_path, instance_id):
+        """acquire message for a directory, in the version the receiving
+        instance understands. call with self.lock held"""
+        if self.policy.is_per_share_instance(instance_id):
+            return self.acquire_message_v2(dir_path)
+        return json.dumps({'dir_path': dir_path,
+                           'mode': 'acquire'
+                           })
+
+    def acquire_message_v2(self, dir_path):
+        """version 2: names the per-share peer of a mapped directory and lists
+        the directories whose snapshots are to be synced"""
+        msg = {'version': 2,
+               'dir_path': dir_path,
+               'mode': 'acquire',
+               # a subvolume can keep snapshots in several directories; only
+               # the directory itself is listed for now
+               'snap_dirs': [dir_path]}
+        peer_uuid = self.dir_to_peer.get(dir_path)
+        if peer_uuid:
+            msg['peer_uuid'] = peer_uuid
+        return json.dumps(msg)
+
     def process_updates(self):
-        def acquire_message(dir_path):
-            return json.dumps({'dir_path': dir_path,
-                               'mode': 'acquire'
-                               })
         def release_message(dir_path, purging=False):
             msg = {'dir_path': dir_path,
                    'mode': 'release'}
@@ -344,7 +363,8 @@ class FSPolicy:
                 elif action_type == ActionType.MAP_REMOVE:
                     removals.append(dir_path)
                 elif action_type == ActionType.ACQUIRE:
-                    notifies[dir_path] = (lookup_info['instance_id'], acquire_message(dir_path))
+                    notifies[dir_path] = (lookup_info['instance_id'],
+                                          self.acquire_message(dir_path, lookup_info['instance_id']))
                 elif action_type == ActionType.RELEASE:
                     notifies[dir_path] = (lookup_info['instance_id'],
                                           release_message(dir_path,
@@ -1398,7 +1418,7 @@ class FSSnapshotMirror:
                         log.warning(f'directory {dir_path} not mapped to any instance yet')
                         return
 
-                    acquire_msg = json.dumps({'dir_path': dir_path, 'mode': 'acquire'})
+                    acquire_msg = fspolicy.acquire_message(dir_path, instance_id)
 
                     log.debug(f'sending acquire notification for {dir_path} to instance {instance_id}')
                     fspolicy.op_tracker.start_async_op()
