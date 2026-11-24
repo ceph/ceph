@@ -31,10 +31,15 @@ class Policy:
     # to other mirror daemon instances.
     DIR_SHUFFLE_THROTTLE_INTERVAL = 300
 
-    def __init__(self):
+    def __init__(self, requires_per_share=None):
         self.dir_states = {}
         self.instance_to_dir_map = {}
         self.dead_instances = []
+        # instances whose mirror daemon routes directories by peer
+        self.per_share_instances = set()
+        # true for a directory mapped to a per-share peer; such a directory
+        # may only go to one of the instances above
+        self.requires_per_share = requires_per_share or (lambda dir_path: False)
         self.lock = Lock()
 
     @staticmethod
@@ -182,6 +187,8 @@ class Policy:
             self.unmap(dir_path, dir_state)
         for instance_id, dir_paths in self.instance_to_dir_map.items():
             if self.is_dead_instance(instance_id):
+                continue
+            if self.requires_per_share(dir_path) and instance_id not in self.per_share_instances:
                 continue
             if not min_instance_id or len(dir_paths) < len(self.instance_to_dir_map[min_instance_id]):
                 min_instance_id = instance_id
@@ -348,9 +355,11 @@ class Policy:
         if dead_instances:
             self._remove_instances(dead_instances)
 
-    def add_instances(self, instance_ids, initial_update=False):
-        log.debug(f'adding instances: {instance_ids} initial_update {initial_update}')
+    def add_instances(self, instance_ids, initial_update=False, per_share=()):
+        log.debug(f'adding instances: {instance_ids} initial_update {initial_update} '
+                  f'per_share {per_share}')
         with self.lock:
+            self.per_share_instances.update(per_share)
             if initial_update:
                 self.add_instances_initial(instance_ids)
             else:
@@ -378,6 +387,13 @@ class Policy:
                     dir_state = self.dir_states[dir_path]
                     if self.set_state(dir_state, State.SHUFFLING):
                         shuffle_dirs.append(dir_path)
+                if per_share:
+                    # directories mapped to a per-share peer stall while no
+                    # instance routes by peer; retry them now
+                    for dir_path, dir_state in self.dir_states.items():
+                        if dir_state.stalled and self.requires_per_share(dir_path):
+                            dir_state.stalled = False
+                            shuffle_dirs.append(dir_path)
                 log.debug(f'remapping directories: {shuffle_dirs}')
                 return shuffle_dirs
 
@@ -389,6 +405,7 @@ class Policy:
         log.debug(f'removing instances: {instance_ids}')
         shuffle_dirs = []
         for instance_id in instance_ids:
+            self.per_share_instances.discard(instance_id)
             if not instance_id in self.instance_to_dir_map:
                 continue
             if not self.instance_to_dir_map[instance_id]:
@@ -416,7 +433,10 @@ class Policy:
             res = {} # type: Dict
             if dir_state.stalled:
                 res['state'] = 'stalled'
-                res['reason'] = 'no mirror daemons running'
+                if self.requires_per_share(dir_path):
+                    res['reason'] = 'no mirror daemon running supports per-share peers'
+                else:
+                    res['reason'] = 'no mirror daemons running'
             elif dir_state.state == State.ASSOCIATING:
                 res['state'] = 'mapping'
             else:

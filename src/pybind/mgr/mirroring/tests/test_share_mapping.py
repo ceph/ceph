@@ -1,6 +1,8 @@
 import errno
 import json
+import pickle
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +11,9 @@ from tests import mock  # noqa: F401 -- sets up ceph module mocks
 
 from mirroring.fs import snapshot_mirror
 from mirroring.fs.dir_map.load import load_shares
+from mirroring.fs.dir_map.policy import Policy
 from mirroring.fs.dir_map.update import UpdateDirMapRequest
+from mirroring.fs.notify import InstanceWatcher
 from mirroring.fs.snapshot_mirror import FSPolicy, FSSnapshotMirror
 from mirroring.tests.fakes import FakeIoctx
 
@@ -169,3 +173,74 @@ def test_fspolicy_removal_forgets_mapping_on_success(fspolicy, r, kept):
     fspolicy.add_dir('/volumes/g/sv1', P1)
     fspolicy.continue_action([], ['/volumes/g/sv1'], r)
     assert ('/volumes/g/sv1' in fspolicy.dir_to_peer) == kept
+
+
+# capability gate: mapped directories only go to instances advertising per_share
+
+def test_heartbeat_reply_features():
+    listener = mock.Mock()
+    with mock.patch.object(InstanceWatcher, 'schedule_notify_task'):
+        watcher = InstanceWatcher(FakeIoctx(), {}, listener)
+        watcher.handle_notify(None, 0, [(4242, 1, b'{"addr": "a1", "features": ["per_share"]}'),
+                                        (4343, 2, b'{"addr": "a2"}')], [])
+    listener.handle_instances.assert_called_once_with(
+        {'4242': {'addr': 'a1', 'features': ['per_share']},
+         '4343': {'addr': 'a2', 'features': []}}, {})
+
+
+def test_fspolicy_records_instance_features(fspolicy):
+    fspolicy.update_instances({'4242': {'addr': 'a1', 'features': ['per_share']},
+                               '4343': {'addr': 'a2', 'features': []}}, {})
+    deadline = time.time() + 5
+    while not fspolicy.policy.per_share_instances and time.time() < deadline:
+        time.sleep(0.01)
+    assert fspolicy.policy.per_share_instances == {'4242'}
+    assert pickle.loads(fspolicy.ioctx.omap['instance_4242'])['features'] == ['per_share']
+    assert pickle.loads(fspolicy.ioctx.omap['instance_4343'])['features'] == []
+
+
+def test_fspolicy_init_reads_features_from_records():
+    with mock.patch.object(snapshot_mirror, 'InstanceWatcher'):
+        p = FSPolicy(mock.MagicMock(), FakeIoctx())
+        p.init({}, {'4242': {'version': 1, 'addr': 'a1', 'features': ['per_share']},
+                    '4343': {'version': 1, 'addr': 'a2'}}, {})
+    try:
+        assert p.policy.per_share_instances == {'4242'}
+    finally:
+        p.shutdown()
+        p.finisher.thread.stop()
+
+
+def assign(policy, dir_path):
+    policy.add_dir(dir_path)
+    policy.start_action(dir_path)
+    return policy.lookup(dir_path)['instance_id']
+
+
+def test_policy_maps_mapped_dir_only_to_per_share_instance():
+    policy = Policy(requires_per_share=lambda dir_path: dir_path == '/m')
+    policy.add_instances(['i1', 'i2'], initial_update=True, per_share=['i2'])
+    assert assign(policy, '/x') == 'i1'
+    assert assign(policy, '/y') == 'i2'
+    # both instances hold one directory; the mapped one may only go to i2
+    assert assign(policy, '/m') == 'i2'
+    assert assign(policy, '/u') == 'i1'
+
+
+def test_policy_stalls_and_retries_mapped_dir():
+    policy = Policy(requires_per_share=lambda dir_path: dir_path == '/m')
+    policy.add_instances(['i1'], initial_update=True)
+    assert assign(policy, '/m') is None
+    assert policy.dir_status('/m') == {'state': 'stalled',
+                                       'reason': 'no mirror daemon running supports per-share peers'}
+    # a per-share instance joining retries the stalled directory
+    assert '/m' in policy.add_instances(['i2'], per_share=['i2'])
+    policy.start_action('/m')
+    assert policy.lookup('/m')['instance_id'] == 'i2'
+
+
+def test_policy_forgets_removed_per_share_instance():
+    policy = Policy()
+    policy.add_instances(['i1'], initial_update=True, per_share=['i1'])
+    policy.remove_instances(['i1'])
+    assert policy.per_share_instances == set()

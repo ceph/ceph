@@ -26,6 +26,10 @@ SYNC_STAT_KEY_PREFIX = "sync_stat"
 PEER_KEY_PREFIX = "peer_"
 SHARE_KEY_PREFIX = "share_"
 
+# advertised in a mirror daemon's heartbeat reply when it routes each
+# directory to the peer named in its acquire message
+PER_SHARE_FEATURE = "per_share"
+
 log = logging.getLogger(__name__)
 
 

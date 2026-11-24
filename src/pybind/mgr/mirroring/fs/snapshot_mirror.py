@@ -22,7 +22,7 @@ from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
     disconnect_from_filesystem, connect_to_cluster, disconnect_from_cluster, \
-    AuthMode, PEER_KEY_PREFIX
+    AuthMode, PEER_KEY_PREFIX, PER_SHARE_FEATURE
 from .metrics.cache import (
     COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
     metrics_for_dir_and_peers, try_get_from_complete)
@@ -55,7 +55,7 @@ class FSPolicy:
         self.mgr = mgr
         self.ioctx = ioctx
         self.pending = []
-        self.policy = Policy()
+        self.policy = Policy(requires_per_share=lambda dir_path: dir_path in self.dir_to_peer)
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)
         self.dir_paths = []
@@ -150,7 +150,8 @@ class FSPolicy:
             self.policy.init(dir_mapping)
             # we'll schedule action for all directories, so don't bother capturing
             # directory names here.
-            self.policy.add_instances(list(instances.keys()), initial_update=True)
+            self.policy.add_instances(list(instances.keys()), initial_update=True,
+                                      per_share=FSPolicy.per_share_instances(instances))
             self.instance_watcher = InstanceWatcher(self.ioctx, instances,
                                                     self.instance_listener)
             self.schedule_action(list(dir_mapping.keys()))
@@ -180,7 +181,15 @@ class FSPolicy:
             finally:
                 self.op_tracker.finish_async_op()
 
-    def handle_update_instances(self, instances_added, instances_removed, request_id, r):
+    @staticmethod
+    def per_share_instances(instances):
+        """instance ids, of the given instance records, whose mirror daemon
+        routes directories by peer"""
+        return [instance_id for instance_id, data in instances.items()
+                if PER_SHARE_FEATURE in data.get('features', [])]
+
+    def handle_update_instances(self, instances_added, per_share_added, instances_removed,
+                                request_id, r):
         log.info(f'handle_update_instances: {instances_added} {instances_removed} {request_id} {r}')
         with self.lock:
             try:
@@ -200,7 +209,8 @@ class FSPolicy:
                 if instances_added:
                     # Least-load shuffle; may be empty if dirs are still throttled
                     # after a recent failover remap.
-                    schedules.extend(self.policy.add_instances(instances_added))
+                    schedules.extend(self.policy.add_instances(instances_added,
+                                                               per_share=per_share_added))
                 self.schedule_action(schedules)
 
                 # If still uneven (typical: daemon rejoins within the throttle
@@ -230,15 +240,17 @@ class FSPolicy:
             log.info(f'blocklisting instance_id: {instance_id} addr: {addr}')
             blocklist(self.mgr, addr)
         with self.lock:
+            per_share_added = FSPolicy.per_share_instances(added)
             instances_added = {}
             instances_removed = []
-            for instance_id, addr in added.items():
-                instances_added[instance_id] = {'version': 1, 'addr': addr}
+            for instance_id, data in added.items():
+                instances_added[instance_id] = {'version': 1, **data}
             instances_removed = list(removed.keys())
             request_id = str(uuid.uuid4())
             def async_callback(r):
                 self.finisher.queue(self.handle_update_instances,
-                                    [list(instances_added.keys()), instances_removed, request_id, r])
+                                    [list(instances_added.keys()), per_share_added,
+                                     instances_removed, request_id, r])
             # blacklisted instances can be removed at this point. remapping directories
             # mapped to blacklisted instances on module startup is handled in policy
             # add_instances().

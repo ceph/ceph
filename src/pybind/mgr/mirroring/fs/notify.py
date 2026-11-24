@@ -88,7 +88,9 @@ class InstanceWatcher:
                     log.debug(f'InstanceWatcher.handle_notify: {instance_id}: {notifier_data}')
                     if not instance_id in self.instances:
                         self.instances[instance_id] = {}
-                        added[instance_id] = notifier_data['addr']
+                        # older mirror daemons reply without features
+                        added[instance_id] = {'addr': notifier_data['addr'],
+                                              'features': notifier_data.get('features', [])}
                     self.instances[instance_id]['addr'] = notifier_data['addr']
                     self.instances[instance_id]['seen'] = time.time()
                 # gather non responders
