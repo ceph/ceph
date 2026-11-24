@@ -894,9 +894,14 @@ public:
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
+      /* head_write_failed: an earlier attempt's head write failed.
+       * retries_left: how many more times the write may retry if an older
+       * head replaced the one it read (*retry is set), or < 0 if it never
+       * retries */
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     bool assume_noent, void *index_op,
+                     bool assume_noent, bool head_write_failed,
+                     int retries_left, bool *retry, void *index_op,
                      const req_context& rctx, jspan_context& trace,
                      bool log_op = true);
       int write_meta(uint64_t size, uint64_t accounted_size,

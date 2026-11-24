@@ -132,6 +132,30 @@ static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
+// for testing: wait rgw_inject_delay_sec at the injection point that
+// rgw_inject_delay_pattern names
+static void maybe_inject_delay(CephContext* cct, const DoutPrefixProvider* dpp,
+                               optional_yield y, std::string_view pattern,
+                               const rgw_obj& obj)
+{
+  const double delay_sec = cct->_conf->rgw_inject_delay_sec;
+  if (delay_sec <= 0 ||
+      std::string_view(cct->_conf->rgw_inject_delay_pattern) != pattern) {
+    return;
+  }
+  ldpp_dout(dpp, 0) << "injecting delay of " << delay_sec << "s at "
+                    << pattern << " for " << obj << dendl;
+  const auto delay = ceph::make_timespan(delay_sec);
+  if (y) {
+    auto yield = y.get_yield_context();
+    boost::asio::steady_timer timer{yield.get_executor(), delay};
+    boost::system::error_code ec;
+    timer.async_wait(yield[ec]);
+  } else {
+    std::this_thread::sleep_for(delay);
+  }
+}
+
 // reads attribute as std::string
 static inline void read_attr(std::map<std::string, bufferlist>& attrs,
 			     const std::string& attr_name,
@@ -3424,12 +3448,35 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
-                                           bool assume_noent, void *_index_op,
+                                           bool assume_noent, bool head_write_failed,
+                                           int retries_left, bool *retry,
+                                           void *_index_op,
                                            const req_context& rctx,
                                            jspan_context& trace, bool log_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
+
+  /* an earlier attempt (the exclusive create, or a retry) may have prepared
+   * the index op: an attempt that fails without its head write landing
+   * cancels it.
+   * the write failed, so keep remove_objs: a multipart upload stays live with
+   * its parts. after a head write that is known to have failed, don't return
+   * ETIMEDOUT, even for an indexless bucket: the caller would keep the tail
+   * for a head write that can't land */
+  auto cancel_prepared = [&](int r) {
+    if (index_op->is_prepared()) {
+      int ret = index_op->cancel(rctx.dpp, nullptr, rctx.y, log_op);
+      if (ret < 0) {
+        ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
+      }
+      meta.canceled = true;
+    }
+    if (r == -ETIMEDOUT && head_write_failed) {
+      r = -EIO;
+    }
+    return r;
+  };
 
   ObjectWriteOperation op;
 #ifdef WITH_LTTNG
@@ -3447,19 +3494,19 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   RGWObjManifest *manifest = nullptr;
   int r = target->get_state(rctx.dpp, &state, &manifest, false, rctx.y, assume_noent);
   if (r < 0)
-    return r;
+    return cancel_prepared(r);
 
   rgw_obj& obj = target->get_obj();
 
   if (obj.get_oid().empty()) {
     ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
-    return -EIO;
+    return cancel_prepared(-EIO);
   }
 
   rgw_rados_ref ref;
   r = store->get_obj_head_ref(rctx.dpp, target->get_meta_placement_rule(), obj, &ref);
   if (r < 0)
-    return r;
+    return cancel_prepared(r);
 
   bool is_olh = state->is_olh;
 
@@ -3480,19 +3527,19 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     if (r == -ENOENT) {
       current_state = &no_current_version;
     } else if (r < 0) {
-      return r;
+      return cancel_prepared(r);
     }
   }
 
   r = target->check_preconditions(rctx.dpp, std::nullopt, real_clock::zero(), false, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
   if (r < 0) {
-    return r;
+    return cancel_prepared(r);
   }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
   if (r < 0)
-    return r;
+    return cancel_prepared(r);
 
   if (real_clock::is_zero(meta.set_mtime)) {
     meta.set_mtime = real_clock::now();
@@ -3614,7 +3661,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                               idx_restore_status, idx_restore_expiry_date);
 
   if (!op.size())
-    return 0;
+    return cancel_prepared(0);
 
   uint64_t epoch;
   int64_t poolid;
@@ -3648,6 +3695,15 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   auto& ioctx = ref.ioctx;
 
+  /* for testing: hold every attempt of a write that is guarded by the head it
+   * read, to land a concurrent change of that head before the write. a plain
+   * overwrite first tries an exclusive create that fails with EEXIST: that
+   * try isn't guarded, and isn't held */
+  if (set_attr_id_tag) {
+    maybe_inject_delay(store->ctx(), rctx.dpp, rctx.y,
+                       "delay_write_meta_guarded_head_write", obj);
+  }
+
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
   r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, &trace, &epoch);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
@@ -3657,6 +3713,48 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     if (r == -EEXIST && assume_noent) {
       target->invalidate_state();
       return r;
+    }
+    if (r == -ECANCELED && set_attr_id_tag && retries_left >= 0) {
+      /* the head we read was replaced under us. that is a lost race only if
+       * the new head is stamped at or after our write. an lc transition or
+       * object rewrite keeps the mtime of the head it replaced, a metadata
+       * update (tagging, acl) keeps it or adds 1ns, and a concurrent write
+       * stamped before ours is older: retry then, so the newest stamp wins,
+       * instead of reporting success for data that was never written. out
+       * of retries, fail with a retryable error rather than that success */
+      target->invalidate_state();
+      RGWObjState *cur_state = nullptr;
+      RGWObjManifest *cur_manifest = nullptr;
+      int ret = target->get_state(rctx.dpp, &cur_state, &cur_manifest, false,
+                                  rctx.y);
+      if (ret < 0) {
+        ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": failed to re-read the head of "
+                               << obj << " after it was replaced: ret=" << ret << dendl;
+        target->state = nullptr;
+        target->manifest = nullptr;
+        /* our head write failed: no ETIMEDOUT, whether or not an index op
+         * was prepared */
+        return cancel_prepared(ret == -ETIMEDOUT ? -EIO : ret);
+      }
+      if (cur_state->exists && cur_state->mtime < meta.set_mtime) {
+        if (retries_left > 0) {
+          ldpp_dout(rctx.dpp, 5) << __func__ << ": head of " << obj
+                                 << " was replaced by an older one, retrying" << dendl;
+          *retry = true;
+          return r;
+        }
+        ldpp_dout(rctx.dpp, 1) << "WARNING: " << __func__ << ": head of " << obj
+                               << " was replaced by an older one, out of retries;"
+                               << " failing this write" << dendl;
+        /* fail with a retryable error instead of turning ECANCELED into
+         * success, and skip done_cancel, which would consume remove_objs:
+         * the caller drops the data it wrote, so the client can resend */
+        target->state = cur_state;
+        target->manifest = cur_manifest;
+        return cancel_prepared(-ERR_SERVICE_UNAVAILABLE);
+      }
+      target->state = cur_state;
+      target->manifest = cur_manifest;
     }
     goto done_cancel;
   }
@@ -3803,15 +3901,32 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   index_op.set_zones_trace(meta.zones_trace);
   
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
+  /* only a new write, stamped with the current time, retries when an older
+   * head replaced the one it read. not writes that keep a given mtime (sync,
+   * lc transition, object rewrite, restore), nor ones that keep the tail of
+   * the head they read (append, copy onto itself): the replacement may have
+   * released that tail */
+  const bool may_retry = real_clock::is_zero(meta.set_mtime) && !meta.keep_tail;
+  constexpr int max_retries = 3;
+  int retries = 0;
+  bool head_write_failed = false;
   int r = 0;
-  if (assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
-    if (r == -EEXIST) {
+  for (;;) {
+    bool retry = false;
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent,
+                       head_write_failed,
+                       (may_retry ? max_retries - retries : -1), &retry,
+                       (void *)&index_op, rctx, trace, log_op);
+    if (r == -EEXIST && assume_noent) {
       assume_noent = false;
+      head_write_failed = true;
+    } else if (retry) {
+      ++retries;
+      assume_noent = false;
+      head_write_failed = true;
+    } else {
+      break;
     }
-  }
-  if (!assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
   }
   return r;
 }
@@ -5743,20 +5858,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   // for testing: hold the copy after reading the source and before writing
   // the head, to reproduce a race with a concurrent overwrite
-  if (cct->_conf->rgw_inject_delay_sec > 0 &&
-      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_copy_obj_data_complete") {
-    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
-                      << "s for " << dest_obj << dendl;
-    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
-    if (y) {
-      auto yield = y.get_yield_context();
-      boost::asio::steady_timer timer{yield.get_executor(), delay};
-      boost::system::error_code ec;
-      timer.async_wait(yield[ec]);
-    } else {
-      std::this_thread::sleep_for(delay);
-    }
-  }
+  maybe_inject_delay(cct, dpp, y, "delay_copy_obj_data_complete", dest_obj);
 
   const req_context rctx{dpp, y, nullptr};
   return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
@@ -9182,20 +9284,7 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
 
   // for testing: hold the rollback, to reproduce a race with a concurrent
   // overwrite of the head
-  if (cct->_conf->rgw_inject_delay_sec > 0 &&
-      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_olh_cancel_modification") {
-    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
-                      << "s for " << olh_obj << dendl;
-    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
-    if (y) {
-      auto yield = y.get_yield_context();
-      boost::asio::steady_timer timer{yield.get_executor(), delay};
-      boost::system::error_code ec;
-      timer.async_wait(yield[ec]);
-    } else {
-      std::this_thread::sleep_for(delay);
-    }
-  }
+  maybe_inject_delay(cct, dpp, y, "delay_olh_cancel_modification", olh_obj);
 
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, olh_obj, &ref);
