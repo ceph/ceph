@@ -1,3 +1,10 @@
+# Kernels before Linux 7.0 cannot load aes256k cephx keys (the default), which
+# breaks the kernel rbd map. Ubuntu 22.04 is such a kernel; CentOS Stream 9 is not.
+# See https://tracker.ceph.com/issues/81231
+teuthology:
+  postmerge:
+    - if yaml.os_type == "ubuntu" then reject() end
+
 overrides:
   ceph:
     conf:
