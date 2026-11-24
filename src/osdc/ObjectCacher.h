@@ -547,6 +547,7 @@ class ObjectCacher {
   // the most of those the flusher keeps (its share of it), 0 for no limit
   std::atomic<uint64_t> max_writeback{0};
   std::atomic<int64_t> flush_min_age_ns{0};  // see set_flush_min_age()
+  std::atomic<int> flush_batch{0};           // see set_flush_batch()
   // Over its share of the limit, a member of a group may still send what
   // the others leave unused, as the dirty limits let it: one busy file
   // lives in one member, and its writeback would otherwise get only that
@@ -642,8 +643,8 @@ class ObjectCacher {
 			    int64_t *amount, int *max_count);
 
   void trim();
-  void flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0,
-             ceph::timespan min_age=ceph::timespan::zero());
+  bool flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0,
+             ceph::timespan min_age=ceph::timespan::zero(), int batch=0);
 
   /**
    * flush a range of buffers
@@ -799,6 +800,16 @@ class ObjectCacher {
   void set_flush_min_age(ceph::signedspan age) {
     flush_min_age_ns.store(std::max<int64_t>(age.count(), 0),
                            std::memory_order_relaxed);
+  }
+  /**
+   * Have the flusher, when it brings the cache down to its dirty target,
+   * start at most @n writebacks before it lets go of the lock once, as it
+   * does for aged data; 0, the default, sends all it has to at once.
+   * Writers of the same cache wait for the lock meanwhile, and a pass that
+   * sends hundreds of small BufferHeads held them for milliseconds.
+   */
+  void set_flush_batch(int n) {
+    flush_batch.store(std::max(n, 0), std::memory_order_relaxed);
   }
   void set_max_woken_writers(uint64_t n) {
     max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);

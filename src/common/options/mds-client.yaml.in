@@ -264,6 +264,24 @@ options:
   - runtime
   see_also:
   - client_oc_max_dirty
+- name: client_oc_flush_batch
+  type: uint
+  level: dev
+  desc: Most writebacks the flusher starts at once before it lets the
+    writers of its cache in
+  long_desc: When the object cache's flusher brings the dirty data down to
+    client_oc_target_dirty, it starts this many writebacks at most before
+    it lets go of the cache's lock once, as it does for aged data.  The
+    writers of the cache wait for that lock, and a pass that sent hundreds
+    of small BufferHeads at once held them for milliseconds.  0 sends all
+    it has to at once.
+  default: 32
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_target_dirty
 - name: client_oc_flush_min_age
   type: float
   level: dev
