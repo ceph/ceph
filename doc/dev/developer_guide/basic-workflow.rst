@@ -174,7 +174,7 @@ Synchronizing Local Main with Upstream Main
 
 In your local working copy, there is a copy of the ``main`` branch in
 ``remotes/origin/main``. This is called "local main". This copy of the
-main branch (https://github.com/your_github_id/ceph.git) is "frozen in time"
+main branch (``https://github.com/your_github_id/ceph.git``) is "frozen in time"
 at the moment that you cloned it, but the upstream repo
 (https://github.com/ceph/ceph.git, typically abbreviated to ``ceph/ceph.git``)
 that it was forked from is not frozen in time: the upstream repo is still being

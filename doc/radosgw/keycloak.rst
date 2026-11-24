@@ -119,7 +119,7 @@ steps:
       :align: center
 
 After these steps have been completed, the tag 'Department' will appear in the
-JWT (web token), under the 'https://aws.amazon.com/tags' namespace.
+JWT (web token), under the ``https://aws.amazon.com/tags`` namespace.
 
 Tags can be verified by performing token introspection on a JWT. To introspect
 a token, use ``client id`` and ``client secret`` as follows::
