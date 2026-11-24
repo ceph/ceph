@@ -90,7 +90,8 @@ protected:
       }
     }
   }
-  void test_queue(unsigned item_size, bool randomize = false) {
+  void test_queue(unsigned item_size, bool randomize = false,
+                  bool eligible = false) {
     // Due to the WRR queue having a lot of probabilistic logic
     // we can't determine the exact order OPs will be dequeued.
     // However, the queue should not dequeue a priority out of
@@ -108,7 +109,11 @@ protected:
     typedef std::map<unsigned, unsigned> LastKlass;
     LastKlass last_strict, last_norm;
     while (!(wq.empty())) {
-      Item r = wq.dequeue();
+      auto cost = [&](const Item &item) -> std::optional<unsigned> {
+        auto &queue = strictq.empty() ? normq : strictq;
+        return queue.at(std::get<0>(item)).at(std::get<1>(item)).front().first;
+      };
+      Item r = eligible ? *wq.dequeue_eligible(cost) : wq.dequeue();
       if (!(strictq.empty())) {
         // Check that there are no higher priorities
         // in the strict queue.
@@ -206,6 +211,56 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class_null) {
   // Pick a klass that was not enqueued
   wq.remove_by_class(klasses + 1, &wq_removed);
   EXPECT_EQ(0u, wq_removed.size());
+}
+
+TEST_F(WeightedPriorityQueueTest, eligible_queue_preserves_priority_and_owner_order)
+{
+  test_queue(1000, true, true);
+}
+
+TEST_F(WeightedPriorityQueueTest, blocked_owners_retain_their_round_robin_position)
+{
+  WQ queue(0, 0);
+  for (unsigned i = 0; i < 2; ++i) {
+    queue.enqueue(1, 5, 1, Item{5, 1, i});
+    queue.enqueue(2, 5, 1, Item{5, 2, i});
+  }
+  bool blocked = false;
+  auto cost = [&blocked](const Item &item) -> std::optional<unsigned> {
+    if (blocked && std::get<1>(item) != 3) {
+      return std::nullopt;
+    }
+    return 1;
+  };
+  EXPECT_EQ(std::get<1>(*queue.dequeue_eligible(cost)), 1);
+  blocked = true;
+  queue.enqueue_strict(3, 100, Item{100, 3, 0});
+  EXPECT_EQ(std::get<1>(*queue.dequeue_eligible(cost)), 3);
+  EXPECT_FALSE(queue.dequeue_eligible(cost));
+  blocked = false;
+  for (unsigned owner : {2, 1, 2}) {
+    EXPECT_EQ(std::get<1>(*queue.dequeue_eligible(cost)), owner);
+  }
+  EXPECT_TRUE(queue.empty());
+}
+
+TEST_F(WeightedPriorityQueueTest, blocked_strict_work_does_not_hide_priority_zero)
+{
+  WQ queue(0, 0);
+  queue.enqueue_strict(1, 100, Item{100, 1, 0});
+  queue.enqueue_strict(2, 0, Item{0, 2, 0});
+  queue.enqueue(3, 50, 1, Item{50, 3, 0});
+  auto cost = [](const Item &item) -> std::optional<unsigned> {
+    if (std::get<1>(item) == 1) {
+      return std::nullopt;
+    }
+    return 0;
+  };
+  EXPECT_EQ(std::get<1>(*queue.dequeue_eligible(cost)), 2);
+  EXPECT_EQ(std::get<1>(*queue.dequeue_eligible(cost)), 3);
+  EXPECT_FALSE(queue.dequeue_eligible(cost));
+  EXPECT_EQ(queue.get_size_slow(), 1);
+  EXPECT_EQ(std::get<1>(queue.dequeue()), 1);
 }
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class) {

@@ -101,7 +101,8 @@ ECRepRequest::with_pg_interruptible(
           cost,
           prio,
           0,
-          klass}));
+          klass},
+        scheduler::throttle_level_t::leaf));
     throttle.emplace(std::move(releaser));
   }
   co_await std::visit(overloaded{
