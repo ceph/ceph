@@ -168,7 +168,12 @@ if [ -n "$counters" ] && [[ $OPTIONS =~ read_from_replica=(balance|localize) ]] 
     fi
 fi
 
-sudo rbd device unmap $DEV
-rbd rm $POOL/$IMAGE
+# Cleanup must not hang the job if the cluster is still recovering from the
+# thrash -- the verification above has already passed.  Force the unmap
+# (direct I/O leaves nothing to flush) and bound the image removal; a teardown
+# that cannot reach the cluster is teuthology's to clean up, not a test
+# failure.
+sudo rbd device unmap -o force $DEV || true
+timeout 300 rbd rm $POOL/$IMAGE || true
 rm -rf $DATA
 echo OK
