@@ -251,6 +251,10 @@ To scan for the reachability of external links, execute:
 
     admin/build-doc linkcheck
 
+The results are written to ``build-doc/output/linkcheck/output.txt``.  Release
+notes, changelogs, relative links, and links to Ceph pull requests, commits,
+and tracker issues are not checked.
+
 Running ``admin/build-doc`` creates a ``build-doc`` directory under
 ``ceph``.  You may need to create a directory under ``ceph/build-doc`` for
 Javadoc file output:
