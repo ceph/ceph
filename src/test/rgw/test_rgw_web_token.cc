@@ -147,6 +147,36 @@ TEST(WebTokenEngineTest, GetTokenClaimsSkipsPrincipalTagsNamespace) {
 
 }
 
+TEST(WebTokenEngineTest, RecurseAndInsertSkipsNullClaims) {
+  WebTokenEngine engine(nullptr, nullptr, nullptr, nullptr);
+  std::unordered_multimap<string, string> out;
+
+  const auto null_val = parse_json("null");
+  EXPECT_NO_THROW(WebTokenEngineTestAccess::call_recurse_and_insert(
+      engine, "null_claim", jwt::claim(null_val), out));
+  EXPECT_TRUE(out.empty());
+}
+
+TEST(WebTokenEngineTest, RecurseAndInsertSkipsNullFieldsInObjectAndArray) {
+  WebTokenEngine engine(nullptr, nullptr, nullptr, nullptr);
+  std::unordered_multimap<string, string> out;
+
+  const auto val = parse_json(R"({
+    "keep_str": "value",
+    "null_field": null,
+    "nested": {
+      "inner_keep": "ok",
+      "inner_null": null
+    },
+    "arr_with_null": ["first", null, "third"]
+  })");
+
+  EXPECT_NO_THROW(WebTokenEngineTestAccess::call_recurse_and_insert(
+      engine, "ignored_root_key", jwt::claim(val), out));
+  EXPECT_EQ(out.count("null_field"), 0u);
+  EXPECT_EQ(out.count("inner_null"), 0u);
+}
+
 }  // namespace
 }  // namespace rgw::auth::sts
 
