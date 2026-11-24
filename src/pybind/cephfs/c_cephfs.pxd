@@ -185,6 +185,20 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_readdir_snapdiff2(ceph_snapdiff_info2 *snapdiff, ceph_snapdiff_entry_t *out)
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff)
     int ceph_close_snapdiff2(ceph_snapdiff_info2 *snapdiff)
+    cdef struct ceph_query_permissions_answer:
+        uint64_t ino
+        uint8_t state
+        uint64_t tuple_version
+        uint32_t mode
+        uint32_t uid
+        uint32_t gid
+        size_t acl_length
+
+    int ceph_query_permissions(ceph_mount_info *cmount, const char *path,
+                               uint32_t rights, uint32_t flags,
+                               ceph_query_permissions_answer *answer,
+                               void *acl_buf, size_t acl_buf_len)
+
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)

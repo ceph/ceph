@@ -28,6 +28,7 @@
 #include "common/compiler_extensions.h"
 #include "include/common_fwd.h"
 #include "include/cephfs/ceph_ll_client.h"
+#include "include/cephfs/query_permissions.h"
 #include "common/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
@@ -126,6 +127,7 @@ enum {
   l_c_mds_req_lookupino,
   l_c_mds_req_lookupname,
   l_c_mds_req_getvxattr,
+  l_c_mds_req_query_permissions,
   l_c_mds_req_dummy,
   l_c_mds_req_setxattr,
   l_c_mds_req_rmxattr,
@@ -748,6 +750,12 @@ public:
 		 const UserPerm& perms);
   int ll_getxattr(Inode *in, const char *name, void *value, size_t size,
 		  const UserPerm& perms);
+  int _query_permissions(Inode *in, const UserPerm& perms,
+			 uint32_t rights, uint32_t flags, bufferlist *reply_bl);
+  int ll_query_permissions(const char *path, uint32_t rights, uint32_t flags,
+			   struct ceph_query_permissions_answer *answer,
+			   void *acl_buf, size_t acl_buf_len,
+			   const UserPerm& perms);
   int ll_setxattr(Inode *in, const char *name, const void *value, size_t size,
 		  int flags, const UserPerm& perms);
   int ll_removexattr(Inode *in, const char *name, const UserPerm& perms);
@@ -1270,6 +1278,10 @@ protected:
     unsigned int mask = 0;
     bool is_rename = false;
     bool require_target = true;
+    /* Last component: name lookup only, no AUTH_SHARED getattr. */
+    bool resolve_only = false;
+    /* Surface LOOKUPPARENT errors. Otherwise ".." stays in this directory. */
+    bool fail_dotdot = false;
   };
   int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options, std::string trimmed_path=std::string());
   int path_walk(InodeRef dirinode, const filepath& fp, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
@@ -2229,7 +2241,8 @@ private:
 		 const UserPerm& perms);
 
   int _lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name,
-              int mask, InodeRef *target, const UserPerm& perm, bool is_rename=false);
+              int mask, InodeRef *target, const UserPerm& perm, bool is_rename=false,
+              bool fail_dotdot=false);
 
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);

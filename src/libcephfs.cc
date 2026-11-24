@@ -2467,6 +2467,17 @@ extern "C" int ceph_ll_getxattr(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_getxattr(in, name, value, size, *perms));
 }
 
+extern "C" int ceph_query_permissions(struct ceph_mount_info *cmount,
+				      const char *path, uint32_t rights,
+				      uint32_t flags,
+				      struct ceph_query_permissions_answer *answer,
+				      void *acl_buf, size_t acl_buf_len)
+{
+  return cmount->get_client()->ll_query_permissions(
+    path, rights, flags, answer, acl_buf, acl_buf_len,
+    cmount->default_perms);
+}
+
 extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
                               Inode *in, char *list,
                               size_t buf_size, size_t *list_size,

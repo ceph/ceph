@@ -115,6 +115,9 @@ using namespace std::literals::string_view_literals;
 #include "MetaRequest.h"
 #include "ObjecterWriteback.h"
 #include "posix_acl.h"
+#include "mds/QueryPermissions.h"
+#include "mds/cephfs_features.h"
+#include "include/cephfs/query_permissions.h"
 
 #include "include/ceph_assert.h"
 #include "include/cephfs/keys_and_values.h"
@@ -722,6 +725,8 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_mds_req_lookupino, "mds_req_lookupino", "MDS lookupino requests");
     plb.add_u64_counter(l_c_mds_req_lookupname, "mds_req_lookupname", "MDS lookupname requests");
     plb.add_u64_counter(l_c_mds_req_getvxattr, "mds_req_getvxattr", "MDS getvxattr requests");
+    plb.add_u64_counter(l_c_mds_req_query_permissions, "mds_req_query_permissions",
+                        "MDS query permissions requests");
     plb.add_u64_counter(l_c_mds_req_dummy, "mds_req_dummy", "MDS dummy requests");
     plb.add_u64_counter(l_c_mds_req_setxattr, "mds_req_setxattr", "MDS setxattr requests");
     plb.add_u64_counter(l_c_mds_req_rmxattr, "mds_req_rmxattr", "MDS rmxattr requests");
@@ -3032,6 +3037,8 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
     case CEPH_MDS_OP_LOOKUPINO: logger->inc(l_c_mds_req_lookupino); break;
     case CEPH_MDS_OP_LOOKUPNAME: logger->inc(l_c_mds_req_lookupname); break;
     case CEPH_MDS_OP_GETVXATTR: logger->inc(l_c_mds_req_getvxattr); break;
+    case CEPH_MDS_OP_QUERY_PERMISSIONS:
+      logger->inc(l_c_mds_req_query_permissions); break;
     case CEPH_MDS_OP_DUMMY: logger->inc(l_c_mds_req_dummy); break;
     case CEPH_MDS_OP_SETXATTR: logger->inc(l_c_mds_req_setxattr); break;
     case CEPH_MDS_OP_RMXATTR: logger->inc(l_c_mds_req_rmxattr); break;
@@ -8049,7 +8056,7 @@ bool Client::_dentry_valid(const Dentry *dn)
   return false;
 }
 
-int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name, int mask, InodeRef *target, const UserPerm& perms, bool is_rename)
+int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name, int mask, InodeRef *target, const UserPerm& perms, bool is_rename, bool fail_dotdot)
 {
   int r = 0;
   Dentry *dn = NULL;
@@ -8070,11 +8077,13 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
       req->set_filepath(path);
 
       InodeRef tmptarget;
-      int r = make_request(req, perms, &tmptarget, NULL, rand() % mdsmap->get_num_in_mds());
+      int pr = make_request(req, perms, &tmptarget, NULL, rand() % mdsmap->get_num_in_mds());
 
-      if (r == 0) {
+      if (pr == 0) {
 	*target = std::move(tmptarget);
 	ldout(cct, 8) << __func__ << " found target " << (*target)->ino << dendl;
+      } else if (fail_dotdot) {
+	r = pr;
       } else {
 	*target = dir;
       }
@@ -8291,7 +8300,12 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
         rc = r;
         goto out;
       }
-      caps = CEPH_CAP_AUTH_SHARED;
+      /*
+       * QUERY_PERMISSIONS must resolve a name the caller cannot Unix-READ.
+       * AUTH_SHARED on that last LOOKUP makes the MDS apply MAY_READ.
+       */
+      if (!(extra_options.resolve_only && i == path.depth() - 1))
+        caps = CEPH_CAP_AUTH_SHARED;
     }
 
     // N.B.: we don't validate alternate_name we generate during wrapping
@@ -8308,7 +8322,8 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
       caps |= extra_options.mask;
     }
 
-    int r = _lookup(diri, dname, alternate_name, caps, &next, perms, extra_options.is_rename);
+    int r = _lookup(diri, dname, alternate_name, caps, &next, perms,
+                    extra_options.is_rename, extra_options.fail_dotdot);
     if (r == -ENOENT && i == (path.depth()-1) && !extra_options.require_target) {
       target = InodeRef();
       rc = 0;
@@ -8717,6 +8732,88 @@ int Client::_getvxattr(
     }
   }
   return res;
+}
+
+int Client::_query_permissions(Inode *in, const UserPerm& perms,
+			       uint32_t rights, uint32_t flags,
+			       bufferlist *reply_bl)
+{
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_QUERY_PERMISSIONS);
+  req->set_filepath(filepath(in->ino));
+  req->set_inode(in);
+  req->head.args.query_permissions.format = CEPH_QUERY_PERM_FORMAT;
+  req->head.args.query_permissions.rights = rights;
+  req->head.args.query_permissions.flags = flags;
+
+  int res = make_request(req, perms, nullptr, nullptr, -1, reply_bl,
+			 CEPHFS_FEATURE_QUERY_PERMISSIONS);
+  ldout(cct, 10) << __func__ << " ino " << in->ino << " result=" << res << dendl;
+  return res;
+}
+
+int Client::ll_query_permissions(const char *path, uint32_t rights, uint32_t flags,
+				 struct ceph_query_permissions_answer *answer,
+				 void *acl_buf, size_t acl_buf_len,
+				 const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  InodeRef inref;
+  int r;
+  {
+    std::scoped_lock lock(client_lock);
+    r = path_walk(cwd, filepath(path), &inref, perms,
+                  {.resolve_only = true, .fail_dotdot = true});
+    if (r < 0)
+      return r;
+    _ll_get(inref.get());
+  }
+  Inode *in = inref.get();
+
+  bufferlist bl;
+  {
+    std::scoped_lock lock(client_lock);
+    r = _query_permissions(in, perms, rights, flags, &bl);
+    if (r < 0) {
+      _ll_put(in, 1);
+      return r;
+    }
+
+    if (!answer) {
+      _ll_put(in, 1);
+      return 0;
+    }
+
+    memset(answer, 0, sizeof(*answer));
+    if (bl.length() == 0) {
+      answer->ino = in->ino.val;
+      _ll_put(in, 1);
+      return 0;
+    }
+
+    QueryPermissionsReply payload;
+    auto p = bl.cbegin();
+    decode(payload, p);
+    answer->ino = payload.ino.val;
+    answer->state = payload.state;
+    answer->tuple_version = payload.tuple_version;
+    answer->mode = payload.mode;
+    answer->uid = payload.uid;
+    answer->gid = payload.gid;
+    if (payload.state == CEPH_QUERY_PERM_ACL) {
+      answer->acl_length = payload.acl.length();
+      if (acl_buf && acl_buf_len >= payload.acl.length())
+	memcpy(acl_buf, payload.acl.c_str(), payload.acl.length());
+      else if (payload.acl.length()) {
+	_ll_put(in, 1);
+	return -ERANGE;
+      }
+    }
+    _ll_put(in, 1);
+  }
+  return 0;
 }
 
 bool Client::make_absolute_path_string(const InodeRef& in, std::string& path)
@@ -15015,13 +15112,16 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   std::scoped_lock lock(client_lock);
   if (int rc = path_walk(cwd, filepath(name), &in, perms, {.followsym = !(flags & AT_SYMLINK_NOFOLLOW), .mask = mask}); rc < 0) {
     /* zero out mask, just in case... */
-    stx->stx_mask = 0;
-    stx->stx_ino = 0;
+    if (stx) {
+      stx->stx_mask = 0;
+      stx->stx_ino = 0;
+    }
     *out = NULL;
     return rc;
   } else {
     ceph_assert(in);
-    fill_statx(in, mask, stx);
+    if (stx)
+      fill_statx(in, mask, stx);
     _ll_get(in.get());
     *out = in.get();
     return 0;

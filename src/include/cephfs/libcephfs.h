@@ -31,6 +31,7 @@
 #include <dirent.h>
 
 #include "ceph_ll_client.h"
+#include "query_permissions.h"
 
 #ifdef __cplusplus
 namespace ceph::common {
@@ -2227,6 +2228,19 @@ int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, void *value, size_t size,
 		     const UserPerm *perms);
+/**
+ * One-shot MDS QUERY_PERMISSIONS (qa / libcephfs tests; not a VFS path).
+ * rights is CEPH_QUERY_PERM_READ or CEPH_QUERY_PERM_WRITE. flags may
+ * include CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT.
+ *
+ * On success (\return 0), fills *answer; acl bytes are written to acl_buf
+ * when state is CEPH_QUERY_PERM_ACL. tuple fields are valid when state is
+ * CEPH_QUERY_PERM_NO_ACL or CEPH_QUERY_PERM_ACL.
+ */
+int ceph_query_permissions(struct ceph_mount_info *cmount, const char *path,
+			   uint32_t rights, uint32_t flags,
+			   struct ceph_query_permissions_answer *answer,
+			   void *acl_buf, size_t acl_buf_len);
 int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, const void *value, size_t size,
 		     int flags, const UserPerm *perms);
