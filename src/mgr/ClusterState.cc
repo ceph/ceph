@@ -18,6 +18,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MPGStats.h"
+#include "osd/osd_types_fmt.h"
 
 #include <time.h>
 #include <boost/range/adaptor/reversed.hpp>
@@ -127,6 +128,17 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
       dout(15) << " had " << pgid << " from "
 	       << q->second.reported_epoch << ":"
 	       << q->second.reported_seq << dendl;
+      continue;
+    }
+    // ... or from another OSD, earlier in this same reporting window
+    if (const auto pq = pending_inc.pg_stat_updates.find(pgid);
+	pq != pending_inc.pg_stat_updates.end() &&
+	pq->second.get_version_pair() > pg_stats.get_version_pair()) {
+      dout(15) << fmt::format(
+		    " got {} reported at {}:{} but already pending {}:{}",
+		    pgid, pg_stats.reported_epoch, pg_stats.reported_seq,
+		    pq->second.reported_epoch, pq->second.reported_seq)
+	       << dendl;
       continue;
     }
 
