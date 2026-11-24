@@ -73,9 +73,8 @@ inline auto convert(const auto& from) -> std::vector<std::uint8_t>
 
 } // namespace ceph::libfdb::to
 
-/* Map from FDB inputs from FDB TYPE to CONCRETE (i.e. copyable) userland types. Do NOT add
-non-FDB input sources here (or any non-matching user output sources). Do NOT add
-non-owning targets, lest Antevorda be angered!: */
+/* Decoded values must own their data or write into caller-owned storage.
+ * Custom serializers must enforce that rule for nested members too: */
 namespace ceph::libfdb::from {
 
 namespace detail {
@@ -93,7 +92,7 @@ inline void convert(const std::span<const std::uint8_t>& from, versionstamp& to)
  to.store_result(from);
 }
 
-template <typename ToT>
+template <concepts::decoded_value ToT>
 requires (!std::invocable<ToT&, const char *, std::size_t>)
 inline void convert(const std::span<const std::uint8_t>& from, ToT& to)
 {
@@ -140,7 +139,7 @@ inline std::string decode_zpp_string_value(const std::span<const std::uint8_t> f
  return std::string(data, static_cast<std::string::size_type>(size));
 }
 
-template <typename ValueT>
+template <concepts::decoded_value ValueT>
 inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
 {
  std::pair<std::string, ValueT> r;

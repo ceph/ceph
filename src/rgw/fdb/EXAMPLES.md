@@ -231,6 +231,9 @@ connection string, while a cluster-file name must be passed as a
 codes and identical flags. This supports additive transaction tags and settings
 whose order matters.
 
+Option values compare by alternative and payload; two `option_flag` values are
+equal. Option entries can therefore be compared directly or with range algorithms.
+
 **Migration from `option_map`:** the sorted, unique-key container and its alias
 are removed. Replace map-specific `find()`, `insert_or_assign()`, and `operator[]`
 calls with sequence operations. Braced initializers still work, but now retain
@@ -279,6 +282,8 @@ Transactions, Transactors, and lazy database scans own their option snapshots.
 Changing the original list affects later construction. A consumed list can
 transfer its storage to `make_transaction()`. Validation happens when options
 are applied; native failures retain their error code and category.
+Transaction construction rejects both null handles and handles containing a
+moved-from database before calling the native client.
 
 On replay, libfdb reapplies nonpersistent entries in recorded order. FoundationDB
 retains timeout, retry limit, maximum retry delay, and authorization-token options.
@@ -319,6 +324,14 @@ if (lfdb::get(dbh, "person/konrad-zuse/name", name)) {
 
 Use a void callback when the raw serialized bytes must be copied or decoded
 immediately. The span is only valid during the callback.
+
+Typed reads and scans reject read-only borrowed ranges such as `std::string_view`
+and `std::span<const std::uint8_t>`: their data would expire with the native result.
+Use owning values or a writable span backed by caller-owned storage. Custom
+serialized types must also own any nested decoded data; a container of views
+does not extend the native result's lifetime. This rule applies to `from::convert()`
+as well; perform deliberate borrowed decoding inside a raw callback with the
+serializer directly.
 
 ```cpp
 lfdb::get(dbh, "person/konrad-zuse/name",
@@ -1115,11 +1128,17 @@ for the replacement. These operations support constant evaluation when their
 domain and storage permit it. `with_options(interval_set, options)` retains the
 mutable set type. `compile_intervals()` still exports the existing vector or
 fixed-capacity collection. Core storage exposes const iteration to preserve its
-canonical order; exported collections are independent values.
+canonical order; exported collections are independent values with mutable iteration
+and indexed access. Const exports retain const access.
 Geometric predicates borrow their operands and ignore execution-option conflicts.
 The dynamic pure-core algebra accepts immutable, copy-constructible keys. Fixed-
 capacity export uses preconstructed assignable slots and therefore additionally
 requires assignable interval values; this requirement is checked by its constraints.
+
+Owning boundaries and borrowed boundaries compare endpoint kind, inclusivity, and
+finite keys using `Domain::compare()`. Keys need no separate equality operator.
+Borrowed boundaries refer to lvalue keys that must outlive them; both mutable and
+const temporary keys are rejected.
 
 As with existing expressions, options apply to each emitted native interval;
 `result_limit` does not become a whole-query row limit. Conflicting options for
@@ -1734,6 +1753,8 @@ const auto removed = lfdb::erase_if<person_record>(
 Selector-shaped scans can ask for a bounded page. The returned page contains
 only rows the caller requested; the extra sentinel row used to detect
 continuation is not decoded or returned.
+The native page limit is checked when the page is constructed and when a scan
+uses it, including after direct edits to `page::size`.
 
 ```cpp
 auto people = lfdb::select{ "person/" };

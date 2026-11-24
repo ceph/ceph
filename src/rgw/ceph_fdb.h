@@ -60,10 +60,8 @@ auto serialize(auto& archive, const ceph::buffer::list& src)
  return archive(std::span<const std::uint8_t> { bytes.data(), bytes.size() });
 }
 
-// This transliteration is one-way: we read from a buffer::ptr to an archive; writing 
-// to a ceph::buffer::ptr as output seems pointless to me, as we already support spans 
-// and buffer::list-- I feel in fact like we would be courting danger we don't need as it
-// is a non-owning structure. 
+// buffer::ptr shares ownership of its allocation. This adapter supports it as
+// input; decode into buffer::list or caller-owned byte storage:
 auto serialize(auto& archive, const ceph::buffer::ptr& src)
 {
  const auto bytes = ceph::libfdb::detail::as_byte_view(

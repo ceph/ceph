@@ -945,6 +945,71 @@ struct immutable_domain final
 
 };
 
+template <typename T>
+concept can_borrow_closed_boundary = requires(T&& value) {
+ core::boundary_ref<integer_domain>::closed(std::forward<T>(value));
+};
+
+template <typename T>
+concept can_borrow_open_boundary = requires(T&& value) {
+ core::boundary_ref<integer_domain>::open(std::forward<T>(value));
+};
+
+static_assert(can_borrow_closed_boundary<int&>);
+static_assert(can_borrow_closed_boundary<const int&>);
+static_assert(not can_borrow_closed_boundary<int>);
+static_assert(not can_borrow_closed_boundary<const int>);
+static_assert(can_borrow_open_boundary<int&>);
+static_assert(can_borrow_open_boundary<const int&>);
+static_assert(not can_borrow_open_boundary<int>);
+static_assert(not can_borrow_open_boundary<const int>);
+
+TEST_CASE("boundary equality uses domain values and endpoint shape", "[fdb][algebra][types]")
+{
+ using boundary = core::boundary<immutable_domain>;
+ using boundary_ref = core::boundary_ref<immutable_domain>;
+
+ constexpr immutable_key first {1}, same {1}, other {2};
+
+ STATIC_REQUIRE(boundary::closed(first) == boundary::closed(same));
+ STATIC_REQUIRE(boundary::closed(first) != boundary::closed(other));
+ STATIC_REQUIRE(boundary::closed(first) != boundary::open(first));
+ STATIC_REQUIRE(boundary::negative_infinity() == boundary::negative_infinity());
+ STATIC_REQUIRE(boundary::negative_infinity() != boundary::positive_infinity());
+
+ CHECK(boundary_ref::closed(first) == boundary_ref::closed(same));
+ CHECK(boundary_ref::closed(first) != boundary_ref::closed(other));
+ CHECK(boundary_ref::closed(first) != boundary_ref::open(first));
+ CHECK(boundary_ref::closed(first) != boundary_ref::positive_infinity());
+ CHECK(boundary_ref::negative_infinity() == boundary_ref::negative_infinity());
+ CHECK(boundary_ref::positive_infinity() == boundary_ref::positive_infinity());
+ CHECK(boundary_ref::negative_infinity() != boundary_ref::positive_infinity());
+
+ using query = core::query<immutable_domain>;
+
+ STATIC_REQUIRE(query::closed(first, other) == query::closed(same, other));
+ STATIC_REQUIRE(query::closed(first, other) != query::open(first, other));
+}
+
+TEST_CASE("fixed interval exports support mutable indexed access", "[fdb][algebra][types]")
+{
+ auto exported = core::compile_intervals<1>(integer_query::closed(1, 2));
+ const auto& observed = exported;
+
+ STATIC_REQUIRE(std::same_as<decltype(exported[0]), integer_query&>);
+ STATIC_REQUIRE(std::same_as<decltype(observed[0]), const integer_query&>);
+
+ exported[0] = integer_query::closed(3, 4);
+
+ CHECK(integer_query::closed(3, 4) == *std::begin(exported));
+ CHECK(integer_query::closed(3, 4) == observed[0]);
+
+ auto fdb_export = q::compile_intervals<1>(q::between("a", "b"));
+ fdb_export[0] = q::between("c", "d");
+
+ CHECK(q::between("c", "d") == *std::begin(fdb_export));
+}
+
 struct immutable_model final
 {
  using query = core::query<immutable_domain>;

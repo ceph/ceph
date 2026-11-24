@@ -84,7 +84,18 @@ namespace detail {
 
 struct boundary_view_ops
 {
- constexpr bool operator==(const boundary_view_ops&) const = default;
+ template <typename SelfT>
+ constexpr bool operator==(this const SelfT& self, const SelfT& rhs)
+ {
+  using domain_type = typename SelfT::domain_type;
+
+  if (self.kind() != rhs.kind() or self.inclusive() != rhs.inclusive()) {
+   return false;
+  }
+
+  return not self.finite() or
+         std::strong_ordering::equal == domain_type::compare(self.finite_key(), rhs.finite_key());
+ }
 
  constexpr bool finite(this const auto& self) noexcept
  {
@@ -200,8 +211,6 @@ class boundary final : public detail::boundary_view_ops
   return includes_key;
  }
 
- constexpr bool operator==(const boundary&) const = default;
-
  private:
  constexpr boundary(const boundary_kind kind,
                     std::optional<value_type> key_value,
@@ -249,7 +258,9 @@ class boundary_ref final : public detail::boundary_view_ops
  }
 
  static constexpr boundary_ref closed(value_type&&) = delete;
+ static constexpr boundary_ref closed(const value_type&&) = delete;
  static constexpr boundary_ref open(value_type&&) = delete;
+ static constexpr boundary_ref open(const value_type&&) = delete;
 
  constexpr boundary_kind kind() const noexcept
  {
@@ -447,9 +458,8 @@ class query final : public detail::expression_tag
 template <ordered_domain DomainT, std::size_t Capacity, typename IntervalT = query<DomainT>>
 requires std::same_as<typename IntervalT::domain_type, DomainT> and
          std::assignable_from<IntervalT&, IntervalT>
-class static_interval_set final
+struct static_interval_set final
 {
- public:
  using value_type = IntervalT;
  using iterator = typename std::array<value_type, Capacity>::iterator;
  using const_iterator = typename std::array<value_type, Capacity>::const_iterator;
@@ -492,6 +502,11 @@ class static_interval_set final
  }
 
  constexpr const value_type& operator[](const std::size_t index) const noexcept
+ {
+  return intervals[index];
+ }
+
+ constexpr value_type& operator[](const std::size_t index) noexcept
  {
   return intervals[index];
  }

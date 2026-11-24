@@ -165,6 +165,84 @@ concept can_lfdb_from_convert_output =
   lfdb::from::convert(bytes, fn);
  };
 
+template <typename ValueT>
+concept can_scan_value =
+ requires(lfdb::transaction_handle txn, lfdb::database_handle dbh, lfdb::select selection) {
+  lfdb::scan<ValueT>(txn, selection);
+  lfdb::scan<ValueT>(dbh, selection);
+  lfdb::scan<ValueT>(txn, selection, lfdb::page {1});
+  lfdb::scan<ValueT>(dbh, selection, lfdb::page {1});
+  lfdb::pair_generator<ValueT>(txn, selection);
+  lfdb::blocks<ValueT>(dbh, selection);
+  lfdb::collect<ValueT>(txn, selection);
+  lfdb::collect<ValueT>(dbh, selection);
+ };
+
+template <typename ValueT>
+void check_borrowed_read_rejection()
+{
+ // Check each entry point independently so one rejection cannot mask another:
+ STATIC_REQUIRE_FALSE(requires(lfdb::transaction_handle txn, lfdb::select selection) {
+  lfdb::scan<ValueT>(txn, selection);
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::database_handle dbh, lfdb::select selection) {
+  lfdb::scan<ValueT>(dbh, selection);
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::transaction_handle txn, lfdb::select selection) {
+  lfdb::scan<ValueT>(txn, selection, lfdb::page {1});
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::database_handle dbh, lfdb::select selection) {
+  lfdb::scan<ValueT>(dbh, selection, lfdb::page {1});
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::transaction_handle txn, lfdb::select selection) {
+  lfdb::pair_generator<ValueT>(txn, selection);
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::database_handle dbh, lfdb::select selection) {
+  lfdb::blocks<ValueT>(dbh, selection);
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::transaction_handle txn, lfdb::select selection) {
+  lfdb::collect<ValueT>(txn, selection);
+ });
+ STATIC_REQUIRE_FALSE(requires(lfdb::database_handle dbh, lfdb::select selection) {
+  lfdb::collect<ValueT>(dbh, selection);
+ });
+}
+
+TEST_CASE("decoded reads reject borrowed result storage", "[fdb][conversion][types]")
+{
+ using bytes = std::vector<std::uint8_t>;
+ using borrowed_bytes = std::span<const std::uint8_t>;
+ using writable_bytes = std::span<std::uint8_t>;
+
+ STATIC_REQUIRE_FALSE(can_lfdb_get_raw_value<borrowed_bytes>);
+ STATIC_REQUIRE_FALSE(can_lfdb_get_raw_value<std::string_view>);
+ STATIC_REQUIRE_FALSE(can_lfdb_from_convert_output<borrowed_bytes>);
+ STATIC_REQUIRE_FALSE(can_lfdb_from_convert_output<std::string_view>);
+ check_borrowed_read_rejection<borrowed_bytes>();
+ check_borrowed_read_rejection<std::string_view>();
+ STATIC_REQUIRE(can_lfdb_get_raw_value<bytes>);
+ STATIC_REQUIRE(can_lfdb_get_raw_value<writable_bytes>);
+ STATIC_REQUIRE(can_scan_value<bytes>);
+
+ bytes storage(3);
+ writable_bytes output {storage};
+ const bytes expected {1, 2, 3};
+
+ lfdb::from::convert(lfdb::to::convert(expected), output);
+
+ CHECK(std::data(storage) == std::data(output));
+ CHECK(storage == expected);
+
+ janitor j;
+ const auto key = test_key("caller-owned-byte-output");
+ lfdb::set(j, key, expected);
+ std::ranges::fill(storage, 0);
+
+ REQUIRE(lfdb::get(j, key, output));
+ CHECK(std::data(storage) == std::data(output));
+ CHECK(storage == expected);
+}
+
 template <typename FnT>
 concept can_lfdb_watched_loop =
  requires(lfdb::database_handle dbh, std::string key, FnT fn) {
@@ -3623,6 +3701,22 @@ TEST_CASE("generic page collection", "[fdb][collect]") {
 #endif
 }
 
+TEST_CASE("mutable pages retain the native range limit contract", "[fdb][types]")
+{
+ lfdb::page request;
+ request.size = lfdb::page::max_size;
+
+ CHECK(std::numeric_limits<int>::max() == lfdb::detail::range_limit_for(request));
+
+ request.size = 1 + lfdb::page::max_size;
+
+ CHECK_THROWS_AS(lfdb::detail::range_limit_for(request), lfdb::libfdb_exception);
+
+ request.size = std::numeric_limits<std::uint64_t>::max();
+
+ CHECK_THROWS_AS(lfdb::detail::range_limit_for(request), lfdb::libfdb_exception);
+}
+
 TEST_CASE("paged scan", "[fdb]") {
  janitor j;
 
@@ -4400,6 +4494,16 @@ TEST_CASE("transactors report setup failures before invoking the body", "[fdb]")
  SECTION("direct transaction") {
   CHECK_THROWS_WITH(lfdb::transaction {dbh},
                     Catch::Matchers::ContainsSubstring("transaction requires a database handle"));
+ }
+
+ SECTION("moved-from database") {
+  dbh = lfdb::create_database();
+  const lfdb::database owner {std::move(*dbh)};
+
+  REQUIRE(owner);
+  REQUIRE_FALSE(*dbh);
+  CHECK_THROWS_AS(lfdb::transaction {dbh}, lfdb::libfdb_exception);
+  check_setup_failure(lfdb::make_transactor(dbh));
  }
 
  SECTION("default options") {
@@ -6251,6 +6355,34 @@ TEST_CASE("Options retain application order and repetitions", "[fdb][options]")
  check_order(FDB_NET_OPTION_TLS_PASSWORD, FDB_NET_OPTION_TLS_KEY_BYTES);
  check_order(FDB_DB_OPTION_TRANSACTION_TIMEOUT, FDB_DB_OPTION_LOCATION_CACHE_SIZE);
  check_order(FDB_TR_OPTION_TAG, FDB_TR_OPTION_AUTO_THROTTLE_TAG);
+}
+
+TEST_CASE("option values compare flags and payloads", "[fdb][options][types]")
+{
+ using bytes = std::vector<std::uint8_t>;
+
+ STATIC_REQUIRE(std::totally_ordered<lfdb::option_value>);
+
+ const std::array<lfdb::option_value, 4> values {
+  lfdb::option_flag, std::int64_t {42}, std::string {"tag"}, bytes {1, 2}
+ };
+
+ for (std::size_t index = 0; std::size(values) > index; ++index) {
+  const auto copy = values[index];
+
+  CHECK(copy == values[index]);
+  CHECK(std::strong_ordering::equal == (copy <=> values[index]));
+  CHECK(copy != values[(1 + index) % std::size(values)]);
+ }
+
+ CHECK(std::ranges::is_sorted(values));
+
+ const lfdb::transaction_options flags {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+ };
+ const auto copied = flags;
+
+ CHECK(std::ranges::equal(flags, copied));
 }
 
 TEST_CASE("Option list insertion and editing preserve sequence semantics", "[fdb][options]")

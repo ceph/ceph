@@ -68,7 +68,7 @@ struct with_result_t final {};
 inline constexpr with_result_t with_result;
 
 struct versionstamp;
-struct watch_handle;
+class watch_handle;
 
 class key_selector;
 
@@ -163,11 +163,23 @@ concept raw_key_value_callback =
                                            std::span<const std::uint8_t>>>;
 
 template <typename T>
+concept read_only_borrowed_range =
+ std::ranges::borrowed_range<std::remove_cvref_t<T>> and
+ std::is_const_v<std::remove_reference_t<
+                  std::ranges::range_reference_t<std::remove_cvref_t<T>>>>;
+
+// Read-only borrowed ranges would retain bytes owned by a released FDB result.
+// Writable spans remain valid sinks into caller-owned storage.
+template <typename T>
+concept decoded_value =
+ std::is_object_v<T> and not read_only_borrowed_range<T>;
+
+template <typename T>
 concept decoded_value_sink =
  not value_invocable<std::remove_reference_t<T>> and
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
- std::is_object_v<std::remove_reference_t<T>>;
+ decoded_value<std::remove_reference_t<T>>;
 
 } // namespace ceph::libfdb::concepts
 
@@ -610,7 +622,11 @@ inline select as_half_open_select(select selection)
 
 // Flag-only options are indicated with an explicit option_flag, as they have
 // no actual value:
-struct option_flag_t final {};
+struct option_flag_t final
+{
+ constexpr auto operator<=>(const option_flag_t&) const = default;
+
+};
 inline constexpr option_flag_t option_flag;
 
 using option_value = std::variant<option_flag_t, std::int64_t, std::string, std::vector<std::uint8_t>>;
@@ -1188,7 +1204,7 @@ class transaction final
 
  static database_handle require_database(database_handle dbh)
  {
-  if (not dbh) {
+  if (not dbh or not *dbh) {
    throw libfdb_exception(std::errc::invalid_argument, "transaction requires a database handle");
   }
 

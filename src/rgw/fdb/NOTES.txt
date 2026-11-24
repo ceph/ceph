@@ -7,6 +7,15 @@ modify it under the terms of the GNU Lesser General Public
 License version 2.1, as published by the Free Software
 Foundation. See file COPYING.
 
+* Boundary equality uses domain comparison for both owning and borrowed endpoints;
+  borrowed endpoints reject temporary keys, including const temporaries. Fixed
+  interval exports support mutable indexing as well as iteration. Flag-only
+  option values compare normally, so option-entry range equality is available.
+  Typed decoding rejects direct read-only borrowed ranges; writable caller-owned
+  buffers remain supported. Custom serializers must also own nested decoded data.
+  Transaction setup rejects moved-from databases, and native page limits remain
+  checked after edits to page::size. See EXAMPLES.md for contracts and lifetimes.
+
 * Owning and borrowed invocation share body-result and exception normalization.
   Borrowed handles are validated at their caller boundary; owning attempts use
   transactions already created by their source. Staged preparation remains inside

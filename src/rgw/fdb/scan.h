@@ -409,7 +409,7 @@ inline auto generate_FDB_pairs(transaction& txn, SelectionT selection,
  }
 }
 
-template <typename ValueT = std::string>
+template <concepts::decoded_value ValueT = std::string>
 inline auto decode_pairs(std::span<const FDBKeyValue> pairs)
 {
  return pairs | std::views::transform(to_decoded_kv_pair<ValueT>);
@@ -792,7 +792,7 @@ template <query::expression SelectionT>
 
 // For ordinary range scans inside one explicit transaction, scan() is usually
 // the right default:
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           query::expression SelectionT>
 inline auto scan(::ceph::libfdb::transaction_handle txn, SelectionT selection,
                  const read_mode mode = read_mode::serializable)
@@ -808,7 +808,7 @@ inline auto scan(::ceph::libfdb::transaction_handle txn, SelectionT selection,
 }
 
 // Compatibility name retained for existing callers:
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           query::expression SelectionT>
 inline auto pair_generator(::ceph::libfdb::transaction_handle txn, SelectionT selection,
                            const read_mode mode = read_mode::serializable)
@@ -905,6 +905,10 @@ constexpr std::size_t initial_reservation(RangeT& rows, const page p,
 
 constexpr int range_limit_for(page p)
 {
+ if (page::max_size < p.size) {
+  throw libfdb_exception(std::errc::value_too_large, "page size exceeds FoundationDB range limit");
+ }
+
  if (0 == p.size) {
   return 0;
  }
@@ -912,10 +916,10 @@ constexpr int range_limit_for(page p)
  return static_cast<int>(p.size + 1);
 }
 
-template <typename ValueT>
+template <concepts::decoded_value ValueT>
 using row_t = std::pair<std::string, ValueT>;
 
-template <typename ValueT, typename FnT>
+template <concepts::decoded_value ValueT, typename FnT>
 using row_transform_result_t =
  std::invoke_result_t<FnT&, row_t<ValueT>&&>;
 
@@ -960,7 +964,7 @@ template <std::ranges::input_range RangeT>
  return out;
 }
 
-template <typename ValueT = std::string>
+template <concepts::decoded_value ValueT = std::string>
 [[nodiscard]] auto scan(::ceph::libfdb::transaction_handle txn,
                         ::ceph::libfdb::select selector, page p,
                         const read_mode mode = read_mode::serializable)
@@ -980,7 +984,7 @@ template <typename ValueT = std::string>
  return out;
 }
 
-template <typename ValueT = std::string>
+template <concepts::decoded_value ValueT = std::string>
 [[nodiscard]] auto scan(ceph::libfdb::database_handle dbh,
                         const transaction_options& options,
                         ceph::libfdb::select selector,
@@ -994,7 +998,7 @@ template <typename ValueT = std::string>
   });
 }
 
-template <typename ValueT = std::string>
+template <concepts::decoded_value ValueT = std::string>
 [[nodiscard]] auto scan(ceph::libfdb::database_handle dbh,
                         ceph::libfdb::select selector,
                         page p,
@@ -1006,7 +1010,7 @@ template <typename ValueT = std::string>
 
 namespace detail {
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>>
 AssocT materialize_managed_block(const transaction_source& source,
                                  query_cursor& cursor,
@@ -1022,7 +1026,7 @@ AssocT materialize_managed_block(const transaction_source& source,
  return ::ceph::util::collect_as<AssocT>(decode_pairs<ValueT>(window->result_pairs));
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>>
 auto blocks_selector(transaction_source source, query_cursor cursor, const read_mode mode)
  -> std::generator<AssocT>
@@ -1039,7 +1043,7 @@ auto blocks_selector(transaction_source source, query_cursor cursor, const read_
  }
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           query::expression SelectionT>
 inline auto managed_scan_selector(transaction_source source, SelectionT selection,
                                   const read_mode mode)
@@ -1129,7 +1133,7 @@ requires std::ranges::range<ResultT> and
 /* blocks() materializes bounded managed windows; use scan(txn, ...) for direct
  * scans in a caller-owned transaction. Use partitions() when independently
  * scheduling a large range earns the additional planning overhead. */
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 auto blocks(ceph::libfdb::database_handle dbh,
@@ -1143,7 +1147,7 @@ auto blocks(ceph::libfdb::database_handle dbh,
   detail::make_managed_query_cursor(std::move(selection)), mode);
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 auto blocks(ceph::libfdb::database_handle dbh,
@@ -1156,7 +1160,7 @@ auto blocks(ceph::libfdb::database_handle dbh,
 }
 
 // Compatibility name retained for existing callers:
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 auto block_generator(ceph::libfdb::database_handle dbh,
@@ -1169,7 +1173,7 @@ auto block_generator(ceph::libfdb::database_handle dbh,
   std::move(dbh), options, std::move(selection), mode);
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 auto block_generator(ceph::libfdb::database_handle dbh,
@@ -1181,7 +1185,7 @@ auto block_generator(ceph::libfdb::database_handle dbh,
 }
 
 // Managed scans decode directly from independently retried result windows.
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           query::expression SelectionT>
 inline auto scan(ceph::libfdb::database_handle dbh,
                  const transaction_options& options,
@@ -1193,7 +1197,7 @@ inline auto scan(ceph::libfdb::database_handle dbh,
   detail::transaction_source(std::move(dbh), options), std::move(selection), mode);
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           query::expression SelectionT>
 inline auto scan(ceph::libfdb::database_handle dbh,
                  SelectionT selection,
@@ -1204,7 +1208,7 @@ inline auto scan(ceph::libfdb::database_handle dbh,
                      std::move(selection), mode);
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 inline AssocT collect(::ceph::libfdb::transaction_handle txn, SelectionT selection,
@@ -1213,7 +1217,7 @@ inline AssocT collect(::ceph::libfdb::transaction_handle txn, SelectionT selecti
  return ::ceph::util::collect_as<AssocT>(scan<ValueT>(txn, std::move(selection), mode));
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 inline AssocT collect(database_handle dbh, const transaction_options& options,
@@ -1223,7 +1227,7 @@ inline AssocT collect(database_handle dbh, const transaction_options& options,
           scan<ValueT>(std::move(dbh), options, std::move(selection), mode));
 }
 
-template <typename ValueT = std::string,
+template <concepts::decoded_value ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
 inline AssocT collect(::ceph::libfdb::database_handle dbh,
@@ -1343,7 +1347,7 @@ std::size_t for_each_row(std::generator<RowT> rows, FnT&& fn)
 
 } // namespace detail
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline std::size_t for_each(transaction_handle txn, SelectionT selection, const read_mode mode,
                             FnT&& fn)
@@ -1351,7 +1355,7 @@ inline std::size_t for_each(transaction_handle txn, SelectionT selection, const 
  return detail::for_each_row(scan<ValueT>(std::move(txn), std::move(selection), mode), fn);
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline std::size_t for_each(transaction_handle txn, SelectionT selection, FnT&& fn)
 {
@@ -1359,7 +1363,7 @@ inline std::size_t for_each(transaction_handle txn, SelectionT selection, FnT&& 
                          std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline std::size_t for_each(database_handle dbh, const transaction_options& options,
                             SelectionT selection, const read_mode mode,
@@ -1368,7 +1372,7 @@ inline std::size_t for_each(database_handle dbh, const transaction_options& opti
  return detail::for_each_row(scan<ValueT>(std::move(dbh), options, std::move(selection), mode), fn);
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline std::size_t for_each(database_handle dbh, SelectionT selection, const read_mode mode,
                             FnT&& fn)
@@ -1377,7 +1381,7 @@ inline std::size_t for_each(database_handle dbh, SelectionT selection, const rea
                           std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline std::size_t for_each(database_handle dbh, const transaction_options& options,
                             SelectionT selection, FnT&& fn)
@@ -1386,7 +1390,7 @@ inline std::size_t for_each(database_handle dbh, const transaction_options& opti
                          std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline std::size_t for_each(database_handle dbh, SelectionT selection, FnT&& fn)
 {
@@ -1394,7 +1398,7 @@ inline std::size_t for_each(database_handle dbh, SelectionT selection, FnT&& fn)
                           std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, typename OutIterT,
+template <concepts::decoded_value ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
@@ -1409,7 +1413,7 @@ inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT
  return out;
 }
 
-template <typename ValueT = std::string, typename FnT, typename OutIterT,
+template <concepts::decoded_value ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
@@ -1419,7 +1423,7 @@ inline OutIterT transform(transaction_handle txn, SelectionT selection, OutIterT
                           read_mode::serializable, std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::constructible_from<
            std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
@@ -1438,7 +1442,7 @@ requires detail::row_invocable<FnT, ValueT> and
  return out;
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::constructible_from<
            std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
@@ -1451,7 +1455,7 @@ requires detail::row_invocable<FnT, ValueT> and
                           std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, typename OutIterT,
+template <concepts::decoded_value ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
@@ -1467,7 +1471,7 @@ inline OutIterT transform(database_handle dbh, const transaction_options& option
  return out;
 }
 
-template <typename ValueT = std::string, typename FnT, typename OutIterT,
+template <concepts::decoded_value ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
@@ -1478,7 +1482,7 @@ inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT ou
                           std::move(out), mode, std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, typename OutIterT,
+template <concepts::decoded_value ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
@@ -1489,7 +1493,7 @@ inline OutIterT transform(database_handle dbh, const transaction_options& option
                           read_mode::serializable, std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, typename OutIterT,
+template <concepts::decoded_value ValueT = std::string, typename FnT, typename OutIterT,
           query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
@@ -1499,7 +1503,7 @@ inline OutIterT transform(database_handle dbh, SelectionT selection, OutIterT ou
                           std::move(out), std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::constructible_from<
            std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
@@ -1519,7 +1523,7 @@ requires detail::row_invocable<FnT, ValueT> and
  return out;
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::constructible_from<
            std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
@@ -1533,7 +1537,7 @@ requires detail::row_invocable<FnT, ValueT> and
                           std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::constructible_from<
            std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
@@ -1547,7 +1551,7 @@ requires detail::row_invocable<FnT, ValueT> and
                           std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_invocable<FnT, ValueT> and
          std::constructible_from<
            std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>,
@@ -1560,7 +1564,7 @@ requires detail::row_invocable<FnT, ValueT> and
                           std::forward<FnT>(fn));
 }
 
-template <typename ValueT = std::string, typename PredT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename PredT, query::expression SelectionT>
 requires detail::row_predicate<PredT, ValueT>
 inline std::size_t erase_if(::ceph::libfdb::transaction_handle txn,
                             SelectionT selection, PredT&& pred)
@@ -1572,7 +1576,7 @@ inline std::size_t erase_if(::ceph::libfdb::transaction_handle txn,
   });
 }
 
-template <typename ValueT = std::string, typename PredT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename PredT, query::expression SelectionT>
 requires detail::row_predicate<PredT, ValueT>
 inline std::size_t erase_if(::ceph::libfdb::database_handle dbh, const transaction_options& options,
                             SelectionT selection, PredT&& pred)
@@ -1587,7 +1591,7 @@ inline std::size_t erase_if(::ceph::libfdb::database_handle dbh, const transacti
   });
 }
 
-template <typename ValueT = std::string, typename PredT, query::expression SelectionT>
+template <concepts::decoded_value ValueT = std::string, typename PredT, query::expression SelectionT>
 requires detail::row_predicate<PredT, ValueT>
 inline std::size_t erase_if(::ceph::libfdb::database_handle dbh,
                             SelectionT selection, PredT&& pred)
