@@ -60,10 +60,10 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
 
+  principal_tags_t get_principal_tags(const DoutPrefixProvider* dpp, const rgw_decoded_jwt& decoded) const;
+
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>, bool>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
-
-  std::string get_pem_from_jwk(const std::string& n_b64url, const std::string& e_b64url) const;
 
   bool validate_signature_using_n_e(const DoutPrefixProvider* dpp, const rgw_decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const;
 
@@ -74,7 +74,8 @@ class WebTokenEngine : public rgw::auth::Engine {
                         const req_state* s, optional_yield y) const;
 
   template <typename T>
-  void recurse_and_insert(const string& key, const jwt::claim& c, T& t) const;
+  void recurse_and_insert(const string& key, const jwt::claim& c, T& t, bool is_root_tags = false) const;
+
   WebTokenEngine::token_t get_token_claims(const rgw_decoded_jwt& decoded) const;
 
   int create_connection(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const;

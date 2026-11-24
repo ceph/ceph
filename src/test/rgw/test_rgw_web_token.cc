@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 
@@ -28,6 +29,12 @@ struct WebTokenEngineTestAccess {
       const WebTokenEngine& engine,
       const rgw_decoded_jwt& decoded) {
     return engine.get_token_claims(decoded);
+  }
+
+  static auto call_get_principal_tags(const WebTokenEngine& engine,
+                                      const DoutPrefixProvider* dpp,
+                                      const rgw_decoded_jwt& decoded) {
+    return engine.get_principal_tags(dpp, decoded);
   }
 };
 
@@ -175,6 +182,24 @@ TEST(WebTokenEngineTest, RecurseAndInsertSkipsNullFieldsInObjectAndArray) {
       engine, "ignored_root_key", jwt::claim(val), out));
   EXPECT_EQ(out.count("null_field"), 0u);
   EXPECT_EQ(out.count("inner_null"), 0u);
+}
+
+TEST(WebTokenEngineTest, GetPrincipalTagsExtractsEnvProd) {
+  WebTokenEngine engine(nullptr, nullptr, nullptr, nullptr);
+
+  const std::string jwt_str = make_test_jwt(R"({
+    "https://aws.amazon.com/tags": {
+      "principal_tags": {
+        "env": ["prod"]
+      }
+    }
+  })");
+
+  const auto decoded = jwt::decode<jwt::traits::kazuho_picojson>(jwt_str);
+  const auto tags =
+      WebTokenEngineTestAccess::call_get_principal_tags(engine, nullptr, decoded);
+
+  EXPECT_EQ(tags.count({"env", "prod"}), 1u);
 }
 
 }  // namespace
