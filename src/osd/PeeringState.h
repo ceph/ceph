@@ -463,7 +463,8 @@ public:
     virtual bool try_reserve_recovery_space(
       int64_t primary_num_bytes,
       int64_t local_num_bytes,
-      int64_t num_objects = 0) = 0;
+      int64_t num_objects = 0,
+      bool pool_migration = false) = 0;
     virtual void unreserve_recovery_space() = 0;
 
     // ================== Peering log events ====================

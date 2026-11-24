@@ -589,6 +589,7 @@ public:
 	stats = stat;
 	return false;
       });
+    update_pool_migration_local_bytes();
   }
 
   void schedule_recovery_work(

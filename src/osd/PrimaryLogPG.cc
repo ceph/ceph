@@ -9811,6 +9811,7 @@ void PrimaryLogPG::apply_stats(
   const object_stat_sum_t &delta_stats) {
 
   recovery_state.apply_op_stats(soid, delta_stats);
+  update_pool_migration_local_bytes();
   for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
        i != get_backfill_targets().end();
        ++i) {

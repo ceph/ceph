@@ -725,7 +725,8 @@ public:
 
 
   bool try_reserve_recovery_space(
-    int64_t primary_num_bytes, int64_t local_num_bytes, int64_t num_objects) final {
+    int64_t primary_num_bytes, int64_t local_num_bytes, int64_t num_objects,
+    bool pool_migration) final {
     // TODO
     return true;
   }

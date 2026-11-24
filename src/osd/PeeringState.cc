@@ -6895,7 +6895,7 @@ PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRe
       context< Active >().remote_shards_to_reserve_migration.end()) {
     if (*migration_osd_it == ps->pg_whoami) {
       if (!pl->try_reserve_recovery_space(
-	     num_bytes, 0, num_objects)) {
+	     num_bytes, 0, num_objects, true)) {
 	post_event(RemotePoolMigrationRejectedTooFull());
       } else {
 	pl->request_remote_recovery_reservation(
@@ -7163,7 +7163,7 @@ PeeringState::RepNotRecovering::react(const RemotePoolMigrationRequest &evt)
 {
   DECLARE_LOCALS;
   if (!pl->try_reserve_recovery_space(
-	evt.source_num_bytes, 0, evt.source_num_objects)) {
+	evt.source_num_bytes, 0, evt.source_num_objects, true)) {
     post_event(RemotePoolMigrationRejectedTooFull());
   } else {
     pl->request_remote_recovery_reservation(
