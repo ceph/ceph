@@ -44,6 +44,12 @@ in case the one happens to be down at the time of mount. Monitor addresses take
 the form ip_address[:port]. If the port is not specified, the Ceph default of 6789
 is assumed.
 
+Port 6789 is the Monitors' messenger v1 port. Monitors listen for messenger v2
+on port 3300, but the client assumes port 6789 for every ``ms_mode``. So when
+you pass ``mon_addr`` with an ``ms_mode`` other than ``legacy``, for example
+``secure`` for on-the-wire encryption, give port 3300 with each address, as in
+``mon_addr=192.168.0.1:3300``.
+
 If Monitor addresses are not specified, then **mount.ceph** will attempt to determine
 Monitor addresses using local configuration files and/or DNS SRV records. In a similar
 way, if authentication is enabled on Ceph cluster (which is done using CephX) and
@@ -51,6 +57,9 @@ options ``secret`` and ``secretfile`` are not specified in the command, the moun
 helper will spawn a child process that will use the standard Ceph library routines
 to find a keyring and fetch the secret from it (including the Monitor address and
 FSID if those are not specified).
+With the new device syntax and no ``ms_mode`` option, **mount.ceph** uses the
+Monitors' messenger v2 addresses and ``ms_mode=prefer-crc``, and falls back to
+messenger v1 if the configuration lists no messenger v2 addresses.
 
 A sub-directory of the file system can be mounted by specifying the (absolute)
 path to the sub-directory right after "=" in the device part of the mount command.
@@ -290,6 +299,11 @@ Pass the Monitor host's IP address, optionally::
 Pass the port along with IP address if it is running on a non-standard port::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1:7000
+
+Use messenger v2 with on-the-wire encryption, passing each Monitor's messenger
+v2 port::
+
+    mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1:3300,ms_mode=secure
 
 If there are multiple Monitors, pass each address separated by a "/"::
 
