@@ -16178,6 +16178,95 @@ def test_block_public_object_canned_acls():
     client.put_object(Bucket=bucket_name, Key='foo4', Body='', ACL='private')
 
 
+def _put_public_access_block(client, bucket_name):
+    access_conf = {'BlockPublicAcls': True,
+                   'IgnorePublicAcls': False,
+                   'BlockPublicPolicy': False,
+                   'RestrictPublicBuckets': False}
+    client.put_public_access_block(Bucket=bucket_name, PublicAccessBlockConfiguration=access_conf)
+
+
+def test_block_public_object_grant_acls():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _put_public_access_block(client, bucket_name)
+
+    all_users = 'uri="http://acs.amazonaws.com/groups/global/AllUsers"'
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key='foo1', Body='', GrantRead=all_users)
+    assert 403 == _get_status(e.response)
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key='foo2', Body='', GrantFullControl=all_users)
+    assert 403 == _get_status(e.response)
+
+    client.put_object(Bucket=bucket_name, Key='foo3', Body='', ACL='private')
+
+
+def test_block_public_copy_object():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='src', Body='foo')
+    _put_public_access_block(client, bucket_name)
+    copy_source = {'Bucket': bucket_name, 'Key': 'src'}
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name, Key='dst1', CopySource=copy_source, ACL='public-read')
+    assert 403 == _get_status(e.response)
+
+    all_users = 'uri="http://acs.amazonaws.com/groups/global/AllUsers"'
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name, Key='dst2', CopySource=copy_source, GrantRead=all_users)
+    assert 403 == _get_status(e.response)
+
+    client.copy_object(Bucket=bucket_name, Key='dst3', CopySource=copy_source, ACL='private')
+
+
+def test_block_public_multipart_upload():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _put_public_access_block(client, bucket_name)
+
+    e = assert_raises(ClientError, client.create_multipart_upload, Bucket=bucket_name, Key='mpu1', ACL='public-read')
+    assert 403 == _get_status(e.response)
+
+    all_users = 'uri="http://acs.amazonaws.com/groups/global/AllUsers"'
+    e = assert_raises(ClientError, client.create_multipart_upload, Bucket=bucket_name, Key='mpu2', GrantRead=all_users)
+    assert 403 == _get_status(e.response)
+
+    response = client.create_multipart_upload(Bucket=bucket_name, Key='mpu3', ACL='private')
+    client.abort_multipart_upload(Bucket=bucket_name, Key='mpu3', UploadId=response['UploadId'])
+
+
+def test_block_public_post_object():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _put_public_access_block(client, bucket_name)
+
+    url = _get_post_url(bucket_name)
+    utc = pytz.utc
+    expires = datetime.datetime.now(utc) + datetime.timedelta(seconds=+6000)
+    aws_secret_access_key = get_main_aws_secret_key()
+    aws_access_key_id = get_main_aws_access_key()
+
+    def post_with_acl(acl, key):
+        policy_document = {"expiration": expires.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "conditions": [
+            {"bucket": bucket_name},
+            ["starts-with", "$key", "foo"],
+            {"acl": acl},
+            ["content-length-range", 0, 1024]
+            ]}
+        policy = base64.b64encode(bytes(json.JSONEncoder().encode(policy_document), 'utf-8'))
+        signature = base64.b64encode(hmac.new(bytes(aws_secret_access_key, 'utf-8'), policy, hashlib.sha1).digest())
+        payload = OrderedDict([("key", key), ("AWSAccessKeyId", aws_access_key_id),
+            ("acl", acl), ("signature", signature), ("policy", policy),
+            ('file', ('bar'))])
+        return requests.post(url, files=payload, verify=get_config_ssl_verify())
+
+    r = post_with_acl("public-read", "foo_public.txt")
+    assert r.status_code == 403
+
+    r = post_with_acl("private", "foo_private.txt")
+    assert r.status_code == 204
+
+
 def test_block_public_policy():
     bucket_name = get_new_bucket()
     client = get_client()
