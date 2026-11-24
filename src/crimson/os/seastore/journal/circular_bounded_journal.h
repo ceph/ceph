@@ -18,6 +18,8 @@
 #include "include/uuid.h"
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include <algorithm>
+#include <limits>
 #include <list>
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/journal/circular_journal_space.h"
@@ -180,7 +182,10 @@ public:
   }
 
   extent_len_t get_max_write_length() const final {
-    return cjs.get_records_total_size();
+    // the journal can be larger than what extent_len_t can hold
+    return std::min<size_t>(
+      cjs.get_records_total_size(),
+      std::numeric_limits<extent_len_t>::max());
   }
 
   // Test interfaces
