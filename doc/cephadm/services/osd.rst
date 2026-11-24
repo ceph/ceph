@@ -321,6 +321,25 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
 
 For more on ``cephadm``, see also :ref:`cephadm-spec-unmanaged`.
 
+.. _cephadm-osd-spec-changes:
+
+Changing an OSD Spec
+^^^^^^^^^^^^^^^^^^^^
+
+When a changed OSD spec is applied, ``cephadm`` uses it only for OSDs that it
+creates after the change. Existing OSDs are not redeployed. For example, adding
+``encrypted: true`` to a spec does not encrypt the OSDs that the spec has
+already deployed. Only OSDs created afterward are encrypted. Removing a host
+from a spec's placement does not remove the OSDs on that host.
+
+To bring an existing OSD in line with a changed spec, replace it with
+``--zap`` (see :ref:`cephadm-replacing-an-osd`). ``cephadm`` then creates a new
+OSD on the zapped device from the current spec.
+
+It is best to settle on a device layout early and afterward change only a
+spec's placement. For example, apply a spec to one host, check the OSDs that it
+creates, and then widen the placement to the remaining hosts.
+
 .. _cephadm-osd-removal:
 
 Remove an OSD
