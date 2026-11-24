@@ -245,8 +245,6 @@ TEST_F(SessionRoutesTest, NewHintReportsThePreviousCore)
 TEST_F(SessionRoutesTest, UnusableHintIsIgnored)
 {
   const auto invalid = hint_followed_t::what_t::invalid;
-  // no port
-  EXPECT_EQ(invalid, follow(pg, hint(core, 0)).what);
   // no main connection, whose address to use
   EXPECT_EQ(invalid, routes.follow_hint(
     pg, hint(core), nullptr, at(90), blocks, connect, session_ops,
@@ -314,6 +312,77 @@ TEST_F(SessionRoutesTest, ConnectingCoresCountTowardsTheLimit)
   EXPECT_EQ(hint_followed_t::what_t::too_many_cores,
             follow(pg2, hint(other_core, other_port)).what);
   EXPECT_EQ(1u, connect_calls);
+}
+
+// a hint without a port: the core takes no direct connections for now
+
+TEST_F(SessionRoutesTest, MainHintOfAnUnroutedPgChangesNothing)
+{
+  auto out = follow(pg, hint(core, 0));
+  EXPECT_EQ(hint_followed_t::what_t::unchanged, out.what);
+  EXPECT_EQ(nullptr, routes.route_of(pg));
+  EXPECT_EQ(0u, connect_calls);
+  EXPECT_EQ(0u, routes.num_core_cons());
+}
+
+TEST_F(SessionRoutesTest, MainHintSendsPgBackToMainOnceDrained)
+{
+  hinted_and_connected();
+  op_route_t a, b, c;
+  ASSERT_EQ(routing_t::what_t::switched, route(a, 100).what);
+  ASSERT_EQ(std::optional<core_id_t>(core), a.core);
+
+  auto out = follow(pg, hint(core, 0), 100);
+  EXPECT_EQ(hint_followed_t::what_t::to_main, out.what);
+  EXPECT_EQ(std::optional<core_id_t>(core), out.prev_core);
+  EXPECT_FALSE(out.opened);
+  EXPECT_FALSE(route_of(pg).hinted_core);
+  // the core's connection is kept: it may be hinted again
+  EXPECT_EQ(core_con, routes.core_con(core));
+
+  // a is in flight on the core connection: b follows it there
+  auto r = route(b, 101);
+  EXPECT_EQ(routing_t::what_t::pending, r.what);
+  EXPECT_FALSE(r.desired);
+  EXPECT_EQ(std::optional<core_id_t>(core), b.core);
+
+  // drained: back to the main connection
+  routes.retire_op(a);
+  routes.retire_op(b);
+  r = route(c, 102);
+  EXPECT_EQ(routing_t::what_t::switched, r.what);
+  EXPECT_FALSE(c.core);
+
+  // again a main hint: nothing to change
+  EXPECT_EQ(hint_followed_t::what_t::unchanged,
+            follow(pg, hint(core, 0), 103).what);
+}
+
+TEST_F(SessionRoutesTest, CoreHintedAgainAfterAMainHint)
+{
+  hinted_and_connected();
+  ASSERT_EQ(hint_followed_t::what_t::to_main,
+            follow(pg, hint(core, 0)).what);
+
+  // the connection was kept: no new one
+  auto out = follow(pg, hint(core));
+  EXPECT_EQ(hint_followed_t::what_t::changed, out.what);
+  EXPECT_FALSE(out.prev_core);
+  EXPECT_FALSE(out.opened);
+  EXPECT_EQ(1u, connect_calls);
+  EXPECT_EQ(std::optional<core_id_t>(core), route_of(pg).hinted_core);
+  op_route_t op;
+  EXPECT_EQ(routing_t::what_t::switched, route(op, 100).what);
+  EXPECT_EQ(std::optional<core_id_t>(core), op.core);
+}
+
+TEST_F(SessionRoutesTest, MainHintWhileRoutingOffIsIgnored)
+{
+  hinted_and_connected();
+  cfg.enabled = false;
+  EXPECT_EQ(hint_followed_t::what_t::invalid,
+            follow(pg, hint(core, 0)).what);
+  EXPECT_EQ(std::optional<core_id_t>(core), route_of(pg).hinted_core);
 }
 
 TEST_F(SessionRoutesTest, CoreIsRoutedToOnlyOnceAdmitted)
@@ -1054,10 +1123,19 @@ TEST_F(InactiveSessionRoutesTest, HintWhileRoutingOffDoesNotActivate)
   EXPECT_FALSE(routes.is_active());
 }
 
+TEST_F(InactiveSessionRoutesTest, MainHintDoesNotActivate)
+{
+  EXPECT_EQ(hint_followed_t::what_t::unchanged,
+            follow(pg, hint(core, 0)).what);
+  EXPECT_FALSE(routes.is_active());
+  EXPECT_EQ(nullptr, routes.route_of(pg));
+}
+
 TEST_F(InactiveSessionRoutesTest, OnlyAFollowedHintActivates)
 {
-  // unusable
-  EXPECT_EQ(hint_followed_t::what_t::invalid, follow(pg, hint(core, 0)).what);
+  // unusable: the main connection's own port
+  EXPECT_EQ(hint_followed_t::what_t::invalid,
+            follow(pg, hint(core, 6800)).what);
   EXPECT_FALSE(routes.is_active());
   // its host blocked
   blocks.block(host, at(90));
