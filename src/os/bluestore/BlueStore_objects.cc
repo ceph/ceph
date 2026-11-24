@@ -91,7 +91,7 @@ bluestore::OnodeRef bluestore::OnodeSpace::add_onode(const ghobject_t& oid,
     return p.first->second;
   }
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
-  cache->_add(o.get(), 1);
+  cache->_add(o.get());
   cache->_trim_some();
   return o;
 }
@@ -168,7 +168,7 @@ void bluestore::OnodeSpace::rename(
   // install a non-existent onode at old location
   oldo.reset(new Onode(o->c, old_oid, o->key));
   po->second = oldo;
-  cache->_add(oldo.get(), 1);
+  cache->_add(oldo.get());
   // add at new position and fix oid, key.
   // This will pin 'o' and implicitly touch cache
   // when it will eventually become unpinned
