@@ -4122,6 +4122,69 @@ TEST_CASE("FoundationDB integer encoding is little endian", "[fdb]") {
  STATIC_REQUIRE(negative_one == lfdb::detail::little_endian_bytes(std::int32_t {-1}));
 }
 
+template <typename ValueT, bool Supported>
+void check_atomic_byte_operand()
+{
+ // Probe each overload independently; an invalid byte type must fail its constraint:
+ STATIC_REQUIRE(Supported == requires(lfdb::transaction_handle txn, const ValueT& value) {
+  lfdb::atomic::byte_min(txn, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh, const ValueT& value) {
+  lfdb::atomic::byte_min(dbh, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh,
+                                     const lfdb::transaction_options& options, const ValueT& value) {
+  lfdb::atomic::byte_min(dbh, options, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::transaction_handle txn, const ValueT& value) {
+  lfdb::atomic::byte_max(txn, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh, const ValueT& value) {
+  lfdb::atomic::byte_max(dbh, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh,
+                                     const lfdb::transaction_options& options, const ValueT& value) {
+  lfdb::atomic::byte_max(dbh, options, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::transaction_handle txn, const ValueT& value) {
+  lfdb::atomic::append_if_fits(txn, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh, const ValueT& value) {
+  lfdb::atomic::append_if_fits(dbh, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh,
+                                     const lfdb::transaction_options& options, const ValueT& value) {
+  lfdb::atomic::append_if_fits(dbh, options, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::transaction_handle txn, const ValueT& value) {
+  lfdb::atomic::compare_and_clear(txn, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh, const ValueT& value) {
+  lfdb::atomic::compare_and_clear(dbh, "key", value);
+ });
+ STATIC_REQUIRE(Supported == requires(lfdb::database_handle dbh,
+                                     const lfdb::transaction_options& options, const ValueT& value) {
+  lfdb::atomic::compare_and_clear(dbh, options, "key", value);
+ });
+}
+
+TEST_CASE("atomic byte mutations constrain their operand storage", "[fdb][concepts]")
+{
+ check_atomic_byte_operand<int, false>();
+ check_atomic_byte_operand<std::vector<int>, false>();
+ check_atomic_byte_operand<std::list<std::uint8_t>, false>();
+ check_atomic_byte_operand<std::vector<bool>, false>();
+ check_atomic_byte_operand<rvalue_string_view_only, false>();
+
+ check_atomic_byte_operand<std::string, true>();
+ check_atomic_byte_operand<std::string_view, true>();
+ check_atomic_byte_operand<char[4], true>();
+ check_atomic_byte_operand<std::vector<std::uint8_t>, true>();
+ check_atomic_byte_operand<std::array<std::uint8_t, 3>, true>();
+ check_atomic_byte_operand<std::span<std::uint8_t>, true>();
+ check_atomic_byte_operand<std::span<const std::uint8_t>, true>();
+}
+
 TEST_CASE("atomic mutations", "[fdb]") {
  janitor j;
 

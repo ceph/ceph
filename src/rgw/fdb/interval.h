@@ -478,6 +478,7 @@ struct static_interval_set final
 
  // Initialize unused slots without requiring an adapter's default interval.
  explicit constexpr static_interval_set(const value_type& initial)
+ requires (0 == Capacity or std::convertible_to<const value_type&, value_type>)
   : static_interval_set(initial, std::make_index_sequence<Capacity> {})
  {}
 

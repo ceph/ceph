@@ -1010,6 +1010,62 @@ TEST_CASE("fixed interval exports support mutable indexed access", "[fdb][algebr
  CHECK(q::between("c", "d") == *std::begin(fdb_export));
 }
 
+TEST_CASE("fixed storage constrains only the constructors that copy", "[fdb][algebra][types]")
+{
+ struct move_only_interval final
+ {
+  using domain_type = integer_domain;
+
+  std::unique_ptr<int> token;
+ };
+
+ using storage = core::static_interval_set<integer_domain, 1, move_only_interval>;
+ using empty_storage = core::static_interval_set<integer_domain, 0, move_only_interval>;
+
+ STATIC_REQUIRE(std::default_initializable<storage>);
+ STATIC_REQUIRE_FALSE(std::constructible_from<storage, const move_only_interval&>);
+ STATIC_REQUIRE(std::constructible_from<empty_storage, const move_only_interval&>);
+
+ storage out;
+ out.push_back(move_only_interval {std::make_unique<int>(42)});
+
+ REQUIRE(1 == out.size());
+ CHECK(42 == *out[0].token);
+
+ const move_only_interval seed {std::make_unique<int>(7)};
+ const empty_storage empty {seed};
+
+ CHECK(empty.empty());
+ CHECK(7 == *seed.token);
+
+ struct copy_only_interval final
+ {
+  using domain_type = integer_domain;
+
+  int value = 0;
+
+  public:
+  copy_only_interval() = default;
+  copy_only_interval(const copy_only_interval&) = default;
+  copy_only_interval(copy_only_interval&&) = delete;
+
+  public:
+  copy_only_interval& operator=(copy_only_interval&&) = default;
+
+ };
+
+ using copy_storage = core::static_interval_set<integer_domain, 1, copy_only_interval>;
+
+ STATIC_REQUIRE_FALSE(std::move_constructible<copy_only_interval>);
+ STATIC_REQUIRE(std::constructible_from<copy_storage, const copy_only_interval&>);
+
+ const copy_only_interval copy_seed;
+ copy_storage copied {copy_seed};
+ copied.push_back(copy_seed);
+
+ CHECK(1 == copied.size());
+}
+
 struct immutable_model final
 {
  using query = core::query<immutable_domain>;

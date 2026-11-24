@@ -548,7 +548,8 @@ inline auto byte_span(const std::string_view bytes)
 }
 
 template <typename FDBBytesT>
-requires (not concepts::stringview_convertible<FDBBytesT>)
+requires (not concepts::stringview_convertible<FDBBytesT>) and
+         std::constructible_from<std::span<const std::uint8_t>, const FDBBytesT&>
 inline auto byte_span(const FDBBytesT& bytes)
 {
  return std::span<const std::uint8_t>(bytes);

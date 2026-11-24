@@ -1134,6 +1134,9 @@ Geometric predicates borrow their operands and ignore execution-option conflicts
 The dynamic pure-core algebra accepts immutable, copy-constructible keys. Fixed-
 capacity export uses preconstructed assignable slots and therefore additionally
 requires assignable interval values; this requirement is checked by its constraints.
+Supplying an initial value for unused fixed-capacity slots also requires copying
+that value, unless capacity is zero. Default slot construction does not require
+copyable interval adapters.
 
 Owning boundaries and borrowed boundaries compare endpoint kind, inclusivity, and
 finite keys using `Domain::compare()`. Keys need no separate equality operator.
@@ -2234,7 +2237,10 @@ lfdb::atomic::max(dbh, "stats/high-watermark", std::uint64_t{128});
 lfdb::atomic::min(dbh, "stats/low-watermark", std::uint64_t{4});
 ```
 
-Byte-wise atomic mutations operate on raw byte strings:
+Byte-wise atomic mutations operate on raw byte strings. Their operands must be
+string-view-convertible or contiguous `std::uint8_t` storage, such as byte vectors,
+arrays, or spans. Other element types and noncontiguous ranges are rejected by
+the overload constraints:
 
 ```cpp
 const std::string_view zero_bytes("\0\0\0\0\0\0\0\0", 8);
