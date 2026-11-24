@@ -30,6 +30,11 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   if (ceph_arch_intel_avx512_vpclmul && ceph_crc32c_intel_fast_avx512_vpclmul_exists()) {
     return ceph_crc32c_intel_fast_avx512_vpclmul;
   }
+  // AVX2 with GFNI, VAES and VPCLMULQDQ, but not that AVX512 set (as ISA-L's
+  // own dispatcher chooses): folding with VPCLMULQDQ (crc32_iscsi_avx2)
+  if (ceph_arch_intel_avx2_vpclmul && ceph_crc32c_intel_fast_avx2_vpclmul_exists()) {
+    return ceph_crc32c_intel_fast_avx2_vpclmul;
+  }
   // crc32_iscsi_01 uses PCLMULQDQ as well as SSE 4.2.
   if (ceph_arch_intel_sse42 && ceph_arch_intel_pclmul && ceph_crc32c_intel_fast_exists()) {
     return ceph_crc32c_intel_fast_pclmul;
