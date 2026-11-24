@@ -100,6 +100,9 @@
 #                  reactors, and a reactor that runs out of it fails its
 #                  connections (std::bad_alloc). Keep OSD_MEMORY / OSD_SMP
 #                  well above the data in flight per reactor.
+#   FIO_LAT_LOG    1: log every op's completion latency, as
+#                  RESULTS_DIR/<workload>-<mode>-<rep>_clat.log (fio's
+#                  write_lat_log; all the jobs in one file)  (default: unset)
 #   REPEAT         repetitions of every (workload, mode) pair   (default: 1)
 #   RESULTS_DIR    where fio outputs, the summary and the OSD logs are kept
 #                  (default: ./fio-hints-results.<date> under the build dir)
@@ -711,6 +714,11 @@ function _fio_run() {
     local extra=(time_based=1 runtime=$FIO_RUNTIME ramp_time=$FIO_RAMP
                  touch_objects=0)
     [ $rw = randrw ] && extra+=(rwmixread=70)
+    # FIO_LAT_LOG=1: log every op's completion latency (fio's clat log, all
+    # the jobs in one file: <RESULTS_DIR>/<tag>_clat.log), to find when the
+    # slow ops happen
+    [ -n "$FIO_LAT_LOG" ] &&
+        extra+=(write_lat_log=$RESULTS_DIR/$tag log_avg_msec=0 per_job_logs=0)
     if [ -n "$FIO_RATE_IOPS" ]; then
         # per job. A single rate_iops value caps reads and writes each
         local job_iops=$(( (FIO_RATE_IOPS + FIO_NUMJOBS - 1) / FIO_NUMJOBS ))
