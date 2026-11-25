@@ -9,6 +9,7 @@ overrides:
     log-ignorelist:
       - \(OSD_DOWN\)
       - \(OSD_HOST_DOWN\)
+      - \(OSD_ROOT_DOWN\)
       - \(POOL_APP_NOT_ENABLED\)
       - \(SLOW_OPS\)
       - \(PG_AVAILABILITY\)
