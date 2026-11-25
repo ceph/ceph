@@ -19172,7 +19172,12 @@ paths:
       - RgwBucket
   /api/rgw/bucket/ratelimit:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -19418,6 +19423,11 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -19454,6 +19464,8 @@ paths:
           application/json:
             schema:
               properties:
+                daemon_name:
+                  type: string
                 enabled:
                   type: string
                 max_read_bytes:
@@ -20923,7 +20935,12 @@ paths:
       - RgwUser
   /api/rgw/user/ratelimit:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -21430,6 +21447,11 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -21466,6 +21488,8 @@ paths:
           application/json:
             schema:
               properties:
+                daemon_name:
+                  type: string
                 enabled:
                   default: false
                   type: boolean
