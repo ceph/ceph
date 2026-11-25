@@ -436,7 +436,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool try_reserve_recovery_space(
     int64_t primary_num_bytes,
     int64_t local_num_bytes,
-    int64_t num_objects,
+    int64_t primary_num_objects,
+    int64_t local_num_objects,
     backfill_reservation_space_info_t *space_info = nullptr) override {
     recovery_space_reserved = true;
     if (inject_fail_reserve_recovery_space) {

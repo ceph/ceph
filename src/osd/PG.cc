@@ -1738,13 +1738,11 @@ std::optional<backfill_osd_space_usage_t> PG::get_local_osd_space_usage()
 bool PG::try_reserve_recovery_space(
   int64_t primary_bytes,
   int64_t local_bytes,
-  int64_t num_objects,
+  int64_t primary_num_objects,
+  int64_t local_num_objects,
   backfill_reservation_space_info_t *space_info) {
   // Use tentative_bacfill_full() to make sure enough
   // space is available to handle target bytes from primary.
-
-  // TODO: If we passed num_objects from primary we could account for
-  // an estimate of the metadata overhead.
 
   // TODO: If we had compressed_allocated and compressed_original from primary
   // we could compute compression ratio and adjust accordingly.
@@ -1756,20 +1754,20 @@ bool PG::try_reserve_recovery_space(
   // statfs using ps->primary_bytes.
   uint64_t pending_adjustment = 0;
   if (primary_bytes) {
-    if (!num_objects) {
+    if (!local_num_objects) {
       // backfill uses number of objects from the stats, pool migration
       // tells the target PG how many objects will be migrated
-      num_objects = info.stats.stats.sum.num_objects;
+      local_num_objects = info.stats.stats.sum.num_objects;
     }
     // For erasure coded pool overestimate by a full stripe per object
     // because we don't know how each objected rounded to the nearest stripe
     if (pool.info.is_erasure()) {
       primary_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       primary_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	num_objects;
+	primary_num_objects;
       local_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       local_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	num_objects;
+	local_num_objects;
     }
     pending_adjustment = pending_backfill(
       cct,

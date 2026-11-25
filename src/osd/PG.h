@@ -922,7 +922,8 @@ public:
   bool try_reserve_recovery_space(
     int64_t primary,
     int64_t local,
-    int64_t num_objects,
+    int64_t primary_num_objects,
+    int64_t local_num_objects,
     backfill_reservation_space_info_t *space_info = nullptr) override;
   void unreserve_recovery_space() override;
 

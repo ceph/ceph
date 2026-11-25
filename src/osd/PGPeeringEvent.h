@@ -183,14 +183,17 @@ struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
   unsigned priority;
   int64_t primary_num_bytes;
   int64_t local_num_bytes;
+  int64_t primary_num_objects;
   std::optional<backfill_reservation_space_info_t> space_info;
   explicit RequestBackfillPrio(
     unsigned prio,
     int64_t pbytes,
     int64_t lbytes,
+    int64_t primary_num_objects,
     std::optional<backfill_reservation_space_info_t> &&space_info) :
     boost::statechart::event< RequestBackfillPrio >(),
     priority(prio), primary_num_bytes(pbytes), local_num_bytes(lbytes),
+    primary_num_objects(primary_num_objects),
     space_info(std::move(space_info)) {}
   void print(std::ostream *out) const {
     *out << "RequestBackfillPrio: priority " << priority

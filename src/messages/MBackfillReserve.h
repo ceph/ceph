@@ -26,7 +26,7 @@
 
 class MBackfillReserve : public MOSDPeeringOp {
 private:
-  static constexpr int HEAD_VERSION = 6;
+  static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
@@ -44,6 +44,7 @@ public:
   uint32_t priority;
   int64_t primary_num_bytes;
   int64_t shard_num_bytes;
+  int64_t primary_num_objects = 0;
   std::optional<backfill_reservation_space_info_t> space_info;
 
   spg_t get_spg() const {
@@ -66,6 +67,7 @@ public:
 	  priority,
 	  primary_num_bytes,
 	  shard_num_bytes,
+          primary_num_objects,
 	  std::move(space_info)));
     case GRANT:
       return new PGPeeringEvent(
@@ -110,20 +112,24 @@ public:
 		   spg_t pgid,
 		   epoch_t query_epoch, unsigned prio = -1,
 		   int64_t primary_num_bytes = 0,
-		   int64_t shard_num_bytes = 0)
+		   int64_t shard_num_bytes = 0,
+                   int64_t primary_num_objects = 0)
     : MOSDPeeringOp{MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio), primary_num_bytes(primary_num_bytes),
-      shard_num_bytes(shard_num_bytes) {}
+      shard_num_bytes(shard_num_bytes),
+      primary_num_objects(primary_num_objects) {}
   MBackfillReserve(int type,
 		   spg_t pgid,
 		   epoch_t query_epoch,
 		   backfill_reservation_space_info_t &&space_info,
                    unsigned prio = -1,
 		   int64_t primary_num_bytes = 0,
-		   int64_t shard_num_bytes = 0)
+		   int64_t shard_num_bytes = 0,
+                   int64_t primary_num_objects = 0)
     : MBackfillReserve(type, pgid, query_epoch, prio,
-                       primary_num_bytes, shard_num_bytes) {
+                       primary_num_bytes, shard_num_bytes,
+                       primary_num_objects) {
     this->space_info = std::move(space_info);
   }
 
@@ -178,6 +184,9 @@ public:
     } else {
       space_info = std::nullopt;
     }
+    if (header.version >= 7) {
+      decode(primary_num_objects, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -203,6 +212,7 @@ public:
     encode(primary_num_bytes, payload);
     encode(shard_num_bytes, payload);
     encode(space_info, payload);
+    encode(primary_num_objects, payload);
   }
 };
 
