@@ -139,8 +139,8 @@ describe('HostResourcePageComponent', () => {
       expect(getField('Model')).toEqual(expect.objectContaining({ value: 'PowerEdge R750' }));
       expect(getField('CPUs')).toEqual(expect.objectContaining({ value: '2' }));
       expect(getField('Cores')).toEqual(expect.objectContaining({ value: 32 }));
-      expect(getField('Total Memory')?.value).toBe('1 MiB'); // 1024 KB transformed
-      expect(getField('Raw Capacity')?.value).toBe('3 KiB'); // 1024 + 2048 Bytes transformed
+      expect(getField('Total memory')?.value).toBe('1 MiB'); // 1024 KB transformed
+      expect(getField('Raw capacity')?.value).toBe('3 KiB'); // 1024 + 2048 Bytes transformed
       expect(getField('HDDs')).toEqual(expect.objectContaining({ value: '4' }));
       expect(getField('Flash')).toEqual(expect.objectContaining({ value: 2 }));
       expect(getField('NICs')).toEqual(expect.objectContaining({ value: '6' }));
@@ -155,8 +155,8 @@ describe('HostResourcePageComponent', () => {
       expect(getField('Labels')).toEqual(expect.objectContaining({ values: [] }));
       expect(getField('Status')).toEqual(expect.objectContaining({ value: undefined }));
       expect(getField('Model')).toEqual(expect.objectContaining({ value: undefined }));
-      expect(getField('Total Memory')).toEqual(expect.objectContaining({ value: '-' }));
-      expect(getField('Raw Capacity')).toEqual(expect.objectContaining({ value: '-' }));
+      expect(getField('Total memory')).toEqual(expect.objectContaining({ value: '-' }));
+      expect(getField('Raw capacity')).toEqual(expect.objectContaining({ value: '-' }));
     });
 
     it('should keep capacity values empty if standard fact fields are missing', () => {
@@ -172,8 +172,8 @@ describe('HostResourcePageComponent', () => {
 
       fixture.detectChanges();
 
-      expect(getField('Total Memory')?.value).toEqual('-');
-      expect(getField('Raw Capacity')?.value).toEqual('-');
+      expect(getField('Total memory')?.value).toEqual('-');
+      expect(getField('Raw capacity')?.value).toEqual('-');
     });
   });
 
