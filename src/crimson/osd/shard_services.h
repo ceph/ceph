@@ -5,6 +5,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
@@ -616,10 +617,13 @@ public:
     return store;
   }
 
-  seastar::future<bool> is_local_storage_full(store_index_t store_index) const {
-    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::is_storage_full>(
-        get_store(store_index));
-  }
+  // Fullness when this reactor hosts the store. nullopt when the store
+  // lives on another reactor: the local SeaStore shard is inactive, and
+  // get_sharded_store() would abort. Call is_storage_full() for that case.
+  std::optional<bool> resident_storage_full(store_index_t store_index) const;
+  // Fullness of the store that holds this PG's data. May submit to the
+  // owning reactor.
+  seastar::future<bool> is_storage_full(store_index_t store_index) const;
 
   struct shard_stats_t {
     double reactor_utilization;

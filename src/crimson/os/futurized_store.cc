@@ -41,7 +41,7 @@ seastar::future<> with_store_do_transaction(
   std::unique_ptr<Context> on_commit(
     ceph::os::Transaction::collect_all_contexts(txn));
   const auto original_core = seastar::this_shard_id();
-  if (store.shard_id == original_core || store.shard_id == GLOBAL_STORE) {
+  if (is_store_local(store)) {
     return store.f_store.get_sharded_store(store.store_index).do_transaction_no_callbacks(
       std::move(ch), std::move(txn)
     ).then([on_commit=std::move(on_commit)]() mutable {
