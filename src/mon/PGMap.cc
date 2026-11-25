@@ -3329,6 +3329,8 @@ void PGMap::get_health_checks(
 	summary += " reporting legacy (not per-pg) BlueStore omap";
       } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
 	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
+      } else if (asum.first == "BLUESTORE_NO_DB_SHARDING") {
+	summary += " not using RocksDB column family sharding";
       } else if (asum.first == "BLUESTORE_SPURIOUS_READ_ERRORS") {
         summary += " have spurious read errors";
       } else if (asum.first == "BLUESTORE_SLOW_OP_ALERT") {
