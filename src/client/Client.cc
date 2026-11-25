@@ -8790,13 +8790,15 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       mask &= ~CEPH_SETATTR_ATIME;
-    } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
-	       in->atime != utime_t(stx->stx_atime)) {
-      args.setattr.atime = utime_t(stx->stx_atime);
-      inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
-                    CEPH_CAP_FILE_WR;
     } else {
-      mask &= ~CEPH_SETATTR_ATIME;
+      /* If we do not hold EXCL or WR caps, we MUST pass this request to the MDS
+       * regardless of whether the new atime matches the old cached atime.
+       * This ensures the network mask preserves CEPH_SETATTR_ATIME so the MDS
+       * can handle POSIX compliance and bump ctime. A client with SHARED caps
+       * cannot mutate metadata or bump ctime locally too.
+       */
+      args.setattr.atime = utime_t(stx->stx_atime);
+      inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
     }
   }
 
