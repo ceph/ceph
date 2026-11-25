@@ -90,12 +90,13 @@ refers to the ``id`` exclusive of the ``mon.`` prefix: for example, if
 ``mon.a`` has been chosen as the ``id`` of a Monitor, then ``{mon-id}`` is
 ``a``.                                               ???
 
-#. Create a data directory on the machine that will host the new Monitor:
+#. Create a data directory, owned by the ``ceph`` user, on the machine that
+   will host the new Monitor:
 
    .. prompt:: bash $
 
     ssh {new-mon-host}
-    sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
+    sudo -u ceph mkdir /var/lib/ceph/mon/ceph-{mon-id}
 
 #. Create a temporary directory ``{tmp}`` that will contain the files needed
    during this procedure. This directory should be different from the data
@@ -125,20 +126,24 @@ refers to the ``id`` exclusive of the ``mon.`` prefix: for example, if
 #. Prepare the Monitor's data directory, which was created in the first step.
    The following command must specify the path to the monitor map (so that
    information about a quorum of Monitors and their ``fsid``\s can be
-   retrieved) and specify the path to the monitor keyring:
+   retrieved) and specify the path to the monitor keyring. Run it as the
+   ``ceph`` user, which must be able to read both files in ``{tmp}``:
 
    .. prompt:: bash $
 
-      sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
+      sudo -u ceph ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
 
-#. Start the new Monitor. It will automatically join the cluster. To provide
-   information to the daemon about which address to bind to, use either the
-   ``--public-addr {ip}`` option or the ``--public-network {network}`` option.
-   For example:
+#. Set the address that the new Monitor binds to: add ``public_addr = {ip}``
+   to a ``[mon.{mon-id}]`` section of ``/etc/ceph/ceph.conf`` on its host, or
+   make sure that ``public_network`` in that file includes the host's address.
+   Give the IP address without a port, so that the Monitor binds both the
+   msgr2 port (3300) and the v1 port (6789). Then start the Monitor and enable
+   it at boot. It joins the cluster by itself:
 
    .. prompt:: bash $
 
-      ceph-mon -i {mon-id} --public-addr {ip:port}
+      sudo systemctl start ceph-mon@{mon-id}
+      sudo systemctl enable ceph-mon@{mon-id}
 
 .. _removing-monitors:
 
