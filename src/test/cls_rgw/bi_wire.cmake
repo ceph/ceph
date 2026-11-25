@@ -18,6 +18,7 @@ target_include_directories(unittest_cls_rgw_bi_wire PRIVATE
 set_target_properties(unittest_cls_rgw_bi_wire PROPERTIES
   CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES OFF)
 add_test(NAME cls_rgw_bi_wire COMMAND unittest_cls_rgw_bi_wire)
+add_dependencies(tests unittest_cls_rgw_bi_wire)
 
 function(rgw_cls_add_wire_test name)
   set(target "unittest_cls_rgw_${name}_wire")
@@ -28,6 +29,7 @@ function(rgw_cls_add_wire_test name)
     cls_rgw_client Catch2::Catch2 ceph-common ${FMT_LIB})
   set_target_properties(${target} PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
   add_test(NAME "cls_rgw_${name}_wire" COMMAND ${target})
+  add_dependencies(tests ${target})
 endfunction()
 
 foreach(name IN ITEMS write bilog bucket index_stats object usage reshard gc lifecycle multipart)
@@ -41,6 +43,7 @@ target_link_libraries(unittest_cls_rgw_bi_client PRIVATE
   cls_rgw_client librados global Catch2::Catch2 ceph-common ${FMT_LIB})
 set_target_properties(unittest_cls_rgw_bi_client PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 add_test(NAME cls_rgw_bi_client COMMAND unittest_cls_rgw_bi_client)
+add_dependencies(tests unittest_cls_rgw_bi_client)
 
 add_executable(unittest_cls_rgw_bilog_client
   "${CMAKE_CURRENT_LIST_DIR}/bilog_client.cc"
@@ -49,3 +52,4 @@ target_link_libraries(unittest_cls_rgw_bilog_client PRIVATE
   cls_rgw_client librados global Catch2::Catch2 ceph-common ${FMT_LIB})
 set_target_properties(unittest_cls_rgw_bilog_client PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 add_test(NAME cls_rgw_bilog_client COMMAND unittest_cls_rgw_bilog_client)
+add_dependencies(tests unittest_cls_rgw_bilog_client)

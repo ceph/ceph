@@ -8,6 +8,7 @@ foreach(kind client module)
   set_target_properties(unittest_cls_user_${kind} PROPERTIES
     CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
   add_test(NAME cls_user_${kind} COMMAND unittest_cls_user_${kind})
+  add_dependencies(tests unittest_cls_user_${kind})
 endforeach()
 target_sources(unittest_cls_user_module PRIVATE "${user_test_dir}/../cls_rgw/module_loader.cc")
 target_compile_definitions(unittest_cls_user_module PRIVATE TEST_CLS_RGW_MODULE="$<TARGET_FILE:cls_user>")
@@ -22,6 +23,7 @@ target_link_libraries(unittest_cls_user_wire PRIVATE
 set_target_properties(unittest_cls_user_wire PROPERTIES
   CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 add_test(NAME cls_user_wire COMMAND unittest_cls_user_wire)
+add_dependencies(tests unittest_cls_user_wire)
 
 add_executable(unittest_cls_user_reset
   "${user_test_dir}/datum_reset.cc"
@@ -42,3 +44,4 @@ target_link_options(unittest_cls_user_reset PRIVATE
   "$<$<PLATFORM_ID:Darwin>:LINKER:-dead_strip>"
   "$<$<NOT:$<PLATFORM_ID:Darwin>>:LINKER:--gc-sections>")
 add_test(NAME cls_user_reset COMMAND unittest_cls_user_reset)
+add_dependencies(tests unittest_cls_user_reset)
