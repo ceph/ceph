@@ -417,11 +417,55 @@ For example::
 
         $ rbd --cluster site-a mirror image snapshot image-pool/image-1
 
-By default up to ``5`` mirror-snapshots will be created per-image. The most
-recent mirror-snapshot is automatically pruned if the limit is reached.
-The limit can be overridden via the ``rbd_mirroring_max_mirroring_snapshots``
-configuration option if required. Additionally, mirror-snapshots are
-automatically deleted when the image is removed or when mirroring is disabled.
+Mirror-snapshots are system snapshots that RBD manages for mirroring, not a
+snapshot history. The secondary cluster has a single non-primary image, not
+one copy per mirror-snapshot: the ``rbd-mirror`` daemon brings that image up
+to the state of each mirror-snapshot in turn, whether it was created manually
+or by a schedule. A mirror-snapshot is removed after it is no longer needed,
+and all of them are removed when the image is removed or when mirroring is
+disabled.
+
+User snapshots of the primary image are mirrored too. Each mirror-snapshot
+records the user snapshots that exist when it is created, and when the
+``rbd-mirror`` daemon syncs it, the daemon creates those user snapshots on the
+non-primary image and removes the ones that were removed from the primary
+image. Changes to user snapshots therefore reach the secondary cluster with
+the next mirror-snapshot.
+
+The ``rbd_mirroring_max_mirroring_snapshots`` configuration option (default
+``5``, minimum ``3``) limits only the number of mirror-snapshots on the
+primary image that a peer's ``rbd-mirror`` daemon has not yet finished with.
+It does not limit user snapshots, and it is not a retention setting. The limit
+is reached only when the daemon falls behind, for example while it is stopped
+or when mirror-snapshots are created faster than they can be synced. If
+creating a mirror-snapshot puts that number over the limit, the newest of the
+older mirror-snapshots is unlinked from that peer and is removed if no other
+peer needs it. The others are kept because the daemon might still be syncing
+from them, and the changes in the removed mirror-snapshot are synced as part
+of the next one.
+
+``rbd snap ls`` does not list mirror-snapshots. To see them, for example when
+troubleshooting, add ``--all`` and run the command on both clusters. In the
+``NAMESPACE`` column, a mirror-snapshot of the primary image lists the UUIDs
+of the peers that still need it, and a mirror-snapshot of the non-primary
+image shows the mirror UUID of the primary pool, the ID of the matching
+primary mirror-snapshot, and whether it is fully copied. For example::
+
+        $ rbd --cluster site-a snap ls --all image-pool/image-1
+        SNAPID  NAME                                                                                       SIZE    PROTECTED  TIMESTAMP                 NAMESPACE
+             4  before-upgrade                                                                             10 GiB             Wed Nov 25 09:12:41 2026  user
+             5  .mirror.primary.c8a3a7f4-2b1e-4d39-9b5e-6f0d2e7a1c44.0f3b9d62-8c47-4a1e-b2d5-7e94c1a6f830  10 GiB             Wed Nov 25 09:13:05 2026  mirror (primary peer_uuids:[587b08db-3d33-4f32-8af8-421e77abb081])
+        $ rbd --cluster site-b snap ls --all image-pool/image-1
+        SNAPID  NAME                                                                                           SIZE    PROTECTED  TIMESTAMP                 NAMESPACE
+             3  before-upgrade                                                                                 10 GiB             Wed Nov 25 09:13:19 2026  user
+             4  .mirror.non_primary.c8a3a7f4-2b1e-4d39-9b5e-6f0d2e7a1c44.9e2c51d7-3a86-4f0b-a4c9-1d58e6b7f203  10 GiB             Wed Nov 25 09:13:19 2026  mirror (non-primary peer_uuids:[] 7c51df2a-c4e8-4b2a-9e43-5d4fd5a1b0e1:5 copied)
+
+.. warning:: Do not remove mirror-snapshots by hand. ``rbd snap purge`` and
+   ``rbd snap rm`` with a snapshot name act only on user snapshots, but
+   ``rbd snap rm --snap-id`` also removes a mirror-snapshot of the primary
+   image. If the mirror-snapshot that the non-primary image was last synced to
+   is removed, the ``rbd-mirror`` daemon reports a split-brain and stops
+   mirroring the image until a `force resync command`_ is issued.
 
 Mirror-snapshots can also be automatically created on a periodic basis if
 mirror-snapshot schedules are defined. The mirror-snapshot can be scheduled
