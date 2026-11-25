@@ -762,7 +762,15 @@ export class RbdFormComponent extends CdForm implements OnInit {
     request.name = this.rbdForm.getValue('name');
     request.schedule_interval = this.rbdForm.getValue('schedule');
     request.enable_mirror = this.mirroring;
-    request.size = this.formatter.toBytes(this.rbdForm.getValue('size'));
+    // The size field shows the image size rounded to one decimal (e.g. 1150 MiB
+    // becomes "1.1 GiB"), so converting it back is lossy and the backend would
+    // resize, possibly shrinking the image. Only send the field's value when
+    // the user actually changed it, otherwise keep the exact current size.
+    const sizeControl = this.rbdForm.get('size');
+    request.size =
+      sizeControl.dirty || !this.response
+        ? this.formatter.toBytes(sizeControl.value)
+        : this.response.size;
     _.forIn(this.features, (feature) => {
       if (this.rbdForm.getValue(feature.key)) {
         request.features.push(feature.key);
