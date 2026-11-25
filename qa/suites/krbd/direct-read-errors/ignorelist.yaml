@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Error -5 reading object
+      - injectdataerr
+      - \(OSD_TOO_MANY_REPAIRS\)
+      - is_erasure
+      - \(OSD_DOWN\)
+      - \(OSD_HOST_DOWN\)
+      - osds down
+      - is down
+      - Degraded data redundancy
+      - \(PG_DEGRADED\)
+      - \(PG_AVAILABILITY\)
+      - overall HEALTH_
