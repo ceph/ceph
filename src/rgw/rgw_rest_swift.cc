@@ -3132,6 +3132,8 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
     string account_name;
     next_tok(req, account_name, '/');
 
+    s->init_state.swift_account_realm = account_name;
+
     /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
     const vector<string> skipped_prefixes = { "AUTH_", "KEY_" };
 

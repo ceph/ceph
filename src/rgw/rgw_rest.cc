@@ -242,6 +242,13 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
   return false;
 }
 
+static void dump_swift_www_authenticate(req_state *s)
+{
+  const std::string& account = s->init_state.swift_account_realm;
+  const std::string realm = url_encode(account.empty() ? "unknown" : account);
+  dump_header(s, "WWW-Authenticate", "Swift realm=\"" + realm + '"');
+}
+
 static void dump_status(req_state *s, int status,
 			const char *status_name)
 {
@@ -253,6 +260,9 @@ static void dump_status(req_state *s, int status,
   } catch (rgw::io::Exception& e) {
     ldpp_dout(s, 0) << "ERROR: s->cio->send_status() returned err="
                      << e.what() << dendl;
+  }
+  if ((s->prot_flags & RGW_REST_SWIFT) && status == 401) {
+    dump_swift_www_authenticate(s);
   }
 }
 
