@@ -1592,7 +1592,9 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   
   if (!dn || !dn->inode) {
     InodeRef tmp_ref(in);
-    if (old_dentry) {
+    // the source of a rename: another rename of this client that moved it
+    // first already unlinked it (old_dentry->dir is null then)
+    if (old_dentry && old_dentry->dir) {
       if (old_dentry->dir != dir) {
 	Inode *old_diri = old_dentry->dir->parent_inode;
 	clear_dir_complete_and_ordered(old_diri, false);
@@ -2074,8 +2076,10 @@ Inode* Client::insert_trace(MetaRequest *request,
   if (p.end()) {
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
 
+    // a dentry another request of this client unlinked meanwhile (a
+    // concurrent rename of it) has no dir any more: leave it alone
     Dentry *d = request->dentry();
-    if (d) {
+    if (d && d->dir) {
       Inode *diri = d->dir->parent_inode;
       clear_dir_complete_and_ordered(diri, true);
     }
@@ -2086,9 +2090,10 @@ Inode* Client::insert_trace(MetaRequest *request,
 	Dentry *od = request->old_dentry();
 	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
 	ceph_assert(od);
-	unlink(od, true, true);  // keep dir, dentry
-      } else if (op == CEPH_MDS_OP_RMDIR ||
-		 op == CEPH_MDS_OP_UNLINK) {
+	if (od->dir)
+	  unlink(od, true, true);  // keep dir, dentry
+      } else if ((op == CEPH_MDS_OP_RMDIR ||
+		  op == CEPH_MDS_OP_UNLINK) && d->dir) {
 	// unlink, rmdir
 	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
 	unlink(d, true, true);  // keep dir, dentry
