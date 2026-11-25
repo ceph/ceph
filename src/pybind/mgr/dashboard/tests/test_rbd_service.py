@@ -11,8 +11,10 @@ except ImportError:
     import unittest.mock as mock
 
 from .. import mgr
-from ..services.rbd import RbdConfiguration, RBDSchedulerInterval, RbdService, \
-    get_image_spec, parse_image_spec
+from ..exceptions import DashboardException
+from ..services.ceph_service import SendCommandError
+from ..services.rbd import RbdConfiguration, RbdMirroringService, \
+    RBDSchedulerInterval, RbdService, get_image_spec, parse_image_spec
 
 
 class ImageNotFoundStub(Exception):
@@ -178,3 +180,45 @@ class RbdServiceTest(unittest.TestCase):
             # pylint: disable=protected-access
             res = RbdService._rbd_image_refs(ioctx_mock, str(i))
             self.assertEqual(res, images[i*2:(i*2)+2])
+
+
+@mock.patch('dashboard.services.ceph_service.CephService.send_command')
+class RbdMirroringScheduleTest(unittest.TestCase):
+
+    def test_schedule_add_remove(self, send_command):
+        RbdMirroringService.snapshot_schedule_add('pool/image', '1h')
+        send_command.assert_called_with('mon', 'rbd mirror snapshot schedule add',
+                                        to_json=False, level_spec='pool/image',
+                                        interval='1h')
+        RbdMirroringService.snapshot_schedule_remove('')
+        send_command.assert_called_with('mon', 'rbd mirror snapshot schedule remove',
+                                        to_json=False, level_spec='')
+
+    def test_schedule_add_error_is_raised(self, send_command):
+        send_command.side_effect = SendCommandError(
+            'rbd_support module is not ready, try again',
+            'rbd mirror snapshot schedule add', {}, -11)
+        with self.assertRaises(DashboardException):
+            RbdMirroringService.snapshot_schedule_add('pool/image', '1h')
+
+    def test_schedule_info(self, send_command):
+        def command(_, prefix, **kwargs):
+            self.assertEqual(kwargs.get('level_spec'), 'pool/image')
+            if prefix == 'rbd mirror snapshot schedule list':
+                return {'1': {'name': 'pool/image',
+                              'schedule': [{'interval': '1h', 'start_time': None}]}}
+            return {'scheduled_images': [{'image': 'pool/image',
+                                          'schedule_time': '2026-11-18 18:00:00'}]}
+        send_command.side_effect = command
+        self.assertEqual(RbdMirroringService.get_snapshot_schedule_info('pool/image'), [{
+            'name': 'pool/image',
+            'schedule_interval': [{'interval': '1h', 'start_time': None}],
+            'schedule_time': '2026-11-18 18:00:00',
+        }])
+
+    def test_schedule_info_query_error(self, send_command):
+        send_command.side_effect = SendCommandError(
+            'rbd_support module is not ready, try again',
+            'rbd mirror snapshot schedule list', {}, -11)
+        self.assertIsNone(RbdMirroringService.get_snapshot_schedule_info('pool/image'))
+        self.assertIsNone(RbdMirroringService.get_schedule_interval('pool/'))
