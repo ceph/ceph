@@ -463,7 +463,7 @@ class Schedules:
         try:
             while True:
                 with rados.ReadOpCtx() as read_op:
-                    self.handler.log.info(
+                    self.handler.log.debug(
                         "load_schedules: {}, start_after={}".format(
                             pool_name, start_after))
                     it, ret = ioctx.get_omap_vals(read_op, start_after, "", 128)
@@ -473,7 +473,7 @@ class Schedules:
                     for k, v in it:
                         start_after = k
                         v = v.decode()
-                        self.handler.log.info(
+                        self.handler.log.debug(
                             "load_schedule: {} {}".format(k, v))
                         try:
                             try:

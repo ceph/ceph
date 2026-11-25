@@ -56,7 +56,7 @@ class CreateSnapshotRequests:
     def add(self, pool_id: str, namespace: str, image_id: str) -> None:
         image_spec = ImageSpec(pool_id, namespace, image_id)
 
-        self.log.debug("CreateSnapshotRequests.add: {}/{}/{}".format(
+        self.log.info("CreateSnapshotRequests.add: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
         max_concurrent = self.handler.module.get_localized_module_option(
@@ -287,7 +287,7 @@ class CreateSnapshotRequests:
     def finish(self, image_spec: ImageSpec) -> None:
         pool_id, namespace, image_id = image_spec
 
-        self.log.debug("CreateSnapshotRequests.finish: {}/{}/{}".format(
+        self.log.info("CreateSnapshotRequests.finish: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
         self.put_ioctx(image_spec)
@@ -390,7 +390,7 @@ class MirrorSnapshotScheduleHandler:
         self.log.debug("MirrorSnapshotScheduleHandler: queue is initialized")
 
     def load_schedules(self) -> None:
-        self.log.info("MirrorSnapshotScheduleHandler: load_schedules")
+        self.log.debug("MirrorSnapshotScheduleHandler: load_schedules")
         self.schedules.load(namespace_validator, image_validator)
 
     def refresh_images(self) -> float:
