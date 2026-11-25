@@ -335,6 +335,35 @@ public:
   {
     return ceph_sync_fs(cmount);
   }
+  int truncate(const char* relpath, int64_t size)
+  {
+    auto file_path = make_file_path(relpath);
+    return ceph_truncate(cmount, file_path.c_str(), size);
+  }
+  // Wait for the MDS to finish trimming objects after a truncate.
+  bool wait_for_truncate(const char* relpath, uint64_t size)
+  {
+    struct ceph_statx stx;
+    if (statx(relpath, &stx, CEPH_STATX_INO, 0) < 0) {
+      return false;
+    }
+    for (unsigned attempt = 0; attempt < 30; ++attempt) {
+      cmdmap_t cmdmap;
+      cmdmap["number"] = (int64_t)stx.stx_ino;
+      auto dump = tell_rank0("dump inode", std::move(cmdmap));
+      if (dump.type() == json_spirit::obj_type) {
+        auto& inode = dump.get_obj();
+        auto s = inode.find("size");
+        auto p = inode.find("truncate_pending");
+        if (s != inode.end() && s->second.get_uint64() == size &&
+            p != inode.end() && p->second.get_uint64() == 0) {
+          return true;
+        }
+      }
+      sleep(1);
+    }
+    return false;
+  }
 
   int test_open(const char* relpath)
   {
@@ -2868,4 +2897,62 @@ TEST(LibCephFS, SnapDiffRemoteDentryNotInCache) {
 
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, BlockDiffConsecutiveZeroSizedClones)
+{
+  TestMount test_mount("BlockDiffConsecutiveZeroSizedClones");
+
+  constexpr uint64_t obj_size = 4 * 1024 * 1024;
+  constexpr uint64_t file_size = 2 * obj_size;
+  constexpr uint64_t write_size = 4096;
+
+  ASSERT_LE(0, test_mount.write_random("fileA", 2, obj_size));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap0"));
+
+  // Truncate object 1 to size 0, then sparsely extend back to 8 MiB.
+  ASSERT_EQ(0, test_mount.truncate("fileA", obj_size));
+  ASSERT_TRUE(test_mount.wait_for_truncate("fileA", obj_size));
+  ASSERT_EQ(0, test_mount.truncate("fileA", file_size));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // Repeat so object 1 gets a second consecutive zero-sized version.
+  ASSERT_EQ(0, test_mount.truncate("fileA", obj_size));
+  ASSERT_TRUE(test_mount.wait_for_truncate("fileA", obj_size));
+  ASSERT_EQ(0, test_mount.truncate("fileA", file_size));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // Diff across two zero-sized versions: must succeed with no changed extents.
+  interval_set<uint64_t> actual;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap1", "snap2", nullptr, &actual));
+  ASSERT_TRUE(actual.empty()) << "unexpected extents: " << actual;
+
+  // Diff from non-zero across consecutive zero-sized versions: object 1 changed.
+  interval_set<uint64_t> expected;
+  expected.union_insert(obj_size, obj_size);
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap0", "snap2", nullptr, &actual));
+  ASSERT_EQ(expected, actual);
+
+  // Write to object 1 after snap2 so snap1->snap3 crosses two historical
+  // zero-sized clones (snap1 -> snap2) followed by a non-empty hop (snap2 -> head).
+  ASSERT_LE(0, test_mount.write_random("fileA", 1, write_size, obj_size, false));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap3"));
+
+  expected.clear();
+  expected.union_insert(obj_size, write_size);
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap1", "snap3", nullptr, &actual));
+  ASSERT_EQ(expected, actual);
+
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap0"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap3"));
 }

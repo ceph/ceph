@@ -15084,7 +15084,9 @@ void MDCache::file_blockdiff(CInode *in1, snapid_t snapid1,
     dout(10) << __func__ << ": inode1 is not auth, reporting whole file:"
              << " snapid1=" << snapid1 << " inode1=" << *in1
              << " snapid2=" << snapid2 << " inode2=" << *in2 << dendl;
-    block_diff->blocks.union_insert(0, view2->get_inode()->size);
+    if (view2->get_inode()->size > 0) {
+      block_diff->blocks.union_insert(0, view2->get_inode()->size);
+    }
     ctx->complete(0);
     return;
   }
@@ -15124,7 +15126,9 @@ void MDCache::file_blockdiff(const FileBlockDiffSnapshot *in1,
   if (in1->get_inode()->layout != in2->get_inode()->layout) {
     dout(20) << __func__ << ": snaps have different layout: " << in1->get_inode()->layout
 	     << " vs " << in2->get_inode()->layout << dendl;
-    block_diff->blocks.union_insert(0, in2->get_inode()->size);
+    if (in2->get_inode()->size > 0) {
+      block_diff->blocks.union_insert(0, in2->get_inode()->size);
+    }
     ctx->complete(0);
     return;
   }
@@ -15261,7 +15265,7 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
       uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
 						 snap_set->objectid, 0);
 
-      for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
+      for (auto hops = std::distance(it1, it2); hops > 0; --hops, ++it1) {
 	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps
 		 << " overlap: " << it1->overlap << "]" << dendl;
 	auto next_it = it1 + 1;
@@ -15269,6 +15273,11 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 		 << " overlap: " << next_it->overlap << "]" << dendl;
 	auto sz = next_it->size;
 	if (sz == 0) {
+	  if (it1->size == 0) {
+	    dout(10) << __func__ << ": objectid=" << snap_set->objectid
+		     << " is empty in both clones, skipping" << dendl;
+	    continue;
+	  }
 	  // this object is a hole in the file.
 	  // TODO: report holes in blockdiff strucuter. that way,
 	  // caller can optimize and punch holes rather than writing
@@ -15279,7 +15288,9 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 	}
 
 	extent.clear();
-	extent.union_insert(offset, sz);
+	if (sz > 0) {
+	  extent.union_insert(offset, sz);
+	}
 	for (auto &overlap_region : it1->overlap) {
 	  uint64_t overlap_offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
 							     snap_set->objectid, overlap_region.first);
@@ -15289,7 +15300,6 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 	dout(20) << __func__ << ": (non overlapping) extent=" << extent << dendl;
 	extents.union_of(extent);
 	dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
-	++it1;
       }
     }
   }
