@@ -122,15 +122,16 @@ function ec_counters() {
         grep -m1 '^EC_DIRECT_READS' || true
 }
 
-function data_pool_is_ec() {
+# The direct-read path is only taken on an *optimized* EC pool (one that
+# reports split_reads).  A plain erasure pool reads whole objects from the
+# primary, so no direct/split reads are expected there and the assertion
+# below must not fire for it.
+function data_pool_is_optimized_ec() {
     local data_pool
     data_pool=$(rbd info $POOL/$IMAGE --format json |
         python3 -c 'import json, sys; print(json.load(sys.stdin).get("data_pool", ""))')
     [ -n "$data_pool" ] &&
-        ceph osd pool ls detail --format json |
-        python3 -c 'import json, sys
-pools = json.load(sys.stdin)
-sys.exit(not any(p["pool_name"] == sys.argv[1] and p["type"] == 3 for p in pools))' "$data_pool"
+        ceph osd pool ls detail | grep "'$data_pool'" | grep -q split_reads
 }
 
 mountpoint -q /sys/kernel/debug || sudo mount -t debugfs none /sys/kernel/debug
@@ -160,7 +161,7 @@ done
 counters=$(ec_counters)
 echo "after $cycle cycles: ${counters:-no EC direct read counters}"
 if [ -n "$counters" ] && [[ $OPTIONS =~ read_from_replica=(balance|localize) ]] &&
-        data_pool_is_ec; then
+        data_pool_is_optimized_ec; then
     read -r _ direct _ _ _ split _ _ <<< "$counters"
     if ((direct == 0 || split == 0)); then
         echo "no EC direct reads ($direct) or split reads ($split)"
