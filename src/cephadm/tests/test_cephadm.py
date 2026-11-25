@@ -26,6 +26,7 @@ from pyfakefs import fake_filesystem
 from pyfakefs import fake_filesystem_unittest
 
 from cephadmlib.constants import DEFAULT_REGISTRY
+from cephadmlib.daemons import rgw as _rgw
 
 _cephadm = import_cephadm()
 
@@ -3793,11 +3794,11 @@ def test_read_metrics_push_endpoint_roundtrip(tmp_path):
     path = tmp_path / 'metrics-push.endpoint'
     endpoint = 'http://h:9091/metrics/job/rgw-bucket-usage/zone/abc=1'
     path.write_text(_metrics_endpoint_record(endpoint, 'http://h:9091', 'zone a'))
-    saved = _cephadm._read_metrics_push_endpoint(str(path))
+    saved = _rgw._read_metrics_push_endpoint(str(path))
     assert saved['endpoint'] == endpoint
     assert saved['pushgateway_url'] == 'http://h:9091'
     assert saved['zone_name'] == 'zone a'
-    assert _cephadm._read_metrics_push_endpoint(str(tmp_path / 'missing')) == {}
+    assert _rgw._read_metrics_push_endpoint(str(tmp_path / 'missing')) == {}
 
 
 def test_metrics_push_target_changed_ignores_empty_record():
@@ -3806,10 +3807,10 @@ def test_metrics_push_target_changed_ignores_empty_record():
         'pushgateway_url': 'http://h:9091',
         'zone_name': 'z1',
     }
-    assert not _cephadm._metrics_push_target_changed(saved, 'http://h:9091', 'z1')
-    assert _cephadm._metrics_push_target_changed(saved, 'http://h:9091', 'z2')
-    assert _cephadm._metrics_push_target_changed(saved, 'http://other:9091', 'z1')
-    assert not _cephadm._metrics_push_target_changed({}, 'http://h:9091', 'z1')
+    assert not _rgw._metrics_push_target_changed(saved, 'http://h:9091', 'z1')
+    assert _rgw._metrics_push_target_changed(saved, 'http://h:9091', 'z2')
+    assert _rgw._metrics_push_target_changed(saved, 'http://other:9091', 'z1')
+    assert not _rgw._metrics_push_target_changed({}, 'http://h:9091', 'z1')
 
 
 def _metrics_push_ident(tmp_path):
@@ -3830,12 +3831,12 @@ def test_retire_handoff_keeps_pushgateway_group(tmp_path, monkeypatch):
         f.write(_metrics_endpoint_record(endpoint, 'http://h:9091', 'z1'))
     deleted = []
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
+        _rgw.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
     monkeypatch.setattr(
-        _cephadm, '_delete_pushgateway_group',
+        _rgw, '_delete_pushgateway_group',
         lambda *a, **k: deleted.append(a[2]) or True)
 
-    _cephadm._retire_metrics_push_timer(
+    _rgw._retire_metrics_push_timer(
         ctx, ident,
         desired={'pushgateway_url': 'http://h:9091', 'zone_name': 'z1'},
         force_delete=False,
@@ -3852,12 +3853,12 @@ def test_retire_disable_deletes_pushgateway_group(tmp_path, monkeypatch):
         f.write(_metrics_endpoint_record(endpoint, 'http://h:9091', 'z1'))
     deleted = []
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
+        _rgw.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
     monkeypatch.setattr(
-        _cephadm, '_delete_pushgateway_group',
+        _rgw, '_delete_pushgateway_group',
         lambda *a, **k: deleted.append(a[2]) or True)
 
-    _cephadm._retire_metrics_push_timer(
+    _rgw._retire_metrics_push_timer(
         ctx, ident, desired=None, force_delete=True)
     assert deleted == [endpoint]
     assert not os.path.exists(path)
@@ -3871,12 +3872,12 @@ def test_retire_retarget_deletes_previous_group(tmp_path, monkeypatch):
         f.write(_metrics_endpoint_record(endpoint, 'http://h:9091', 'oldzone'))
     deleted = []
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
+        _rgw.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
     monkeypatch.setattr(
-        _cephadm, '_delete_pushgateway_group',
+        _rgw, '_delete_pushgateway_group',
         lambda *a, **k: deleted.append(a[2]) or True)
 
-    _cephadm._retire_metrics_push_timer(
+    _rgw._retire_metrics_push_timer(
         ctx, ident,
         desired={'pushgateway_url': 'http://h:9091', 'zone_name': 'newzone'},
         force_delete=False,
@@ -3893,11 +3894,11 @@ def test_retire_keeps_record_when_delete_fails(tmp_path, monkeypatch):
             'http://h:9091/metrics/job/rgw-bucket-usage/zone/abc',
             'http://h:9091', 'z1'))
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
+        _rgw.systemd_unit, 'remove_timer_unit', lambda *a, **k: None)
     monkeypatch.setattr(
-        _cephadm, '_delete_pushgateway_group', lambda *a, **k: False)
+        _rgw, '_delete_pushgateway_group', lambda *a, **k: False)
 
-    _cephadm._retire_metrics_push_timer(
+    _rgw._retire_metrics_push_timer(
         ctx, ident, desired=None, force_delete=True)
     assert os.path.exists(path)
 
@@ -3912,16 +3913,16 @@ def test_deploy_deletes_group_when_zone_changes(tmp_path, monkeypatch):
         f.write(_metrics_endpoint_record(endpoint, 'http://h:9091', 'oldzone'))
     events = []
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'remove_timer_unit',
+        _rgw.systemd_unit, 'remove_timer_unit',
         lambda *a, **k: events.append('remove'))
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'install_timer_unit',
+        _rgw.systemd_unit, 'install_timer_unit',
         lambda *a, **k: events.append('install'))
     monkeypatch.setattr(
-        _cephadm, '_delete_pushgateway_group',
+        _rgw, '_delete_pushgateway_group',
         lambda *a, **k: events.append(('delete', a[2])) or True)
 
-    _cephadm._deploy_metrics_push_timer(ctx, ident, {
+    _rgw._deploy_metrics_push_timer(ctx, ident, {
         'pushgateway_url': 'http://h:9091',
         'zone_name': 'newzone',
         'interval': 3600,
@@ -3949,12 +3950,12 @@ def test_deploy_keeps_group_when_target_is_unchanged(tmp_path, monkeypatch):
             'http://h:9091', 'z1'))
     deleted = []
     monkeypatch.setattr(
-        _cephadm.systemd_unit, 'install_timer_unit', lambda *a, **k: None)
+        _rgw.systemd_unit, 'install_timer_unit', lambda *a, **k: None)
     monkeypatch.setattr(
-        _cephadm, '_delete_pushgateway_group',
+        _rgw, '_delete_pushgateway_group',
         lambda *a, **k: deleted.append(a[2]) or True)
 
-    _cephadm._deploy_metrics_push_timer(ctx, ident, {
+    _rgw._deploy_metrics_push_timer(ctx, ident, {
         'pushgateway_url': 'http://h:9091',
         'zone_name': 'z1',
         'interval': 1800,
@@ -3979,8 +3980,8 @@ def test_pushgateway_delete_accepts_already_gone(monkeypatch):
             return 'cid\n', '', 0
         return '404', '', 0
 
-    monkeypatch.setattr(_cephadm, 'call', fake_call)
-    assert _cephadm._delete_pushgateway_group(
+    monkeypatch.setattr(_rgw, 'call', fake_call)
+    assert _rgw._delete_pushgateway_group(
         ctx, ident, 'http://h:9091/metrics/job/rgw-bucket-usage/zone/abc')
     assert seen['cmd'][:3] == ['/usr/bin/podman', 'exec', 'cid']
     assert 'DELETE' in seen['cmd']
