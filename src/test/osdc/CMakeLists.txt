@@ -35,6 +35,14 @@ add_executable(unittest_splitop
 add_ceph_unittest(unittest_splitop)
 target_link_libraries(unittest_splitop global ${BLKID_LIBRARIES})
 
+# unittest_object_cacher_shard
+add_executable(unittest_object_cacher_shard
+  object_cacher_shard.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_object_cacher_shard)
+target_link_libraries(unittest_object_cacher_shard osdc global ${BLKID_LIBRARIES})
+
 # unittest_objecter_direct_reads
 add_executable(unittest_objecter_direct_reads
   test_objecter_direct_reads.cc
