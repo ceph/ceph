@@ -691,6 +691,18 @@ class TestGetDeviceLvs(object):
         vgs = api.get_device_lvs('/dev/foo')
         assert vgs == []
 
+    def test_get_device_lvs_lv_with_several_segments(self, monkeypatch):
+        # pvs prints db1 once per segment after it was extended past db2
+        stdout = [
+            ';/dev/vg/db1;db1;vg;aaaa;41943040',
+            ';/dev/vg/db2;db2;vg;bbbb;20971520',
+            ';/dev/vg/db1;db1;vg;aaaa;41943040',
+            ';/dev/vg/;;vg;;0',
+        ]
+        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (stdout, '', 0))
+        lvs = api.get_device_lvs('/dev/sdb')
+        assert [lv.lv_name for lv in lvs] == ['db1', 'db2']
+
 
 # NOTE: api.convert_filters_to_str() and api.convert_tags_to_str() should get
 # tested automatically while testing api.make_filters_lvmcmd_ready()
@@ -767,6 +779,15 @@ class TestGetPVs(object):
         pvs_ = api.get_pvs()
         assert len(pvs_) == 1
         assert pvs_[0].pv_name == pvs[0].pv_name
+
+    def test_get_pvs_lv_with_several_segments(self, monkeypatch):
+        stdout = ['/dev/sdb;;;vg;aaaa',
+                  '/dev/sdb;;;vg;bbbb',
+                  '/dev/sdb;;;vg;aaaa']
+        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (stdout, '', 0))
+        pvs = api.get_pvs()
+        assert [(pv.pv_name, pv.lv_uuid) for pv in pvs] == [('/dev/sdb', 'aaaa'),
+                                                            ('/dev/sdb', 'bbbb')]
 
     def test_get_pvs_empty(self, monkeypatch):
         monkeypatch.setattr(api.process, 'call', lambda x,**kw: ('', '', 0))

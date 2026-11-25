@@ -117,6 +117,23 @@ def _output_parser(output: List[str], fields: str) -> List[Dict[str, Any]]:
     return report
 
 
+def _unique_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    ``pvs`` prints one row per PV segment, so an LV that was extended (or
+    allocated in more than one chunk) on the same PV shows up several times
+    with identical fields. Drop those repeated rows, keeping the first
+    occurrence, so callers that count LVs or PVs see each of them once.
+    """
+    seen = set()
+    unique = []
+    for report in reports:
+        key = tuple(sorted(report.items()))
+        if key not in seen:
+            seen.add(key)
+            unique.append(report)
+    return unique
+
+
 def _splitname_parser(line: str) -> Dict[str, Any]:
     """
     Parses the output from ``dmsetup splitname``, that should contain prefixes
@@ -607,7 +624,7 @@ def get_pvs(fields: str = PV_FIELDS, filters: Optional[Dict[str, Any]] = None, t
             filters_str, '-o', fields]
 
     stdout, stderr, returncode = process.call(args, run_on_host=True, verbose_on_failure=False)
-    pvs_report = _output_parser(stdout, fields)
+    pvs_report = _unique_reports(_output_parser(stdout, fields))
     return [PVolume(**pv_report) for pv_report in pvs_report]
 
 
@@ -1261,7 +1278,7 @@ def get_device_lvs(device: str, name_prefix: str = '') -> List[Volume]:
         run_on_host=True,
         verbose_on_failure=False
     )
-    lvs = _output_parser(stdout, LV_FIELDS)
+    lvs = _unique_reports(_output_parser(stdout, LV_FIELDS))
     return [Volume(**lv) for lv in lvs if lv['lv_name'] and
             lv['lv_name'].startswith(name_prefix)]
 
