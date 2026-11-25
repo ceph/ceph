@@ -16,8 +16,8 @@ const pages = {
 };
 
 enum WizardSteps {
-  CreateRealmZonegroup = 'Create Realm & Zonegroup',
-  CreateZone = 'Create Zone',
+  CreateRealmZonegroup = 'Create realm & zonegroup',
+  CreateZone = 'Create zone',
   Review = 'Review'
 }
 
@@ -313,42 +313,52 @@ export class MultisitePageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.wizard.url)
   replicationWizardExist() {
-    cy.get('cds-modal').then(() => {
-      cy.get('[data-testid=rgw-multisite-wizard-header]').should(
-        'contain.text',
-        'Set up Multi-site Replication'
-      );
-    });
+    cy.get('cds-modal').should('exist');
+    cy.get('[data-testid=rgw-multisite-wizard-header]').should(
+      'contain.text',
+      'Set up Multi-site Replication'
+    );
   }
 
-  @PageHelper.restrictTo(pages.index.url)
+  @PageHelper.restrictTo(pages.wizard.url)
   verifyWizardContents(step: Step) {
-    cy.get('cds-modal').then(() => {
-      this.gotoStep(step);
-      if (step === 'CreateRealmZonegroup') {
-        this.typeValueToField('realmName', 'test-realm');
-        this.typeValueToField('zonegroupName', 'test-zg');
-      } else if (step === 'CreateZone') {
-        this.typeValueToField('zoneName', 'test-zone');
-      } else {
-        this.gotoStep('Review');
-        cy.get('.form-group.row').then(() => {
-          cy.get('#realmName').invoke('text').should('eq', 'test-realm');
-          cy.get('#zonegroupName').invoke('text').should('eq', 'test-zg');
-          cy.get('#zoneName').invoke('text').should('eq', 'test-zone');
-        });
-      }
-    });
+    this.gotoStep(step);
+    if (step === 'CreateRealmZonegroup') {
+      this.typeValueToField('realmName', 'test-realm');
+      this.typeValueToField('zonegroupName', 'test-zg');
+    } else if (step === 'CreateZone') {
+      this.typeValueToField('zoneName', 'test-zone');
+    } else {
+      // step === 'Review': already navigated by gotoStep above
+      cy.get('.review-item').should('exist');
+      cy.get('.review-item')
+        .contains('dt', 'Realm name')
+        .siblings('dd')
+        .invoke('text')
+        .invoke('trim')
+        .should('eq', 'test-realm');
+      cy.get('.review-item')
+        .contains('dt', 'Zonegroup name')
+        .siblings('dd')
+        .invoke('text')
+        .invoke('trim')
+        .should('eq', 'test-zg');
+      cy.get('.review-item')
+        .contains('dt', 'Zone name')
+        .siblings('dd')
+        .invoke('text')
+        .invoke('trim')
+        .should('eq', 'test-zone');
+    }
   }
 
   typeValueToField(fieldID: string, value: string) {
-    cy.get(`#${fieldID}`).clear().type(value).should('have.value', value);
+    cy.get(`#${fieldID}`).should('be.visible').clear().type(value).should('have.value', value);
   }
 
   gotoStep(step: Step) {
-    cy.get('cd-wizard').then(() => {
-      cy.get('form').should('be.visible');
-      cy.get('button').contains(WizardSteps[step]).click();
-    });
+    cy.get('cd-rgw-multisite-wizard').should('exist');
+    cy.get('cds-progress-indicator').should('be.visible');
+    cy.get('cds-progress-indicator').contains('button', WizardSteps[step]).click();
   }
 }
