@@ -28,20 +28,22 @@ public:
       librados::IoCtx &group_io_ctx, const std::string &group_id,
       std::set<std::string> *mirror_peer_uuids, 
       std::vector<ImageCtx *> *image_ctxs,
-      Context *on_finish) {
+      Context *on_finish, bool remove_creating_user_snaps = false) {
     return new GroupUnlinkPeerRequest(group_io_ctx, group_id,
                                       mirror_peer_uuids, image_ctxs,
-                                      on_finish);
+                                      on_finish, remove_creating_user_snaps);
   }
 
   GroupUnlinkPeerRequest(librados::IoCtx &group_io_ctx,
                          const std::string &group_id,
                          std::set<std::string> *mirror_peer_uuids, 
                          std::vector<ImageCtx *> *image_ctxs,
-                         Context *on_finish)
+                         Context *on_finish,
+                         bool remove_creating_user_snaps = false)
     : m_group_io_ctx(group_io_ctx), m_group_id(group_id),
       m_mirror_peer_uuids(mirror_peer_uuids), m_image_ctxs(image_ctxs),
-      m_on_finish(on_finish) {
+      m_on_finish(on_finish),
+      m_remove_creating_user_snaps(remove_creating_user_snaps) {
     m_cct = (CephContext *)group_io_ctx.cct();
   }
 
@@ -56,6 +58,7 @@ private:
 
   uint64_t m_max_snaps;
   bool m_has_newer_mirror_snap = false;
+  bool m_remove_creating_user_snaps = false;
   CephContext *m_cct;
 
   std::vector<cls::rbd::GroupSnapshot> m_group_snaps;

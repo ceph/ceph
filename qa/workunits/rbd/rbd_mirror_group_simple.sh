@@ -2789,6 +2789,113 @@ test_mirror_group_snapshot_unlink_peer()
   stop_mirrors "${primary_cluster}"
 }
 
+declare -a test_force_promote_creating_group_snaps_removal_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 3 4)
+
+test_force_promote_creating_group_snaps_removal_scenarios=1
+
+test_force_promote_creating_group_snaps_removal()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+  local user_snap_count=$1 ; shift
+
+  local group0=test-group0
+  local big_image=test-image-big
+  local user_snap_prefix=user_snap_
+
+  start_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" $(("${image_count}"-1))
+  image_create "${primary_cluster}" "${pool}/${big_image}" 4G
+  group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${big_image}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  local snaps_before_sync
+  get_group_snap_count "${secondary_cluster}" "${pool}/${group0}" '*' snaps_before_sync
+
+  local i
+  for i in $(seq 1 "${user_snap_count}"); do
+    write_image "${primary_cluster}" "${pool}" "${big_image}" 1024 4194304
+    group_snap_create "${primary_cluster}" "${pool}/${group0}" "${user_snap_prefix}${i}"
+  done
+  write_image "${primary_cluster}" "${pool}" "${big_image}" 1024 4194304
+  local mirror_snap_id
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" mirror_snap_id
+
+  local snaps_on_secondary=${snaps_before_sync}
+  local count=0
+  while [ "${snaps_on_secondary}" -le "${snaps_before_sync}" ]; do
+    if [ "${count}" -ge 600 ]; then
+      fail "group snapshot count on ${secondary_cluster} did not grow beyond ${snaps_before_sync}"
+      return 1
+    fi
+    count=$((count+1))
+    sleep 0.1
+    get_group_snap_count "${secondary_cluster}" "${pool}/${group0}" '*' snaps_on_secondary
+  done
+  stop_mirrors "${secondary_cluster}" '-9'
+
+  # the daemon is dead, so the snapshots that are creating stay that way here
+  local creating_user_snaps=()
+  local creating_mirror_snaps=()
+  get_group_snaps_names "${secondary_cluster}" "${pool}/${group0}" 'creating' 'user' creating_user_snaps
+  get_group_snaps_names "${secondary_cluster}" "${pool}/${group0}" 'creating' 'mirror' creating_mirror_snaps
+
+  local snaps_caught=true
+  if [ "${#creating_user_snaps[@]}" -eq 0 ] && [ "${#creating_mirror_snaps[@]}" -eq 0 ]; then
+    snaps_caught=false
+    testlog "couldn't kill rbd-mirror daemon while snapshots were created"
+  fi
+
+  mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
+  mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
+  start_mirrors "${secondary_cluster}"
+
+  local group_id_before
+  get_id_from_group_info "${primary_cluster}" "${pool}/${group0}" group_id_before
+  mirror_group_resync "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_id_changed "${primary_cluster}" "${pool}/${group0}" "${group_id_before}"
+  wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}" "${primary_cluster}" "${pool}"/"${group0}"
+
+  if [ "${snaps_caught}" = 'true' ]; then
+    # the user snapshots that were in CREATING state must be gone
+    local snap_name
+    for snap_name in "${creating_user_snaps[@]}"; do
+      check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group0}" "${snap_name}" || return 1
+    done
+
+    # the mirror snapshot must be gone (whether it is in CREATING state or not)
+    test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${mirror_snap_id}" 0 ||
+      { fail "mirror group snapshot ${mirror_snap_id} still present after force promote"; return 1; }
+  fi
+
+  # tidy up
+  mirror_group_disable "${secondary_cluster}" "${pool}/${group0}"
+  group_remove "${secondary_cluster}" "${pool}/${group0}"
+
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+
+  images_remove "${secondary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
+  image_remove "${secondary_cluster}" "${pool}/${big_image}"
+
+  wait_for_no_keys "${secondary_cluster}"
+  stop_mirrors "${primary_cluster}"
+  stop_mirrors "${secondary_cluster}"
+}
+
 declare -a test_force_promote_delete_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 '')
 declare -a test_force_promote_delete_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 'disable_reenable_primary')
 
@@ -4182,6 +4289,7 @@ run_all_tests()
   run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
   run_test_all_scenarios test_image_move_group
   run_test_all_scenarios test_force_promote
+  run_test_all_scenarios test_force_promote_creating_group_snaps_removal
   run_test_all_scenarios test_resync
   run_test_all_scenarios test_multiple_mirror_group_snapshot_whilst_stopped
   run_test_all_scenarios test_create_group_with_image_remove_then_repeat
