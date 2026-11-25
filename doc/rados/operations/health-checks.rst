@@ -2515,7 +2515,7 @@ To re-enable telemetry (and silence the alert), run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on --license sharing-1-0
+   ceph telemetry on
 
 To disable telemetry (and silence the alert), run the following command:
 
