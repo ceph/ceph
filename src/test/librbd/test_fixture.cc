@@ -34,7 +34,13 @@ TestFixture::TestFixture() : m_image_size(0) {
 void TestFixture::SetUpTestCase() {
   ASSERT_EQ("", connect_cluster(&_cluster));
   _pool_name = get_temp_pool_name("test-librbd-");
-  ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
+
+  // these tests expect a removed image to be gone rather than moved to the
+  // trash, so don't let a ceph.conf setting change that
+  ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_move_to_trash_on_remove",
+                              "false"));
+  ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados,
+                                   {{"rbd_move_to_trash_on_remove", "false"}}));
 
   bool created = false;
   ASSERT_EQ(0, create_image_data_pool(_rados, _data_pool, &created));
