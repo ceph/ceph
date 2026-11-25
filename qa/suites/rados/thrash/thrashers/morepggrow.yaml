@@ -18,6 +18,7 @@ tasks:
     min_in: 2
     chance_pgnum_grow: 3
     chance_pgpnum_fix: 1
+    aggressive_pg_num_changes: false
 openstack:
 - volumes:
     size: 50
