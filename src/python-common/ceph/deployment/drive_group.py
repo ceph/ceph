@@ -1,5 +1,4 @@
 import enum
-import yaml
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import (  # noqa: F401 (type comments)
@@ -7,6 +6,7 @@ from ceph.deployment.service_spec import (  # noqa: F401 (type comments)
     GeneralArgList,
     PlacementSpec,
     ServiceSpec,
+    register_service_spec,
 )
 from ceph.deployment.hostspec import SpecValidationError
 
@@ -171,6 +171,7 @@ class DriveGroupValidationError(SpecValidationError):
             f'Failed to validate OSD spec "{name}": {msg}')
 
 
+@register_service_spec('osd')
 class DriveGroupSpec(ServiceSpec):
     """
     Describe a drive group in the same form that ceph-volume
@@ -416,6 +417,3 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'objectstore seastore only supports osd type crimson')
-
-
-yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

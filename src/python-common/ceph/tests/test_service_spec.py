@@ -2251,3 +2251,26 @@ def test_rgw_ssl_related_extra_args_without_ssl_still_validate(extra_args):
     spec.validate()
     loaded = ServiceSpec.from_json(spec.to_json())
     assert loaded.rgw_frontend_extra_args == extra_args
+
+
+def test_service_spec_registry_is_consistent():
+    """Registered types are sorted, and every spec class is registered as known."""
+    from ceph.deployment.service_spec import ServiceSpec
+    known = ServiceSpec.KNOWN_SERVICE_TYPES
+    assert known == sorted(set(known))
+    assert set(ServiceSpec.REQUIRES_SERVICE_ID) <= set(known)
+    assert set(ServiceSpec._SPEC_CLASSES) <= set(known)
+    for spec_cls in ServiceSpec._SPEC_CLASSES.values():
+        assert issubclass(spec_cls, ServiceSpec)
+
+
+def test_register_service_spec_rejects_a_second_class():
+    """A service type maps to exactly one spec class."""
+    from ceph.deployment.service_spec import register_service_spec
+
+    class OtherRGWSpec(ServiceSpec):
+        pass
+
+    with pytest.raises(ValueError, match='already registered'):
+        register_service_spec('rgw')(OtherRGWSpec)
+    assert type(ServiceSpec('rgw', service_id='x')) is RGWSpec
