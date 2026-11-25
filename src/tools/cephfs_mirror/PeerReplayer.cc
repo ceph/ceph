@@ -323,10 +323,16 @@ void PeerReplayer::shutdown() {
 
 void PeerReplayer::add_directory(string_view dir_root) {
   dout(20) << ": dir_root=" << dir_root << dendl;
+  auto _dir_root = std::string(dir_root);
 
   std::scoped_lock locker(m_lock);
-  m_directories.emplace_back(dir_root);
-  m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
+  if (std::find(m_directories.begin(), m_directories.end(), _dir_root) !=
+      m_directories.end()) {
+    dout(10) << ": dir_root=" << _dir_root << " already in replay list" << dendl;
+    return;
+  }
+  m_directories.emplace_back(_dir_root);
+  m_snap_sync_stats.emplace(_dir_root, SnapSyncStat());
   m_cond.notify_all();
 }
 
@@ -1318,7 +1324,7 @@ int PeerReplayer::SnapDiffSync::init_sync() {
   int r = ceph_fstatx(m_local, m_fh->c_fd, &tstx,
                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                       CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                      AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                      AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to stat snap=" << m_current.first << ": " << cpp_strerror(r)
          << dendl;
@@ -1499,7 +1505,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
     r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &estx,
                      CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                      CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                     AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                     AT_SYMLINK_NOFOLLOW);
     if (r < 0) {
       derr << ": failed to stat epath=" << epath << ", r=" << r << dendl;
       return r;
@@ -1616,7 +1622,7 @@ int PeerReplayer::RemoteSync::init_sync() {
   int r = ceph_fstatx(m_local, m_fh->c_fd, &tstx,
                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                       CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                      AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                      AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to stat snap=" << m_current.first << ": " << cpp_strerror(r)
          << dendl;
@@ -1703,7 +1709,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
                      CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                      CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                     AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+                     AT_SYMLINK_NOFOLLOW);
     if (r < 0) {
       derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
            << dendl;
@@ -2112,19 +2118,23 @@ void PeerReplayer::peer_status(Formatter *f) {
   f->open_object_section("stats");
   for (auto &[dir_root, sync_stat] : m_snap_sync_stats) {
     f->open_object_section(dir_root);
-    if (sync_stat.failed) {
+    switch (get_dir_sync_state(sync_stat)) {
+    case DirSyncState::Failed:
       f->dump_string("state", "failed");
       if (sync_stat.last_failed_reason) {
 	f->dump_string("failure_reason", *sync_stat.last_failed_reason);
       }
-    } else if (!sync_stat.current_syncing_snap) {
+      break;
+    case DirSyncState::Idle:
       f->dump_string("state", "idle");
-    } else {
+      break;
+    case DirSyncState::Syncing:
       f->dump_string("state", "syncing");
       f->open_object_section("current_syncing_snap");
       f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
       f->dump_string("name", (*sync_stat.current_syncing_snap).second);
       f->close_section();
+      break;
     }
     if (sync_stat.last_synced_snap) {
       f->open_object_section("last_synced_snap");
@@ -2132,7 +2142,10 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->dump_string("name", (*sync_stat.last_synced_snap).second);
       if (sync_stat.last_sync_duration) {
         f->dump_float("sync_duration", *sync_stat.last_sync_duration);
-        f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+      }
+      if (!sync_stat.last_synced.is_zero()) {
+        // ISO-8601 local time with offset (matches utime_t::localtime)
+        f->dump_string("sync_time_stamp", stringify(sync_stat.last_synced));
       }
       if (sync_stat.last_sync_bytes) {
 	f->dump_unsigned("sync_bytes", *sync_stat.last_sync_bytes);
