@@ -146,6 +146,7 @@ class TestLuksFormat(object):
     @patch('ceph_volume.util.encryption.process.call')
     def test_luks_format_command_with_default_size(self, m_call, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd')
+        m_call.return_value = ([], [], 0)
         expected = [
             'cryptsetup',
             '--batch-mode',
@@ -162,6 +163,7 @@ class TestLuksFormat(object):
     @patch('ceph_volume.util.encryption.process.call')
     def test_luks_format_with_extra_option(self, m_call, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd')
+        m_call.return_value = ([], [], 0)
         expected = [
             'cryptsetup',
             '--batch-mode',
@@ -179,6 +181,7 @@ class TestLuksFormat(object):
     @patch('ceph_volume.util.encryption.process.call')
     def test_luks_format_command_with_custom_size(self, m_call, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd\n[osd]\nosd_dmcrypt_key_size=256')
+        m_call.return_value = ([], [], 0)
         expected = [
             'cryptsetup',
             '--batch-mode',
@@ -191,6 +194,13 @@ class TestLuksFormat(object):
         ]
         encryption.luks_format('abcd', '/dev/foo')
         assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_fails(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        m_call.return_value = ([], ['Device /dev/foo is in use. Can not proceed with format operation.'], 5)
+        with pytest.raises(RuntimeError, match='is in use'):
+            encryption.luks_format('abcd', '/dev/foo')
 
 
 class TestLuksOpen(object):

@@ -103,9 +103,9 @@ def create_dmcrypt_key() -> str:
 
 def luks_format(key: str, device: str, options: Optional[str] = None) -> None:
     """
-    Decrypt (open) an encrypted device, previously prepared with cryptsetup
+    Format a device as LUKS with cryptsetup, raising RuntimeError on failure
 
-    :param key: dmcrypt secret key, will be used for decrypting
+    :param key: dmcrypt secret key, will be used for encrypting
     :param device: Absolute path to device
     :param options: A list of additional cryptsetup args
     """
@@ -122,7 +122,13 @@ def luks_format(key: str, device: str, options: Optional[str] = None) -> None:
 
     command: List[str] = base_cmd + ["luksFormat"] + extra_args + [device]
 
-    process.call(command, stdin=key, terminal_verbose=True, show_command=True)
+    # A failed luksFormat leaves whatever LUKS header was on the device
+    # before (e.g. one still open from an earlier attempt).  If we carried on,
+    # the following luksOpen could reuse that stale mapping and the OSD would
+    # end up encrypted with a key that is not the one we store for it.
+    _, err, rc = process.call(command, stdin=key, terminal_verbose=True, show_command=True)
+    if rc:
+        raise RuntimeError(f"Can't luksFormat {device}: {' '.join(err)}")
 
 
 def plain_open(key, device, mapping):
