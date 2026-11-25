@@ -64,7 +64,9 @@ macro(build_spdk)
 
   ExternalProject_Add(spdk-ext
     SOURCE_DIR ${source_dir}
-    CONFIGURE_COMMAND env CC=${spdk_cc} CXX=${spdk_cxx} ./configure
+    # unset $LDFLAGS: isa-l's configure keeps it, and rpm's package-notes
+    # spec then fails to link in the "env -i" build below
+    CONFIGURE_COMMAND env -u LDFLAGS CC=${spdk_cc} CXX=${spdk_cxx} ./configure
       --disable-tests
       --disable-unit-tests
       --disable-examples
