@@ -87,6 +87,7 @@ export enum Icons {
   dataTable = 'data-table',
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
+  userAdmin = 'user--admin', // System user
   chevronDown = 'chevron--down',
   connect = 'connect',
   checkmarkOutline = 'checkmark--outline',
@@ -174,7 +175,9 @@ export const ICON_TYPE = {
   leftArrow: 'caret--left',
   rightArrow: 'caret--right',
   locked: 'locked',
-  cloudMonitoring: 'cloud--monitoring'
+  cloudMonitoring: 'cloud--monitoring',
+  userAccessLocked: 'user--access-locked',
+  userAdmin: 'user--admin'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
