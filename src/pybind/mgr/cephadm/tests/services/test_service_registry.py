@@ -96,3 +96,29 @@ def test_config_section_and_auth_entity_come_from_service_class():
     assert get_auth_entity('ceph-exporter', 'host1') == 'client.ceph-exporter.host1'
     assert get_auth_entity('node-proxy', 'x', host='host1') == 'client.node-proxy.host1'
     assert get_auth_entity('osd', '3') == 'osd.3'
+
+
+# Daemon types the upgrade loop does not walk today. A new service either
+# gets a place in utils.CEPH_UPGRADE_ORDER or is added here on purpose.
+NOT_IN_UPGRADE_ORDER = {
+    'agent',
+    'container',
+    'elasticsearch',
+    'jaeger-agent',
+    'jaeger-collector',
+    'jaeger-query',
+    'node-proxy',
+    'snmp-gateway',
+}
+
+
+def test_every_daemon_type_has_an_upgrade_decision():
+    """Each registered service's daemon types are either ordered for upgrade or listed as not upgraded."""
+    from cephadm.utils import CEPH_UPGRADE_ORDER
+    from orchestrator._interface import service_to_daemon_types
+    service_registry._discover_services()
+    for service_type in service_registry._registered_services:
+        for daemon_type in service_to_daemon_types(service_type):
+            assert (daemon_type in CEPH_UPGRADE_ORDER) != (daemon_type in NOT_IN_UPGRADE_ORDER), (
+                f'{daemon_type}: add it to CEPH_UPGRADE_ORDER in cephadm/utils.py '
+                f'or to NOT_IN_UPGRADE_ORDER in this test')
