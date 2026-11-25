@@ -129,7 +129,8 @@ describe('RbdFormComponent', () => {
         getPool('two', 'replicated', '', ['rbd']),
         getPool('three', 'replicated', '', ['rbd']),
         getPool('four', 'erasure', '', ['rbd']),
-        getPool('four', 'erasure', 'ec_overwrites', ['rbd'])
+        getPool('four', 'erasure', 'ec_overwrites', ['rbd']),
+        getPool('five', 'erasure', 'ec_overwrites,supports_omap', ['rbd'])
       ];
       spyOn(TestBed.inject(PoolService), 'list').and.callFake(() => of(mock.pools));
       rbdServiceGetSpy = spyOn(TestBed.inject(RbdService), 'get');
@@ -185,12 +186,12 @@ describe('RbdFormComponent', () => {
 
       it('should be enabled with more than 1 pool', () => {
         component['handleExternalData'](mock);
-        expect(component.allDataPools.length).toBe(3);
+        expect(component.allDataPools.length).toBe(4);
         expect(component.rbdForm.get('useDataPool').disabled).toBe(false);
 
         mock.pools.pop();
         component['handleExternalData'](mock);
-        expect(component.allDataPools.length).toBe(2);
+        expect(component.allDataPools.length).toBe(3);
         expect(component.rbdForm.get('useDataPool').disabled).toBe(false);
       });
 
