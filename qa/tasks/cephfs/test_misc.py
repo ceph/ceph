@@ -52,6 +52,20 @@ class TestMisc(CephFSTestCase):
         else:
             self.fail("Expected EBUSY")
 
+    def test_client_dump_subvolume_metrics_aggr(self):
+        """
+        That the dump_subvolume_metrics_aggr client command does not abort
+        the client.
+        """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client")
+
+        metrics = self.mount_a.admin_socket(['dump_subvolume_metrics_aggr'])
+        self.assertIn('current_metrics', metrics)
+        self.assertIn('last_metrics', metrics)
+        self.mount_a.run_shell(["touch", "dump_subvolume_metrics_aggr"])
+
     def test_getattr_caps(self):
         """
         Check if MDS recognizes the 'mask' parameter of open request.
