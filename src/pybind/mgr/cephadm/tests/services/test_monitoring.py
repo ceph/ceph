@@ -1209,21 +1209,16 @@ class TestMonitoring:
 
                 assert 'loki.relabel "ceph_component"' in alloy_cfg
                 assert 'forward_to = [loki.process.remove_timestamp.receiver]' in alloy_cfg
-                # ceph-client.<id>.log - non-core / client-style daemons
-                assert (
-                    r'.*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|'
-                    r'ceph-exporter|nvmeof|iscsi|smb)\\.[^/]+\\.log'
-                    in alloy_cfg
-                )
-                # ceph-<type>.<id>.log - osd, mon, mgr, mds
-                assert r'.*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log' in alloy_cfg
+                # Generic file rules: ceph-<type> then ceph-client.<type> override
+                assert r'.*/ceph-([^.]+)\\.[^/]+\\.log' in alloy_cfg
+                assert r'.*/ceph-client\\.([^.]+)\\.[^/]+\\.log' in alloy_cfg
                 # ceph.log (cluster log)
                 assert r'.*/ceph\\.log$' in alloy_cfg
                 assert 'replacement   = "cluster"' in alloy_cfg
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_alloy_journal_non_core_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        """Journald source must collect non-core Cephadm units and label components."""
+    def test_alloy_journal_ceph_daemons_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Journald source must collect Cephadm units and label component from unit type."""
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
@@ -1233,18 +1228,24 @@ class TestMonitoring:
                     DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
                 alloy_cfg = config['files']['config.alloy']
 
-                assert 'loki.source.journal "ceph_non_core"' in alloy_cfg
+                assert 'loki.source.journal "ceph_daemons"' in alloy_cfg
                 assert 'loki.relabel "ceph_journal"' in alloy_cfg
                 assert 'relabel_rules = loki.relabel.ceph_journal.rules' in alloy_cfg
                 assert 'path          = "/var/log/journal"' in alloy_cfg
-                # Non-core unit keep/component only (aligned with core file labels)
-                non_core = (
-                    r'ceph-[^@]+@(nfs|nvmeof|cephfs-mirror|rbd-mirror|iscsi|smb|'
-                    r'rgw|ceph-exporter|crash|haproxy|keepalived)\\..*'
-                )
-                assert non_core in alloy_cfg
+                # Generic keep/component: ceph-<fsid>@<type>.<id>
+                generic = r'ceph-[^@]+@([^.]+)\\..*'
+                assert generic in alloy_cfg
                 assert 'action        = "keep"' in alloy_cfg
+                assert 'action        = "drop"' in alloy_cfg
                 assert 'target_label  = "component"' in alloy_cfg
+                assert 'replacement   = "$1"' in alloy_cfg
+                # Monitoring / collector units are dropped
+                assert (
+                    r'ceph-[^@]+@(alloy|loki|promtail|prometheus|grafana|'
+                    r'alertmanager|node-exporter|pushgateway|snmp-gateway|'
+                    r'mgmt-gateway|oauth2-proxy)\\..*'
+                    in alloy_cfg
+                )
                 # Do not promote high-cardinality / journal-only labels
                 assert 'target_label  = "unit"' not in alloy_cfg
                 assert 'target_label  = "comm"' not in alloy_cfg

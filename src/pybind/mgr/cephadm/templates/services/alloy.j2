@@ -13,28 +13,29 @@ loki.source.file "system" {
 	legacy_positions_file = "/var/lib/alloy/data/positions.yaml"
 }
 
+// File logs → stream labels: job, host, component
+// Generic path rules; ceph-client.* overrides the broad ceph-<type> match.
 loki.relabel "ceph_component" {
 	forward_to = [loki.process.remove_timestamp.receiver]
 
-	// ensure host is a stream label
 	rule {
 		source_labels = ["host"]
 		target_label  = "host"
 		action        = "replace"
 	}
 
-	// ceph-client.<id>.log - non-core / client-style daemons
+	// ceph-<type>.<id>.log (osd, mon, mgr, mds, crash, …)
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|ceph-exporter|nvmeof|iscsi|smb)\\.[^/]+\\.log"
+		regex         = ".*/ceph-([^.]+)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}
 
-	// ceph-<type>.<id>.log - core daemons
+	// ceph-client.<type>.<id>.log — wins over the rule above (type ≠ "client")
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log"
+		regex         = ".*/ceph-client\\.([^.]+)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}
@@ -48,30 +49,34 @@ loki.relabel "ceph_component" {
 	}
 }
 
-// Journald: non-core Cephadm units (nfs, nvmeof, mirrors, gateways, etc.)
-// matches is AND-only, so filter with relabel keep instead of OR matches.
-// Only promote component so journal streams match core file-log labels
-// (job, host, component). Internal __journal__* fields are dropped by Alloy.
+// Journald: Cephadm units only (not host-wide journal).
+// Unit form: ceph-<fsid>@<type>.<id>[.service] → component=<type>
+// Keep stream labels aligned with file path: job, host, component only.
 loki.relabel "ceph_journal" {
 	forward_to = [loki.process.remove_timestamp.receiver]
 
-	// Keep only non-core Cephadm systemd units:
-	// ceph-<fsid>@<type>.<id>[.service]
 	rule {
 		source_labels = ["__journal__systemd_unit"]
-		regex         = "ceph-[^@]+@(nfs|nvmeof|cephfs-mirror|rbd-mirror|iscsi|smb|rgw|ceph-exporter|crash|haproxy|keepalived)\\..*"
+		regex         = "ceph-[^@]+@([^.]+)\\..*"
 		action        = "keep"
+	}
+
+	// Drop collectors / monitoring stack (cardinality + self-ingest)
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "ceph-[^@]+@(alloy|loki|promtail|prometheus|grafana|alertmanager|node-exporter|pushgateway|snmp-gateway|mgmt-gateway|oauth2-proxy)\\..*"
+		action        = "drop"
 	}
 
 	rule {
 		source_labels = ["__journal__systemd_unit"]
-		regex         = "ceph-[^@]+@(nfs|nvmeof|cephfs-mirror|rbd-mirror|iscsi|smb|rgw|ceph-exporter|crash|haproxy|keepalived)\\..*"
+		regex         = "ceph-[^@]+@([^.]+)\\..*"
 		target_label  = "component"
 		replacement   = "$1"
 	}
 }
 
-loki.source.journal "ceph_non_core" {
+loki.source.journal "ceph_daemons" {
 	max_age       = "12h"
 	path          = "/var/log/journal"
 	relabel_rules = loki.relabel.ceph_journal.rules
