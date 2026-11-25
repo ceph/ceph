@@ -11,20 +11,12 @@ from ceph_volume import log, conf, configuration
 from ceph_volume import exceptions
 from ceph_volume import terminal
 
-# The ceph-volume-zfs specific code
-import ceph_volume_zfs.zfs
-from ceph_volume_zfs import devices
-# from ceph_volume_zfs.util import device
-from ceph_volume_zfs.devices import zfs
-
 # the supported actions
 from ceph_volume_zfs.devices.zfs import inventory
 from ceph_volume_zfs.devices.zfs import prepare
 from ceph_volume_zfs.devices.zfs import zap
-
-
-if __name__ == '__main__':
-    zfs.ZFS()
+from ceph_volume_zfs.devices.zfs import list as list_
+from ceph_volume_zfs.devices.zfs import activate
 
 
 class ZFS(object):
@@ -43,7 +35,9 @@ class ZFS(object):
 
     def __init__(self, argv=None, parse=True):
         self.zfs_mapper = {
+            'activate': activate.Activate,
             'inventory': inventory.Inventory,
+            'list': list_.ListCmd,
             'prepare': prepare.Prepare,
             'zap': zap.Zap,
         }
