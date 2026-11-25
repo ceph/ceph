@@ -289,9 +289,10 @@ struct bluefs_transaction_t {
   ceph::buffer::list op_bl;     ///< encoded transaction ops
 
   bluefs_transaction_t() : seq(0) {}
+  bluefs_transaction_t(const uuid_d& _uuid, uint64_t s) : uuid(_uuid), seq(s) {}
 
-  void clear() {
-    *this = bluefs_transaction_t();
+  void reset(const uuid_d& uuid) {
+    *this = bluefs_transaction_t(uuid, 0);
   }
   bool empty() const {
     return op_bl.length() == 0;
