@@ -83,22 +83,29 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       ];
     }
 
-    const roots: any[] = [];
-    nodes.reverse().forEach((node: CrushmapNode) => {
-      if (rootNodes.includes(node.id)) {
-        roots.push(node.id);
-      }
-      treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap);
+    // `nodes` comes from `ceph osd tree` and is already ordered the same way
+    // as the CLI output: buckets by name before devices, devices by class and
+    // then numerically by id. The `children` lists are not (they come reversed),
+    // so order them by their position in `nodes`.
+    const treeOrder = new Map<number, number>(nodes.map((node, index) => [node.id, index]));
+    const byTreeOrder = (a: number, b: number) =>
+      (treeOrder.get(a) ?? Infinity) - (treeOrder.get(b) ?? Infinity);
+
+    // Children have to be built before their parents, so walk the list backwards.
+    [...nodes].reverse().forEach((node: CrushmapNode) => {
+      treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap, byTreeOrder);
     });
 
-    const children = roots.map((id) => {
-      return treeNodeMap[id];
-    });
-
-    return children;
+    // `roots` (crush.find_roots()) is already sorted by id like the CLI, but
+    // also contains shadow roots, which are not part of `nodes`.
+    return rootNodes.filter((id) => treeNodeMap[id]).map((id) => treeNodeMap[id]);
   }
 
-  private generateTreeLeaf(node: CrushmapNode, treeNodeMap: Record<number, any>) {
+  private generateTreeLeaf(
+    node: CrushmapNode,
+    treeNodeMap: Record<number, any>,
+    compareFn: (a: number, b: number) => number
+  ) {
     const cdId = node.id;
     this.metadataKeyMap[cdId] = node;
 
@@ -118,7 +125,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       type: node.type
     };
     if (node?.children?.length) {
-      node.children.sort().forEach((childId: number) => {
+      [...node.children].sort(compareFn).forEach((childId: number) => {
         children.push(treeNodeMap[childId]);
       });
 
