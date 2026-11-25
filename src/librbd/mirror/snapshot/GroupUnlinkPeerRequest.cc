@@ -41,21 +41,33 @@ template <typename I>
 void GroupUnlinkPeerRequest<I>::unlink_peer() {
   ldout(m_cct, 10) << "rbd_mirroring_max_mirroring_snapshots = " << m_max_snaps << dendl;
 
-  // First pass : cleanup snaps that have no peer_uuids or are incomplete
+  // First pass : cleanup snaps that have no peer_uuids or are stuck in
+  // creating/incomplete state
   for (auto peer: *m_mirror_peer_uuids){
     for (auto it = m_group_snaps.begin(); it != m_group_snaps.end(); it++) {
+      bool remove = false;
       auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-	  &it->snapshot_namespace);
-      if (ns == nullptr) {
-	continue;
+          &it->snapshot_namespace);
+      if (ns != nullptr) {
+        remove = ns->mirror_peer_uuids.empty() ||
+          (ns->mirror_peer_uuids.count(peer) != 0 &&
+           ns->is_primary() &&
+           !is_mirror_group_snapshot_complete(it->state, ns->complete)) ||
+          (ns->is_non_primary() &&
+           it->state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING);
+      } else {
+        // An interrupted copy leaves CREATING user records with no image
+        // snapshot ids saved, and nothing prunes them once the group is
+        // primary.
+        remove = m_remove_creating_user_snaps &&
+                 (cls::rbd::get_group_snap_namespace_type(it->snapshot_namespace) ==
+                  cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) &&
+                 it->state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING;
       }
 
-      if (ns->mirror_peer_uuids.empty() ||
-	(ns->mirror_peer_uuids.count(peer) != 0 &&
-	 ns->is_primary() &&
-         !is_mirror_group_snapshot_complete(it->state, ns->complete))) {
-	process_snapshot(*it, peer);
-	return;
+      if (remove) {
+        process_snapshot(*it, peer);
+        return;
       }
     }
   }
@@ -155,10 +167,10 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
     return;
   }
 
-  const auto& ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
-      group_snap.snapshot_namespace);
-  if (ns.mirror_peer_uuids.empty() ||
-      !is_mirror_group_snapshot_complete(group_snap.state, ns.complete)) {
+  const auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &group_snap.snapshot_namespace);
+  if (ns == nullptr || ns->mirror_peer_uuids.empty() ||
+      !is_mirror_group_snapshot_complete(group_snap.state, ns->complete)) {
     remove_group_snapshot(group_snap);
   } else {
     // Note: avoid calling remove_peer_uuid_from_group_snap() for CREATING
@@ -322,12 +334,19 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
         if (it->first == CEPH_NOSNAP) {
           continue;
         }
-        auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-            &it->second.snap_namespace);
-        if (mirror_ns == nullptr) {
-          continue;
+        // A CREATING user snapshot has no member list yet, so find its image
+        // snapshots by the group snapshot id in their namespace.
+        bool match = false;
+        if (auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+              &it->second.snap_namespace)) {
+          match = (mirror_ns->group_snap_id == m_group_snap_id);
+        } else if (auto group_ns =
+                     std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+                       &it->second.snap_namespace)) {
+          match = (group_ns->group_id == m_group_id &&
+                   group_ns->group_snapshot_id == m_group_snap_id);
         }
-        if (mirror_ns->group_snap_id == m_group_snap_id) {
+        if (match) {
           ldout(m_cct, 10) << "removing individual snapshot: "
                            << it->first << ", from image id:"
                            << ictx->id << dendl;
@@ -435,10 +454,11 @@ void GroupUnlinkPeerRequest<I>::remove_image_snapshot(ImageCtx *image_ctx,
     ldout(m_cct, 10) << "missing snapshot: snap_id=" << snap_id << dendl;
     return;
   }
-  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-    &snap_namespace);
-  if (mirror_ns == nullptr) {
-    lderr(m_cct) << "not mirror snapshot (snap_id=" << snap_id << ")" << dendl;
+  auto snap_type = cls::rbd::get_snap_namespace_type(snap_namespace);
+  if (snap_type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR &&
+      snap_type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_GROUP) {
+    lderr(m_cct) << "not mirror or part of group snapshot (snap_id=" << snap_id << ")"
+                 << dendl;
     return;
   }
   image_ctx->operations->snap_remove(snap_namespace, snap_name.c_str(),

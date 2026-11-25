@@ -1991,6 +1991,16 @@ stop_mirror_while_group_snapshot_incomplete() {
     fi
 }
 
+test_image_snapshot_with_group_snap_info_present() {
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local group_snap_id=$4
+
+    local img_snap_id
+    get_image_snapshot_with_group_snap_info "${cluster}" "${pool}" "${image}" "${group_snap_id}" img_snap_id
+}
+
 compare_image_snapshots()
 {
     local pool=$1
@@ -2592,6 +2602,34 @@ get_group_snap_count()
     fi
 }
 
+# Return the names of the group snapshots of a group that are in the given
+# state, in the array whose name is passed as the last argument.
+# state: 'creating' or 'complete'
+# type:  'user', 'mirror' or 'all'
+get_group_snaps_names()
+{
+    local cluster=$1
+    local group_spec=$2
+    local state=$3
+    local type=$4
+    local -n _group_snap_names=$5
+
+    local xpath="//group_snaps/group_snap"
+    if [ "${state}" = 'creating' ]; then
+        xpath+="[state='creating']"
+    elif [ "${state}" = 'complete' ]; then
+        xpath+="[state='created'][namespace/type='user' or namespace/complete='true']"
+    else
+        fail "invalid value for state: '${state}' (allowed: 'creating' or 'complete')"; return 1;
+    fi
+    if [ "${type}" != 'all' ]; then
+        xpath+="[namespace/type='${type}']"
+    fi
+
+    run_cmd "rbd --cluster ${cluster} group snap ls ${group_spec} --format xml --pretty-format"
+    _group_snap_names=($(xmlstarlet sel -t -m "${xpath}" -v "snapshot" -n < "$CMD_STDOUT" || :))
+}
+
 get_group_snap_name()
 {
     local cluster=$1
@@ -2761,7 +2799,7 @@ check_group_snap_doesnt_exist()
     local count
 
     get_group_snap_count "${cluster}" "${group_spec}" "${snap}" count
-    test 0 = "${count}" || { fail "snap count = ${count}"; return 1; }
+    test 0 = "${count}" || { fail "group snapshot '${snap}' of ${group_spec} still exists on ${cluster}, snap count = ${count}"; return 1; }
 }
 
 check_group_snap_exists()

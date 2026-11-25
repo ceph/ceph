@@ -894,7 +894,8 @@ void GroupPromoteRequest<I>::group_unlink_peer() {
     &GroupPromoteRequest<I>::handle_group_unlink_peer>(this);
 
   auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
-    m_group_ioctx, m_group_id, &m_mirror_peer_uuids, &m_image_ctxs, ctx);
+    m_group_ioctx, m_group_id, &m_mirror_peer_uuids, &m_image_ctxs, ctx,
+    true);
 
   req->send();
 }
