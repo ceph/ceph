@@ -6979,9 +6979,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   while (1) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) {
-      if (logger) {
-        logger->inc(l_mdss_cache_trim_throttle);
-      }
+      logger->inc(l_mdc_cache_trim_throttle);
       break;
     }
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
@@ -7010,9 +7008,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) {
-      if (logger) {
-        logger->inc(l_mdss_cache_trim_throttle);
-      }
+      logger->inc(l_mdc_cache_trim_throttle);
       break;
     }
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
@@ -13970,6 +13966,10 @@ void MDCache::register_perfcounters()
                         "Internal Counter type uninline succeeded");
     pcb.add_u64_counter(l_mdc_uninline_write_failed, "uninline_write_failed",
                         "Internal Counter type uninline write failed");
+
+    pcb.add_u64_counter(l_mdc_cache_trim_throttle, "cache_trim_throttle",
+                        "Cache trim throttle counter", "ctt",
+                        PerfCountersBuilder::PRIO_INTERESTING);
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());
