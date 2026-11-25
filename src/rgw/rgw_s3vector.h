@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 #include "include/encoding.h"
 #include "include/expected.hpp"
@@ -20,6 +22,10 @@ class Formatter;
 class JSONObj;
 class JSONParser;
 class DoutPrefixProvider;
+
+namespace arrow {
+class Array;
+}
 
 namespace rgw::sal {
 class Bucket;
@@ -279,7 +285,37 @@ struct vector_item_t {
   std::string metadata; // JSON string
 
   void dump(ceph::Formatter* f) const;
-  void decode_json(JSONObj* obj);
+};
+
+struct validation_error_t {
+  std::string path;
+  std::string message;
+};
+
+inline constexpr size_t max_metadata_size = 40*1024;
+inline constexpr size_t max_metadata_keys = 50;
+
+// the vectors of a PutVectors request, as the arrow arrays that are written
+// to the index. the arrays are filled directly from the payload of the request.
+// the schema of the index is not known when the payload is parsed, so:
+// - the values of all the vectors are held in one flat array, that is turned
+//   into a list of vectors (without copying) once the dimension is known
+// - the filterable metadata columns are extracted from the metadata array
+// an invalid vector stops the conversion: the vectors that follow it are not
+// added to the arrays, and the errors are reported when the request is executed
+struct put_vectors_data_t {
+  std::shared_ptr<arrow::Array> keys;     // strings
+  std::shared_ptr<arrow::Array> values;   // floats, "dimension" values per vector
+  std::shared_ptr<arrow::Array> metadata; // JSON strings, null when there is no metadata
+  // the number of vectors in the request
+  size_t num_vectors = 0;
+  // the number of vectors in the arrays
+  size_t num_rows = 0;
+  // the dimension of the first vector, all other vectors must match it
+  size_t dimension = 0;
+  // the index and dimension of the first vector that does not match
+  std::optional<std::pair<size_t, size_t>> dimension_mismatch;
+  std::vector<validation_error_t> errors;
 };
 
 /*
@@ -287,18 +323,33 @@ struct vector_item_t {
     "indexArn": "string",
     "indexName": "string",
     "vectorBucketName": "string",
-    "vectors": [vector_item_t]
+    "vectors": [
+      {
+        "key": "string",
+        "data": {"float32": ["float"]},
+        "metadata": {}
+      }
+    ]
   }
 */
 struct put_vectors_t {
   boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
-  std::vector<vector_item_t> vectors;
-
-  void dump(ceph::Formatter* f) const;
-  void decode_json(JSONObj* obj);
+  put_vectors_data_t data;
 };
+
+// parse the JSON payload of a PutVectors request (implemented in rgw_s3vector_parse.cc).
+// the payload must be followed by a null character: payload.data()[payload.size()] == '\0'
+// the payload has a fixed structure, anything else is rejected with -EINVAL.
+// invalid vectors do not fail the parsing, they are reported by put_vectors()
+int parse_put_vectors(const DoutPrefixProvider* dpp, std::string_view payload, put_vectors_t& request);
+
+// set the names of the index and its vector bucket from the fields of a
+// request: either the ARN of the index, or the names of both.
+// returns -EINVAL if they are invalid
+int resolve_index_name(const DoutPrefixProvider* dpp, const std::string& str_arn,
+    std::string& vector_bucket_name, std::string& index_name, boost::optional<rgw::ARN>& arn);
 
 /*
   {
@@ -640,11 +691,6 @@ inline rgw::ARN vector_bucket_arn(const std::string& zonegroup, const std::strin
       fmt::format("bucket/{}", vector_bucket_name)
     );
 }
-
-struct validation_error_t {
-  std::string path;
-  std::string message;
-};
 
 // names of the internal columns of the index table. all of them start with an
 // underscore, which is why a metadata key name may not start with one

@@ -28,6 +28,51 @@ protected:
 public:
   explicit RGWS3VectorBase(bufferlist&& data) : in_data(std::move(data)) {}
 protected:
+  // the namespace of the request is the one of the user making it
+  void init_namespace() {
+    bucket_ns.tenant = s->bucket_tenant;
+    if (const auto* account_id = std::get_if<rgw_account_id>(&s->owner.id); account_id) {
+      bucket_ns.account = *account_id;
+    }
+  }
+
+  // resolve the backend of the request, and the namespace and storage mode
+  // of the vector bucket. the name of the vector bucket is empty when the
+  // request has no individual target bucket
+  int init_backend(rgw::s3vector::BackendConfig& backend_config,
+                   const boost::optional<rgw::ARN>& arn,
+                   const std::string& vector_bucket_name,
+                   optional_yield y) {
+    const auto backend_name = s->cct->_conf.get_val<std::string>("rgw_s3vector_backend");
+    if (rgw::s3vector::get_backend_type(backend_name, backend_config.backend_type) < 0) {
+      return -EINVAL;
+    }
+
+    if (const int rc = resolve_namespace(arn, y); rc < 0) {
+      return rc;
+    }
+    // Resolve storage mode before entering LanceDB's alternate stack.
+    if (!vector_bucket_name.empty()) {
+      std::unique_ptr<rgw::sal::VectorBucket> bucket;
+      int ret = driver->load_vector_bucket(this,
+          rgw_bucket(bucket_ns.name(), vector_bucket_name),
+          &bucket, y);
+      if (ret < 0 && ret != -ENOENT) {
+        return ret;
+      }
+      rgw::s3vector::StorageMode mode;
+      ret = rgw::s3vector::get_bucket_storage_mode(this,
+          ret == 0 && rgw::s3vector::is_rgw_backend(backend_config.backend_type)
+              ? bucket.get() : nullptr,
+          mode);
+      if (ret < 0) {
+        return ret;
+      }
+      backend_config.storage_mode = mode;
+    }
+    return 0;
+  }
+
   template<typename RestConfig>
   int do_init_processing(rgw::s3vector::VectorBucketConfig<RestConfig>& configuration,
                          optional_yield y) {
@@ -35,11 +80,7 @@ protected:
     auto& backend_config = configuration.backend_config;
     backend_config.storage_mode.reset();
 
-    // the namespace of the request is the one of the user making it
-    bucket_ns.tenant = s->bucket_tenant;
-    if (const auto* account_id = std::get_if<rgw_account_id>(&s->owner.id); account_id) {
-      bucket_ns.account = *account_id;
-    }
+    init_namespace();
 
     if (in_data.length() == 0) {
       ldpp_dout(this, 1) << "ERROR: JSON s3vector payload missing" << dendl;
@@ -58,43 +99,20 @@ protected:
       return -EINVAL;
     }
 
-    const auto backend_name = s->cct->_conf.get_val<std::string>("rgw_s3vector_backend");
-    if (rgw::s3vector::get_backend_type(backend_name, backend_config.backend_type) < 0) {
-      return -EINVAL;
-    }
-
-    int rc = 0;
+    static const boost::optional<rgw::ARN> no_arn;
+    static const std::string no_bucket;
+    const boost::optional<rgw::ARN>* arn = &no_arn;
     if constexpr (requires { rest_config.vector_bucket_arn; }) {
-      rc = resolve_namespace(rest_config.vector_bucket_arn, y);
+      arn = &rest_config.vector_bucket_arn;
     } else if constexpr (requires { rest_config.index_arn; }) {
-      rc = resolve_namespace(rest_config.index_arn, y);
+      arn = &rest_config.index_arn;
     }
-    if (rc < 0) {
-      return rc;
-    }
-    // Resolve storage mode before entering LanceDB's alternate stack.
     // ListVectorBuckets has no individual target bucket.
+    const std::string* vector_bucket_name = &no_bucket;
     if constexpr (requires { rest_config.vector_bucket_name; }) {
-      if (!rest_config.vector_bucket_name.empty()) {
-        std::unique_ptr<rgw::sal::VectorBucket> bucket;
-        int ret = driver->load_vector_bucket(this,
-            rgw_bucket(bucket_ns.name(), rest_config.vector_bucket_name),
-            &bucket, y);
-        if (ret < 0 && ret != -ENOENT) {
-          return ret;
-        }
-        rgw::s3vector::StorageMode mode;
-        ret = rgw::s3vector::get_bucket_storage_mode(this,
-            ret == 0 && rgw::s3vector::is_rgw_backend(backend_config.backend_type)
-                ? bucket.get() : nullptr,
-            mode);
-        if (ret < 0) {
-          return ret;
-        }
-        backend_config.storage_mode = mode;
-      }
+      vector_bucket_name = &rest_config.vector_bucket_name;
     }
-    return 0;
+    return init_backend(backend_config, *arn, *vector_bucket_name, y);
   }
 
   // a vector bucket that is identified by name is looked up in the namespace of
@@ -688,8 +706,31 @@ private:
   RGWOpType get_type() override { return RGW_OP_S3VECTOR_PUT_VECTORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
+  // the payload of PutVectors holds the vectors, and may be large. so, it is not
+  // decoded into an intermediate representation as done for the other requests.
+  // it is parsed directly into the arrays that are written to the index
   int init_processing(optional_yield y) override {
-    return do_init_processing(configuration, y);
+    auto& rest_config = configuration.rest_config;
+    auto& backend_config = configuration.backend_config;
+    backend_config.storage_mode.reset();
+
+    init_namespace();
+
+    if (in_data.length() == 0) {
+      ldpp_dout(this, 1) << "ERROR: JSON s3vector payload missing" << dendl;
+      return -EINVAL;
+    }
+    // the parser needs a null terminated payload
+    const auto length = in_data.length();
+    in_data.append('\0');
+    if (const int ret = rgw::s3vector::parse_put_vectors(this,
+          std::string_view(in_data.c_str(), length), rest_config); ret < 0) {
+      return ret;
+    }
+    // the vectors were converted, the payload is not needed anymore
+    in_data.clear();
+
+    return init_backend(backend_config, rest_config.index_arn, rest_config.vector_bucket_name, y);
   }
 
   void execute(optional_yield y) override {

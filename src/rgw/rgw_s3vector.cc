@@ -463,10 +463,7 @@ namespace rgw::s3vector {
     }
   }
 
-  void decode_name_or_arn(const char* name_field, const char* arn_field, std::string& name, boost::optional<rgw::ARN>& arn, JSONObj* obj) {
-    std::string str_arn;
-    JSONDecoder::decode_json(arn_field, str_arn, obj);
-    JSONDecoder::decode_json(name_field, name, obj);
+  void verify_name_or_arn(const char* name_field, const char* arn_field, const std::string& str_arn, const std::string& name, boost::optional<rgw::ARN>& arn) {
     if (str_arn.empty() && name.empty()) {
       throw JSONDecoder::err(fmt::format("either {} or {} must be specified", name_field, arn_field));
     }
@@ -477,6 +474,13 @@ namespace rgw::s3vector {
       arn = rgw::ARN::parse(str_arn);
       if (!arn) throw JSONDecoder::err(fmt::format("failed to parse ARN {}", str_arn));
     }
+  }
+
+  void decode_name_or_arn(const char* name_field, const char* arn_field, std::string& name, boost::optional<rgw::ARN>& arn, JSONObj* obj) {
+    std::string str_arn;
+    JSONDecoder::decode_json(arn_field, str_arn, obj);
+    JSONDecoder::decode_json(name_field, name, obj);
+    verify_name_or_arn(name_field, arn_field, str_arn, name, arn);
   }
 
   void decode_vector_bucket_name(std::string& vector_bucket_name, boost::optional<rgw::ARN>& arn, JSONObj* obj) {
@@ -494,32 +498,53 @@ namespace rgw::s3vector {
     verify_name(vector_bucket_name);
   }
 
+  // extract the names of the vector bucket and the index from the ARN of the index
+  void split_index_arn(const rgw::ARN& arn, std::string& vector_bucket_name, std::string& index_name) {
+    constexpr std::string_view bucket_prefix = "bucket/";
+    constexpr std::string_view index_prefix = "/index/";
+    std::string_view resource{arn.resource};
+    if (!resource.starts_with(bucket_prefix)) {
+      throw JSONDecoder::err(
+          fmt::format("invalid index ARN. expected: 'bucket/<bucket_name>/index/<index_name>' got: {}", resource));
+    }
+    // Remove "bucket/" prefix
+    resource.remove_prefix(bucket_prefix.size());
+    // Find "/index/" separator
+    auto index_pos = resource.find(index_prefix);
+    if (index_pos == std::string_view::npos) {
+      throw JSONDecoder::err(
+          fmt::format("invalid index ARN. expected: 'bucket/<bucket_name>/index/<index_name>' got: {}", resource));
+    }
+    vector_bucket_name = resource.substr(0, index_pos);
+    index_name = resource.substr(index_pos + index_prefix.size());
+  }
+
   void decode_index_name(std::string& vector_bucket_name, std::string& index_name, boost::optional<rgw::ARN>& arn, JSONObj* obj) {
     decode_name_or_arn("indexName", "indexArn", index_name, arn, obj);
     if (arn) {
       ceph_assert(index_name.empty());
-      constexpr std::string_view bucket_prefix = "bucket/";
-      constexpr std::string_view index_prefix = "/index/";
-      std::string_view resource{arn->resource};
-      if (!resource.starts_with(bucket_prefix)) {
-        throw JSONDecoder::err(
-            fmt::format("invalid index ARN. expected: 'bucket/<bucket_name>/index/<index_name>' got: {}", resource));
-      }
-      // Remove "bucket/" prefix
-      resource.remove_prefix(bucket_prefix.size());
-      // Find "/index/" separator
-      auto index_pos = resource.find(index_prefix);
-      if (index_pos == std::string_view::npos) {
-        throw JSONDecoder::err(
-            fmt::format("invalid index ARN. expected: 'bucket/<bucket_name>/index/<index_name>' got: {}", resource));
-      }
-      vector_bucket_name = resource.substr(0, index_pos);
-      index_name = resource.substr(index_pos + index_prefix.size());
+      split_index_arn(*arn, vector_bucket_name, index_name);
     } else {
       JSONDecoder::decode_json("vectorBucketName", vector_bucket_name, obj, true);
     }
     verify_name(index_name);
     verify_name(vector_bucket_name);
+  }
+
+  int resolve_index_name(const DoutPrefixProvider* dpp, const std::string& str_arn,
+      std::string& vector_bucket_name, std::string& index_name, boost::optional<rgw::ARN>& arn) {
+    try {
+      verify_name_or_arn("indexName", "indexArn", str_arn, index_name, arn);
+      if (arn) {
+        split_index_arn(*arn, vector_bucket_name, index_name);
+      }
+      verify_name(index_name);
+      verify_name(vector_bucket_name);
+    } catch (const JSONDecoder::err& e) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector invalid index name: " << e.what() << dendl;
+      return -EINVAL;
+    }
+    return 0;
   }
 
   template<typename T>
@@ -745,8 +770,6 @@ namespace rgw::s3vector {
   static constexpr int num_key_columns = 1;
 
   static constexpr unsigned int max_top_k = 10000;
-  static constexpr size_t max_metadata_size = 40*1024;
-  static constexpr size_t max_metadata_keys = 50;
   static constexpr size_t max_nonfilterable_metadata_keys = 10;
   static constexpr size_t max_filterable_metadata_keys = 10;
 
@@ -1727,45 +1750,6 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  void vector_item_t::decode_json(JSONObj* obj) {
-    JSONDecoder::decode_json("key", key, obj, true);
-    if (key.empty()) {
-      throw JSONDecoder::err("vector key must be specified");
-    }
-    data.emplace();
-    rgw::s3vector::decode_json("data", *data, obj);
-    if (data->empty()) {
-      throw JSONDecoder::err("vector data cannot be empty");
-    }
-    JSONDecoder::decode_json("metadata", metadata, obj);
-  }
-
-  void put_vectors_t::dump(ceph::Formatter* f) const {
-    f->open_object_section("");
-    if (index_arn) {
-      ::encode_json("indexArn", index_arn->to_string(), f);
-    } else {
-      ::encode_json("indexName", index_name, f);
-      ::encode_json("vectorBucketName", vector_bucket_name, f);
-    }
-    f->open_array_section("vectors");
-    for (const auto& vector : vectors) {
-      vector.dump(f);
-    }
-    f->close_section();
-    f->close_section();
-  }
-
-  void put_vectors_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
-    JSONDecoder::decode_json("vectors", vectors, obj, true);
-
-    // the maximum number of vectors is configurable, and is verified in put_vectors()
-    if (vectors.empty()) {
-      throw JSONDecoder::err("vectors array must contain at least 1 item");
-    }
-  }
-
   struct PutVectorsCtx {
     const VectorBucketConfig<put_vectors_t>* configuration;
     rgw::sal::Driver* driver;
@@ -1789,7 +1773,9 @@ namespace rgw::s3vector {
     }
     LanceDBTable* table = table_handle.table;
     LanceDBConnection* conn = table_handle.conn_handle.conn;
-    if (configuration.vectors.empty()) {
+    // the arrays that were filled when the request was parsed
+    const auto& data = configuration.data;
+    if (!data.keys) {
       ldpp_dout(dpp, 10) << "WARNING: s3vector no vectors provided" << dendl;
       lancedb_table_free(table);
       lancedb_connection_free(conn);
@@ -1814,12 +1800,28 @@ namespace rgw::s3vector {
     }
     const auto filterable_keys = get_filterable_keys_from_schema(schema);
 
-    arrow::StringBuilder key_builder;
-    arrow::FloatBuilder float_builder;
-    arrow::FixedSizeListBuilder data_builder(arrow::default_memory_pool(),
-        std::make_unique<arrow::FloatBuilder>(),
-        dimension);
-    arrow::StringBuilder metadata_builder;
+    // the vectors were already validated when the request was parsed, other
+    // than their dimension. only the first invalid vector is reported
+    if (data.dimension != 0 && data.dimension != dimension) {
+      errors.push_back({"vectors[0].data",
+        fmt::format("expected dimension {} but got {}", dimension, data.dimension)});
+    } else if (!data.errors.empty()) {
+      errors.insert(errors.end(), data.errors.begin(), data.errors.end());
+    } else if (data.dimension_mismatch) {
+      errors.push_back({fmt::format("vectors[{}].data", data.dimension_mismatch->first),
+        fmt::format("expected dimension {} but got {}", dimension, data.dimension_mismatch->second)});
+    }
+    if (!errors.empty()) {
+      for (const auto& error : errors) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector invalid vector. " << error.path << ": " << error.message << dendl;
+      }
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      ctx->result = -EINVAL;
+      return;
+    }
+    const auto& keys = static_cast<const arrow::StringArray&>(*data.keys);
+    const auto& metadata = static_cast<const arrow::StringArray&>(*data.metadata);
 
     // create builders for filterable columns
     struct FilterableBuilder {
@@ -1860,93 +1862,19 @@ namespace rgw::s3vector {
       filterable_builders.push_back(std::move(fb));
     }
 
-    unsigned int num_rows = 0;
-    for (size_t vi = 0; vi < configuration.vectors.size(); ++vi) {
-      const auto& vector = configuration.vectors[vi];
-      // validate key
-      if (vector.key.empty()) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector vector with empty key at index " << vi << dendl;
-        errors.push_back({fmt::format("vectors[{}].key", vi), "must not be empty"});
-        break;
-      }
-      // validate data
-      if (!vector.data) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector vector with no data, key: " << vector.key << dendl;
-        errors.push_back({fmt::format("vectors[{}].data", vi), "missing data"});
-        break;
-      }
-      // validate data dimension
-      if (vector.data->size() != dimension) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector vector dimension mismatch, expected "
-          << dimension << " got " << vector.data->size() << " for key: " << vector.key << dendl;
-        errors.push_back({fmt::format("vectors[{}].data", vi),
-          fmt::format("expected dimension {} but got {}", dimension, vector.data->size())});
-        break;
-      }
-      // validate metadata JSON if exists
-      const bool has_metadata = !vector.metadata.empty();
+    const unsigned int num_rows = data.num_rows;
+    // the filterable metadata columns are extracted from the metadata.
+    // this is skipped when the index has no filterable metadata keys
+    for (size_t vi = 0; vi < num_rows && !filterable_builders.empty(); ++vi) {
+      const auto vector_key = keys.GetView(vi);
+      const auto vector_metadata = metadata.GetView(vi);
+      // parse metadata JSON if exists
+      const bool has_metadata = !metadata.IsNull(vi);
       JSONParser parser;
-      if (has_metadata && !parser.parse(vector.metadata.c_str(), vector.metadata.size())) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector invalid metadata JSON for key: " << vector.key << dendl;
+      if (has_metadata && !parser.parse(vector_metadata.data(), vector_metadata.size())) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector invalid metadata JSON for key: " << vector_key << dendl;
         errors.push_back({fmt::format("vectors[{}].metadata", vi), "invalid JSON"});
         break;
-      }
-      if (has_metadata && vector.metadata.size() > max_metadata_size) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector metadata of size: " << vector.metadata.size() <<
-          " is too large for key: " << vector.key << dendl;
-        errors.push_back({fmt::format("vectors[{}].metadata", vi),
-          fmt::format("size ({}) must not exceed {} bytes", vector.metadata.size(), max_metadata_size)});
-        break;
-      }
-      if (has_metadata) {
-        bool invalid_field = false;
-        size_t num_fields = 0;
-        std::set<std::string> field_names;
-        for (auto it = parser.find_first(); !it.end(); ++it) {
-          auto* field = *it;
-          const auto& name = field->get_name();
-          if (!field_names.insert(name).second) {
-            ldpp_dout(dpp, 1) << "ERROR: s3vector duplicate metadata field '" << name << "' in key: " << vector.key << dendl;
-            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "field name must not be duplicated"});
-            invalid_field = true;
-            break;
-          }
-          if (++num_fields > max_metadata_keys) {
-            ldpp_dout(dpp, 1) << "ERROR: s3vector too many metadata fields for key: " << vector.key << dendl;
-            errors.push_back({fmt::format("vectors[{}].metadata", vi),
-              fmt::format("must not have more than {} fields", max_metadata_keys)});
-            invalid_field = true;
-            break;
-          }
-          if (const auto result = validate_metadata_key_name(name); !result) {
-            ldpp_dout(dpp, 1) << "ERROR: s3vector metadata field name '" << name << "' " << result.error() << " in key: " << vector.key << dendl;
-            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), fmt::format("field name {}", result.error())});
-            invalid_field = true;
-            break;
-          }
-          const auto& dv = field->get_data_val();
-          if (!dv.quoted && dv.str == "null") {
-            ldpp_dout(dpp, 1) << "ERROR: s3vector null metadata value for field '" << name << "' in key: " << vector.key << dendl;
-            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "null values are not supported"});
-            invalid_field = true;
-            break;
-          }
-        }
-        if (invalid_field) break;
-      }
-      // add key
-      key_builder.Append(vector.key).ok();
-      // add data
-      auto* float_list_builder = static_cast<arrow::FloatBuilder*>(data_builder.value_builder());
-      for (const auto& value : vector.data.value()) {
-        float_list_builder->Append(value).ok();
-      }
-      data_builder.Append().ok();
-      // add metadata
-      if (has_metadata) {
-        metadata_builder.Append(vector.metadata).ok();
-      } else {
-        metadata_builder.AppendNull().ok();
       }
       // add filterable metadata columns
       if (!filterable_builders.empty() && !has_metadata) {
@@ -1958,7 +1886,6 @@ namespace rgw::s3vector {
           fb.builder->AppendNull().ok();
         }
         if (!errors.empty()) break;
-        ++num_rows;
         continue;
       }
       if (has_metadata && !filterable_builders.empty()) {
@@ -1999,7 +1926,7 @@ namespace rgw::s3vector {
             }
           } catch (const JSONDecoder::err& e) {
             ldpp_dout(dpp, 1) << "ERROR: s3vector failed to decode metadata field '"
-              << fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
+              << fb.name << "' for key: " << vector_key << ". error: " << e.what() << dendl;
             errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "invalid type"});
             break;
           }
@@ -2015,7 +1942,7 @@ namespace rgw::s3vector {
                 static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(val).ok();
               } catch (const JSONDecoder::err& err) {
                 ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
-                  << fb.name << "' for key: " << vector.key << " expected number but got:"  << value_str
+                  << fb.name << "' for key: " << vector_key << " expected number but got:"  << value_str
                   << ". error: " << err.what() << dendl;
                 errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), err.what()});
               }
@@ -2027,7 +1954,7 @@ namespace rgw::s3vector {
                 static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(false).ok();
               } else {
                 ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
-                  << fb.name << "' for key: " << vector.key << " expected boolean but got: " << value_str << dendl;
+                  << fb.name << "' for key: " << vector_key << " expected boolean but got: " << value_str << dendl;
                 errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected boolean"});
               }
               break;
@@ -2051,7 +1978,7 @@ namespace rgw::s3vector {
                   value_builder->Append(val).ok();
                 } catch (const JSONDecoder::err& err) {
                   ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
-                    << fb.name << "' for key: " << vector.key << " expected number in list but got: " << v
+                    << fb.name << "' for key: " << vector_key << " expected number in list but got: " << v
                     << ". error: " << err.what() << dendl;
                   errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), err.what()});
                   break;
@@ -2070,7 +1997,7 @@ namespace rgw::s3vector {
                   value_builder->Append(false).ok();
                 } else {
                   ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
-                    << fb.name << "' for key: " << vector.key << " expected boolean in list but got: " << v << dendl;
+                    << fb.name << "' for key: " << vector_key << " expected boolean in list but got: " << v << dendl;
                   errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected boolean"});
                   break;
                 }
@@ -2082,7 +2009,6 @@ namespace rgw::s3vector {
         }
       }
       if (!errors.empty()) break;
-      ++num_rows;
     }
 
     if (!errors.empty()) {
@@ -2092,12 +2018,19 @@ namespace rgw::s3vector {
       return;
     }
 
-    std::shared_ptr<arrow::Array> key_array, data_array, metadata_array;
-    key_builder.Finish(&key_array).ok();
-    data_builder.Finish(&data_array).ok();
-    metadata_builder.Finish(&metadata_array).ok();
+    // the values of all the vectors are in one flat array. now that the dimension
+    // is known, the list of vectors is built on top of it, without copying the values
+    std::shared_ptr<arrow::Array> data_array;
+    if (const auto status = arrow::FixedSizeListArray::FromArrays(data.values,
+          schema->GetFieldByName(data_field_str)->type()).Value(&data_array); !status.ok()) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to build the vectors array: " << status.ToString() << dendl;
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      ctx->result = -EINVAL;
+      return;
+    }
 
-    arrow::ArrayVector arrays = {key_array, data_array, metadata_array};
+    arrow::ArrayVector arrays = {data.keys, data_array, data.metadata};
     for (auto& fb : filterable_builders) {
       std::shared_ptr<arrow::Array> arr;
       fb.builder->Finish(&arr).ok();
@@ -2169,14 +2102,22 @@ namespace rgw::s3vector {
     if (!operation.backend_config.storage_mode) {
       return -EINVAL;
     }
-    const auto& configuration = operation.rest_config;
-    log_configuration(dpp, "PutVectors", configuration);
-    const auto max_vectors = dpp->get_cct()->_conf->rgw_s3vector_max_put_vectors;
-    if (configuration.vectors.size() > max_vectors) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector too many vectors in request, got "
-        << configuration.vectors.size() << " maximum is " << max_vectors << dendl;
+    const auto& data = operation.rest_config.data;
+    const size_t num_vectors = data.num_vectors;
+    const size_t max_vectors = dpp->get_cct()->_conf->rgw_s3vector_max_put_vectors;
+    if (num_vectors == 0 && !data.errors.empty()) {
+      // the request is invalid, regardless of its vectors
+      for (const auto& error : data.errors) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector invalid request. " << error.path << ": " << error.message << dendl;
+      }
+      errors.insert(errors.end(), data.errors.begin(), data.errors.end());
+      return -EINVAL;
+    }
+    if (num_vectors == 0 || num_vectors > max_vectors) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector invalid number of vectors in request, got "
+        << num_vectors << " maximum is " << max_vectors << dendl;
       errors.push_back({"vectors",
-        fmt::format("must contain 1-{} items, got {}", max_vectors, configuration.vectors.size())});
+        fmt::format("must contain 1-{} items, got {}", max_vectors, num_vectors)});
       return -EINVAL;
     }
     PutVectorsCtx ctx{&operation, driver, &ns, dpp, &errors, 0};
