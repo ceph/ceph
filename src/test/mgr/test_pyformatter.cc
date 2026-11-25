@@ -373,6 +373,76 @@ TEST(PyFormatter, EmptySectionName)
 
 /* End Negative Tests */
 
+TEST(PyFormatter, DumpPyObject_StoresPrebuiltObject)
+{
+  // Verify that dump_pyobject inserts a caller-owned PyObject into the dict
+  // without re-encoding, which is the pattern used in get_store_prefix.
+  PyFormatter py_f;
+  PyObject *value = PyUnicode_FromString("hello");
+  ASSERT_NE(value, nullptr);
+  py_f.dump_pyobject("key", value);
+
+  PyObject *result = py_f.get();
+  ASSERT_NE(result, nullptr);
+  ASSERT_TRUE(PyDict_Check(result));
+
+  PyObject *item = PyDict_GetItemString(result, "key");
+  ASSERT_NE(item, nullptr);
+  ASSERT_TRUE(PyUnicode_Check(item));
+  ASSERT_STREQ(PyUnicode_AsUTF8(item), "hello");
+
+  Py_DECREF(result);
+}
+
+TEST(PyFormatter, DumpString_SkipsNonUtf8Value)
+{
+  // dump_string uses PyUnicode_FromStringAndSize which fails on invalid UTF-8.
+  // The method must not crash and must simply skip the key.
+  PyFormatter py_f;
+  // "\x80\xff" is invalid UTF-8
+  std::string bad_utf8("\x80\xff", 2);
+  py_f.dump_string("bad_key", bad_utf8);
+
+  PyObject *result = py_f.get();
+  ASSERT_NE(result, nullptr);
+  ASSERT_TRUE(PyDict_Check(result));
+
+  // Key must be absent — dump_string skips on encoding failure
+  PyObject *item = PyDict_GetItemString(result, "bad_key");
+  ASSERT_EQ(item, nullptr);
+
+  Py_DECREF(result);
+}
+
+TEST(PyFormatter, DumpPyObject_NonUtf8ViLatin1Fallback)
+{
+  // This is the pattern used in get_store_prefix to handle crash metadata
+  // containing non-printable / non-UTF-8 bytes: try UTF-8, fall back to
+  // Latin-1, then call dump_pyobject directly with the validated PyObject*.
+  PyFormatter py_f;
+  std::string bad_utf8("\x80\xff", 2);
+
+  PyObject *value = PyUnicode_FromStringAndSize(bad_utf8.c_str(), bad_utf8.size());
+  if (!value) {
+    PyErr_Clear();
+    value = PyUnicode_DecodeLatin1(bad_utf8.c_str(), bad_utf8.size(), nullptr);
+  }
+  ASSERT_NE(value, nullptr);  // Latin-1 must always succeed
+  py_f.dump_pyobject("latin1_key", value);
+
+  PyObject *result = py_f.get();
+  ASSERT_NE(result, nullptr);
+  ASSERT_TRUE(PyDict_Check(result));
+
+  // Key must be present — Latin-1 fallback succeeded
+  PyObject *item = PyDict_GetItemString(result, "latin1_key");
+  ASSERT_NE(item, nullptr);
+  ASSERT_TRUE(PyUnicode_Check(item));
+
+  Py_DECREF(result);
+}
+
+
 /*
  * Tests for PyFormatterRO (read-only-on-the-fly builder):
  *  - lists -> tuples, sets -> frozensets
