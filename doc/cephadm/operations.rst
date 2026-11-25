@@ -28,7 +28,9 @@ commands:
 
   The debug messages are very verbose!
 
-You can see recent events by running the following command:
+To see recent events, run the following command. It prints the entries at
+``info`` or higher among the last 20 entries of the ``cephadm`` channel, as
+described in :ref:`rados-monitoring-log-last`:
 
 .. prompt:: bash #
 
