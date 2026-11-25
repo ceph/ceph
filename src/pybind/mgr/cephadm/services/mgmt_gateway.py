@@ -5,7 +5,9 @@ from ceph.deployment.utils import wrap_ipv6
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
+from cephadm.services.cephadmservice import (
+    CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext, get_dashboard_endpoints,
+)
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -24,11 +26,15 @@ class MgmtGatewayService(CephadmService):
     INTERNAL_SVC_TEMPLATE_PATH = 'services/mgmt-gateway/internal_server.conf.j2'
     INTERNAL_SERVICE_PORT = 29443
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            deploy_ctx: DaemonDeployContext,
+    ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     def get_service_endpoints(self, service_name: str) -> List[str]:
@@ -71,9 +77,12 @@ class MgmtGatewayService(CephadmService):
         return sd_endpoints
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
         deps = [
             f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
@@ -86,10 +95,13 @@ class MgmtGatewayService(CephadmService):
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            deploy_ctx: DaemonDeployContext,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(MgmtGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         scheme = 'https'
@@ -147,7 +159,7 @@ class MgmtGatewayService(CephadmService):
             daemon_config["files"]["nginx.crt"] = tls_pair.cert
             daemon_config["files"]["nginx.key"] = tls_pair.key
 
-        return daemon_config, self.sorted_dependencies(self.mgr, svc_spec, daemon_spec.daemon_type)
+        return daemon_config, self.get_dependencies(self.mgr, svc_spec, daemon_spec.daemon_type)
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
