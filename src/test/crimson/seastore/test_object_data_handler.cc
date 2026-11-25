@@ -221,7 +221,7 @@ struct object_data_handler_test_t:
     with_trans_intr(
       t, seastar::coroutine::lambda([&](auto &t)
 				    -> ObjectDataHandler::clone_ret {
-	ObjectDataHandler objhandler(MAX_OBJECT_SIZE);
+	ObjectDataHandler objhandler(MAX_OBJECT_SIZE, delta_overwrite_max());
 	auto &target = get_object(target_snap);
 	target.clone_from(head);
         auto id = head.onode->get_layout()
@@ -261,7 +261,7 @@ struct object_data_handler_test_t:
     with_trans_intr(t, [&](auto &t) {
       return seastar::do_with(
 	std::move(bl),
-	ObjectDataHandler(MAX_OBJECT_SIZE),
+	ObjectDataHandler(MAX_OBJECT_SIZE, delta_overwrite_max()),
 	[=, this, &t](auto &bl, auto &objhandler) {
 	  return objhandler.write(
 	    ObjectDataHandler::context_t{
@@ -289,7 +289,7 @@ struct object_data_handler_test_t:
 	obj.size - offset);
       with_trans_intr(t, [&](auto &t) {
       return seastar::do_with(
-	ObjectDataHandler(MAX_OBJECT_SIZE),
+	ObjectDataHandler(MAX_OBJECT_SIZE, delta_overwrite_max()),
 	[=, this, &t](auto &objhandler) {
 	  return objhandler.truncate(
 	    ObjectDataHandler::context_t{
@@ -314,7 +314,7 @@ struct object_data_handler_test_t:
     snapid_t snap = CEPH_NOSNAP) {
     auto &obj = get_object(snap);
     bufferlist bl = with_trans_intr(t, [&](auto &t) {
-      return ObjectDataHandler(MAX_OBJECT_SIZE).read(
+      return ObjectDataHandler(MAX_OBJECT_SIZE, delta_overwrite_max()).read(
         ObjectDataHandler::context_t{
           *tm,
           t,
@@ -421,6 +421,13 @@ struct object_data_handler_test_t:
     }
     snaps.clear();
     return tm_teardown();
+  }
+
+  // ObjectDataHandler no longer reads the config itself. Tests toggle
+  // seastore_data_delta_based_overwrite, so pass the current value.
+  extent_len_t delta_overwrite_max() const {
+    return crimson::common::get_conf<Option::size_t>(
+      "seastore_data_delta_based_overwrite");
   }
 
   void enable_delta_based_overwrite() {
@@ -975,7 +982,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
     read(*t1, base + 4096, 4096);
     auto t2 = create_read_transaction();
     bufferlist committed = with_trans_intr(*t2, [&](auto &t) {
-      return ObjectDataHandler(MAX_OBJECT_SIZE).read(
+      return ObjectDataHandler(MAX_OBJECT_SIZE, delta_overwrite_max()).read(
         ObjectDataHandler::context_t{
           *tm,
           t,

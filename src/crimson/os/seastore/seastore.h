@@ -676,6 +676,9 @@ public:
   private:
     std::string root;
     const uint32_t max_object_size;
+    // Read once per mount. ObjectDataHandler is built per data op, and
+    // looking this up by string on each _write showed up in profiles.
+    const extent_len_t delta_based_overwrite_max_extent_size;
     bool is_test;
 
     Device* primary_device = nullptr;
