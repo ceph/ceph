@@ -162,12 +162,15 @@ options:
   type: size
   level: advanced
   desc: The maximum size (in bytes) of regular (non multi-part) object upload.
-  long_desc: Plain object upload is capped at this amount of data. In order to
-    upload larger objects, a special composite upload mechanism is required
-    multi-part upload (MPU) for S3 and DLO and SLO for Swift.  Note that this
-    value also limits the size of individual chunks uploaded for MPU and
-    DLO/SLO objects, thus the largest composite object that can be uploaded is
-    of size rgw_max_put_size * rgw_multipart_part_upload_limit
+  long_desc: >-
+    A plain object upload is capped at this size. To store a larger object,
+    use multipart upload (MPU) with S3, or a Dynamic or Static Large Object
+    (DLO or SLO) with Swift, instead of raising this limit. This value also
+    caps each MPU part and each DLO or SLO segment, so the largest composite
+    object is rgw_max_put_size times rgw_multipart_part_upload_limit: about
+    48.8 TiB with the defaults. Amazon S3 also limits a single PUT to 5 GiB,
+    and most S3 clients switch to multipart upload for large objects on their
+    own.
   default: 5_G
   services:
   - rgw
