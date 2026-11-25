@@ -122,6 +122,9 @@
   ``rgw_keystone_scope_include_roles`` (default true).
 * RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
   changed from ``false`` to ``true``.
+* RGW: New CephX profile ``profile rgw`` grants a Ceph Object Gateway the
+  permissions it needs. Create keys with
+  ``mon 'profile rgw' osd 'profile rgw'``.
 
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
