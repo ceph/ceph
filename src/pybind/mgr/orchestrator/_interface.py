@@ -638,6 +638,11 @@ class Orchestrator(object):
     ) -> List[str]:
         """
         Applies any spec
+
+        Backends that handle every service type the same way (cephadm)
+        override this method and do not need a per-type apply_<type>()
+        method. The table below is only for backends that implement a
+        subset of the types (Rook).
         """
         fns: Dict[str, Callable[..., OrchResult[str]]] = {
             'alertmanager': self.apply_alertmanager,
@@ -672,7 +677,13 @@ class Orchestrator(object):
             r_res = raise_if_exception(r)
             l_res.append(r_res)
             return OrchResult(l_res)
-        return raise_if_exception(reduce(merge, [fns[spec.service_type](spec) for spec in specs], OrchResult([])))
+        def apply_one(spec: "GenericSpec") -> OrchResult[str]:
+            fn = fns.get(spec.service_type)
+            if fn is None:
+                return OrchResult(None, exception=OrchestratorError(
+                    f'service type {spec.service_type!r} is not supported by this orchestrator backend'))
+            return fn(spec)
+        return raise_if_exception(reduce(merge, [apply_one(spec) for spec in specs], OrchResult([])))
 
     def set_unmanaged(self, service_name: str, value: bool) -> OrchResult[str]:
         """

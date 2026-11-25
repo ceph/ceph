@@ -858,3 +858,10 @@ def test_service_daemon_type_mapping_special_cases():
         daemon_type_to_service('ingress')
     with pytest.raises(KeyError):
         service_to_daemon_types('bogus')
+
+
+def test_apply_unsupported_service_type():
+    """apply() reports a service type the backend has no apply method for."""
+    from orchestrator import Orchestrator, raise_if_exception
+    with pytest.raises(OrchestratorError, match='not supported'):
+        raise_if_exception(Orchestrator().apply([ServiceSpec('cephfs-mirror')]))
