@@ -55,7 +55,7 @@ class DaemonState
   /// device ids -> devname, derived from metadata[device_ids]
   std::map<std::string,std::string> devices;
 
-  /// device ids -> by-path, derived from metadata[device_ids]
+  /// device ids -> by-path, derived from metadata[device_paths]
   std::map<std::string,std::string> devices_bypath;
 
   // TODO: this can be generalized to other daemons
