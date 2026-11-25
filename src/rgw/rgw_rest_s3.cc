@@ -2100,10 +2100,10 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
   s->formatter->dump_string("Name", s->bucket_name);
-  s->formatter->dump_string("Prefix", prefix);
+  dump_urlsafe(s, encode_key, "Prefix", prefix, false);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty()) {
-    s->formatter->dump_string("Delimiter", delimiter);
+    dump_urlsafe(s, encode_key, "Delimiter", delimiter, false);
   }
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
               : "false"));
@@ -2128,7 +2128,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     encode_key = true;
   }
   RGWListBucket_ObjStore_S3::send_common_versioned_response();
-  s->formatter->dump_string("KeyMarker", marker.name);
+  dump_urlsafe(s, encode_key, "KeyMarker", marker.name);
   s->formatter->dump_string("VersionIdMarker", marker.instance);
   if (is_truncated && !next_marker.empty()) {
     dump_urlsafe(s ,encode_key, "NextKeyMarker", next_marker.name);
@@ -2202,7 +2202,7 @@ void RGWListBucket_ObjStore_S3::send_common_response()
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
   s->formatter->dump_string("Name", s->bucket_name);
-  s->formatter->dump_string("Prefix", prefix);
+  dump_urlsafe(s, encode_key, "Prefix", prefix, false);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty()) {
     dump_urlsafe(s, encode_key, "Delimiter", delimiter, false);
@@ -2289,7 +2289,7 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->close_section();
     }
   }
-  s->formatter->dump_string("Marker", marker.name);
+  dump_urlsafe(s, encode_key, "Marker", marker.name);
   if (is_truncated && !next_marker.empty()) {
     dump_urlsafe(s, encode_key, "NextMarker", next_marker.name);
   }
@@ -2300,17 +2300,16 @@ void RGWListBucket_ObjStore_S3::send_response()
 void RGWListBucket_ObjStore_S3v2::send_versioned_response()
 {
   s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
+  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
+    s->formatter->dump_string("EncodingType", "url");
+    encode_key = true;
+  }
   RGWListBucket_ObjStore_S3v2::send_common_versioned_response();
   s->formatter->dump_string("KeyContinuationToken", marker.name);
   s->formatter->dump_string("VersionIdContinuationToken", marker.instance);
   if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextKeyContinuationToken", next_marker.name);
     s->formatter->dump_string("NextVersionIdContinuationToken", next_marker.instance);
-  }
-
-  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
-    s->formatter->dump_string("EncodingType", "url");
-    encode_key = true;
   }
 
   if (op_ret >= 0) {
@@ -2445,7 +2444,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   }
   s->formatter->dump_int("KeyCount", objs.size() + common_prefixes.size());
   if (start_after_exist) {
-    s->formatter->dump_string("StartAfter", startAfter);
+    dump_urlsafe(s, encode_key, "StartAfter", startAfter);
   }
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -5128,22 +5127,24 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     return;
 
   s->formatter->open_object_section_in_ns("ListMultipartUploadsResult", XMLNS_AWS_S3);
+  if (encode_url)
+    s->formatter->dump_string("EncodingType", "url");
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Bucket", s->bucket_name);
   if (!prefix.empty())
-    s->formatter->dump_string("Prefix", prefix);
+    dump_urlsafe(s, encode_url, "Prefix", prefix, false);
   if (!marker_key.empty())
-    s->formatter->dump_string("KeyMarker", marker_key);
+    dump_urlsafe(s, encode_url, "KeyMarker", marker_key, false);
   if (!marker_upload_id.empty())
     s->formatter->dump_string("UploadIdMarker", marker_upload_id);
   if (!next_marker_key.empty())
-    s->formatter->dump_string("NextKeyMarker", next_marker_key);
+    dump_urlsafe(s, encode_url, "NextKeyMarker", next_marker_key, false);
   if (!next_marker_upload_id.empty())
     s->formatter->dump_string("NextUploadIdMarker", next_marker_upload_id);
   s->formatter->dump_int("MaxUploads", max_uploads);
   if (!delimiter.empty())
-    s->formatter->dump_string("Delimiter", delimiter);
+    dump_urlsafe(s, encode_url, "Delimiter", delimiter, false);
   s->formatter->dump_string("IsTruncated", (is_truncated ? "true" : "false"));
 
   if (op_ret >= 0) {
