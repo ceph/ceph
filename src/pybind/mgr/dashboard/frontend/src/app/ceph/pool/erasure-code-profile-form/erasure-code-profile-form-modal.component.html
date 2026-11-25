@@ -117,7 +117,7 @@
           label="Data chunks (k)"
           [helperText]="tooltips.k"
           min="2"
-          [invalid]="!form.controls.k.valid && form.controls.k.dirty"
+          [invalid]="form.controls.k.enabled && !form.controls.k.valid && form.controls.k.dirty"
           [invalidText]="dataChunkError"
           formControlName="k"
           ng-model="$ctrl.erasureCodeProfile.k"
@@ -197,7 +197,7 @@
           label="Coding chunks (m)"
           [helperText]="tooltips.m"
           min="1"
-          [invalid]="!form.controls.m.valid && form.controls.m.dirty"
+          [invalid]="form.controls.m.enabled && !form.controls.m.valid && form.controls.m.dirty"
           [invalidText]="codeChunkError"
           formControlName="m"
           i18n
@@ -456,16 +456,22 @@
           [helperText]="tooltips.crushFailureDomain"
           i18n
         >
-          @if (!failureDomains) {
-            <option value="">Loading...</option>
-          }
-          @for (domain of failureDomainKeys; track domain) {
-            <option
-              [value]="domain"
-              [selected]="domain.toLowerCase() === CrushFailureDomains.Host"
-            >
-              {{ domain }} ( {{ failureDomains[domain].length }} )
+          @if (profile) {
+            <option [value]="profile['crush-failure-domain'] ?? ''">
+              {{ profile['crush-failure-domain'] }}
             </option>
+          } @else {
+            @if (!failureDomains) {
+              <option value="">Loading...</option>
+            }
+            @for (domain of failureDomainKeys; track domain) {
+              <option
+                [value]="domain"
+                [selected]="domain.toLowerCase() === CrushFailureDomains.Host"
+              >
+                {{ domain }} ( {{ failureDomains[domain].length }} )
+              </option>
+            }
           }
         </cds-select>
       </div>

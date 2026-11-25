@@ -489,7 +489,9 @@ export class ErasureCodeProfileFormModalComponent
       }
     });
 
-    this.form.disable();
+    this.form.disable({ emitEvent: false });
+    this.form.markAsPristine();
+    this.form.markAsUntouched();
   }
 
   onSubmit() {
