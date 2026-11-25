@@ -1,0 +1,27 @@
+# krbd watch/notify under a pool migration -- replicated image.
+# From Bill's PR #1 review: linger_ops (watch/notify/ack) have special handling
+# for the redirect replies a pool migration generates; exercise it end to end.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - slow request
+      - marked LAGGY
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default map options: ms_mode=crc
+- workunit:
+    clients:
+      client.0:
+        - rbd/krbd_watch_notify_migration.sh
+    env:
+      WPOOL: krbd-wn-pool

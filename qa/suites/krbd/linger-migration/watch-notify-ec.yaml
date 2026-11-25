@@ -1,0 +1,29 @@
+# krbd watch/notify under a pool migration -- image header (+ watch) in a
+# replicated pool, image DATA in an EC pool.  Same linger-under-migration check
+# as the replicated job, with an EC data pool present.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - is_erasure
+      - slow request
+      - marked LAGGY
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default map options: ms_mode=crc
+- workunit:
+    clients:
+      client.0:
+        - rbd/krbd_watch_notify_migration.sh
+    env:
+      WPOOL: krbd-wn-pool
+      EC_POOL: krbd-wn-ec
