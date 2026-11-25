@@ -928,10 +928,15 @@ Usage
 The Ceph Object Gateway logs the usage of each user. You can track the usage of
 each user within a specified date range.
 
-- Add ``rgw_enable_usage_log = true`` in the ``[client.rgw]`` section of
-  ``ceph.conf`` and restart the ``radosgw`` service. 
+- Set ``rgw_enable_usage_log`` to ``true`` for the gateways in the central
+  configuration database, and restart them. For example, for every gateway
+  named ``client.rgw.*``, which includes every gateway deployed by cephadm:
 
-  .. note:: Until Ceph has a linkable macro that handles all the many ways that options can be set, we advise that you set ``rgw_enable_usage_log = true`` in central config or in ``ceph.conf`` and restart all RGWs.
+  .. prompt:: bash #
+
+     ceph config set client.rgw rgw_enable_usage_log true
+
+  See :ref:`radosgw-config-ref` for how a gateway finds its settings.
 
 
 Options include: 

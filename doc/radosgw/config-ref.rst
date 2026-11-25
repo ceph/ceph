@@ -4,16 +4,36 @@
  Ceph Object Gateway Config Reference
 ======================================
 
-The following settings may be added to the Ceph configuration file (i.e., usually
-``ceph.conf``) under the ``[client.radosgw.{instance-name}]`` section. The
-settings may contain default values. If you do not specify each setting in the
-Ceph configuration file, the default value will be set automatically.
+The following options can be set in the central configuration database or in
+the Ceph configuration file, ``ceph.conf``. An option that is not set in either
+place takes its default value.
 
-Configuration variables set under the ``[client.radosgw.{instance-name}]``
-section will not apply to rgw or radosgw-admin commands without an instance-name
-specified in the command. Thus variables meant to be applied to all RGW
-instances or all radosgw-admin options can be put into the ``[global]`` or the
-``[client]`` section to avoid specifying ``instance-name``.
+.. note:: Most deployments are best served by setting options in the central
+   configuration database with ``ceph config set`` instead of in
+   ``ceph.conf``. The database keeps every gateway's settings in one place,
+   and ``ceph config dump`` shows them. See :ref:`ceph-conf-database`.
+
+A Ceph Object Gateway reads its settings from the section for its own Ceph
+name, ``client.{name}``. A gateway deployed by cephadm is named
+``client.rgw.{daemon-id}``. A gateway started by hand has the name given by
+its ``--name`` (or ``-n``) option, such as ``client.radosgw.gateway`` in
+:doc:`/man/8/radosgw`. Neither ``rgw`` nor ``radosgw`` is required in the name.
+
+The central configuration database and ``ceph.conf`` match section names
+differently:
+
+- In the central configuration database, a section applies to every daemon
+  whose name begins with it. For example, this command applies to every gateway
+  named ``client.rgw.*``, which includes every gateway deployed by cephadm:
+
+  .. prompt:: bash #
+
+     ceph config set client.rgw rgw_enable_usage_log true
+
+- In ``ceph.conf``, a daemon reads only the section for its full name, then
+  ``[client]``, then ``[global]``. A ``[client.rgw]`` section applies only to a
+  gateway named exactly ``client.rgw``. To apply a setting to every gateway and
+  to ``radosgw-admin`` commands, put it in ``[client]`` or ``[global]``.
 
 .. confval:: rgw_frontends
 .. confval:: rgw_data
@@ -194,8 +214,8 @@ for dedup operations to function:
 Multisite Settings
 ==================
 
-You may include the following settings in your Ceph configuration
-file under each ``[client.radosgw.{instance-name}]`` instance.
+Set the following options for each gateway, in the section for its name, as
+described at the start of this page.
 
 .. confval:: rgw_zone
 .. confval:: rgw_zonegroup
