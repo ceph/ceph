@@ -158,11 +158,19 @@ Entering Stretch Mode
 To enable stretch mode, you must set the location of each monitor, correlating
 with the CRUSH topology.
 
-#. Place ``mon.a`` in your first data center:
+#. Place ``mon.a`` and ``mon.b`` in your first data center, and ``mon.c`` and
+   ``mon.d`` in your second:
 
    .. prompt:: bash $
 
       ceph mon set_location a datacenter=zone1
+      ceph mon set_location b datacenter=zone1
+      ceph mon set_location c datacenter=zone2
+      ceph mon set_location d datacenter=zone2
+
+   Before you enable stretch mode, the CRUSH map must have the ``datacenter``
+   buckets ``zone1`` and ``zone2``, with the hosts of each zone under them. The
+   tiebreaker Monitor gets its location in a later step.
 
 #. Generate a CRUSH rule that places two copies in each data center.
    This requires editing the CRUSH map directly:
@@ -187,11 +195,10 @@ with the CRUSH topology.
              step emit
      }
 
-   .. warning:: When a CRUSH rule is defined in a stretch mode cluster and the
-      rule has multiple ``take`` steps, ``MAX AVAIL`` for the pools
-      associated with the CRUSH rule will report that the available size is all
-      of the available space from the datacenter, not the available space for
-      the pools associated with the CRUSH rule.
+   .. warning:: In Squid, ``ceph df`` reports a wrong ``MAX AVAIL`` for pools
+      whose CRUSH rule has more than one ``take`` step: it counts the
+      available space of a single ``datacenter`` only. Tentacle and later
+      releases combine all ``take`` steps and report the correct value.
    
       For example, consider a cluster with two CRUSH rules, ``stretch_replicated_rule`` and
       ``stretch_replicated_rule_alt``::
@@ -216,7 +223,7 @@ with the CRUSH topology.
                  step emit
          }
 
-      In the above example, ``stretch_replicated_rule_alt`` will report an incorrect value for
+      In Squid, ``stretch_replicated_rule_alt`` will report an incorrect value for
       ``MAX AVAIL``. ``stretch_replicated_rule`` will report the correct value.
       This is because ``stretch_replicated_rule_alt`` is defined in such a way that
       ``PGMap::get_rule_avail`` considers only the available capacity of a single
@@ -239,24 +246,28 @@ with the CRUSH topology.
       ceph osd setcrushmap -i crush2.map.bin
 
 #. Direct the cluster to enter stretch mode. The cluster will automatically
-   switch to the `connectivity` election strategy if not already configured.
+   switch to the ``connectivity`` election strategy if not already configured.
    
-   When a tiebreaker Monitor is provisioned, it must be assigned to a CRUSH 
-   `datacenter` location that is neither `zone1` nor `zone2`. This data center 
-   should not be predefined in your CRUSH map.
+   When a tiebreaker Monitor is provisioned, it must be assigned to a CRUSH
+   ``datacenter`` location that is neither ``zone1`` nor ``zone2``. This data
+   center must not exist in your CRUSH map: ``ceph mon enable_stretch_mode``
+   fails unless the CRUSH map has exactly two buckets of the dividing type.
    
-   An explicit tiebreaker Monitor is optional. If not specified, the cluster will
-   automatically select a Monitor that has been assigned to a `datacenter` (or the
-   specified bucket type) that differs from the main data zones.
+   An explicit tiebreaker Monitor is optional. If not specified, the cluster
+   will automatically select the one Monitor that has been assigned to a
+   ``datacenter`` (or the specified bucket type) that differs from the main
+   data zones.
    
    **Option 1: Automatic tiebreaker selection** (recommended):
    
-   Let the cluster automatically select the tiebreaker:
+   Let the cluster automatically select the tiebreaker. The first positional
+   argument of ``ceph mon enable_stretch_mode`` is the tiebreaker, so give the
+   other two arguments by name:
 
    .. prompt:: bash $
 
       ceph mon set_location e datacenter=zone3
-      ceph mon enable_stretch_mode stretch_replicated_rule datacenter
+      ceph mon enable_stretch_mode --new_crush_rule stretch_replicated_rule --dividing_bucket datacenter
 
    **Option 2: Explicit tiebreaker monitor**:
    
@@ -325,15 +336,16 @@ recovery stretch mode. The command executes only when the cluster
 is in degraded stretch mode or healthy stretch mode.
 
 .. important:: The ability to exit stretch mode is not present in
-               releases before 18.2.8 (Reef). Clusters running an
-               earlier release should be updated to 18.2.8 or later.
+               Squid releases before 19.2.3. Clusters running an
+               earlier Squid release should be updated to 19.2.3 or later.
 
 Limitations of Stretch Mode 
 ===========================
 When using stretch mode, OSDs must be located at exactly two zones. 
 
-Two Monitors must be run in each data center, plus a tiebreaker in a third
-(possibly in the cloud) for a total of five Monitors. While in stretch mode, OSDs
+Run two Monitors in each data center, plus a tiebreaker in a third (possibly in
+the cloud), for a total of five Monitors. Ceph requires at least one Monitor in
+each data center. While in stretch mode, OSDs
 will connect only to Monitors within the data center in which they are located.
 OSDs *DO NOT* connect to the tiebreaker monitor.
 
@@ -379,7 +391,10 @@ Deploy a new Monitor and run the following command:
 
 .. prompt:: bash $
 
-   ceph mon set_new_tiebreaker mon.<new_mon_name>
+   ceph mon set_new_tiebreaker <new_mon_name>
+
+Give the Monitor name without the ``mon.`` prefix, as with
+``ceph mon set_location``.
 
 This command protests if the new Monitor is in the same CRUSH location as the
 existing, non-tiebreaker monitors. This command will not remove the previous
@@ -401,6 +416,9 @@ Forcing recovery stretch mode
 When in stretch degraded mode, the cluster will go into recovery mode
 automatically when the disconnected data center comes back. If that does not
 happen or you want to enable recovery mode early, run the following command:
+
+.. warning:: Run this command only after at least one Monitor of the
+   disconnected data center, and the tiebreaker Monitor, are in the quorum.
 
 .. prompt:: bash $
 
