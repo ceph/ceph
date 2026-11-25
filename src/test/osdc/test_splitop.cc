@@ -288,7 +288,7 @@ public:
   std::pair<extent_set, bufferlist>
     assemble_buffer_sparse_read(int) const override { return {}; }
   void assemble_buffer_read(bufferlist &, int) const override {}
-  void init_read(OSDOp &, bool, int, bool) override {}
+  void init_read(OSDOp &, bool, int, bool, bool) override {}
   bool legacy_version_mismatch() const override { return false; }
   bool version_mismatch_v2() const override { return false; }
   void init_reference_sub_read() override {}
@@ -910,7 +910,7 @@ TEST_F(TestSplitOpInit, ECLocalizeZone1PrimaryReadsLocalShards)
     split.init_reference_sub_read();
     ASSERT_FALSE(split.abort);
     EXPECT_EQ(3, split.reference_sub_read_key);
-    split.init_read(op->ops[0], false, 0, false);
+    split.init_read(op->ops[0], false, 0, false, false);
     ASSERT_FALSE(split.abort);
     EXPECT_EQ(2u, split.sub_reads.size());
     EXPECT_EQ(shard_id_t(3), split.sub_reads.at(3).abs_shard);
@@ -932,7 +932,7 @@ TEST_F(TestSplitOpInit, ECLocalizeMissingLocalShardAborts)
     ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, true);
     split.init_reference_sub_read();
     ASSERT_FALSE(split.abort);
-    split.init_read(op->ops[0], false, 0, false);
+    split.init_read(op->ops[0], false, 0, false, false);
     EXPECT_TRUE(split.abort);
   }
   op->put();
@@ -978,7 +978,7 @@ TEST_F(TestSplitOpInit, ReplicaLocalizeReadsOnlyLocalZone)
       ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, true);
       split.init_reference_sub_read();
       ASSERT_FALSE(split.abort);
-      split.init_read(op->ops[0], false, 0, false);
+      split.init_read(op->ops[0], false, 0, false, false);
       ASSERT_FALSE(split.abort);
       for (auto& [key, sr] : split.sub_reads) {
         EXPECT_LT((int)sr.abs_shard, (int)acting.size())
@@ -1005,7 +1005,7 @@ TEST_F(TestSplitOpInit, ECLocalizeZone0PrimaryKeepsLocalDataShard)
     ASSERT_FALSE(split.abort);
     // Only the legacy strategy reads the primary as the version reference.
     split.strategy = ECSplitOpProbe::InternalVersionStrategy::FromPrimaryShard;
-    split.init_read(op->ops[0], false, 0, false);
+    split.init_read(op->ops[0], false, 0, false, false);
     ASSERT_FALSE(split.abort);
     std::set<int> abs_shards;
     for (auto& [key, sr] : split.sub_reads) {
@@ -1029,7 +1029,7 @@ TEST_F(TestSplitOpInit, ECLocalizeZone1SparseReadAssembles)
     ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, true);
     split.init_reference_sub_read();
     ASSERT_FALSE(split.abort);
-    split.init_read(op->ops[0], true, 0, false);
+    split.init_read(op->ops[0], true, 0, false, false);
     ASSERT_FALSE(split.abort);
     for (int rel_shard = 0; rel_shard < 2; rel_shard++) {
       auto& d = split.sub_reads.at(rel_shard + 3).details[0];
@@ -1102,7 +1102,7 @@ TEST_F(TestSplitOpInit, ECBalanceReadsChooseZonePerShard)
       ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, false);
       split.init_reference_sub_read();
       ASSERT_FALSE(split.abort);
-      split.init_read(op->ops[0], false, 0, false);
+      split.init_read(op->ops[0], false, 0, false, false);
       ASSERT_FALSE(split.abort);
       std::set<int> zones;
       for (auto& [key, sr] : split.sub_reads) {
@@ -1136,7 +1136,7 @@ TEST_F(TestSplitOpInit, ECBalanceReadsSkipZoneMissingShard)
       ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, false);
       split.init_reference_sub_read();
       ASSERT_FALSE(split.abort);
-      split.init_read(op->ops[0], false, 0, false);
+      split.init_read(op->ops[0], false, 0, false, false);
       ASSERT_FALSE(split.abort) << "seed " << seed;
       EXPECT_TRUE(split.sub_reads.contains(1)) << "seed " << seed;
       EXPECT_FALSE(split.sub_reads.contains(4)) << "seed " << seed;
@@ -1161,8 +1161,8 @@ TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
     ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
     split.init_reference_sub_read();
     ASSERT_FALSE(split.abort);
-    split.init(op->ops[0], 0, false);
-    split.init(op->ops[1], 1, false);
+    split.init(op->ops[0], 0, false, false);
+    split.init(op->ops[1], 1, false, false);
     ASSERT_FALSE(split.abort);
     auto& ref = split.sub_reads.at(split.reference_sub_read_key);
     ASSERT_GE((int)ref.abs_shard, 0);

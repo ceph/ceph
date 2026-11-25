@@ -177,7 +177,8 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
  * @param ops_index Index of the operation in the operation list
  * @param single_op True if the whole op will be sent as a single op
  */
-void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
+void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op,
+                          bool has_primary_ops) {
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
@@ -205,17 +206,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op)
   // 1. Reading from multiple chunks (count > 1)
   // 2. Version information is needed (orig_op->objver)
   // 3. There are non-read operations that need the primary
-  bool has_non_read_ops = false;
-  for (const auto &op : orig_op->ops) {
-    if (op.op.op != CEPH_OSD_OP_READ && op.op.op != CEPH_OSD_OP_SPARSE_READ) {
-      has_non_read_ops = true;
-      break;
-    }
-  }
-
-  bool primary_required = orig_op->objver || has_non_read_ops ||
-                          (!single_op &&
-                           strategy == InternalVersionStrategy::FromPrimaryShard);
+  bool primary_required =
+      has_primary_ops ||
+      (!single_op && strategy == InternalVersionStrategy::FromPrimaryShard);
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -466,7 +459,8 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
  * @param ops_index Index of the operation in the operation list
  * @param single_op True if the whole op will be sent as a single op
  */
-void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
+void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index,
+                               bool single_op, bool has_primary_ops) {
   // init_reference_sub_read() aborts on < 2 valid OSDs; checked by create().
   ceph_assert(valid_indices.size() >= 2);
 
@@ -883,14 +877,15 @@ void SplitOp::protect_torn_reads() {
   }
 }
 
-void SplitOp::init(OSDOp &op, int ops_index, bool single_op) {
+void SplitOp::init(OSDOp &op, int ops_index, bool single_op,
+                   bool has_primary_ops) {
   switch (op.op.op) {
   case CEPH_OSD_OP_SPARSE_READ: {
-    init_read(op, true, ops_index, single_op);
+    init_read(op, true, ops_index, single_op, has_primary_ops);
     break;
   }
   case CEPH_OSD_OP_READ: {
-    init_read(op, false, ops_index, single_op);
+    init_read(op, false, ops_index, single_op, has_primary_ops);
     break;
   }
   default: {
@@ -979,6 +974,7 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
                         uint64_t replica_min_read_size, CephContext *cct,
                         bool &has_primary_ops, bool &single_direct_op) {
   bool suitable_read_found = false;
+  bool rejected = false;
 
   std::optional<raw_shard_id_t> target_shard;
 
@@ -991,7 +987,8 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
           // length of zero actually means "the whole object". This code cannot
           // know the size of the object efficiently, so reject the op.
           ldout(cct, DBG_LVL) << __func__ << " REJECT: Zero length read" << dendl;
-          return false;
+          rejected = true;
+          break;
         }
         if ((is_erasure && length > 0) ||
             (!is_erasure && length >= replica_min_read_size)) {
@@ -1010,15 +1007,19 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
       case CEPH_OSD_OP_GETXATTRS:
       case CEPH_OSD_OP_CHECKSUM:
       case CEPH_OSD_OP_GETXATTR:
-      case CEPH_OSD_OP_STAT:
       case CEPH_OSD_OP_CMPXATTR:
+      case CEPH_OSD_OP_STAT: {
+        has_primary_ops |= is_erasure;
+        break;
+      }
       case CEPH_OSD_OP_CALL: {
         has_primary_ops = true;
         break; // Do not block validate.
       }
       default: {
         ldout(cct, DBG_LVL) << __func__ << " REJECT: unsupported op" << dendl;
-        return false;
+        rejected = true;
+        break;
       }
     }
   }
@@ -1027,7 +1028,7 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
     single_direct_op = target_shard == raw_shard_id_t(0);
   }
 
-  return suitable_read_found;
+  return rejected ? false : suitable_read_found;
 }
 
 /**
@@ -1043,38 +1044,64 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
  * @param objecter Objecter instance for configuration access
  * @param pi Pool information
  * @param cct CephContext for logging
- * @return A pair of bools: {suitable_read_found, single_direct_op}
+ * @return A tuple of bools: {suitable_read_found, single_direct_op,
+ *         has_primary_ops}
  *         - suitable_read_found: true if operation contains valid read(s)
  *         - single_direct_op: true if operation can be sent to single OSD
+ *         - has_primary_ops: true if operation contains ops that must be
+ *           sent to the primary
  */
-std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
-                               const pg_pool_t *pi, CephContext *cct) {
-  bool is_erasure = pi->is_erasure();
-
-  // Validate flags
-  if (!SplitOp::validate_flags(pi, op->target.flags, cct)) {
-    return {false, false};
+std::tuple<bool, bool, bool> validate(Objecter::Op* op, Objecter& objecter,
+                                      const pg_pool_t* pi, CephContext* cct)
+{
+  if (!(op->target.flags &
+        (CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS))) {
+    return {false, false, false};
   }
 
-  // Initialize state for operation validation
-  bool has_primary_ops = nullptr != op->objver;
+  bool is_erasure = pi->is_erasure();
+
+  bool has_primary_ops = is_erasure && (nullptr != op->objver);
   bool single_direct_op = is_erasure;
 
   uint64_t replica_min_shard_read_size = objecter.get_min_split_replica_read_size();
-
-  if (!is_erasure && replica_min_shard_read_size == 0) {
-    ldout(cct, DBG_LVL) << __func__ << " REJECT: splitting disabled (min_split_replica_read_size=0)" << dendl;
-    return {false, false};
-  }
-
   uint64_t replica_min_read_size = replica_min_shard_read_size * kReplicaMinShardReads;
+
+  bool replica_splitting_disabled = !is_erasure &&
+                                    replica_min_shard_read_size == 0;
 
   // Validate operations and read sizes
   bool suitable_read_found = validate_operations(op, pi, is_erasure,
                                                  replica_min_read_size, cct,
                                                  has_primary_ops, single_direct_op);
 
-  return {suitable_read_found, single_direct_op};
+  // Reject if the pool has the EIO flag set, so that the op reaches
+  // _op_submit() and is failed there.  Splitting would send sub-ops that
+  // _op_submit() fails and frees immediately, and a single-op direct read
+  // would skip _op_submit()'s _calc_target(), and with it the EIO check.
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: pool EIO" << dendl;
+    suitable_read_found = false;
+  } else if (op->snapid != CEPH_NOSNAP || !op->snapc.empty()) {
+    // Reject if the operation is a snapshot operation
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: snapshot operation" << dendl;
+    suitable_read_found = false;
+  } else if (!pi->has_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS)) {
+    // Reject if direct reads not supported by profile.
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: split reads off" << dendl;
+    suitable_read_found = false;
+  } else if (!pi->allows_nonprimary_reads()) {
+    // Reject if pool does not support non-primary reads.
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: non-primary reads not supported for split ops" << dendl;
+    suitable_read_found = false;
+  } else if (replica_splitting_disabled) {
+    ldout(cct, DBG_LVL) << __func__ << " REJECT: splitting disabled (min_split_replica_read_size=0)" << dendl;
+    suitable_read_found = false;
+  } else if (!SplitOp::validate_flags(pi, op->target.flags, cct)) {
+    suitable_read_found = false;
+  }
+
+  return {suitable_read_found, single_direct_op, has_primary_ops};
 }
 
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
@@ -1216,36 +1243,17 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   debug_op_summary("orig_op:", op, cct);
 
-  // Reject if the pool has the EIO flag set, so that the op reaches
-  // _op_submit() and is failed there.  Splitting would send sub-ops that
-  // _op_submit() fails and frees immediately, and a single-op direct read
-  // would skip _op_submit()'s _calc_target(), and with it the EIO check.
-  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECT: pool EIO" << dendl;
-    return false;
-  }
-
-  // Reject if the operation is a snapshot operation
-  if (op->snapid != CEPH_NOSNAP || !op->snapc.empty()) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECT: snapshot operation" << dendl;
-    return false;
-  }
-
-  // Reject if direct reads not supported by profile.
-  if (!pi->has_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS)) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECT: split reads off" << dendl;
-    return false;
-  }
-
-  // Reject if pool does not support non-primary reads.
-  if (!pi->allows_nonprimary_reads()) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECT: non-primary reads not supported for split ops" << dendl;
-    return false;
-  }
-
-  auto [validated, single_op] = validate(op, objecter, pi, cct);
+  auto [validated, single_op, has_primary_ops] = validate(op, objecter, pi, cct);
 
   if (!validated) {
+    if (has_primary_ops && !pi->is_erasure() &&
+        objecter.get_min_split_replica_read_size() == 0) {
+      ldout(cct, DBG_LVL) << __func__ << " primary ops present, clearing "
+                          << "balance/localize reads from non-splitable"
+                          << " replica op" << dendl;
+      op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
+                            CEPH_OSD_FLAG_LOCALIZE_READS);
+    }
     return false;
   }
 
@@ -1297,7 +1305,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
   for (unsigned i = 0; i < op->ops.size(); ++i) {
-    split_read->init(op->ops[i], i, single_op);
+    split_read->init(op->ops[i], i, single_op, has_primary_ops);
     if (split_read->abort) {
       break;
     }

@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -310,11 +311,12 @@ class SplitOp {
   int assemble_rc() const;
   virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const = 0;
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) const = 0;
-  virtual void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) = 0;
+  virtual void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op,
+                         bool has_primary_ops) = 0;
   virtual bool legacy_version_mismatch() const = 0;
   virtual bool version_mismatch_v2() const = 0;
   virtual void init_reference_sub_read() = 0;
-  void init(OSDOp &op, int ops_index, bool single_op);
+  void init(OSDOp &op, int ops_index, bool single_op, bool has_primary_ops);
 
   Objecter::Op *orig_op;
   Objecter &objecter;
@@ -511,7 +513,8 @@ class ECSplitOp : public SplitOp{
    * @param ops_index Index of the operation in the operation list
    * @param single_op True if the whole op will be sent as a single op
    */
-  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op,
+                 bool has_primary_ops) override;
 
   /**
    * @brief Choose the absolute shard to read data shard @p shard from.
@@ -621,7 +624,8 @@ class ReplicaSplitOp : public SplitOp {
    * @param ops_index Index of the operation in the operation list
    * @param single_op True if the whole op will be sent as a single op
    */
-  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op,
+                 bool has_primary_ops) override;
 
   /**
    * @brief Check for version mismatches across replicas.
