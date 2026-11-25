@@ -84,8 +84,9 @@ class GrafanaRestClientTest(unittest.TestCase, KVStoreMockMixin):
         'Accept': 'application/json',
         'Content-Type': 'application/json',
     }
+    dashboard = {'uid': 'foo', 'title': 'Foo'}
     payload = json.dumps({
-        'dashboard': 'foo',
+        'dashboard': {'uid': 'foo', 'title': 'Foo', 'id': None},
         'overwrite': True
     })
 
@@ -114,7 +115,7 @@ class GrafanaRestClientTest(unittest.TestCase, KVStoreMockMixin):
     def test_ssl_verify_push_dashboard(self):
         with patch('requests.post') as mock_request:
             rest_client = GrafanaRestClient()
-            rest_client.push_dashboard('foo')
+            rest_client.push_dashboard(self.dashboard)
             mock_request.assert_called_with(
                 Settings.GRAFANA_API_URL + '/api/dashboards/db',
                 auth=(Settings.GRAFANA_API_USERNAME,
@@ -125,9 +126,20 @@ class GrafanaRestClientTest(unittest.TestCase, KVStoreMockMixin):
         Settings.GRAFANA_API_SSL_VERIFY = False
         with patch('requests.post') as mock_request:
             rest_client = GrafanaRestClient()
-            rest_client.push_dashboard('foo')
+            rest_client.push_dashboard(self.dashboard)
             mock_request.assert_called_with(
                 Settings.GRAFANA_API_URL + '/api/dashboards/db',
                 auth=(Settings.GRAFANA_API_USERNAME,
                       Settings.GRAFANA_API_PASSWORD),
                 data=self.payload, headers=self.headers, verify=False)
+
+    def test_push_dashboard_drops_exported_id(self):
+        # An id that Grafana did not assign makes it answer 404, so only the
+        # uid may identify the dashboard.
+        dashboard = dict(self.dashboard, id=34)
+        with patch('requests.post') as mock_request:
+            GrafanaRestClient.push_dashboard(dashboard)
+            sent = json.loads(mock_request.call_args[1]['data'])
+        self.assertIsNone(sent['dashboard']['id'])
+        self.assertEqual(sent['dashboard']['uid'], 'foo')
+        self.assertEqual(dashboard['id'], 34)

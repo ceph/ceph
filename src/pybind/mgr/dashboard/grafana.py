@@ -39,8 +39,12 @@ class GrafanaRestClient(object):
             'Accept': 'application/json',
             'Content-Type': 'application/json',
         }
+        # Grafana treats a non-null 'id' as a reference to a dashboard it
+        # already stored under that id and answers 404 when there is none,
+        # so a JSON file that keeps the id it was exported with can never be
+        # pushed. Leave it to the 'uid' to decide between create and update.
         payload = {
-            'dashboard': dashboard_obj,
+            'dashboard': dict(dashboard_obj, id=None),
             'overwrite': True,
         }
         try:
