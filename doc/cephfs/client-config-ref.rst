@@ -52,6 +52,7 @@ Client Config Reference
 .. confval:: client_oc_max_dirty
 .. confval:: client_oc_max_dirty_age
 .. confval:: client_oc_max_objects
+.. confval:: client_oc_shards
 .. confval:: client_oc_size
 .. confval:: client_oc_target_dirty
 .. confval:: client_permissions
@@ -77,5 +78,15 @@ Developer Options
 .. confval:: client_debug_inject_tick_delay
 .. confval:: client_inject_fixed_oldest_tid
 .. confval:: client_inject_release_failure
+.. confval:: client_inode_lock_reader_slots
+.. confval:: client_inode_lock_spread_after
+.. confval:: client_lock_max_spinners
+.. confval:: client_lock_spin_tries
+.. confval:: client_oc_flush_batch
+.. confval:: client_oc_flush_min_age
+.. confval:: client_oc_max_woken_writers
+.. confval:: client_oc_max_writeback
+.. confval:: client_oc_read_gate_retries
+.. confval:: client_percpu_slots
 .. confval:: client_trace
 .. confval:: client_write_combine_max
