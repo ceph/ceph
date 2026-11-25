@@ -29,12 +29,24 @@ int ceph_crc32c_intel_fast_avx512_vpclmul_exists(void)
  * streams) on large buffers: 25 vs 16 GB/s for 1 MiB on a Xeon 6740E.
  * Built under the same condition as the AVX512 variant: both need a NASM
  * that knows VPCLMULQDQ.
+ *
+ * crc32_iscsi_avx2 folds in parallel only from 256 bytes. A shorter buffer
+ * it folds 16 bytes at a time, each step waiting for the previous one; that
+ * is slower than crc32_iscsi_01 (up to twice, for 200 to 255 bytes, on that
+ * Xeon 6740E). So shorter buffers go to crc32_iscsi_01, which the callers
+ * of this function must check the CPU for, too (SSE 4.2 and PCLMULQDQ).
  */
+#define CRC32C_AVX2_MIN_LEN 256
+
 uint32_t ceph_crc32c_intel_fast_avx2_vpclmul(uint32_t crc, unsigned char const *buffer, unsigned len)
 {
 	if (!buffer)
 	{
 		return crc32_iscsi_zero_00(buffer, len, crc);
+	}
+	if (len < CRC32C_AVX2_MIN_LEN)
+	{
+		return crc32_iscsi_01(buffer, len, crc);
 	}
 	return crc32_iscsi_avx2(buffer, len, crc);
 }

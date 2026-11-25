@@ -37,9 +37,9 @@ std::vector<intel_variant_t> intel_variants() {
      ceph_arch_intel_sse42 && ceph_arch_intel_pclmul &&
        ceph_crc32c_intel_fast_exists(),
      ceph_crc32c_intel_fast_pclmul},
-    {"intel avx2 vpclmul (crc32_iscsi_avx2)",
-     ceph_arch_intel_avx2_vpclmul &&
-       ceph_crc32c_intel_fast_avx2_vpclmul_exists(),
+    {"intel avx2 vpclmul (crc32_iscsi_avx2; crc32_iscsi_01 below 256 bytes)",
+     ceph_arch_intel_avx2_vpclmul && ceph_arch_intel_sse42 &&
+       ceph_arch_intel_pclmul && ceph_crc32c_intel_fast_avx2_vpclmul_exists(),
      ceph_crc32c_intel_fast_avx2_vpclmul},
     {"intel avx512 vpclmul (crc32_iscsi_by16_10)",
      ceph_arch_intel_avx512_vpclmul &&
