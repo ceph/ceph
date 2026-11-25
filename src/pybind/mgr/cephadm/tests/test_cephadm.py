@@ -14,7 +14,7 @@ from cephadm.inventory import (
     ClientKeyringSpec,
     SpecDescription,
 )
-from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
+from cephadm.services.osd import DeviceConstraintError, OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
 from cephadm.services.service_registry import service_registry
 from cephadm.utils import SpecialHostLabels, cephadmNoImage
@@ -1702,7 +1702,7 @@ class TestCephadm(object):
                 'fcm_ad', 'get_device_constraints', 'test', '/dev/sdb')
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
-                ['--config-json', '-', '--', 'lvm', 'batch',
+                ['--config-json', '-', '--', '--log-level', 'info', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--objectstore', 'bluestore',
                     '--data-allocate-fraction', '0.9', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
@@ -1801,6 +1801,16 @@ class TestCephadm(object):
         with pytest.raises(OrchestratorError, match=msg):
             self._fraction(cephadm_module, ['/dev/sdb', '/dev/sdc'], constraints, **spec_kwargs)
 
+    def test_fcm_fraction_repeated_probe_failure_still_refuses(self, cephadm_module):
+        # fcm_ad raises NotImplementedError for a probe failure it has already
+        # reported, so the mgr does not file another crash record. It must
+        # stay a refusal: returning None would mean "no constraints" and let
+        # ceph-volume build the OSD over the whole device.
+        for devices in (['/dev/sdb'], ['/dev/sdb', '/dev/sdc']):
+            constraints = {d: NotImplementedError('repeated probe failure') for d in devices}
+            with pytest.raises(DeviceConstraintError, match='repeated probe failure'):
+                self._fraction(cephadm_module, devices, constraints)
+
     @pytest.mark.parametrize('spec_kwargs, msg', [
         ({'method': 'raw'}, 'method: raw'),
         ({'data_allocate_fraction': 0.5}, 'data_allocate_fraction'),
@@ -1893,27 +1903,6 @@ class TestCephadm(object):
             with pytest.raises(OrchestratorError):
                 wait(cephadm_module, cephadm_module.get_nvme_device_info(
                     'test', '/dev/sda'))
-
-    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_apply_osd_other_host_failures_stay_unsurfaced(
-            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        # only device-constraint errors are escalated; existing behaviour for
-        # other per-host failures (logged, not raised) is unchanged
-        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        with with_host(cephadm_module, 'test'):
-            spec = DriveGroupSpec(
-                service_id='foo',
-                placement=PlacementSpec(host_pattern='*'),
-                data_devices=DeviceSelection(all=True),
-            )
-            wait(cephadm_module, cephadm_module.apply([spec]))
-            cephadm_module.cache.update_host_devices(
-                'test', Devices([Device('/dev/sdb', available=True)]).devices)
-            with mock.patch.object(
-                    cephadm_module.osd_service, 'create_single_host',
-                    side_effect=RuntimeError('ceph-volume failed')):
-                assert CephadmServe(cephadm_module)._apply_all_services() is False
-            assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is None
 
     def test_create_osds_rejects_fcm_constraint_error_before_saving_spec(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):

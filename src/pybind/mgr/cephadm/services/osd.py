@@ -276,14 +276,21 @@ class OSDService(CephService):
             return ret_msg
 
         async def all_hosts() -> List[str]:
-            futures = [create_from_spec_one(h, ds)
-                       for h, ds in self.prepare_drivegroup(drive_group)]
+            host_selections = self.prepare_drivegroup(drive_group)
+            futures = [create_from_spec_one(h, ds) for h, ds in host_selections]
             results = await gather(*futures, return_exceptions=True)
             failed = []
-            for result in results:
+            constraint_errors: List[str] = []
+            for (h, _), result in zip(host_selections, results):
                 if isinstance(result, Exception):
                     self.mgr.log.error(f'Failed to create OSD: {result}')
                     failed.append(result)
+                    if isinstance(result, DeviceConstraintError):
+                        constraint_errors.append(f'{h}: {result}')
+            if constraint_errors:
+                # A constraint error does not name its host, and raising only
+                # the first would hide the others on a multi-host apply.
+                raise OrchestratorError('; '.join(constraint_errors))
             if failed:
                 raise failed[0]
             return [result for result in results if isinstance(result, str)]
