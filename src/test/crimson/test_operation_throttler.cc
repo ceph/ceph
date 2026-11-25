@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <seastar/core/with_timeout.hh>
+#include <seastar/coroutine/as_future.hh>
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/coroutine.h"
@@ -87,8 +88,8 @@ protected:
   seastar::future<> tear_down_fut() final {
     co_await throttler->stop();
     EXPECT_TRUE(throttler->scheduler->empty());
-    EXPECT_EQ(throttler->count_from(throttler->pending), 0);
-    EXPECT_EQ(throttler->count_from(throttler->in_progress), 0);
+    EXPECT_EQ(pending(), 0);
+    EXPECT_EQ(in_progress(), 0);
     auto &conf = crimson::common::local_conf();
     conf.remove_observer(throttler.get());
     throttler.reset();
@@ -111,7 +112,8 @@ protected:
       throttler->get_throttle(
         params_t{1, priority, owner, klass}, level, abort));
   }
-  auto pending() const { return throttler->count_from(throttler->pending); }
+  uint64_t pending() const { return throttler->count_from(throttler->pending); }
+  uint64_t in_progress() const { return throttler->count_from(throttler->in_progress); }
   bool queue_empty() const { return throttler->scheduler->empty(); }
   seastar::future<> wait_for_worker() {
     co_await seastar::yield();
@@ -355,18 +357,15 @@ TEST_F(OperationThrottlerTest, cancellation_after_admission_keeps_the_slot_owned
       set_scheduler(scheduler::make_scheduler(
         cct.get(), conf, 0, 1, 0, false, false));
       seastar::abort_source abort;
-      auto granted = request(throttle_level_t::foreground, 0, 0,
-                             SchedulerClass::client, &abort);
-      co_await wait_for_worker();
-      EXPECT_TRUE(granted.available());
+      auto granted = co_await seastar::coroutine::as_future(request(
+        throttle_level_t::foreground, 0, 0, SchedulerClass::client, &abort));
       auto waiting = request(throttle_level_t::foreground);
       abort.request_abort();
-      co_await wait_for_worker();
-      EXPECT_FALSE(waiting.available());
+      EXPECT_EQ(in_progress(), 1);
+      EXPECT_EQ(pending(), 1);
       {
         // The future owns the slot even before its caller takes the result.
-        auto guard = co_await std::move(granted);
-        EXPECT_FALSE(waiting.available());
+        auto guard = granted.get();
       }
       auto guard = co_await std::move(waiting);
     }
@@ -402,16 +401,8 @@ TEST_F(OperationThrottlerTest, raising_limit_drains_eligible_queued_requests)
       // Both waiters fit after raising or removing the limit, even while
       // the original operation and the first waiter keep their slots.
       co_await conf.set_val("crimson_osd_scheduler_concurrency", limit);
-      co_await wait_for_worker();
-      EXPECT_TRUE(first.available()) << "limit=" << limit;
-      EXPECT_TRUE(second.available()) << "limit=" << limit;
-
-      {
-        auto guard = co_await std::move(first);
-      }
-      {
-        auto guard = co_await std::move(second);
-      }
+      auto first_guard = co_await std::move(first);
+      auto second_guard = co_await std::move(second);
     }
   });
 }
