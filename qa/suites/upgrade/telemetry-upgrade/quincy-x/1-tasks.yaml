@@ -17,7 +17,6 @@ overrides:
       - OSD_UPGRADE_FINISHED
       - do not have an application enabled
       - is down
-      - Telemetry requires re-opt-in
 tasks:
 - install:
     branch: quincy
