@@ -1279,6 +1279,10 @@ struct pg_pool_t {
     // all-zero stripe units.  Only meaningful on EC pools with
     // FLAG_EC_OPTIMIZATIONS; can be toggled without rebuilding existing data.
     FLAG_PRESERVE_ALLOCATION = 1<<23,
+    // Set by the mon (never by the user) once every OSD understands sparse
+    // reads, mapext and sparse copy-get.  Independent of
+    // FLAG_PRESERVE_ALLOCATION, which only decides whether FAE is modified.
+    FLAG_SUPPORTS_SPARSE_READS = 1<<24,
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1307,6 +1311,7 @@ struct pg_pool_t {
     case FLAG_OMAP: return "supports_omap";
     case FLAG_CRIMSON_ALLOW_PG_MERGE: return "crimson_allow_pg_merge";
     case FLAG_PRESERVE_ALLOCATION: return "preserve_allocation";
+    case FLAG_SUPPORTS_SPARSE_READS: return "supports_sparse_reads";
     default: return "???";
     }
   }
@@ -1373,6 +1378,8 @@ struct pg_pool_t {
       return FLAG_OMAP;
     if (name == "preserve_allocation")
       return FLAG_PRESERVE_ALLOCATION;
+    if (name == "supports_sparse_reads")
+      return FLAG_SUPPORTS_SPARSE_READS;
     return 0;
   }
 
@@ -1826,6 +1833,12 @@ public:
 
   bool supports_omap() const {
     return has_flag(FLAG_OMAP) || is_replicated();
+  }
+
+  // Replicated pools always support sparse reads (via fiemap), including
+  // before the mon sets the flag at upgrade commit.
+  bool supports_sparse_reads() const {
+    return has_flag(FLAG_SUPPORTS_SPARSE_READS) || is_replicated();
   }
 
   bool requires_aligned_append() const {

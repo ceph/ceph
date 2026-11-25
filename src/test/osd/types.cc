@@ -3696,7 +3696,8 @@ TEST(pg_pool_t, TrackZeroBlocksFlagDoesNotConflict)
     pg_pool_t::FLAG_CRIMSON           |
     pg_pool_t::FLAG_EC_OPTIMIZATIONS  |
     pg_pool_t::FLAG_CLIENT_SPLIT_READS |
-    pg_pool_t::FLAG_OMAP;
+    pg_pool_t::FLAG_OMAP              |
+    pg_pool_t::FLAG_SUPPORTS_SPARSE_READS;
   EXPECT_EQ(0u, (uint64_t)pg_pool_t::FLAG_PRESERVE_ALLOCATION & all_other_flags);
 }
 
@@ -3714,6 +3715,96 @@ TEST(pg_pool_t, TrackZeroBlocksFlagInFlagsString)
   pool.enable_track_zero_blocks();
   const std::string s = pool.get_flags_string();
   EXPECT_NE(std::string::npos, s.find("preserve_allocation"));
+}
+
+// ---------------------------------------------------------------------------
+// FLAG_SUPPORTS_SPARSE_READS pool flag
+// ---------------------------------------------------------------------------
+
+TEST(pg_pool_t, SupportsSparseReadsFlagDoesNotConflict)
+{
+  // FLAG_SUPPORTS_SPARSE_READS must not share bits with any other flag.
+  const uint64_t all_other_flags =
+    pg_pool_t::FLAG_HASHPSPOOL        |
+    pg_pool_t::FLAG_FULL              |
+    pg_pool_t::FLAG_EC_OVERWRITES     |
+    pg_pool_t::FLAG_INCOMPLETE_CLONES |
+    pg_pool_t::FLAG_NODELETE          |
+    pg_pool_t::FLAG_NOPGCHANGE        |
+    pg_pool_t::FLAG_NOSIZECHANGE      |
+    pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED |
+    pg_pool_t::FLAG_NOSCRUB           |
+    pg_pool_t::FLAG_NODEEP_SCRUB      |
+    pg_pool_t::FLAG_FULL_QUOTA        |
+    pg_pool_t::FLAG_NEARFULL          |
+    pg_pool_t::FLAG_BACKFILLFULL      |
+    pg_pool_t::FLAG_SELFMANAGED_SNAPS |
+    pg_pool_t::FLAG_POOL_SNAPS        |
+    pg_pool_t::FLAG_CREATING          |
+    pg_pool_t::FLAG_EIO               |
+    pg_pool_t::FLAG_BULK              |
+    pg_pool_t::FLAG_CRIMSON           |
+    pg_pool_t::FLAG_EC_OPTIMIZATIONS  |
+    pg_pool_t::FLAG_CLIENT_SPLIT_READS |
+    pg_pool_t::FLAG_OMAP              |
+    pg_pool_t::FLAG_PRESERVE_ALLOCATION;
+  EXPECT_EQ(0u,
+            (uint64_t)pg_pool_t::FLAG_SUPPORTS_SPARSE_READS & all_other_flags);
+}
+
+TEST(pg_pool_t, SupportsSparseReadsFlagNameRoundTrip)
+{
+  EXPECT_STREQ("supports_sparse_reads",
+               pg_pool_t::get_flag_name(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS));
+  EXPECT_EQ((uint64_t)pg_pool_t::FLAG_SUPPORTS_SPARSE_READS,
+            pg_pool_t::get_flag_by_name("supports_sparse_reads"));
+}
+
+TEST(pg_pool_t, SupportsSparseReadsFlagInFlagsString)
+{
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  const std::string s = pool.get_flags_string();
+  EXPECT_NE(std::string::npos, s.find("supports_sparse_reads"));
+}
+
+TEST(pg_pool_t, SupportsSparseReadsErasure)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  // an EC pool only supports sparse reads once the mon has set the flag
+  EXPECT_FALSE(pool.supports_sparse_reads());
+  pool.set_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  EXPECT_TRUE(pool.supports_sparse_reads());
+  pool.unset_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  EXPECT_FALSE(pool.supports_sparse_reads());
+}
+
+TEST(pg_pool_t, SupportsSparseReadsReplicated)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_REPLICATED;
+  // replicated pools always appear to support sparse reads, so that they
+  // keep working before the flag is set on upgrade commit
+  EXPECT_TRUE(pool.supports_sparse_reads());
+  pool.set_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  EXPECT_TRUE(pool.supports_sparse_reads());
+}
+
+TEST(pg_pool_t, SupportsSparseReadsIndependentOfPreserveAllocation)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.flags |= pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+
+  pool.enable_track_zero_blocks();
+  EXPECT_TRUE(pool.tracks_zero_blocks());
+  EXPECT_FALSE(pool.supports_sparse_reads());
+
+  pool.set_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  pool.disable_track_zero_blocks();
+  EXPECT_FALSE(pool.tracks_zero_blocks());
+  EXPECT_TRUE(pool.supports_sparse_reads());
 }
 
 /*
