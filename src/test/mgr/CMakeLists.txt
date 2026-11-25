@@ -31,6 +31,7 @@ add_executable(unittest_mgr_daemonstate
 add_ceph_unittest(unittest_mgr_daemonstate)
 target_link_libraries(unittest_mgr_daemonstate
   ceph-common
+  global
   Python3::Python
 )
 
