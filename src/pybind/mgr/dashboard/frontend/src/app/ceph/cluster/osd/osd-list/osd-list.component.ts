@@ -273,8 +273,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: $localize`Flags`,
         icon: Icons.flag,
         click: () => this.configureFlagsAction(),
-        permission: 'read',
-        visible: () => this.permissions.osd.read
+        permission: 'update',
+        visible: () => this.permissions.osd.update
       },
       {
         name: $localize`Recovery Priority`,
