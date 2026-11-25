@@ -2124,9 +2124,16 @@ Inode* Client::insert_trace(MetaRequest *request,
 	ceph_assert(request->old_dentry());
 	Dentry *od = request_dentry_now(request->old_dentry(),
 					request->old_dentry_dir());
-	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
-	if (od && od->dir)
-	  unlink(od, true, true);  // keep dir, dentry
+	if (request->old_inode() &&
+	    request->old_inode() == request->other_inode()) {
+	  // both names link one inode: the MDS did nothing and kept both
+	  ldout(cct, 10) << " rename src dn " << od << " and dst are links to "
+			 << *request->old_inode() << ", kept" << dendl;
+	} else {
+	  ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
+	  if (od && od->dir)
+	    unlink(od, true, true);  // keep dir, dentry
+	}
       } else if ((op == CEPH_MDS_OP_RMDIR ||
 		  op == CEPH_MDS_OP_UNLINK) && d && d->dir) {
 	// unlink, rmdir
