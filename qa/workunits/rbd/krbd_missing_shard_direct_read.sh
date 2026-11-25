@@ -36,10 +36,7 @@ DOWN_OSD=""
 cleanup() {
     set +e
     [ -n "$DOWN_OSD" ] && ceph osd unset noup 2>/dev/null
-    [ -n "${DEV:-}" ] && sudo rbd device unmap "$DEV" 2>/dev/null
-    rbd rm "$POOL/$IMAGE" 2>/dev/null
-    ceph osd pool delete "$EC_POOL" "$EC_POOL" --yes-i-really-really-mean-it 2>/dev/null
-    ceph osd erasure-code-profile rm "$EC_PROFILE" 2>/dev/null
+    [ -n "${DEV:-}" ] && sudo rbd device unmap -o force "$DEV" 2>/dev/null
     rm -rf "$DATA"
 }
 trap cleanup EXIT
