@@ -177,6 +177,12 @@ class TestIdentifyCommands:
         })
         assert describe(ioctl)['nsid'] == 7
 
+    def test_a_device_node_that_cannot_be_opened_is_an_error(self, cephadm_fs):
+        # sysfs says the namespace exists but /dev has no node for it
+        fake_sysfs(cephadm_fs)
+        with pytest.raises(Error, match='cannot open'):
+            describe(FakeIoctl())
+
     def test_an_ioctl_failure_is_reported_not_swallowed(self, drive):
         with pytest.raises(Error):
             describe(FakeIoctl(error=OSError(5, 'I/O error')))

@@ -1811,6 +1811,31 @@ class TestCephadm(object):
             with pytest.raises(DeviceConstraintError, match='repeated probe failure'):
                 self._fraction(cephadm_module, devices, constraints)
 
+    @pytest.mark.parametrize('error', [ImportError(), NameError()])
+    def test_fcm_fraction_module_absent_or_without_method_means_no_constraint(
+            self, cephadm_module, error):
+        assert self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': error}) is None
+
+    def test_fcm_fraction_module_stops_answering_partway_refuses(self, cephadm_module):
+        # Returning None here would drop the reservation /dev/sdb asked for.
+        c = {'data_size_bytes': 900, 'device_bytes': 1000}
+        with pytest.raises(DeviceConstraintError, match='stopped answering partway'):
+            self._fraction(cephadm_module, ['/dev/sdb', '/dev/sdc'],
+                           {'/dev/sdb': c, '/dev/sdc': ImportError()})
+
+    def test_fcm_fraction_takes_the_smallest_of_near_equal_fractions(self, cephadm_module):
+        # Within isclose's tolerance but not equal; the larger value could
+        # eat into the reserved region of the other device.
+        small = {'data_size_bytes': 900_000, 'device_bytes': 1_000_000}
+        large = {'data_size_bytes': 900_001, 'device_bytes': 1_000_000}
+        for order in (['/dev/sdb', '/dev/sdc'], ['/dev/sdc', '/dev/sdb']):
+            constraints = {'/dev/sdb': small, '/dev/sdc': large}
+            assert self._fraction(cephadm_module, order, constraints) == 0.9
+
+    def test_fcm_fraction_data_size_equal_to_device_size_is_accepted(self, cephadm_module):
+        c = {'data_size_bytes': 1000, 'device_bytes': 1000}
+        assert self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': c}) == 1.0
+
     @pytest.mark.parametrize('spec_kwargs, msg', [
         ({'method': 'raw'}, 'method: raw'),
         ({'data_allocate_fraction': 0.5}, 'data_allocate_fraction'),
@@ -1923,6 +1948,26 @@ class TestCephadm(object):
                             wait(cephadm_module, cephadm_module.create_osds(dg))
                     create.assert_not_called()
                     assert 'osd.default' not in cephadm_module.spec_store.all_specs
+
+    def test_create_osds_checks_constraints_only_for_the_host_it_creates_on(self, cephadm_module):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with mock.patch.object(CephadmOrchestrator, 'validate_device', return_value=''):
+                with with_host(cephadm_module, 'test'), with_host(cephadm_module, 'test2'):
+                    for host in ('test', 'test2'):
+                        cephadm_module.cache.update_host_devices(
+                            host, Devices([Device('/dev/sdb', available=True)]).devices)
+                    cephadm_module.remote.side_effect = lambda *a, **kw: None
+                    dg = DriveGroupSpec(
+                        placement=PlacementSpec(host_pattern='*'),
+                        data_devices=DeviceSelection(paths=['/dev/sdb']),
+                    )
+                    with mock.patch.object(
+                            cephadm_module.osd_service, 'create_from_spec',
+                            return_value='ok'):
+                        with mock.patch.object(CephadmOrchestrator, 'create_osd_default_spec'):
+                            wait(cephadm_module, cephadm_module.create_osds(dg))
+                    hosts = {c.args[2] for c in self._fcm_calls(cephadm_module)}
+                    assert len(hosts) == 1
 
     def test_create_osds_without_fcm_module_is_unchanged(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
