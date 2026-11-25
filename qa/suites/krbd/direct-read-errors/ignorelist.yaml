@@ -15,3 +15,4 @@ overrides:
       - overall HEALTH_
       - enough copies available
       - \(OSDMAP_FLAGS\)
+      - Monitor daemon marked osd
