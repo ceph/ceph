@@ -8,8 +8,8 @@ teuthology:
     end
   postmerge:
     - |
-      if yaml.os_type == "rocky" then
-        log.debug("not testing on rocky: https://tracker.ceph.com/issues/74907")
+      if yaml.os_type == "ubuntu" and yaml.os_version == "26.04" then
+        log.debug("not testing on ubuntu 26.04: no testing kernel builds")
         reject()
       end
 
