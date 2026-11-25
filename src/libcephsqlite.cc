@@ -438,6 +438,12 @@ static int Sync(sqlite3_file *file, int flags)
 }
 
 
+static bool should_inject_stat_error(CephContext* cct)
+{
+  auto p = cct->_conf.get_val<double>("cephsqlite_inject_stat_error_probability");
+  return p && rand() % 10000 < p * 10000.0;
+}
+
 static int FileSize(sqlite3_file *file, sqlite_int64 *osize)
 {
   auto f = (cephsqlite_file*)file;
@@ -445,12 +451,14 @@ static int FileSize(sqlite3_file *file, sqlite_int64 *osize)
   df(5) << dendl;
 
   uint64_t size = 0;
-  if (int rc = f->io.rs->stat(&size); rc < 0) {
+  int rc = should_inject_stat_error(f->io.cct.get()) ? -EIO : f->io.rs->stat(&size);
+  if (rc < 0) {
     df(5) << "stat failed: " << cpp_strerror(rc) << dendl;
     if (rc == -EBLOCKLISTED) {
       getdata(f->vfs).maybe_reconnect(f->io.cluster);
+      return SQLITE_IOERR_LOCK;
     }
-    return SQLITE_NOTFOUND;
+    return SQLITE_IOERR_FSTAT;
   }
 
   *osize = (sqlite_int64)size;
@@ -727,9 +735,15 @@ static int Access(sqlite3_vfs* vfs, const char* path, int flags, int* result)
   }
 
   uint64_t size = 0;
-  if (int rc = io.rs->stat(&size); rc < 0) {
+  int access_rc = SQLITE_OK;
+  if (int rc = should_inject_stat_error(cct.get()) ? -EIO : io.rs->stat(&size); rc < 0) {
     dv(5) << "= " << rc << " (" << cpp_strerror(rc) << ")" << dendl;
-    *result = 0;
+    if (rc == -EBLOCKLISTED) {
+      getdata(vfs).maybe_reconnect(cluster);
+      access_rc = SQLITE_IOERR_LOCK;
+    } else {
+      access_rc = SQLITE_IOERR_FSTAT;
+    }
   } else {
     dv(5) << "= 0" << dendl;
     *result = 1;
@@ -737,7 +751,7 @@ static int Access(sqlite3_vfs* vfs, const char* path, int flags, int* result)
 
   auto end = ceph::coarse_mono_clock::now();
   getdata(vfs).logger->tinc(P_OP_ACCESS, end-start);
-  return SQLITE_OK;
+  return access_rc;
 }
 
 /* This method is only called once for each database. It provides a chance to
