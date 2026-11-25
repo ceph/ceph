@@ -652,6 +652,9 @@ class TestMonitoring:
                     'if0': ['1.2.3.1']
                 },
             })
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'pools': [{'pool': 1, 'pool_name': pool, 'type': 1}]
+            })
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
                     with_service(cephadm_module, CephExporterSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, s) as _, \
@@ -815,6 +818,9 @@ class TestMonitoring:
                 '1.2.3.0/24': {
                     'if0': ['1.2.3.1']
                 },
+            })
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'pools': [{'pool': 1, 'pool_name': pool, 'type': 1}]
             })
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
                     with_service(cephadm_module, smb_spec) as _, \
