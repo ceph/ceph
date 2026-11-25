@@ -23,15 +23,15 @@ loki.relabel "ceph_component" {
 		action        = "replace"
 	}
 
-	// ceph-client.<id>.log - rgw, rbd-mirror, nfs, ceph-exporter
+	// ceph-client.<id>.log - non-core / client-style daemons
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|ceph-exporter)\\.[^/]+\\.log"
+		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|ceph-exporter|nvmeof|iscsi|smb)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}
 
-	// ceph-<type>.<id>.log
+	// ceph-<type>.<id>.log - core daemons
 	rule {
 		source_labels = ["filename"]
 		regex         = ".*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log"
@@ -48,29 +48,56 @@ loki.relabel "ceph_component" {
 	}
 }
 
-loki.process "remove_timestamp" {
-	forward_to = [loki.write.default.receiver]
+// Journald: non-core Cephadm units (nfs, nvmeof, mirrors, gateways, etc.)
+// matches is AND-only, so filter with relabel keep instead of OR matches.
+// Only promote component so journal streams match core file-log labels
+// (job, host, component). Internal __journal__* fields are dropped by Alloy.
+loki.relabel "ceph_journal" {
+	forward_to = [loki.process.remove_timestamp.receiver]
 
-	// Extract leading timestamp (Ceph + other ISO-like forms), apply as Loki
-	// entry timestamp, then strip it from the message body.
-	stage.regex {
-		expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+"
+	// Keep only non-core Cephadm systemd units:
+	// ceph-<fsid>@<type>.<id>[.service]
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "ceph-[^@]+@(nfs|nvmeof|cephfs-mirror|rbd-mirror|iscsi|smb|rgw|ceph-exporter|crash|haproxy|keepalived)\\..*"
+		action        = "keep"
 	}
 
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "ceph-[^@]+@(nfs|nvmeof|cephfs-mirror|rbd-mirror|iscsi|smb|rgw|ceph-exporter|crash|haproxy|keepalived)\\..*"
+		target_label  = "component"
+		replacement   = "$1"
+	}
+}
+
+loki.source.journal "ceph_non_core" {
+	max_age       = "12h"
+	path          = "/var/log/journal"
+	relabel_rules = loki.relabel.ceph_journal.rules
+	forward_to    = [loki.process.remove_timestamp.receiver]
+	labels        = {
+		job  = "Cluster Logs",
+		host = constants.hostname,
+	}
+}
+
+loki.process "remove_timestamp" {
+	forward_to = [loki.write.default.receiver]
+	stage.regex {
+		expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+(?P<body>.*)$"
+	}
 	stage.timestamp {
 		source            = "ts"
 		format            = "2006-01-02T15:04:05.999999-0700"
-		fallback_formats  = ["2006-01-02T15:04:05.999999Z07:00",
-		                     "2006-01-02 15:04:05.999999-0700",
-		                     "2006-01-02 15:04:05.999999Z07:00",
-		                     "RFC3339",
-		                     "RFC3339Nano"]
 		action_on_failure = "skip"
 	}
-
-	stage.replace {
-		expression = "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+"
-		replace    = ""
+	// Only rewrite the line when a Ceph timestamp prefix was present.
+	stage.match {
+		selector = "{job=\"Cluster Logs\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2}T\""
+		stage.output {
+			source = "body"
+		}
 	}
 }
 
