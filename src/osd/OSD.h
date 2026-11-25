@@ -835,6 +835,8 @@ private:
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
   epoch_t up_epoch;    // _most_recent_ epoch we were marked up
   epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
+  std::atomic<int64_t> reserved_pg_bytes = 0;
+  friend class PG;
 public:
   /**
    * Retrieve the boot_, up_, and bind_ epochs the OSD has std::set. The params

@@ -1728,7 +1728,7 @@ std::optional<backfill_osd_space_usage_t> PG::get_local_osd_space_usage()
     return std::nullopt;
   }
   return backfill_osd_space_usage_t{
-    statfs.get_used_raw(),
+    statfs.get_used_raw() + osd->reserved_pg_bytes.load(),
     statfs.total};
 }
 
@@ -1816,6 +1816,10 @@ bool PG::try_reserve_recovery_space(
 	!cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
       primary_num_bytes.store(primary_bytes);
       local_num_bytes.store(local_bytes);
+      if (likely(primary_bytes >= local_bytes)) {
+        std::ignore = osd->reserved_pg_bytes.fetch_add(primary_bytes - local_bytes);
+      }
+      dout(10) << __func__ << " reserved_pg_bytes: " << osd->reserved_pg_bytes.load() << dendl;
     } else {
       unreserve_recovery_space();
     }
@@ -1823,9 +1827,53 @@ bool PG::try_reserve_recovery_space(
   }
 }
 
+void PG::add_local_num_bytes(int64_t num_bytes) {
+  if (num_bytes) {
+    int64_t prev_bytes = local_num_bytes.load();
+    int64_t new_bytes;
+    do {
+      new_bytes = prev_bytes + num_bytes;
+      if (new_bytes < 0)
+        new_bytes = 0;
+    } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+    // subtract the newly added local bytes from the OSD-scale reserved bytes
+    int64_t delta_bytes = new_bytes - prev_bytes;
+    prev_bytes = osd->reserved_pg_bytes.load();
+    do {
+      new_bytes = prev_bytes - delta_bytes;
+      if (new_bytes < 0)
+        break;
+    } while(!osd->reserved_pg_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+  }
+}
+
+void PG::sub_local_num_bytes(int64_t num_bytes) {
+  ceph_assert(num_bytes >= 0);
+  if (num_bytes) {
+    int64_t prev_bytes = local_num_bytes.load();
+    int64_t new_bytes;
+    do {
+      new_bytes = prev_bytes - num_bytes;
+      if (new_bytes < 0)
+        new_bytes = 0;
+    } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+    // add the newly subtracted local bytes from the OSD-scale reserved bytes
+    int64_t delta_bytes = prev_bytes - new_bytes;
+    prev_bytes = osd->reserved_pg_bytes.load();
+    do {
+      new_bytes = prev_bytes + delta_bytes;
+    } while(!osd->reserved_pg_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+  }
+}
+
 void PG::unreserve_recovery_space() {
+  auto primary_bytes = primary_num_bytes.load();
+  auto local_bytes = local_num_bytes.load();
   primary_num_bytes.store(0);
   local_num_bytes.store(0);
+  if (primary_bytes >= local_bytes) {
+    std::ignore = osd->reserved_pg_bytes.fetch_sub(primary_bytes - local_bytes);
+  }
 }
 
 bool PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
