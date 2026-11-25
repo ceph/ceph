@@ -12,6 +12,15 @@
 
 using namespace std;
 
+std::string make_connect_to(const std::string& host, uint16_t port,
+                            const boost::asio::ip::address& addr)
+{
+  const std::string port_str = std::to_string(port);
+  const std::string addr_str = addr.is_v6() ? "[" + addr.to_string() + "]"
+                                            : addr.to_string();
+  return host + ":" + port_str + ":" + addr_str + ":" + port_str;
+}
+
 void RGWRESTConn::resolve_endpoints() {
   // TODO: resolve endpoints concurrently using async_resolve on a shared io_context.
   //       In practice zones have a single endpoint or at most a handful of individual
@@ -62,14 +71,11 @@ void RGWRESTConn::resolve_endpoints() {
     boost::system::error_code ec;
     auto results = resolver.resolve(res_ep.host, "", ec);
     if (!ec && !results.empty()) {
-      std::string port_str = std::to_string(res_ep.port);
-      std::string host_port_prefix = res_ep.host + ":" + port_str + ":";
-
       res_ep.resolved_ips.reserve(results.size());
       for (const auto& entry : results) {
-        auto ip_str = entry.endpoint().address().to_string();
-        res_ep.resolved_ips.emplace_back(host_port_prefix + ip_str + ":" + port_str);
-        ldout(cct, 2) << "endpoint_url=" << ep_url << " resolved to ip=" << ip_str << dendl;
+        const auto addr = entry.endpoint().address();
+        res_ep.resolved_ips.emplace_back(make_connect_to(res_ep.host, res_ep.port, addr));
+        ldout(cct, 2) << "endpoint_url=" << ep_url << " resolved to ip=" << addr << dendl;
       }
       ldout(cct, 2) << "endpoint=" << ep_url << " resolved to "
                 << res_ep.resolved_ips.size() << " IP addresses" << dendl;

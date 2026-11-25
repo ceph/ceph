@@ -10,6 +10,7 @@
 #include "rgw_sal_fwd.h"
 
 #include <atomic>
+#include <boost/asio/ip/address.hpp>
 
 class RGWSI_Zone;
 
@@ -64,6 +65,11 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
   }
   return params;
 }
+
+// Build a CURLOPT_CONNECT_TO entry "host:port:addr:port". libcurl requires
+// IPv6 addresses to be enclosed in brackets.
+std::string make_connect_to(const std::string& host, uint16_t port,
+                            const boost::asio::ip::address& addr);
 
 /**
  * ResolvedIP - Per-IP connection status tracking.
