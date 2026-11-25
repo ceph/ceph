@@ -198,7 +198,7 @@ add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados)
-target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES}
+target_link_libraries(unittest_librados librados ceph-common ${BLKID_LIBRARIES}
 	${GSSAPI_LIBRARIES})
 
 # unittest_librados_config
