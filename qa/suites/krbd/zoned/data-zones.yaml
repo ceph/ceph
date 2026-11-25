@@ -1,0 +1,23 @@
+tasks:
+- exec:
+    client.0:
+      - |
+        set -ex
+        for dc in dc1 dc2; do
+          sudo ceph osd crush add-bucket $dc datacenter
+          sudo ceph osd crush move $dc root=default
+        done
+        i=0
+        for osd in $(sudo ceph osd ls); do
+          dc=dc1; [ $((i % 2)) -eq 1 ] && dc=dc2
+          h=zh-$osd
+          sudo ceph osd crush add-bucket $h host || true
+          sudo ceph osd crush move $h datacenter=$dc
+          sudo ceph osd crush set osd.$osd 1.0 root=default datacenter=$dc host=$h
+          i=$((i + 1))
+        done
+        sudo ceph osd pool create zdata --pool_type erasure --k 2 --m 1 --num_zones 2 --pg_num 32
+        sudo ceph osd pool set zdata allow_ec_overwrites true
+        sudo ceph osd pool set zdata allow_ec_optimizations true
+        sudo ceph osd pool application enable zdata rbd
+        for _ in $(seq 60); do sudo ceph osd pool ls detail | grep "'zdata'" | grep -q split_reads && break; sleep 2; done
