@@ -862,7 +862,6 @@ target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
   PRIVATE "${LUA_INCLUDE_DIR}")
 
 target_link_libraries(radosgw PRIVATE
@@ -913,7 +912,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
     PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-    PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
     PRIVATE "${LUA_INCLUDE_DIR}")
 
   target_link_libraries(rgw-standalone PRIVATE
@@ -1058,7 +1056,6 @@ target_include_directories(rgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
   PRIVATE "${LUA_INCLUDE_DIR}")
 
 target_link_libraries(rgw

@@ -91,3 +91,6 @@
 [submodule "src/rgw/lancedb-c"]
 	path = src/rgw/lancedb-c
 	url = https://github.com/lancedb/lancedb-c.git
+[submodule "src/rapidjson"]
+	path = src/rapidjson
+	url = https://github.com/Tencent/rapidjson.git

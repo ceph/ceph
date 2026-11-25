@@ -16,9 +16,8 @@ add_library(sqlite_db STATIC ${sqlite_db_srcs})
 target_include_directories(sqlite_db
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
-    PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
     PRIVATE "${LUA_INCLUDE_DIR}")
-target_link_libraries(sqlite_db sqlite3 common)
+target_link_libraries(sqlite_db sqlite3 common RapidJSON::RapidJSON)
 if(COMPILER_SUPPORTS_VLA_ERROR)
   target_compile_options(sqlite_db PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif()

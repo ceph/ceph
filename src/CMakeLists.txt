@@ -426,11 +426,14 @@ add_subdirectory(json_spirit)
 
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 
-# use the rapidjson headers from s3select's submodule
+# RapidJSON is header-only; vendored as the src/rapidjson submodule
 if(NOT TARGET RapidJSON::RapidJSON)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rapidjson/include/rapidjson/rapidjson.h")
+    message(FATAL_ERROR "src/rapidjson submodule missing; run 'git submodule update --init src/rapidjson'")
+  endif()
   add_library(RapidJSON::RapidJSON INTERFACE IMPORTED)
   set_target_properties(RapidJSON::RapidJSON PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/s3select/rapidjson/include")
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/rapidjson/include")
 endif()
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)

@@ -443,7 +443,6 @@ target_include_directories(unittest_rgw_object_ctx
   SYSTEM PRIVATE
     ${CMAKE_SOURCE_DIR}/src/rgw
     ${CMAKE_SOURCE_DIR}/src/rgw/driver/rados
-    ${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include
 )
 target_link_libraries(unittest_rgw_object_ctx ${rgw_libs})
 
