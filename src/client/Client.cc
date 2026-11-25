@@ -1576,31 +1576,37 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 		 << " in dir " << dir->parent_inode->vino() << " dn " << dn
 		 << dendl;
 
-  if (dn && dn->inode) {
-    if (dn->inode->vino() == in->vino()) {
-      touch_dn(dn);
-      ldout(cct, 12) << " had dentry " << dname
-	       << " with correct vino " << dn->inode->vino()
-	       << dendl;
-    } else {
+  bool wrong = dn && dn->inode && dn->inode->vino() != in->vino();
+  if (dn && dn->inode && !wrong) {
+    touch_dn(dn);
+    ldout(cct, 12) << " had dentry " << dname
+	     << " with correct vino " << dn->inode->vino()
+	     << dendl;
+  }
+  
+  if (!dn || !dn->inode || wrong) {
+    InodeRef tmp_ref(in);
+    // the source of a rename: another rename of this client that moved it
+    // first already unlinked it (old_dentry->dir is null then).  One in
+    // another dir goes first, before we take this dir's Inode::lock: a
+    // thread holds one Inode::lock at a time
+    if (old_dentry && old_dentry->dir && old_dentry->dir != dir) {
+      clear_dir_complete_and_ordered(old_dentry->dir->parent_inode, false);
+      unlink(old_dentry, false, false);  // drop dentry
+    }
+    // Point the name at its new inode in one hold of the dir's Inode::lock
+    // (unlink() and link() take it again): the lookup fast path holds it
+    // too, and seeing the name unlinked in between (a rename over an
+    // existing name) it would conclude ENOENT in a complete dir
+    std::scoped_lock il(dir->parent_inode->lock);
+    if (wrong) {
       ldout(cct, 12) << " had dentry " << dname
 	       << " with WRONG vino " << dn->inode->vino()
 	       << dendl;
       unlink(dn, true, true);  // keep dir, keep dentry
     }
-  }
-  
-  if (!dn || !dn->inode) {
-    InodeRef tmp_ref(in);
-    // the source of a rename: another rename of this client that moved it
-    // first already unlinked it (old_dentry->dir is null then)
-    if (old_dentry && old_dentry->dir) {
-      if (old_dentry->dir != dir) {
-	Inode *old_diri = old_dentry->dir->parent_inode;
-	clear_dir_complete_and_ordered(old_diri, false);
-      }
-      unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
-    }
+    if (old_dentry && old_dentry->dir == dir)
+      unlink(old_dentry, true, false);  // drop dentry, keep dir open
     Inode *diri = dir->parent_inode;
     clear_dir_complete_and_ordered(diri, false);
     dn = link(dir, dname, in, dn);
