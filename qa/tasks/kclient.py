@@ -64,7 +64,7 @@ def task(ctx, config):
         client_roles = config
         config = dict([r, dict()] for r in client_roles)
     elif isinstance(config, dict):
-        client_roles = filter(lambda x: 'client.' in x, config.keys())
+        client_roles = [x for x in config.keys() if 'client.' in x]
     else:
         raise ValueError(f"Invalid config object: {config} ({config.__class__})")
     log.info(f"config is {config}")
