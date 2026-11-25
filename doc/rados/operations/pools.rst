@@ -1103,7 +1103,8 @@ You may set values for the following keys:
    :Description: How long (in seconds) a primary OSD waits, after the last write to a PG completes, before telling the replicas how far that PG has committed.
 
    :Type: Integer
-   :Default: unset (no such update is sent)
+   :Default: ``5`` on replicated pools when ``rados_replica_read_policy`` is
+             ``balance`` or ``localize``, otherwise unset (no such update is sent)
 
 
 Getting Pool Values
