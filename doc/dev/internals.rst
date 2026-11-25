@@ -93,7 +93,7 @@ RADOS and Object Store
    :maxdepth: 1
 
    object-store
-   bluestore
+   bluestore/index
    balancer-design
    deduplication
    zoned-storage
