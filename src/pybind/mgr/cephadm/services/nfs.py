@@ -12,7 +12,7 @@ from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, PlacementSpec
 from ceph.utils import with_units_to_int
 from .service_registry import register_cephadm_service
 
@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class NFSService(CephService):
     TYPE = 'nfs'
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_EXPORTER_PORT = 9587
 
     def __init__(self, mgr: "CephadmOrchestrator"):

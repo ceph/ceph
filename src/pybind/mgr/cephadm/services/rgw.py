@@ -3,14 +3,14 @@ import errno
 import re
 from typing import List, Optional, Dict, Any, Tuple, cast
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import RGWSpec, ServiceSpec
+from ceph.deployment.service_spec import RGWSpec, ServiceSpec, PlacementSpec
 from mgr_util import build_url
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 from ceph.cephadm.d3n_types import D3NCache, D3NCacheError, D3NCacheSpec, d3n_get_host_devs, d3n_paths
 from cephadm.services.rgw_d3n import D3NDevicePlanner
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, RGW_PROFILE_RELEASE
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, RGW_PROFILE_RELEASE, AuthEntityKind
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class RgwService(CephService):
     TYPE = 'rgw'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(count=2)
 
     def allow_colo(self) -> bool:
         return True

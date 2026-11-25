@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from ceph.deployment.service_spec import ServiceSpec
 from orchestrator import OrchestratorError
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 
 
 if TYPE_CHECKING:
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class CephadmAgent(CephService):
     TYPE = 'agent'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_HOST
 
     @classmethod
     def _get_ceph_volume_image(cls, mgr: "CephadmOrchestrator") -> str:

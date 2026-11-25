@@ -5,7 +5,7 @@ from mgr_module import HandleCommandResult
 from ..service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, ServiceSpec
+from ceph.deployment.service_spec import AlertManagerSpec, ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephadmService, DaemonDeployContext, get_dashboard_urls, next_action_for_mgmt_stack_service
 from mgr_util import build_url, password_hash
 from ... import utils
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 9093
     USER_CFG_KEY = 'alertmanager/web_user'
     PASS_CFG_KEY = 'alertmanager/web_password'

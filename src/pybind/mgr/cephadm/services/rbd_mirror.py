@@ -2,12 +2,16 @@ import errno
 from typing import List, Optional
 from mgr_module import HandleCommandResult
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from ceph.deployment.service_spec import PlacementSpec
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 
 
 @register_cephadm_service
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(count=2)
 
     def allow_colo(self) -> bool:
         return True

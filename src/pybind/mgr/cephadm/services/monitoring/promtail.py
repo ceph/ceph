@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from typing import List, Any, Tuple, Dict, Optional
 from ..service_registry import register_cephadm_service
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmService, DaemonDeployContext
 
 
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class PromtailService(CephadmService):
     TYPE = 'promtail'
+    DEFAULT_PLACEMENT = PlacementSpec(host_pattern='*')
     DEFAULT_SERVICE_PORT = 9080
 
     @classmethod

@@ -6,7 +6,7 @@ from mgr_module import HandleCommandResult
 from ..service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from orchestrator import DaemonDescription, OrchestratorError
-from ceph.deployment.service_spec import GrafanaSpec, ServiceSpec, MgmtGatewaySpec
+from ceph.deployment.service_spec import GrafanaSpec, ServiceSpec, MgmtGatewaySpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephadmService, DaemonDeployContext
 from mgr_util import build_url
 from ... import utils
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 3000
 
     def generate_data_sources(self, security_enabled: bool, mgmt_gw_enabled: bool, cert: str, pkey: str) -> str:

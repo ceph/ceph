@@ -3,7 +3,7 @@ from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 from copy import copy
 
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
-from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec, ServiceSpec
+from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec, ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext
 from .service_registry import register_cephadm_service
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class OAuth2ProxyService(CephadmService):
     TYPE = 'oauth2-proxy'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     SVC_TEMPLATE_PATH = 'services/oauth2-proxy/oauth2-proxy.conf.j2'
 
     def prepare_create(

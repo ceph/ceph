@@ -6,7 +6,7 @@ from urllib.error import HTTPError, URLError
 from typing import List, Any, Dict, Tuple, Optional, MutableMapping, TYPE_CHECKING
 
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
+from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext, AuthEntityKind
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import http_req
 from orchestrator import OrchestratorError
@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class NodeProxy(CephService):
     TYPE = 'node-proxy'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_HOST
+    DEFAULT_PLACEMENT = PlacementSpec(host_pattern='*')
 
     def prepare_create(
             self,

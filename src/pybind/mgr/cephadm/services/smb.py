@@ -20,6 +20,7 @@ from ceph.smb.constants import (
     SMB_FEATURE_SUPPORTS_SSL,
 )
 
+from ceph.deployment.service_spec import PlacementSpec
 from ceph.deployment.service_spec import (
     SMBExternalCephCluster,
     SMBSpec,
@@ -68,6 +69,8 @@ def _redacted_config(config_blobs: Dict[str, Any]) -> Dict[str, Any]:
 @register_cephadm_service
 class SMBService(CephService):
     TYPE = 'smb'
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     smb_pool = '.smb'  # minor layering violation. try to clean up later.
 
     @property

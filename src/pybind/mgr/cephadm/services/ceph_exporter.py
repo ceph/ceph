@@ -1,11 +1,11 @@
 from typing import TYPE_CHECKING
 from typing import List, Optional, Dict, Any, cast
-from ceph.deployment.service_spec import CephExporterSpec, ServiceSpec
+from ceph.deployment.service_spec import CephExporterSpec, ServiceSpec, PlacementSpec
 from mgr_util import merge_dicts
 from orchestrator import DaemonDescription
 from cephadm import utils
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, next_action_for_mgmt_stack_service
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, next_action_for_mgmt_stack_service, AuthEntityKind
 
 
 if TYPE_CHECKING:
@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class CephExporterService(CephService):
     TYPE = 'ceph-exporter'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(host_pattern='*')
     DEFAULT_SERVICE_PORT = 9926
 
     @property

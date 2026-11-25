@@ -1,13 +1,15 @@
 from typing import List
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from orchestrator import DaemonDescription
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 
 
 @register_cephadm_service
 class MdsService(CephService):
     TYPE = 'mds'
+    AUTH_ENTITY = AuthEntityKind.DAEMON_ID
+    DEFAULT_PLACEMENT = PlacementSpec(count=2)
 
     def allow_colo(self) -> bool:
         return True

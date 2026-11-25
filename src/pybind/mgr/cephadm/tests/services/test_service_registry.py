@@ -64,3 +64,35 @@ def test_all_service_handlers_registered():
 
     assert discovered
     assert registered == discovered
+
+
+def test_service_class_lookup_without_init():
+    """get_service_class() resolves registered types before init_services()."""
+    from cephadm.services.rgw import RgwService
+    assert service_registry.get_service_class('rgw') is RgwService
+    assert service_registry.get_service_class('no-such-service') is None
+
+
+def test_default_placement_returns_a_copy():
+    """Each call returns a separate PlacementSpec equal to the class default."""
+    svc_cls = service_registry.get_service_class('crash')
+    assert svc_cls is not None
+    first = svc_cls.default_placement()
+    second = svc_cls.default_placement()
+    assert first is not None and first == svc_cls.DEFAULT_PLACEMENT
+    assert first is not second
+    assert first is not svc_cls.DEFAULT_PLACEMENT
+    assert service_registry.get_service_class('agent').default_placement() is None
+
+
+def test_config_section_and_auth_entity_come_from_service_class():
+    """The entity helpers follow the attributes set on the service classes."""
+    from cephadm.services.cephadmservice import get_auth_entity
+    from cephadm.utils import name_to_config_section
+    assert name_to_config_section('rgw.foo.a') == 'client.rgw.foo.a'
+    assert name_to_config_section('crash.host1') == 'client.crash.host1'
+    assert name_to_config_section('osd.1') == 'osd.1'
+    assert name_to_config_section('grafana.host1') == 'mon'
+    assert get_auth_entity('ceph-exporter', 'host1') == 'client.ceph-exporter.host1'
+    assert get_auth_entity('node-proxy', 'x', host='host1') == 'client.node-proxy.host1'
+    assert get_auth_entity('osd', '3') == 'osd.3'

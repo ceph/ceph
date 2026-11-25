@@ -4894,39 +4894,13 @@ Then run the following:
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
-            defaults = {
-                'mon': PlacementSpec(count=5),
-                'mgr': PlacementSpec(count=2),
-                'mds': PlacementSpec(count=2),
-                'rgw': PlacementSpec(count=2),
-                'ingress': PlacementSpec(count=2),
-                'iscsi': PlacementSpec(count=1),
-                'nvmeof': PlacementSpec(count=1),
-                'rbd-mirror': PlacementSpec(count=2),
-                'cephfs-mirror': PlacementSpec(count=1),
-                'nfs': PlacementSpec(count=1),
-                'grafana': PlacementSpec(count=1),
-                'alertmanager': PlacementSpec(count=1),
-                'prometheus': PlacementSpec(count=1),
-                'node-exporter': PlacementSpec(host_pattern='*'),
-                'ceph-exporter': PlacementSpec(host_pattern='*'),
-                'loki': PlacementSpec(count=1),
-                'promtail': PlacementSpec(host_pattern='*'),
-                'alloy': PlacementSpec(host_pattern='*'),
-                'crash': PlacementSpec(host_pattern='*'),
-                'container': PlacementSpec(count=1),
-                'pushgateway': PlacementSpec(count=1),
-                'snmp-gateway': PlacementSpec(count=1),
-                'mgmt-gateway': PlacementSpec(count=1),
-                'oauth2-proxy': PlacementSpec(count=1),
-                'elasticsearch': PlacementSpec(count=1),
-                'jaeger-agent': PlacementSpec(host_pattern='*'),
-                'jaeger-collector': PlacementSpec(count=1),
-                'jaeger-query': PlacementSpec(count=1),
-                'node-proxy': PlacementSpec(host_pattern='*'),
-                SMBService.TYPE: PlacementSpec(count=1),
-            }
-            spec.placement = defaults[spec.service_type]
+            svc_cls = service_registry.get_service_class(spec.service_type)
+            placement = svc_cls.default_placement() if svc_cls is not None else None
+            if placement is None:
+                raise OrchestratorError(
+                    f'service type {spec.service_type} has no default placement; '
+                    'please provide a placement')
+            spec.placement = placement
         elif spec.service_type in ['mon', 'mgr'] and \
                 spec.placement.count is not None and \
                 spec.placement.count < 1:

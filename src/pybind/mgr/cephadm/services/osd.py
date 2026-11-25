@@ -18,7 +18,7 @@ from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext, AuthEntityKind
 from .service_registry import register_cephadm_service
 from cephadm.utils import build_ceph_volume_cmd
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class OSDService(CephService):
     TYPE = 'osd'
+    AUTH_ENTITY = AuthEntityKind.DAEMON_ID
 
     def validate_encryption(self, spec: DriveGroupSpec) -> None:
         if spec.method == 'raw' and spec.encrypted and not spec.tpm2:

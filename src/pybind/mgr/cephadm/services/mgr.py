@@ -4,10 +4,10 @@ import re
 import time
 from typing import List, Optional, Dict, Any, Tuple
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from orchestrator import OrchestratorError, DaemonDescription
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class MgrService(CephService):
     TYPE = 'mgr'
+    AUTH_ENTITY = AuthEntityKind.DAEMON_ID
+    DEFAULT_PLACEMENT = PlacementSpec(count=2)
 
     def allow_colo(self) -> bool:
         if self.mgr.get_ceph_option('mgr_standby_modules'):

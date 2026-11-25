@@ -3,7 +3,7 @@ from typing import List, Any, Tuple, Dict, Optional
 from mgr_module import HandleCommandResult
 from ..service_registry import register_cephadm_service
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmService, DaemonDeployContext, next_action_for_mgmt_stack_service
 from ... import utils
 
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
+    DEFAULT_PLACEMENT = PlacementSpec(host_pattern='*')
     DEFAULT_SERVICE_PORT = 9100
 
     @property

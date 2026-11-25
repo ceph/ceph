@@ -22,7 +22,7 @@ Usage:
 
 import os
 import logging
-from typing import Type, Dict, List, TYPE_CHECKING
+from typing import Type, Dict, List, Optional, TYPE_CHECKING
 import importlib
 import pkgutil
 
@@ -39,6 +39,7 @@ class CephadmServiceRegistry:
     def __init__(self) -> None:
         self._services: Dict[str, "CephadmService"] = {}  # Initialized service instances
         self._registered_services: Dict[str, Type["CephadmService"]] = {}  # Mapping of service types to classes
+        self._discovered = False
 
     def register_service(self, service_type: str, service_cls: Type["CephadmService"]) -> None:
         """Registers a service class to the registry."""
@@ -56,11 +57,23 @@ class CephadmServiceRegistry:
 
     def _discover_services(self) -> None:
         """Dynamically discovers and imports all modules in the current directory."""
+        if self._discovered:
+            return
         current_package = __name__.rsplit(".", 1)[0]  # Get the package name
         package_path = os.path.dirname(__file__)  # Directory of this file
         for _, module_name, _ in pkgutil.iter_modules([package_path]):
             logger.debug(f"Importing service module: {current_package}.{module_name}")
             importlib.import_module(f"{current_package}.{module_name}")
+        self._discovered = True
+
+    def get_service_class(self, service_type: str) -> Optional[Type["CephadmService"]]:
+        """
+        Return the class registered for a service type, or None. Unlike
+        get_service() this does not need init_services() to have run, so
+        it can back module level helpers that only need class attributes.
+        """
+        self._discover_services()
+        return self._registered_services.get(service_type)
 
     def get_service(self, service_type: str) -> "CephadmService":
         """Retrieves an initialized service instance by type."""
