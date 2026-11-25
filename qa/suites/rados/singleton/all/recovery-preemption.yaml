@@ -40,6 +40,10 @@ tasks:
 - ceph.healthy:
 - exec:
     osd.0:
+      # Apply the recovery settings before restarting osd.1. During startup,
+      # BlueStore::mount() holds osd_lock and admin-socket config changes can
+      # time out waiting for OSD::handle_conf_change().
+      - for f in 0 1 2 3 ; do sudo ceph daemon osd.$f config set osd_recovery_sleep 0 ; sudo ceph daemon osd.$f config set osd_recovery_max_active 20 ; done
       - rados -p foo bench 30 write -b 4096 --no-cleanup
       - ceph osd out 0
       - sleep 5
@@ -53,7 +57,6 @@ tasks:
       - rados -p foo bench 3 write -b 4096 --no-cleanup
       - ceph osd unset noup
       - sleep 10
-      - for f in 0 1 2 3 ; do sudo ceph daemon osd.$f config set osd_recovery_sleep 0 ; sudo ceph daemon osd.$f config set osd_recovery_max_active 20 ; done
 - ceph.healthy:
 - exec:
     osd.0:
