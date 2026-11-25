@@ -95,6 +95,21 @@ Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
 
           ceph nvmeof listener add --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --host-name HOST_NAME --traddr GATEWAY_IP --trsvcid 4420
 
+   From Tentacle 20.2.2, the gateways can instead create the listeners
+   themselves (auto-listeners). Give the subsystem a network mask in CIDR
+   notation, for example ``192.0.2.0/24``:
+
+   .. prompt:: bash #
+
+      ceph nvmeof subsystem add_network --nqn SUBSYSTEM_NQN --gw-group NVME_OF_GROUP_NAME --network-mask NETWORK_MASK
+
+   Each gateway in the group then adds a listener on port 4420 for each
+   of its IP addresses in that network. The mask can also be given when
+   the subsystem is created, by adding ``--network-mask NETWORK_MASK`` to
+   ``ceph nvmeof subsystem add``. Use either ``listener add`` or a network
+   mask for a subsystem, not both: on Umbrella and later, the gateway
+   refuses to mix them.
+
 #. Get the host NQN (NVMe Qualified Name) for each host:
 
    .. prompt:: bash #
