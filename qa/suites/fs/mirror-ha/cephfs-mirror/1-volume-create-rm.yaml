@@ -10,5 +10,7 @@ tasks:
     - exec:
         mon.a:
           - ceph config set mon mon_allow_pool_delete true
-          - ceph fs volume rm dc --yes-i-really-mean-it
-          - ceph fs volume rm dc-backup --yes-i-really-mean-it
+          # Idempotent: Python CephFSTestCase.setUp() may already have removed
+          # these via delete_all_filesystems() (e.g. rebalance workload).
+          - ceph fs volume rm dc --yes-i-really-mean-it || true
+          - ceph fs volume rm dc-backup --yes-i-really-mean-it || true

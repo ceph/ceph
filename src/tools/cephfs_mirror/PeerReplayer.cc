@@ -961,7 +961,12 @@ void PeerReplayer::remove_persisted_dir_sync_stat(const std::string &dir_root) {
 
   Context *ctx = new C_RemovePersistedSyncStatAio(dir_root);
   librados::AioCompletion *aio_comp = create_rados_callback(ctx);
-  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+
+  int r;
+  {
+    std::lock_guard<ceph::mutex> lock(m_mirror_obj_write_l);
+    r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  }
   if (r < 0) {
     delete ctx;
     derr << ": failed to submit aio remove persisted sync stats for dir_root="
@@ -1142,7 +1147,12 @@ void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
 
   Context *ctx = new C_PersistSyncStatAio(dir_root);
   librados::AioCompletion *aio_comp = create_rados_callback(ctx);
-  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+
+  int r;
+  {
+    std::lock_guard<ceph::mutex> lock(m_mirror_obj_write_l);
+    r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  }
   if (r < 0) {
     delete ctx;
     derr << ": failed to submit aio persist sync stats for dir_root=" << dir_root
@@ -1262,20 +1272,21 @@ int PeerReplayer::try_lock_directory(const std::string &dir_root,
   int fd = r;
   r = ceph_flock(m_remote_mount, fd, LOCK_EX | LOCK_NB, (uint64_t)replayer->get_thread_id());
   if (r != 0) {
-    if (r == -EWOULDBLOCK) {
+    int flock_err = r;
+    if (flock_err == -EWOULDBLOCK) {
       dout(5) << ": dir_root=" << dir_root << " is locked by cephfs-mirror, "
               << "will retry again" << dendl;
     } else {
-      derr << ": failed to lock dir_root=" << dir_root << ": " << cpp_strerror(r)
+      derr << ": failed to lock dir_root=" << dir_root << ": " << cpp_strerror(flock_err)
            << dendl;
     }
 
-    r = ceph_close(m_remote_mount, fd);
-    if (r < 0) {
+    int close_err = ceph_close(m_remote_mount, fd);
+    if (close_err < 0) {
       derr << ": failed to close (cleanup) remote dir_root=" << dir_root << ": "
-           << cpp_strerror(r) << dendl;
+           << cpp_strerror(close_err) << dendl;
     }
-    return r;
+    return flock_err;
   }
 
   dout(10) << ": dir_root=" << dir_root << " locked" << dendl;
@@ -1471,6 +1482,12 @@ void PeerReplayer::initialize_checkpoints(const std::string &dir_root) {
 
   dout(10) << ": remote_highest_snap_id=" << remote_highest_snap_id << dendl;
 
+  // Already-COMPLETE checkpoints (oldest first). Do not include checkpoints
+  // promoted to COMPLETE in this pass so a newly added checkpoint is not
+  // immediately pruned before the user can observe it.
+  std::vector<CompleteCheckpoint> already_complete;
+  size_t newly_complete = 0;
+
   // Iterate through local snapshots and mark checkpoints as COMPLETE
   // if their snap_id is <= remote_highest_snap_id
   for (const auto &[snap_id, snap_name] : local_snap_map) {
@@ -1508,8 +1525,52 @@ void PeerReplayer::initialize_checkpoints(const std::string &dir_root) {
       } else {
         dout(10) << ": successfully marked checkpoint as COMPLETE for snap_id=" << snap_id
                  << " snap_name=" << snap_name << dendl;
+        ++newly_complete;
       }
+    } else if (info.status == CheckpointStatus::COMPLETE) {
+      already_complete.push_back(CompleteCheckpoint{
+        snap_id, snap_name, present_checkpoint_metadata_keys(snap_metadata)});
     }
+  }
+
+  prune_old_synced_checkpoints(dir_root, already_complete, newly_complete);
+}
+
+void PeerReplayer::prune_old_synced_checkpoints(
+    const std::string &dir_root,
+    const std::vector<CompleteCheckpoint> &already_complete,
+    size_t newly_complete) {
+  auto keep_count = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_checkpoint_keep_count");
+
+  size_t total_complete = already_complete.size() + newly_complete;
+  if (total_complete <= keep_count || already_complete.empty()) {
+    dout(20) << ": nothing to prune, already_complete=" << already_complete.size()
+             << " newly_complete=" << newly_complete
+             << " keep_count=" << keep_count << dendl;
+    return;
+  }
+
+  size_t to_remove = std::min(already_complete.size(),
+                              total_complete - keep_count);
+  dout(5) << ": pruning " << to_remove << " old COMPLETE checkpoint(s) under "
+          << dir_root << " (already_complete=" << already_complete.size()
+          << " newly_complete=" << newly_complete
+          << " keep_count=" << keep_count << ")" << dendl;
+
+  for (size_t i = 0; i < to_remove; ++i) {
+    const auto &candidate = already_complete[i];
+    auto snap_path = snapshot_path(m_cct, dir_root, candidate.snap_name);
+    int r = remove_checkpoint_metadata(m_local_mount, snap_path,
+                                       candidate.metadata_keys);
+    if (r < 0) {
+      derr << ": failed to prune checkpoint for snap_id=" << candidate.snap_id
+           << " snap_name=" << candidate.snap_name << " dir_root=" << dir_root
+           << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+    dout(10) << ": pruned COMPLETE checkpoint snap_id=" << candidate.snap_id
+             << " snap_name=" << candidate.snap_name << dendl;
   }
 }
 
@@ -2640,6 +2701,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
 
         struct ceph_statx estx;
         r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &estx,
+                         CEPH_STATX_INO |
                          CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                          CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
                          AT_SYMLINK_NOFOLLOW);
@@ -2650,6 +2712,60 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
 
         bool pic = entry.is_purged_or_itype_changed() || m_deleted[entry.epath].contains(e_name);
         if (S_ISDIR(estx.stx_mode)) {
+          bool purge_remote = false;
+          if (!pic) {
+            struct ceph_statx prev_stx;
+            r = ceph_statxat(m_fh->p_mnt, m_fh->p_fd, _epath.c_str(), &prev_stx,
+                             CEPH_STATX_INO | CEPH_STATX_MODE,
+                             AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+            if (r == -ENOENT) {
+              dout(10) << ": directory=" << _epath
+                       << " is absent from the previous snapshot; using full traversal"
+                       << dendl;
+              pic = true;
+            } else if (r < 0) {
+              derr << ": failed to stat previous directory=" << _epath
+                   << ", r=" << r << dendl;
+              return r;
+            } else if (!S_ISDIR(prev_stx.stx_mode)) {
+              // Same-name type changes should normally have been recorded in
+              // m_deleted. Keep this defensive check before trusting snapdiff.
+              pic = true;
+              purge_remote = true;
+            } else if (prev_stx.stx_ino != estx.stx_ino) {
+              dout(10) << ": directory=" << _epath
+                       << " changed inode between snapshots ("
+                       << prev_stx.stx_ino << " -> " << estx.stx_ino
+                       << "); purging remote and using full traversal" << dendl;
+              pic = true;
+              purge_remote = true;
+            }
+          }
+
+          if (purge_remote) {
+            struct ceph_statx remote_stx;
+            r = ceph_statxat(m_remote, m_fh->r_fd_dir_root, _epath.c_str(),
+                             &remote_stx, CEPH_STATX_MODE,
+                             AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+            if (r == 0) {
+              if (S_ISDIR(remote_stx.stx_mode)) {
+                r = purge_func(_epath);
+              } else {
+                r = ceph_unlinkat(m_remote, m_fh->r_fd_dir_root,
+                                  _epath.c_str(), 0);
+              }
+              if (r < 0) {
+                derr << ": failed to purge replaced remote entry=" << _epath
+                     << ", r=" << r << dendl;
+                return r;
+              }
+            } else if (r != -ENOENT) {
+              derr << ": failed to stat replaced remote entry=" << _epath
+                   << ", r=" << r << dendl;
+              return r;
+            }
+          }
+
           SyncEntry se;
           r = init_directory(_epath, estx, pic, &se);
           if (r < 0) {
@@ -2743,6 +2859,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   }
 
   r = 1;
+  bool callback_invoked = false;
   auto bd_s = clock::now();
   while (true) {
     ceph_file_blockdiff_changedblocks blocks;
@@ -2756,9 +2873,10 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
     if (blocks.num_blocks) {
       auto bd_num_blocks = blocks.num_blocks;
       auto bd_cblock = blocks.b;
+      callback_invoked = true;
       r = callback(blocks.num_blocks, blocks.b);
-      ceph_free_file_blockdiff_buffer(&blocks);
       if (r < 0) {
+        ceph_free_file_blockdiff_buffer(&blocks);
         derr << ": blockdiff callback returned error: r=" << r << dendl;
         break;
       }
@@ -2767,6 +2885,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
 	    --bd_num_blocks;
 	    bd_cblock++;
       }
+      ceph_free_file_blockdiff_buffer(&blocks);
     }
 
     if (rr == 0) {
@@ -2774,6 +2893,16 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
     }
     // else fetch next changed blocks
   }
+
+  // A size-only change can produce no changed data blocks. Still invoke the
+  // callback so copy_to_remote() can update the remote file size.
+  if (r == 0 && !callback_invoked) {
+    r = callback(0, nullptr);
+    if (r < 0) {
+      derr << ": blockdiff callback returned error: r=" << r << dendl;
+    }
+  }
+
   // blockdiff throughput
   auto bd_e = clock::now();
   blockdiff_time = seconds(bd_e - bd_s);
