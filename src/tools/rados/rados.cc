@@ -51,6 +51,7 @@
 #include <deque>
 #include <climits>
 #include <limits>
+#include <list>
 #include <locale>
 #include <memory>
 #include <optional>
@@ -80,6 +81,7 @@ using std::dec;
 using std::deque;
 using std::hex;
 using std::less;
+using std::list;
 using std::map;
 using std::multiset;
 using std::ofstream;
