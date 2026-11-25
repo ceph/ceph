@@ -109,6 +109,24 @@ class TestPathIsMounted(object):
     def test_is_mounted_at_destination(self, fake_proc):
         assert system.path_is_mounted('/boot', destination='/dev/sdc2') is True
 
+    def test_is_mounted_from_non_device_source(self, tmpdir, monkeypatch):
+        # e.g. an OSD directory bind mounted into a container from ZFS
+        PROCDIR = str(tmpdir)
+        with open(os.path.join(PROCDIR, 'mounts'), 'w') as f:
+            f.write('rpool/ROOT/debian /far/lib/ceph/osd/ceph-0 zfs rw,relatime,xattr,posixacl 0 0\n')
+        monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
+        assert system.path_is_mounted('/far/lib/ceph/osd/ceph-0') is True
+        assert system.path_is_mounted('/far/lib/ceph/osd/ceph-0',
+                                      destination='rpool/ROOT/debian') is True
+
+    def test_device_map_still_skips_non_device_sources(self, tmpdir, monkeypatch):
+        PROCDIR = str(tmpdir)
+        with open(os.path.join(PROCDIR, 'mounts'), 'w') as f:
+            f.write('rpool/ROOT/debian /far/lib/ceph/osd/ceph-0 zfs rw,relatime,xattr,posixacl 0 0\n')
+        monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
+        assert system.Mounts(paths=True).get_mounts() == {}
+        assert system.Mounts(devices=True).get_mounts() == {}
+
 
 class TestDeviceIsMounted(object):
 

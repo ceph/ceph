@@ -237,7 +237,11 @@ def path_is_mounted(path, destination=None):
     """
     Check if the given path is mounted
     """
-    m = Mounts(paths=True)
+    # Whatever backs the mount does not matter here, only that something is
+    # mounted at the path: a bind mount from ZFS (source "pool/dataset") or
+    # from a filesystem whose source is not a device node is still a mount,
+    # and treating it as unmounted makes callers mount a tmpfs over it.
+    m = Mounts(paths=True, all_sources=True)
     mounts = m.get_mounts()
     realpath = os.path.realpath(path)
     mounted_locations = mounts.get(realpath, [])
@@ -288,10 +292,11 @@ def device_is_mounted(dev, destination=None):
 class Mounts(object):
     excluded_paths = []
 
-    def __init__(self, devices=False, paths=False, realpath=False):
+    def __init__(self, devices=False, paths=False, realpath=False, all_sources=False):
         self.devices = devices
         self.paths = paths
         self.realpath = realpath
+        self.all_sources = all_sources
 
     def safe_realpath(self, path, timeout=0.2):
         def _realpath(path, result):
@@ -325,6 +330,9 @@ class Mounts(object):
 
         :param realpath: Resolve devices to use their realpaths. This is useful for
         paths like LVM where more than one path can point to the same device
+
+        :param all_sources: Keep every mount, including the ones whose source is
+        not an existing device (e.g. a ZFS dataset or a pseudo filesystem)
         """
         devices_mounted = {}
         paths_mounted = {}
@@ -359,7 +367,8 @@ class Mounts(object):
                 Mounts.excluded_paths.append(fields[1])
                 continue
             # only care about actual existing devices
-            if not os.path.exists(device) or not device.startswith('/'):
+            if not self.all_sources and \
+                    (not os.path.exists(device) or not device.startswith('/')):
                 if device not in do_not_skip:
                     continue
             if device in devices_mounted.keys():
