@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <list>
 
 #include "common/ceph_mutex.h"
 #include "common/shunique_lock.h"
