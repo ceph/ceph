@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 10
+      mds:
+        debug ms: 1
+        debug mds: 10
+    log-ignorelist:
+      # LibCephFSThreads.EvictedWhileBusy and MdsRespawnDuringIO
+      - evicting unresponsive client
+      - MDS_CLIENT
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - libcephfs/client_threads_stress.sh
