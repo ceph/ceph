@@ -1355,7 +1355,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
         object_errors.insert(srd);
         errstream << m_pg_id << " soid " << ho << " : " << ss.str() << "\n";
 
-      } else {
+      } else if (!m_pg.get_is_nonprimary_shard(srd)) {
 
         // XXX: The auth shard might get here that we don't know
         // that it has the "correct" data.
