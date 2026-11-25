@@ -16,6 +16,12 @@ tasks:
           sudo ceph osd crush set osd.$osd 1.0 root=default datacenter=$dc host=$h
           i=$((i + 1))
         done
+        dcs="dc1 dc2 dc3"; j=0
+        for m in $(sudo ceph mon dump -f json 2>/dev/null | python3 -c 'import json,sys; print(" ".join(x["name"] for x in json.load(sys.stdin)["mons"]))'); do
+          dc=$(echo $dcs | cut -d" " -f$(( (j % 3) + 1 )))
+          sudo ceph mon set_location $m datacenter=$dc || true
+          j=$((j + 1))
+        done
         sudo ceph osd pool create zdata --pool_type erasure --k 2 --m 1 --num_zones 2 --pg_num 32
         sudo ceph osd pool set zdata allow_ec_overwrites true
         sudo ceph osd pool set zdata allow_ec_optimizations true
