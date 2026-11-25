@@ -1,0 +1,16 @@
+# The thrash workloads write only about 4-5 GiB per OSD at peak, so on
+# base.yaml's 90 GiB device the stress thread's claims land almost
+# entirely on free space. A 20 GiB device makes claims overlap live data
+# far more often, while keeping peak usage well below the nearfull ratio.
+#
+# BLUESTORE_BLUEFS_OVERSIZED fires when BlueFS uses more than 6% of the
+# device: 1.2 GiB here. BlueFS (RocksDB) reaches 1.3 GiB under these
+# workloads whatever the device size, so turn the warning off.
+#
+# Must sort after base.yaml: fragments are merged in order, last wins.
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore block size: 21474836480
+        bluestore bluefs warn ratio: 1
