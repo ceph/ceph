@@ -832,3 +832,29 @@ class TestCertStoreCertKeySet:
             None,
             False,
         )
+
+
+@pytest.mark.parametrize("stype", ServiceSpec.KNOWN_SERVICE_TYPES)
+def test_service_daemon_type_mapping_round_trip(stype):
+    """Every daemon type of a known service maps back to a service."""
+    from orchestrator._interface import service_to_daemon_types, daemon_type_to_service
+    dtypes = service_to_daemon_types(stype)
+    assert dtypes
+    for dtype in dtypes:
+        # jaeger-tracing deploys daemons that also exist as standalone services
+        assert daemon_type_to_service(dtype) in (stype, dtype)
+
+
+def test_service_daemon_type_mapping_special_cases():
+    """Services with differently named daemons map in both directions."""
+    from orchestrator._interface import service_to_daemon_types, daemon_type_to_service
+    assert service_to_daemon_types('ingress') == ['haproxy', 'keepalived']
+    assert daemon_type_to_service('haproxy') == 'ingress'
+    assert daemon_type_to_service('keepalived') == 'ingress'
+    assert daemon_type_to_service('crashcollector') == 'crash'
+    assert service_to_daemon_types('rgw') == ['rgw']
+    assert daemon_type_to_service('rgw') == 'rgw'
+    with pytest.raises(KeyError):
+        daemon_type_to_service('ingress')
+    with pytest.raises(KeyError):
+        service_to_daemon_types('bogus')

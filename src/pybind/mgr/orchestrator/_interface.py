@@ -1032,83 +1032,37 @@ def json_to_generic_spec(spec: dict) -> GenericSpec:
         return ServiceSpec.from_json(spec)
 
 
+# Services whose daemons do not share the service type name. Every other
+# known service type runs daemons of the same name, so a new service only
+# needs an entry here when that is not the case.
+_SERVICE_DAEMON_TYPES: Dict[str, List[str]] = {
+    'ingress': ['haproxy', 'keepalived'],
+    'jaeger-tracing': ['elasticsearch', 'jaeger-query', 'jaeger-collector', 'jaeger-agent'],
+}
+
+# Daemon types whose service is not named after them and that are not the
+# daemons of a service listed in _SERVICE_DAEMON_TYPES.
+_DAEMON_TYPE_SERVICES: Dict[str, str] = {
+    'haproxy': 'ingress',
+    'keepalived': 'ingress',
+    'crashcollector': 'crash',  # Specific Rook Daemon
+}
+
+
 def daemon_type_to_service(dtype: str) -> str:
-    mapping = {
-        'mon': 'mon',
-        'mgr': 'mgr',
-        'mds': 'mds',
-        'rgw': 'rgw',
-        'osd': 'osd',
-        'haproxy': 'ingress',
-        'keepalived': 'ingress',
-        'iscsi': 'iscsi',
-        'nvmeof': 'nvmeof',
-        'mgmt-gateway': 'mgmt-gateway',
-        'oauth2-proxy': 'oauth2-proxy',
-        'rbd-mirror': 'rbd-mirror',
-        'cephfs-mirror': 'cephfs-mirror',
-        'nfs': 'nfs',
-        'grafana': 'grafana',
-        'alertmanager': 'alertmanager',
-        'prometheus': 'prometheus',
-        'node-exporter': 'node-exporter',
-        'ceph-exporter': 'ceph-exporter',
-        'loki': 'loki',
-        'promtail': 'promtail',
-        'alloy': 'alloy',
-        'pushgateway': 'pushgateway',
-        'crash': 'crash',
-        'crashcollector': 'crash',  # Specific Rook Daemon
-        'container': 'container',
-        'agent': 'agent',
-        'node-proxy': 'node-proxy',
-        'snmp-gateway': 'snmp-gateway',
-        'elasticsearch': 'elasticsearch',
-        'jaeger-agent': 'jaeger-agent',
-        'jaeger-collector': 'jaeger-collector',
-        'jaeger-query': 'jaeger-query',
-        'smb': 'smb',
-    }
-    return mapping[dtype]
+    if dtype in _DAEMON_TYPE_SERVICES:
+        return _DAEMON_TYPE_SERVICES[dtype]
+    if dtype in ServiceSpec.KNOWN_SERVICE_TYPES and dtype not in _SERVICE_DAEMON_TYPES:
+        return dtype
+    raise KeyError(dtype)
 
 
 def service_to_daemon_types(stype: str) -> List[str]:
-    mapping = {
-        'mon': ['mon'],
-        'mgr': ['mgr'],
-        'mds': ['mds'],
-        'rgw': ['rgw'],
-        'osd': ['osd'],
-        'ingress': ['haproxy', 'keepalived'],
-        'iscsi': ['iscsi'],
-        'nvmeof': ['nvmeof'],
-        'mgmt-gateway': ['mgmt-gateway'],
-        'oauth2-proxy': ['oauth2-proxy'],
-        'rbd-mirror': ['rbd-mirror'],
-        'cephfs-mirror': ['cephfs-mirror'],
-        'nfs': ['nfs'],
-        'grafana': ['grafana'],
-        'alertmanager': ['alertmanager'],
-        'prometheus': ['prometheus'],
-        'loki': ['loki'],
-        'promtail': ['promtail'],
-        'alloy': ['alloy'],
-        'pushgateway': ['pushgateway'],
-        'node-exporter': ['node-exporter'],
-        'ceph-exporter': ['ceph-exporter'],
-        'crash': ['crash'],
-        'container': ['container'],
-        'agent': ['agent'],
-        'node-proxy': ['node-proxy'],
-        'snmp-gateway': ['snmp-gateway'],
-        'elasticsearch': ['elasticsearch'],
-        'jaeger-agent': ['jaeger-agent'],
-        'jaeger-collector': ['jaeger-collector'],
-        'jaeger-query': ['jaeger-query'],
-        'jaeger-tracing': ['elasticsearch', 'jaeger-query', 'jaeger-collector', 'jaeger-agent'],
-        'smb': ['smb'],
-    }
-    return mapping[stype]
+    if stype in _SERVICE_DAEMON_TYPES:
+        return list(_SERVICE_DAEMON_TYPES[stype])
+    if stype in ServiceSpec.KNOWN_SERVICE_TYPES:
+        return [stype]
+    raise KeyError(stype)
 
 
 KNOWN_DAEMON_TYPES: List[str] = list(
