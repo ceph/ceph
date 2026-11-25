@@ -247,6 +247,14 @@ public:
     return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
   }
 
+  int notify_metadata_update(librbd::ImageCtx *ictx, const AsyncRequestId &id,
+                             const std::string &key, const std::string &value) {
+    bufferlist bl;
+    encode(NotifyMessage(new MetadataUpdatePayload(
+              id, key, std::optional<std::string>{value})), bl);
+    return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
+  }
+
   typedef std::map<NotifyOp, bufferlist> NotifyOpPayloads;
   typedef std::set<NotifyOp> NotifyOps;
 
@@ -607,6 +615,42 @@ TEST_F(TestImageWatcher, NotifyUpdateFeatures) {
   ASSERT_EQ(0, notify_async_complete(ictx, async_request_id, 0));
   ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
   ASSERT_EQ(0, update_features_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifyMetadataUpdate) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  m_notify_acks = {{NOTIFY_OP_HEADER_UPDATE, {}},
+                   {NOTIFY_OP_ASYNC_COMPLETE, create_response_message(0)}};
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
+
+  // the test acts as a non-owner client requesting a remote metadata update
+  AsyncRequestId async_request_id(
+      ClientId(m_ioctx.get_instance_id(), m_watch_ctx->get_handle()), 1);
+  ASSERT_EQ(0, notify_metadata_update(ictx, async_request_id, "key", "value"));
+
+  // the lock owner executes the request and notifies the completion
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  // The notification has arrived, but the owner may still be caching the
+  // result. Flush its completion callback before replaying the request.
+  C_SaferCond flushed;
+  ictx->image_watcher->flush(&flushed);
+  ASSERT_EQ(0, flushed.wait());
+  {
+    std::lock_guard l{m_callback_lock};
+    m_notifies.erase(NOTIFY_OP_ASYNC_COMPLETE);
+  }
+
+  ASSERT_EQ(0, notify_metadata_update(ictx, async_request_id, "key", "duplicate"));
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+  std::string value;
+  ASSERT_EQ(0, librbd::metadata_get(ictx, "key", &value));
+  ASSERT_EQ("value", value);
 }
 
 TEST_F(TestImageWatcher, NotifySnapCreate) {
