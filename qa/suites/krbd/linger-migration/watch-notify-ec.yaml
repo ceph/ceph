@@ -25,5 +25,4 @@ tasks:
       client.0:
         - rbd/krbd_watch_notify_migration.sh
     env:
-      WPOOL: krbd-wn-pool
-      EC_POOL: krbd-wn-ec
+      USE_EC: "1"

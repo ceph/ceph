@@ -14,3 +14,4 @@ overrides:
       - \(PG_AVAILABILITY\)
       - overall HEALTH_
       - enough copies available
+      - \(OSDMAP_FLAGS\)

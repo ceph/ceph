@@ -21,7 +21,8 @@ set -e
 set -o pipefail
 
 WPOOL=${WPOOL:-krbd-wn-pool-$$}        # replicated pool holding the image header + watch
-EC_POOL=${EC_POOL:-}                   # optional EC data pool
+EC_POOL=""                             # optional EC data pool (unique name when requested)
+[ "${USE_EC:-0}" = 1 ] && EC_POOL=krbd-wn-ec-$$
 IMAGE=${IMAGE:-krbd-wn-$$}
 DATA=$(mktemp -d)
 DEV=""
@@ -36,8 +37,11 @@ trap cleanup EXIT
 mountpoint -q /sys/kernel/debug || sudo mount -t debugfs none /sys/kernel/debug 2>/dev/null || true
 
 watchers() {
-    rbd status "$WPOOL/$IMAGE" -f json |
-        python3 -c 'import json,sys; print(len(json.load(sys.stdin)["watchers"]))'
+    # rbd takes --format (not -f) for json output; always print a number
+    rbd status "$WPOOL/$IMAGE" --format json 2>/dev/null |
+        python3 -c 'import json,sys
+try:    print(len(json.load(sys.stdin).get("watchers", [])))
+except Exception: print(0)' 2>/dev/null || echo 0
 }
 pgnum() {
     ceph osd pool get "$WPOOL" pg_num -f json |
@@ -66,6 +70,8 @@ fi
 rbd create --size 64 $dataopt "$WPOOL/$IMAGE"
 DEV=$(sudo rbd device map "$WPOOL/$IMAGE")
 
+# the kernel registers its header watch shortly after map; give it a moment
+for _ in $(seq 30); do [ "$(watchers)" -ge 1 ] && break; sleep 1; done
 [ "$(watchers)" -ge 1 ] || { echo "FAIL: no watcher registered after map"; exit 1; }
 
 dev_size() { sudo blockdev --getsize64 "$DEV"; }
