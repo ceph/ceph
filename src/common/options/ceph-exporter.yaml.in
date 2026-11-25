@@ -5,7 +5,7 @@ options:
 - name: exporter_sock_dir
   type: str
   level: advanced
-  desc: The path to ceph daemons socket files dir
+  desc: The path to Ceph daemons socket files dir
   default: /var/run/ceph/
   services:
   - ceph-exporter
@@ -14,7 +14,7 @@ options:
 - name: exporter_addr
   type: str
   level: advanced
-  desc: Host ip address where exporter is deployed
+  desc: Host IP address where exporter is deployed
   default: 0.0.0.0
   services:
   - ceph-exporter
@@ -35,7 +35,7 @@ options:
 - name: exporter_key_file
   type: str
   level: advanced
-  desc: Key certificate file for TLS.
+  desc: Certificate private key file for TLS.
   default:
   services:
   - ceph-exporter
@@ -60,7 +60,7 @@ options:
 - name: exporter_sort_metrics
   type: bool
   level: advanced
-  desc: If true it will sort the metrics and group them.
+  desc: If true, sort and group the metrics.
   default: true
   services:
   - ceph-exporter
