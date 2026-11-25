@@ -18378,6 +18378,22 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     return -EINVAL;
   }
 
+  // testing: widen the windows in which walking the target name drops
+  // client_lock (a lookup sent to the MDS) and other requests of this
+  // client move the names, before and after that walk
+  auto inject_delay = cct->_conf.get_val<std::chrono::milliseconds>(
+    "client_inject_rename_walk_delay");
+  auto inject = [&](const char *where) {
+    if (inject_delay.count() <= 0)
+      return;
+    ldout(cct, 1) << __func__ << " injecting a delay of " << inject_delay
+		  << " " << where << dendl;
+    client_lock.unlock();
+    std::this_thread::sleep_for(inject_delay);
+    client_lock.lock();
+  };
+  inject("after walking the source");
+
   walk_dentry_result wdr_to;
   if (int rc = path_walk(todir, filepath(toname), &wdr_to, perm, {.followsym = false, .is_rename = true, .require_target = false}); rc < 0) {
     return rc;
@@ -18387,6 +18403,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   if (wdr_to.diri == root && wdr_to.dname.empty()) {
     return -EINVAL;
   }
+  inject("after walking the target");
 
 #if defined(__linux__)
   bool source_locked = is_inode_locked(wdr_from.diri);

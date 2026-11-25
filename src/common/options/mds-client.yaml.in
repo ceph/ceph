@@ -830,6 +830,21 @@ options:
   services:
   - mds_client
   min: 0
+- name: client_inject_rename_walk_delay
+  type: millisecs
+  level: dev
+  desc: Induce delays around the target walk of a rename for testing
+  long_desc: Make a rename drop the client lock and sleep this long after it
+    walked the source name, and again after it walked the target name, the
+    windows in which another request of the same client can move the
+    source, or link the target name, while the rename holds the dentries it
+    found.  It is read once the source is walked.  Disabled by default
+    (value of 0); used to validate the handling of a rename whose dentries
+    went stale.
+  default: 0
+  services:
+  - mds_client
+  min: 0
 - name: client_fscrypt_as
   type: bool
   level: advanced
