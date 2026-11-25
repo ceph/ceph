@@ -540,6 +540,9 @@ tcp::endpoint parse_endpoint(boost::asio::string_view input,
       } else {
         auto port_str = input.substr(addr_end + 2);
         endpoint.port(parse_port(port_str.data(), ec));
+        if (ec) {
+          return endpoint;
+        }
       }
     } else {
       endpoint.port(default_port);
