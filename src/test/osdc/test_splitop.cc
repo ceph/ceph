@@ -811,12 +811,16 @@ protected:
   static constexpr int64_t rep_pool_id = 2;
   static constexpr int64_t degraded_ec_pool_id = 3;
   boost::asio::io_context ioc;
+  // Never started; the Objecter's log lines name its messenger.
+  MonClient monc{g_ceph_context, ioc};
+  std::unique_ptr<Messenger> msgr{
+    Messenger::create_client_messenger(g_ceph_context, "client")};
   std::unique_ptr<Objecter> objecter;
 
   void SetUp() override
   {
     g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size", "4096");
-    objecter = std::make_unique<Objecter>(g_ceph_context, nullptr, nullptr, ioc);
+    objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
     objecter->init();
 
     OSDMap map;
@@ -1185,8 +1189,8 @@ TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
 // Section 6: SplitOp::create() on pools in a pool migration
 //
 // _calc_target() can route an op to the other pool of a migration, which may
-// have a different layout from the pool in base_oloc.  The Objecter has no
-// messenger, so every op here must stay unsplit.
+// have a different layout from the pool in base_oloc.  The Objecter's
+// messenger is never started, so every op here must stay unsplit.
 // ===========================================================================
 
 class TestSplitOpPoolMigration : public ::testing::Test {
@@ -1205,6 +1209,10 @@ protected:
   static constexpr int64_t ec4_finished_tgt = 9;
 
   boost::asio::io_context ioc;
+  // Never started; the Objecter's log lines name its messenger.
+  MonClient monc{g_ceph_context, ioc};
+  std::unique_ptr<Messenger> msgr{
+    Messenger::create_client_messenger(g_ceph_context, "client")};
   std::unique_ptr<Objecter> objecter;
   std::map<int64_t, std::vector<int>> acting;
   ceph::shared_mutex lock = ceph::make_shared_mutex("TestSplitOpPoolMigration");
@@ -1236,7 +1244,7 @@ protected:
 
   void SetUp() override
   {
-    objecter = std::make_unique<Objecter>(g_ceph_context, nullptr, nullptr, ioc);
+    objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
     objecter->init();
     objecter->set_honor_pool_migration();
 
