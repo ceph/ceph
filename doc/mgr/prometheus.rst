@@ -268,9 +268,13 @@ The metrics take the following form:
 
     # HELP ceph_health_detail healthcheck status by type (0=inactive, 1=active)
     # TYPE ceph_health_detail gauge
-    ceph_health_detail{name="OSDMAP_FLAGS",severity="HEALTH_WARN"} 0.0
-    ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN"} 1.0
-    ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
+    ceph_health_detail{name="OSDMAP_FLAGS",severity="HEALTH_WARN",message=""} 0.0
+    ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN",message=""} 1.0
+    ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN",message=""} 1.0
+
+The ``message`` label is in Umbrella and later releases. It is empty except
+for a few health checks, such as ``CEPHADM_CERT_ERROR``, for which it holds
+details of the check.
 
 The module also maintains an in-memory history of health-check states.
 It saves the history in the Monitors' configuration key store, so the
