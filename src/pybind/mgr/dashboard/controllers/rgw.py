@@ -1500,7 +1500,7 @@ class RgwRealm(RESTController):
         return result
 
     @Endpoint()
-    @ReadPermission
+    @CreatePermission
     def get_realm_tokens(self):
         try:
             result = CephService.get_realm_tokens()
