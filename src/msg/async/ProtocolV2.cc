@@ -1610,7 +1610,7 @@ CtPtr ProtocolV2::throttle_message() {
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
         connection->register_time_events.insert(
-            connection->center->create_time_event(1000,
+            connection->center->create_time_event(cct->_conf->ms_client_throttle_retry_time_interval,
                                                   connection->wakeup_handler));
       }
       return nullptr;
@@ -1642,7 +1642,8 @@ CtPtr ProtocolV2::throttle_bytes() {
         if (connection->register_time_events.empty()) {
           connection->register_time_events.insert(
               connection->center->create_time_event(
-                  1000, connection->wakeup_handler));
+                        cct->_conf->ms_client_throttle_retry_time_interval,
+                        connection->wakeup_handler));
         }
         return nullptr;
       }
@@ -1670,7 +1671,7 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
         connection->register_time_events.insert(
-            connection->center->create_time_event(1000,
+            connection->center->create_time_event(cct->_conf->ms_client_throttle_retry_time_interval,
                                                   connection->wakeup_handler));
       }
       return nullptr;

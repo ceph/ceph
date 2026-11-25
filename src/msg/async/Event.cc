@@ -400,6 +400,8 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
 
     if (end_time > now) {
       timeout_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - now).count();
+      timeout_microseconds = std::max<unsigned>(timeout_microseconds,
+                                                cct->_conf->ms_time_events_min_wait_interval);
     } else {
       timeout_microseconds = 0;
     }
