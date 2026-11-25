@@ -69,6 +69,10 @@ public:
     return true;
   }
 
+  extent_len_t get_max_write_length() const final {
+    return journal_segment_allocator.get_max_write_length();
+  }
+
 private:
   submit_record_ertr::future<> do_submit_record(
     record_t &&record,

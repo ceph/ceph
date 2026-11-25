@@ -90,6 +90,36 @@ struct seastore_test_t :
       std::move(t)).get();
   }
 
+  SeaStore::Shard &seastore_shard() {
+    return static_cast<SeaStore::Shard&>(*sharded_seastore);
+  }
+
+  uint64_t submit_concurrently(std::vector<CTransaction> &&txns) {
+    const auto before = seastore_shard().get_num_batches();
+    std::vector<seastar::future<>> futs;
+    for (auto &t : txns) {
+      futs.push_back(sharded_seastore->do_transaction(coll, std::move(t)));
+    }
+    seastar::when_all_succeed(futs.begin(), futs.end()).get();
+    return seastore_shard().get_num_batches() - before;
+  }
+
+  static CTransaction make_write_txn(
+    const coll_t &cid, const ghobject_t &oid, size_t len, char fill) {
+    bufferlist bl;
+    bl.append(std::string(len, fill));
+    CTransaction t;
+    t.write(cid, oid, 0, bl.length(), bl);
+    return t;
+  }
+
+  void check_contents(const ghobject_t &oid, size_t len, char fill) {
+    auto ret = sharded_seastore->read(coll, oid, 0, len).unsafe_get();
+    bufferlist expected;
+    expected.append(std::string(len, fill));
+    EXPECT_EQ(ret, expected);
+  }
+
   void set_meta(
     const std::string& key,
     const std::string& value) {
@@ -1594,6 +1624,206 @@ TEST_P(seastore_test_t, simple_extent_test)
       1024,
       1024);
     test_obj.check_size(*sharded_seastore);
+  });
+}
+
+TEST_P(seastore_test_t, cross_collection_batch)
+{
+  run_async([this] {
+    coll_t coll2_name{spg_t{pg_t{1, 0}}};
+    auto coll2 = sharded_seastore->create_new_collection(coll2_name).get();
+    {
+      CTransaction t;
+      t.create_collection(coll2_name, 0);
+      sharded_seastore->do_transaction(coll2, std::move(t)).get();
+    }
+
+    auto check = [this](CollectionRef c, const ghobject_t &oid, char fill) {
+      auto ret = sharded_seastore->read(c, oid, 0, 4096).unsafe_get();
+      bufferlist expected;
+      expected.append(std::string(4096, fill));
+      EXPECT_EQ(ret, expected);
+    };
+
+    // The first transaction may commit before the others are submitted, and
+    // then nothing is merged: retry until a batch was merged.
+    bool merged = false;
+    for (char fill = 'a'; fill < 'a' + 10 && !merged; ++fill) {
+      const auto before = seastore_shard().get_num_batches();
+      std::vector<seastar::future<>> futs;
+      futs.push_back(sharded_seastore->do_transaction(
+        coll, make_write_txn(coll_name, make_oid(1), 4096, fill)));
+      futs.push_back(sharded_seastore->do_transaction(
+        coll, make_write_txn(coll_name, make_oid(0), 4096, fill + 1)));
+      futs.push_back(sharded_seastore->do_transaction(
+        coll2, make_write_txn(coll2_name, make_oid(0), 4096, fill + 2)));
+      seastar::when_all_succeed(futs.begin(), futs.end()).get();
+      merged = seastore_shard().get_num_batches() - before < 3;
+
+      check(coll, make_oid(1), fill);
+      check(coll, make_oid(0), fill + 1);
+      check(coll2, make_oid(0), fill + 2);
+    }
+    EXPECT_TRUE(merged);
+  });
+}
+
+TEST_P(seastore_test_t, batch_limit_txns)
+{
+  run_async([this] {
+    seastore_shard().set_batch_limits(2, 0);
+    std::vector<CTransaction> txns;
+    for (int i = 0; i < 5; ++i) {
+      txns.push_back(make_write_txn(coll_name, make_oid(i), 4096, 'a' + i));
+    }
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 3u);
+    for (int i = 0; i < 5; ++i) {
+      check_contents(make_oid(i), 4096, 'a' + i);
+    }
+
+    seastore_shard().set_batch_limits(0, 0);
+    txns.clear();
+    for (int i = 0; i < 5; ++i) {
+      txns.push_back(make_write_txn(coll_name, make_oid(i), 4096, 'f' + i));
+    }
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 2u);
+    for (int i = 0; i < 5; ++i) {
+      check_contents(make_oid(i), 4096, 'f' + i);
+    }
+  });
+}
+
+TEST_P(seastore_test_t, batch_limit_bytes)
+{
+  run_async([this] {
+    seastore_shard().set_batch_limits(0, 40 << 10);
+    std::vector<CTransaction> txns;
+    for (int i = 0; i < 5; ++i) {
+      txns.push_back(make_write_txn(coll_name, make_oid(i), 16384, 'a' + i));
+    }
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 3u);
+    for (int i = 0; i < 5; ++i) {
+      check_contents(make_oid(i), 16384, 'a' + i);
+    }
+
+    seastore_shard().set_batch_limits(0, 1024);
+    txns.clear();
+    for (int i = 0; i < 3; ++i) {
+      txns.push_back(make_write_txn(coll_name, make_oid(i), 4096, 'f' + i));
+    }
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 3u);
+    for (int i = 0; i < 3; ++i) {
+      check_contents(make_oid(i), 4096, 'f' + i);
+    }
+  });
+}
+
+TEST_P(seastore_test_t, batch_limit_keeps_order)
+{
+  run_async([this] {
+    seastore_shard().set_batch_limits(2, 0);
+    std::vector<CTransaction> txns;
+    for (int i = 0; i < 9; ++i) {
+      txns.push_back(make_write_txn(coll_name, make_oid(0), 4096, 'a' + i));
+    }
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 5u);
+    check_contents(make_oid(0), 4096, 'a' + 8);
+  });
+}
+
+TEST_P(seastore_test_t, batch_solo_op)
+{
+  run_async([this] {
+    std::vector<CTransaction> txns;
+    txns.push_back(make_write_txn(coll_name, make_oid(0), 4096, 'a'));
+    txns.push_back(make_write_txn(coll_name, make_oid(1), 4096, 'b'));
+    {
+      CTransaction t;
+      t.omap_rmkeys(coll_name, make_oid(0), std::set<std::string>{"key"});
+      txns.push_back(std::move(t));
+    }
+    txns.push_back(make_write_txn(coll_name, make_oid(2), 4096, 'c'));
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 4u);
+    check_contents(make_oid(0), 4096, 'a');
+    check_contents(make_oid(1), 4096, 'b');
+    check_contents(make_oid(2), 4096, 'c');
+  });
+}
+
+TEST_P(seastore_test_t, batch_solo_clone)
+{
+  run_async([this] {
+    sharded_seastore->do_transaction(
+      coll, make_write_txn(coll_name, make_oid(0), 4096, 'a')).get();
+    std::vector<CTransaction> txns;
+    txns.push_back(make_write_txn(coll_name, make_oid(1), 4096, 'b'));
+    txns.push_back(make_write_txn(coll_name, make_oid(2), 4096, 'c'));
+    {
+      auto coid = make_oid(0);
+      coid.hobj.snap = 10;
+      CTransaction t;
+      t.clone(coll_name, make_oid(0), coid);
+      txns.push_back(std::move(t));
+    }
+    txns.push_back(make_write_txn(coll_name, make_oid(3), 4096, 'd'));
+    EXPECT_EQ(submit_concurrently(std::move(txns)), 4u);
+    check_contents(make_oid(1), 4096, 'b');
+    check_contents(make_oid(2), 4096, 'c');
+    check_contents(make_oid(3), 4096, 'd');
+  });
+}
+
+TEST_P(seastore_test_t, batch_tree_growth_many_collections)
+{
+  run_async([this] {
+    constexpr int num_colls = 4;
+    constexpr int num_objs = 200;
+    std::vector<std::pair<coll_t, CollectionRef>> colls;
+    colls.emplace_back(coll_name, coll);
+    for (int c = 1; c < num_colls; ++c) {
+      coll_t cn{spg_t{pg_t{static_cast<ps_t>(c), 0}}};
+      auto cr = sharded_seastore->create_new_collection(cn).get();
+      CTransaction t;
+      t.create_collection(cn, 0);
+      sharded_seastore->do_transaction(cr, std::move(t)).get();
+      colls.emplace_back(cn, cr);
+    }
+
+    auto submit_all = [&](auto make_txn) {
+      const auto before = seastore_shard().get_num_batches();
+      std::vector<seastar::future<>> futs;
+      for (int i = 0; i < num_objs; ++i) {
+        for (auto &[cn, cr] : colls) {
+          futs.push_back(sharded_seastore->do_transaction(cr, make_txn(cn, i)));
+        }
+      }
+      seastar::when_all_succeed(futs.begin(), futs.end()).get();
+      return seastore_shard().get_num_batches() - before;
+    };
+
+    auto num_batches = submit_all([](const coll_t &cn, int i) {
+      return make_write_txn(cn, make_oid(i), 4096, 'a' + i % 26);
+    });
+    EXPECT_LT(num_batches, uint64_t(num_colls * num_objs));
+    for (auto &[cn, cr] : colls) {
+      for (int i = 0; i < num_objs; ++i) {
+        auto ret = sharded_seastore->read(cr, make_oid(i), 0, 4096).unsafe_get();
+        bufferlist expected;
+        expected.append(std::string(4096, 'a' + i % 26));
+        EXPECT_EQ(ret, expected);
+      }
+    }
+
+    num_batches = submit_all([](const coll_t &cn, int i) {
+      CTransaction t;
+      t.remove(cn, make_oid(i));
+      return t;
+    });
+    EXPECT_LT(num_batches, uint64_t(num_colls * num_objs));
+    for (auto &[cn, cr] : colls) {
+      EXPECT_EQ(
+        sharded_seastore->exists(cr, make_oid(0)).unsafe_get(), false);
+    }
   });
 }
 

@@ -338,6 +338,29 @@ options:
         Note this size ratio does not reflect actual memory usage, as it represents the size of evicted
         pages from A1_in queue.
   default: 0.5
+- name: seastore_batch_max_txns
+  type: uint
+  level: advanced
+  desc: Maximum number of client transactions merged into one SeaStore batch.
+        A shard commits one batch at a time, so all transactions of a batch
+        wait for the slowest IO of the batch; a smaller limit bounds the tail
+        latency. 0 means unlimited.
+  default: 16
+  see_also:
+  - seastore_batch_max_bytes
+- name: seastore_batch_max_bytes
+  type: size
+  level: advanced
+  desc: Maximum encoded size of the client transactions merged into one
+        SeaStore batch. A batch is journaled as one record, which must fit in
+        the journal (for a segmented journal, in one segment), so this must stay
+        well below seastore_segment_size. A transaction bigger than the limit
+        still runs, alone. 0 means unlimited. Independently of this option, a
+        batch never exceeds what the journal accepts in one record.
+  default: 4_M
+  see_also:
+  - seastore_batch_max_txns
+  - seastore_segment_size
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
