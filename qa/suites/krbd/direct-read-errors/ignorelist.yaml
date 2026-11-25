@@ -13,3 +13,4 @@ overrides:
       - \(PG_DEGRADED\)
       - \(PG_AVAILABILITY\)
       - overall HEALTH_
+      - enough copies available

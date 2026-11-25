@@ -62,7 +62,10 @@ ceph osd pool set "$EC_POOL" allow_ec_optimizations true
 ceph osd pool ls detail | grep "'$EC_POOL'" | grep -q split_reads
 
 # --- rbd image with its data in the EC pool ----------------------------------
-rbd create --size $((NOBJ * OBJECT_SIZE)) --data-pool "$EC_POOL" "$POOL/$IMAGE"
+# --size is in MiB; the image spans NOBJ objects of OBJECT_SIZE bytes each, so
+# the past-end read below lands exactly at the true image end (not in-bounds of
+# an accidentally huge image).
+rbd create --size $((NOBJ * OBJECT_SIZE >> 20)) --data-pool "$EC_POOL" "$POOL/$IMAGE"
 DEV=$(sudo rbd device map "$POOL/$IMAGE")
 OPTIONS=$(sudo cat "/sys/bus/rbd/devices/${DEV#/dev/rbd}/config_info" 2>/dev/null || true)
 [ -n "$OPTIONS" ] || OPTIONS=$(ceph-conf --name client.${CEPH_ID:-admin} \
