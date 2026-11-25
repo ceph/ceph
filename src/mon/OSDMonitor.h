@@ -1126,6 +1126,18 @@ public:
   // require_osd_release to it sets the OSDMap flag stretch_zones; until
   // then the monitors keep the behavior of earlier releases.
   static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::vampire;
+
+  // The release from which pools may use sparse reads and mapext. 
+  // The update that raises require_osd_release to it sets
+  // FLAG_SUPPORTS_SPARSE_READS on the pools that qualify.
+  static constexpr ceph_release_t SPARSE_READS_RELEASE = ceph_release_t::vampire;
+  // Whether p gets FLAG_SUPPORTS_SPARSE_READS once the release allows it:
+  // replicated pools, and EC pools with optimizations (not crimson).
+  static bool pool_gets_sparse_reads(const pg_pool_t& p);
+  // Adds FLAG_SUPPORTS_SPARSE_READS when the pending update raises 
+  // require_osd_release to SPARSE_READS_RELEASE.
+  static void enable_sparse_reads_at_commit(const OSDMap& tmp,
+                                            OSDMap::Incremental& inc);
   bool num_zones_supported() const {
     return osdmap.stretch_zones();
   }

@@ -1965,3 +1965,112 @@ TEST(OSDMonitorJoinTest, WhyOsdCannotJoin) {
   EXPECT_EQ("is of a release before vampire",
             OSDMonitor::why_osd_cannot_join(umbrella, v, true));
 }
+
+// The update that raises require_osd_release to SPARSE_READS_RELEASE sets
+// FLAG_SUPPORTS_SPARSE_READS on the pools that get it
+class OSDMonitorSparseReadsCommitTest : public ::testing::Test {
+protected:
+  static constexpr int64_t replicated_id = 1;
+  static constexpr int64_t fast_ec_id = 2;
+  static constexpr int64_t plain_ec_id = 3;
+  static constexpr int64_t crimson_ec_id = 4;
+
+  unique_ptr<CephContext> cct;
+  OSDMap tmp;
+  OSDMap::Incremental inc;
+
+  void SetUp() override {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_MON));
+    g_ceph_context = cct.get();
+    common_init_finish(g_ceph_context);
+
+    uuid_d fsid;
+    tmp.build_simple(g_ceph_context, 1, fsid, 12);
+    OSDMap::Incremental setup(tmp.get_epoch() + 1);
+    setup.fsid = tmp.get_fsid();
+    add_pool(setup, replicated_id, pg_pool_t::TYPE_REPLICATED, 0);
+    add_pool(setup, fast_ec_id, pg_pool_t::TYPE_ERASURE,
+             pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    add_pool(setup, plain_ec_id, pg_pool_t::TYPE_ERASURE, 0);
+    add_pool(setup, crimson_ec_id, pg_pool_t::TYPE_ERASURE,
+             pg_pool_t::FLAG_EC_OPTIMIZATIONS | pg_pool_t::FLAG_CRIMSON);
+    ASSERT_EQ(0, tmp.apply_incremental(setup));
+    inc = OSDMap::Incremental(tmp.get_epoch() + 1);
+  }
+
+  void TearDown() override {
+    g_ceph_context = nullptr;
+  }
+
+  static void add_pool(OSDMap::Incremental& i, int64_t id, int type,
+                       uint64_t flags) {
+    pg_pool_t p;
+    p.type = type;
+    p.size = 3;
+    p.min_size = 2;
+    p.flags = flags;
+    p.set_pg_num(8);
+    p.set_pgp_num(8);
+    i.new_pools[id] = p;
+    i.new_pool_names[id] = "pool" + std::to_string(id);
+  }
+
+  bool flagged(int64_t id) const {
+    auto it = inc.new_pools.find(id);
+    return it != inc.new_pools.end() &&
+           it->second.has_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  }
+};
+
+TEST_F(OSDMonitorSparseReadsCommitTest, PoolGetsSparseReads) {
+  EXPECT_TRUE(OSDMonitor::pool_gets_sparse_reads(*tmp.get_pg_pool(replicated_id)));
+  EXPECT_TRUE(OSDMonitor::pool_gets_sparse_reads(*tmp.get_pg_pool(fast_ec_id)));
+  EXPECT_FALSE(OSDMonitor::pool_gets_sparse_reads(*tmp.get_pg_pool(plain_ec_id)));
+  EXPECT_FALSE(OSDMonitor::pool_gets_sparse_reads(*tmp.get_pg_pool(crimson_ec_id)));
+}
+
+// Replicated pools and fast EC pools get the flag; other EC pools and
+// crimson EC pools do not, and are not touched
+TEST_F(OSDMonitorSparseReadsCommitTest, SetsFlagOnPoolsThatGetIt) {
+  OSDMonitor::enable_sparse_reads_at_commit(tmp, inc);
+  EXPECT_TRUE(flagged(replicated_id));
+  EXPECT_TRUE(flagged(fast_ec_id));
+  EXPECT_FALSE(inc.new_pools.contains(plain_ec_id));
+  EXPECT_FALSE(inc.new_pools.contains(crimson_ec_id));
+}
+
+TEST_F(OSDMonitorSparseReadsCommitTest, SkipsDeletedPools) {
+  inc.old_pools.insert(replicated_id);
+  OSDMonitor::enable_sparse_reads_at_commit(tmp, inc);
+  EXPECT_FALSE(inc.new_pools.contains(replicated_id));
+  EXPECT_TRUE(flagged(fast_ec_id));
+}
+
+// A change the pending update made after tmp was built is kept
+TEST_F(OSDMonitorSparseReadsCommitTest, KeepsPendingPoolChanges) {
+  pg_pool_t pending = *tmp.get_pg_pool(fast_ec_id);
+  pending.flags |= pg_pool_t::FLAG_OMAP;
+  inc.new_pools[fast_ec_id] = pending;
+  OSDMonitor::enable_sparse_reads_at_commit(tmp, inc);
+  EXPECT_TRUE(flagged(fast_ec_id));
+  EXPECT_TRUE(inc.new_pools[fast_ec_id].has_flag(pg_pool_t::FLAG_OMAP));
+}
+
+// A pool that was made fast EC by the pending update gets the flag too
+TEST_F(OSDMonitorSparseReadsCommitTest, UsesPendingPoolToDecide) {
+  pg_pool_t pending = *tmp.get_pg_pool(plain_ec_id);
+  pending.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+  inc.new_pools[plain_ec_id] = pending;
+  OSDMonitor::enable_sparse_reads_at_commit(tmp, inc);
+  EXPECT_TRUE(flagged(plain_ec_id));
+}
+
+TEST_F(OSDMonitorSparseReadsCommitTest, LeavesPoolsThatAlreadyHaveIt) {
+  OSDMonitor::enable_sparse_reads_at_commit(tmp, inc);
+  OSDMap::Incremental first = inc;
+  first.fsid = tmp.get_fsid();
+  ASSERT_EQ(0, tmp.apply_incremental(first));
+  inc = OSDMap::Incremental(tmp.get_epoch() + 1);
+  OSDMonitor::enable_sparse_reads_at_commit(tmp, inc);
+  EXPECT_TRUE(inc.new_pools.empty());
+}

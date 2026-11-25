@@ -948,6 +948,11 @@ You may set values for the following keys:
     :Description: Determines whether omap operations can be performed on a pool. On for replicated and erasure-coded pools with EC optimizations enabled (excluding Crimson pools), off for all other erasure-coded pools.
     :Type: Boolean
 
+.. describe:: supports_sparse_reads
+
+    :Description: Determines whether sparse reads and mapext can be performed on a pool. On for replicated and erasure-coded pools with EC optimizations enabled (excluding Crimson pools), off for all other erasure-coded pools. It is set automatically once all OSDs have been upgraded.
+    :Type: Boolean
+
 .. describe:: hashpspool
 
    :Description: Sets or unsets the ``HASHPSPOOL`` flag on a given pool.

@@ -2049,6 +2049,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       }
     }
 
+    if (osdmap.require_osd_release < SPARSE_READS_RELEASE &&
+        tmp.require_osd_release >= SPARSE_READS_RELEASE) {
+      dout(10) << __func__ << " first sparse reads epoch" << dendl;
+      enable_sparse_reads_at_commit(tmp, pending_inc);
+    }
+
     // after the blocks above, which may replace pending pools
     bool stretch_zones = osdmap.stretch_zones();
     if (!stretch_zones &&
@@ -5934,7 +5940,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP, NUM_ZONES, REPLICA };
+    SUPPORTS_OMAP, NUM_ZONES, REPLICA, SUPPORTS_SPARSE_READS };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6814,6 +6820,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
+      {"supports_sparse_reads", SUPPORTS_SPARSE_READS},
       {"num_zones", NUM_ZONES},
       {"replica", REPLICA},
     };
@@ -7091,6 +7098,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case SUPPORTS_OMAP:
             f->dump_bool("supports_omap", p->supports_omap());
             break;
+          case SUPPORTS_SPARSE_READS:
+            f->dump_bool("supports_sparse_reads", p->supports_sparse_reads());
+            break;
           case NUM_ZONES:
             f->dump_int("num_zones", p->get_num_zones());
             break;
@@ -7286,6 +7296,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case SUPPORTS_OMAP:
             ss << "supports_omap: " <<
               (p->supports_omap() ? "true" : "false") << "\n";
+            break;
+          case SUPPORTS_SPARSE_READS:
+            ss << "supports_sparse_reads: " <<
+              (p->supports_sparse_reads() ? "true" : "false") << "\n";
             break;
           case NUM_ZONES:
             ss << "num_zones: " << p->get_num_zones() << "\n";
@@ -9612,6 +9626,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->type = pool_type;
   pi->fast_read = fread;
   pi->flags = g_conf()->osd_pool_default_flags;
+  if (osdmap.require_osd_release < SPARSE_READS_RELEASE) {
+    // Not every OSD can maintain force_allocated_extents yet
+    pi->unset_flag(pg_pool_t::FLAG_PRESERVE_ALLOCATION);
+  }
   if (bulk) {
     pi->set_flag(pg_pool_t::FLAG_BULK);
   } else if (g_conf()->osd_pool_default_flag_bulk) {
@@ -9768,6 +9786,13 @@ int OSDMonitor::prepare_new_pool(string& name,
       (pool_type == pg_pool_t::TYPE_REPLICATED ||
        (pi->allows_ecoptimizations() && !crimson))) {
     pi->set_flag(pg_pool_t::FLAG_OMAP);
+  }
+
+  // Replicated pools, and fast EC pools, support sparse reads
+  if (osdmap.require_osd_release >= SPARSE_READS_RELEASE &&
+      (pool_type == pg_pool_t::TYPE_REPLICATED ||
+       (pi->allows_ecoptimizations() && !crimson))) {
+    pi->set_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
   }
 
   if (enable_ec_optimizations) {
@@ -10040,6 +10065,12 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
     if (!p.is_crimson() && osdmap.require_osd_release >= ceph_release_t::umbrella) {
       p.flags |= pg_pool_t::FLAG_OMAP;
     }
+
+    // Automatically enable sparse reads in fast EC pools
+    if (osdmap.require_osd_release >= SPARSE_READS_RELEASE &&
+        pool_gets_sparse_reads(p)) {
+      p.set_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+    }
   } else {
     if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
       return tl::unexpected(ErrorNMessage{
@@ -10048,6 +10079,32 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
     }
   }
   return {};
+}
+
+bool OSDMonitor::pool_gets_sparse_reads(const pg_pool_t& p)
+{
+  return p.is_replicated() ||
+         (p.allows_ecoptimizations() && !p.is_crimson());
+}
+
+void OSDMonitor::enable_sparse_reads_at_commit(const OSDMap& tmp,
+                                               OSDMap::Incremental& inc)
+{
+  for (const auto& [id, committed] : tmp.get_pools()) {
+    if (inc.old_pools.contains(id)) {
+      continue;
+    }
+    // the pending pool can hold changes made after tmp was built
+    auto pending = inc.new_pools.find(id);
+    const pg_pool_t& current =
+      pending != inc.new_pools.end() ? pending->second : committed;
+    if (current.has_flag(pg_pool_t::FLAG_SUPPORTS_SPARSE_READS) ||
+        !pool_gets_sparse_reads(current)) {
+      continue;
+    }
+    inc.get_new_pool(id, &committed)->set_flag(
+      pg_pool_t::FLAG_SUPPORTS_SPARSE_READS);
+  }
 }
 
 void OSDMonitor::maybe_enable_pool_split_ops(pg_pool_t& p,
@@ -11456,6 +11513,22 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     bool enable = (var == "set_pool_flags");
     if (enable) {
+      if ((n & pg_pool_t::FLAG_PRESERVE_ALLOCATION) &&
+          osdmap.require_osd_release < SPARSE_READS_RELEASE) {
+        ss << "FLAG_PRESERVE_ALLOCATION requires require_osd_release >= "
+           << SPARSE_READS_RELEASE;
+        return -EPERM;
+      }
+      if ((n & pg_pool_t::FLAG_SUPPORTS_SPARSE_READS) &&
+          p.is_erasure() &&
+          (osdmap.require_osd_release < SPARSE_READS_RELEASE ||
+           !pool_gets_sparse_reads(p))) {
+        ss << "FLAG_SUPPORTS_SPARSE_READS can only be set on an EC pool with "
+              "optimizations once require_osd_release >= "
+           << SPARSE_READS_RELEASE;
+        return -EPERM;
+      }
+
       p.set_flag(n);
     } else {
       p.unset_flag(n);
