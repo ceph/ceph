@@ -208,6 +208,8 @@ The following state space defines the coordination required between primary and 
 
 A directory can be in many different states relative to the snapshot being rolled back to. This section classifies these states by comparing, for a given dentry name `D` in a parent directory, what `D` refers to in the snapshot `S` (the `rollback_to` snapshot) versus what it refers to in `head`.
 
+Rollback is on-demand (section 3, step 2): setting the `rollback_to` marker does not walk the subvolume. Each case below describes what is done to **one name** when that name is *reached*, which is on its first access by a client after the marker is set (section 8), or when the background rollback gets to it. Rolling back a directory does not roll back what is below it. Its entries are reached later, each on its own, in the same way. The one case that walks a tree is the removal of a directory that was created after `S` (CASE A2).
+
 ### Directory snapshot representation
 
 Directory inodes differ from regular files in how their snapshotted versions are stored, which affects every case below:
@@ -228,12 +230,12 @@ This is the common case: the directory was neither deleted nor replaced after `S
   1. The current head version of `X` is copied into `X.old_inodes` so that snapshot `5` keeps seeing it.
   2. The head metadata of `X` is replaced with the version of `X` visible in snapshot `4` (from `X.old_inodes`, or from head if `X` was not modified since `4`).
   3. `X.first` is set to `6`. The dentry `D_head` remains `[2, head]` since the inode is multiversion and no dentry fork is required.
-  4. The rollback recurses into the children of `X`, each of which is evaluated independently (as a file case, or as one of the directory cases in this section).
+  4. The children of `X` are not rolled back at this point. Each of them is evaluated independently when it is reached (as a file case, or as one of the directory cases in this section).
 * **Post-Rollback:** `D_head : [2, head]` $\rightarrow$ `inode# X [6, head]` *(metadata as of snapshot 4)*.
 
 #### CASE A2: Directory does not exist in snapshot, exists in head
 
-The directory was created after `S`. Rolling back requires removing it, along with everything under it, from `head`.
+The directory was created after `S`. Rolling back requires removing it, along with everything under it, from `head`. A directory that exists in `S` under another name was renamed, not created, and is handled in 7.2.
 
 * **Pre-Rollback:** `D_head : [5, head]` $\rightarrow$ `inode# Y [5, head]` *(created after snapshot 4, before snapshot 5)*.
 * **Mechanism:**
@@ -245,11 +247,11 @@ The directory was created after `S`. Rolling back requires removing it, along wi
   * `~mdsN/strayK/Y` $\rightarrow$ `inode# Y` *(in stray until snapshot 5 is removed)*
   * No head dentry for `D`.
 
-The MDS will need to add support to be able to recursively remove a directory tree by itself. There is redmine tracker (https://tracker.ceph.com/issues/44455) already for this targetting an improvement in mgr/volumes plugin. This feature becomes a prerequisite for snapshot rollback. The tracker has undergone discussion which are a bit dated and would need to be revisited.
+The MDS will need to add support to be able to recursively remove a directory tree by itself. There is redmine tracker (https://tracker.ceph.com/issues/44455) already for this targetting an improvement in mgr/volumes plugin. This feature becomes a prerequisite for snapshot rollback.
 
 #### CASE A3: Directory exists in snapshot, deleted in head
 
-The directory was removed (`rmdir`) after `S` and not re-created. Rolling back requires reinstating it, along with its entire subtree, into `head`.
+The directory was removed (`rmdir`) after `S` and not re-created. Rolling back requires reinstating it into `head`. Its subtree is reinstated on demand, as its entries are reached. A directory that is missing from this name because it was renamed is alive at another name, and is handled in 7.2.
 
 * **Pre-Rollback:**
   * `D : [2, 5]` $\rightarrow$ remote link to `inode# X` *(left behind by `rmdir` after snapshot 5)*
@@ -257,7 +259,7 @@ The directory was removed (`rmdir`) after `S` and not re-created. Rolling back r
 * **Mechanism:**
   1. `X` is relinked from the stray directory back into the parent as a primary dentry `D_head : [6, head]`. The stray dentry is removed.
   2. The head metadata of `X` is replaced with the version visible in snapshot `4`, and `X.first` is set to `6`.
-  3. Since `rmdir` only succeeds on an empty directory, every child of `X` that existed in snapshot `4` is now a snapshot-only dentry. Each of these is reinstated into head recursively (a child directory is itself in state A3, and a child file is reinstated from its snapshot dentry).
+  3. Since `rmdir` only succeeds on an empty directory, every child of `X` that existed in snapshot `4` is now a snapshot-only dentry. These are not reinstated along with `X`. Each of them is reinstated into head when it is reached (a child directory is itself in state A3, and a child file is reinstated from its snapshot dentry).
 * **Post-Rollback:**
   * `D_head : [6, head]` $\rightarrow$ `inode# X [6, head]` *(metadata as of snapshot 4)*
   * `D : [2, 5]` $\rightarrow$ remote link to `inode# X` *(unchanged, serves snapshots 3-5)*
@@ -287,15 +289,169 @@ The name `D` refers to a regular file (or symlink) in the snapshot and a directo
 
 As with CASE A4, the head entry is always removed before the snapshot entry is reinstated, so an interrupted rollback always resumes from a well-defined state.
 
+### 7.2 Renames: the inode is linked at a different name than in the snapshot
+
+The cases in 7.1 look at one name at a time. A rename after `S` shows up at two names: the **old name**, which links the inode in `S` but not in head, and the **new name**, which links it in head but not in `S`. Taken one at a time, the old name looks like CASE A3 and the new name looks like CASE A2. Handling a rename that way is wrong:
+
+* CASE A2 at the new name removes the whole tree below a renamed directory, and CASE A3 at the old name then reinstates the same tree entry by entry. The work is proportional to the size of the tree, for a change that touched one dentry.
+* File data is rolled back in place, in RADOS objects that are named by inode number. The old name has to end up linking the same inode, so the head inode is needed there and must not be purged from the new name.
+
+A rename is therefore undone by **moving the inode back** to the name it has in `S`, using the same machinery as a client rename. For a directory, everything below it moves with it. Once the inode is back, the name links the same inode in `S` and in head, which is CASE A1 for a directory and CASE I/II for a file: the metadata is restored and the file data is rolled back. The children of a directory are not touched by the move. Each of them is evaluated when it is reached.
+
+This section applies to files and symlinks as well as to directories. Only the representation of the old name differs.
+
+#### How a rename is recorded
+
+`P/a` is renamed to `Q/b` after snapshot `4` and before snapshot `5`. `P` and `Q` may be the same directory, and may be at any depth in the subvolume.
+
+* **Directory** (`inode# X`, multiversion):
+  * `P/a : [2, 4]` $\rightarrow$ remote link to `inode# X` *(left behind by the rename)*
+  * `Q/b_head : [5, head]` $\rightarrow$ `inode# X [5, head]`, with `X.old_inodes` holding the version `[2, 4]`
+* **File or symlink** (`inode# X`):
+  * `P/a : [2, 4]` $\rightarrow$ snapshot `inode# X [2, 4]` *(forked by the rename)*
+  * `Q/b_head : [5, head]` $\rightarrow$ `inode# X [5, head]`
+
+In both, the old name still says which inode it linked in `S`, by inode number. Nothing at the new name or in the inode says where the inode was in `S`. So a rename can only be undone from the old name; from the new name the MDS can tell that the inode belongs somewhere else, but not where.
+
+#### Telling a rename from a create or a delete
+
+Two facts make this possible:
+
+1. Renames and hardlinks do not cross a subvolume boundary (the MDS fails them with `EXDEV`). An inode that a name in the subvolume links in `S` is, in head, linked in the same subvolume, in the stray directory, or purged. An inode that is linked in head and existed at `S` was linked in the subvolume at `S`.
+2. An inode knows the oldest snapshot it is part of (`oldest_snap`, kept across COWs). An inode **exists in `S`** if it was created before `S` was taken.
+
+**At a name that links `inode# X` in `S`, but not in head.** `X` is looked up by inode number: in the cache, or loaded through its backtrace, which gives its head location.
+
+| Head of `inode# X` is | What happened after `S` | Action at this name |
+| :--- | :--- | :--- |
+| linked at another name | renamed | Move `X` back from that name (CASE B1). |
+| in the stray directory | unlinked, or detached from its new name by this rollback (below) | Move `X` back from stray (CASE A3). |
+| purged (a file or symlink only) | deleted | Reinstate the inode from its snapshot inode under the same inode number (CASE III). |
+
+If the name links another inode in head, that link is removed first (CASE A4), after the MDS has established where `X` is: a removal cannot be undone.
+
+**At a name that links `inode# X` in head, but not in `S`.**
+
+| `inode# X` | What happened after `S` | Action at this name |
+| :--- | :--- | :--- |
+| was created after `S` | created | Remove it (CASE A2, or the head half of CASE III). |
+| exists in `S` | renamed here | **Detach** it. |
+
+To detach `X` is to unlink it from the name into the stray directory in one journal event, the way a rename moves it, without descending into it: a detached directory keeps its head contents. A remote dentry (directory) or a snapshot dentry (file) is left at the name for the snapshots newer than `S`, as in CASE A2. The detached inode is marked as held in the same journal event. While it is held, the stray manager does not purge, truncate or reintegrate it, across an MDS failover as well, and `S` cannot be removed. The hold ends when the inode is moved back to its name in `S`.
+
+#### CASE B1: Renamed, neither name reused
+
+* **Pre-Rollback:** as in "How a rename is recorded" above.
+* **Mechanism, old name `P/a` reached first:**
+  1. `P/a` links `X` in `S` and nothing in head. `X` is alive at `Q/b`, which is not a name it has in `S`.
+  2. `X` is moved from `Q/b` to `P/a` in one journal event. The move forks `Q/b` for snapshot `5`, as a client rename does.
+  3. `P/a` now links `X` in `S` and in head: CASE A1 (directory) or CASE I/II (file).
+  4. When `Q/b` is reached, there is no head dentry and nothing in `S`: nothing to do.
+* **Mechanism, new name `Q/b` reached first:**
+  1. `Q/b` links `X` in head and nothing in `S`. `X` exists in `S`: it is detached. A lookup of `Q/b` returns `ENOENT` from here on.
+  2. When `P/a` is reached, `X` is found in the stray directory and is moved back from there. Steps 3 and 4 above follow.
+* **Post-Rollback (directory):**
+  * `P/a_head : [6, head]` $\rightarrow$ `inode# X [6, head]` *(metadata as of snapshot 4)*
+  * `P/a : [2, 4]` $\rightarrow$ remote link to `inode# X` *(unchanged)*
+  * `Q/b : [5, 5]` $\rightarrow$ remote link to `inode# X` *(visible only in snapshot 5)*
+* **Post-Rollback (file):**
+  * `P/a_head : [6, head]` $\rightarrow$ `inode# X [6, head]` *(copied from the snapshot inode `[2, 4]`)*
+  * `P/a : [2, 4]` $\rightarrow$ snapshot `inode# X [2, 4]` *(unchanged)*
+  * `Q/b : [5, 5]` $\rightarrow$ snapshot `inode# X [5, 5]` *(forked by the move back)*
+  * **Data Action:** `CEPH_OSD_OP_ROLLBACK` for the objects of `inode# X`, to snapshot `4`.
+
+Both orders end in the same state. A rename within one directory, a rename to a directory many levels away, and a rename done several times over are all this case: only the name in `S` and the head location matter. Names that the inode had in between are snapshot-only dentries and are not touched.
+
+#### CASE B2: Renamed over an existing entry
+
+In `S`, `P/a` links `X` and `Q/b` links `Z`. `P/a` was renamed to `Q/b`, which unlinked `Z`.
+
+* **At `Q/b`:** the name links `Z` in `S` and `X` in head. `X` exists in `S`, so it is detached, not removed. `Z` is then brought back: a directory from the stray directory (CASE A3), a file by reinstating it (CASE III).
+* **At `P/a`:** `X` is moved back, from `Q/b` or from stray, as in CASE B1.
+
+#### CASE B3: Renamed, and the old name reused
+
+`P/a` was renamed to `Q/b`, and a new entry `Y` was created at `P/a`.
+
+* **At `P/a`:** this is CASE A4 (or A5), except that `X` is not in the stray directory but at `Q/b`. `Y` was created after `S` and is removed (CASE A2), then `X` is moved back.
+* **At `Q/b`:** as in CASE B1.
+
+#### CASE B4: Names swapped, and longer chains
+
+In `S`, `a` links `X` and `b` links `Z`. In head, `a` links `Z` and `b` links `X` (swapped by way of a temporary name).
+
+* **At `a`:** head links `Z`, which exists in `S`: `Z` is detached. `X` is then moved back from `b`.
+* **At `b`:** there is no head link left. `Z` is moved back from the stray directory.
+
+Every name gives up the inode that it links now and takes back the one that it linked in `S`, from wherever that is. The stray directory does the job of the temporary name, so a cycle of any length is undone without the names having to be visited in a particular order.
+
+#### CASE B5: Renamed into a directory that was created after the snapshot
+
+`P/a` was renamed to `N/a`, where `N` was created after `S`. `N` is CASE A2 and is removed recursively.
+
+The recursive removal applies the test above to every entry that it comes to: an inode that was created after `S` is removed, an inode that exists in `S` is detached. `X` survives the removal of `N` in the stray directory and is moved back when `P/a` is reached. If `P/a` is reached first, `X` has left `N` before `N` is removed.
+
+The reverse, an entry renamed out of a directory that was later deleted, needs nothing new: the directory is CASE A3, and its entry is CASE B1 once the directory is back.
+
+#### CASE B6: A directory and one of its ancestors both renamed
+
+In `S`, the tree is `/a/b` (`a` is `inode# A`, `b` is `inode# B`). In head, it is `/b/a`: `B` was moved out of `A`, and `A` was moved into `B`.
+
+* **At `/a`:** `A` is alive at `B/a` and is moved back. If `/b` was reached before that, `B` has been detached with `A` inside it, and `A` is moved out of the detached `B`.
+* **At `/b`:** `B` exists in `S` and is detached.
+* **At `/a/b`**, which is reached after `/a`: `B` is moved back, from `/b` or from the stray directory.
+
+Moving a directory back cannot create a loop. A name is only evaluated after every directory above it has been rolled back (section 8), so the destination's ancestors are all at the names they have in `S`, up to the subvolume root. The inode being moved is not at its name in `S`, so it is not one of them.
+
+#### Contents of a renamed directory
+
+Moving a directory back does not look at its contents. After the move it is CASE A1, and each child is evaluated on its own when it is reached: entries created in it after `S` are removed, entries deleted from it are reinstated, and entries renamed into or out of it are renames of their own (CASE B1 to B6).
+
+#### Hardlinked files
+
+A file with more than one link, now or in `S`, is not moved: the name it is stored at may be one that it has in `S`, too. The old name gets a link to the inode and the new name loses its link, as described in section 6. A file with a single link in both is always moved, since the one name it has now cannot be in `S`.
+
+#### Order of evaluation and Copy-on-Access
+
+With COA, names are evaluated in whatever order clients and the background rollback get to them, and the two names of a rename may be in directories that are far apart. The cases above do not depend on that order:
+
+* Whichever name is reached first does its half. Reaching the new name first costs one more journal event (the detach) than reaching the old name first.
+* A client never sees the inode at both names, or sees the new name after it was evaluated. Between a detach and the move back, the inode is at neither name in head. The old name is only visible to a client after it has been evaluated, which moves the inode back.
+* The background rollback visits every name in `S`, so every detached inode is moved back, and no hold outlives the rollback.
+
+#### Failures
+
+Each step is one journal event, and what is left by an MDS failover between two steps is a state that is handled already:
+
+* **Detached, not yet moved back:** the inode is in the stray directory and is marked as held. It is moved back when its name in `S` is evaluated.
+* **Moved back, not yet rolled back:** the name links the same inode in `S` and in head, which is CASE A1 or CASE I/II.
+
+#### Open points
+
+* **Access by inode number.** A lookup by inode number (an NFS file handle, `lookupino`) finds an inode at its head location without a path traversal. The path of that inode from the subvolume root has to be rolled back before the inode is handed out.
+* **Multiple active MDSs.** Moving an inode back between directories that are on different ranks is a rename across ranks, and each rank has stray directories of its own. This is part of the multiple active MDS design for rollback and is not covered here.
+* **Statistics.** The recursive statistics of the subvolume, and a quota based on them, do not count a detached tree until it is moved back.
+
 ### Summary
 
-| Case | In snapshot `S` | In head | Rollback action | Recursion into children |
+| Case | In snapshot `S` | In head | Rollback action | Children |
 | :--- | :--- | :--- | :--- | :--- |
-| **A1** | directory, `inode# X` | directory, `inode# X` | Restore `X` metadata from snapshot `S`; preserve the current head version in `X.old_inodes`; bump `X.first`. | Every child is evaluated independently. |
+| **A1** | directory, `inode# X` | directory, `inode# X` | Restore `X` metadata from snapshot `S`; preserve the current head version in `X.old_inodes`; bump `X.first`. | Each child is evaluated independently, when it is reached. |
 | **A2** | absent | directory, `inode# Y` | Remove `Y` from head. Relink `Y` to stray if a newer snapshot covers it; otherwise purge. | Every head child is removed (recursive removal, tracker 44455). |
-| **A3** | directory, `inode# X` | absent | Relink `X` from stray into head; restore metadata from snapshot `S`. | Every snapshot child is reinstated. |
-| **A4** | directory, `inode# X` | directory, `inode# Y` (`X != Y`) | A2 on `Y`, then A3 on `X`. | Head children of `Y` removed; snapshot children of `X` reinstated. |
+| **A3** | directory, `inode# X` | absent | Relink `X` from stray into head; restore metadata from snapshot `S`. | Each snapshot child is reinstated when it is reached. |
+| **A4** | directory, `inode# X` | directory, `inode# Y` (`X != Y`) | A2 on `Y`, then A3 on `X`. | Head children of `Y` removed; each snapshot child of `X` reinstated when it is reached. |
 | **A5** | file/symlink (or directory) | directory (or file/symlink) | Remove the head entry, then reinstate the snapshot entry. | Only for the directory side. |
+
+Renames (7.2). `X` is the inode that was renamed; the old name is its name in `S`.
+
+| Case | Old name | New name | Rollback action |
+| :--- | :--- | :--- | :--- |
+| **B1** | not linked in head | not in `S` | Move `X` back to the old name, then A1 (directory) or CASE I/II (file). If the new name is reached first, `X` is detached there and moved back from stray. |
+| **B2** | not linked in head | links `Z` in `S` | At the new name: detach `X`, bring `Z` back (A3 or CASE III). At the old name: B1. |
+| **B3** | links `Y`, created after `S` | not in `S` | At the old name: remove `Y` (A2), move `X` back. At the new name: B1. |
+| **B4** | links `Z`, which exists in `S` | links `Z` in `S` | At each name: detach the inode it links now, move back the inode it links in `S`. |
+| **B5** | not linked in head | in a directory created after `S` | The recursive removal of that directory detaches `X`; the old name moves it back. |
+| **B6** | below (or above) another renamed directory | not in `S` | B1 for each directory, as its name is reached. |
 
 ## 8. Readdir and capability handling under Copy-on-Access
 
