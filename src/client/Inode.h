@@ -404,6 +404,31 @@ struct Inode : RefCountedObject {
   // a buffered write is marking Fw dirty (Client::_write_fast()); under
   // lock alone
   bool fw_marking = false;
+  /*
+   * A buffered write of this file waiting for whoever holds lock to do it
+   * (Client::_write_fast()): its writer queues it, then takes lock and
+   * finds it done, or does it and the others queued with it.  Lives on
+   * the writer's stack until state is set.
+   */
+  struct FastWrite {
+    Fh *fh;
+    int64_t off;
+    ceph::bufferlist *bl;
+    FastWrite *next = nullptr;
+    bool wait_writeback = false;  // the writer waits for writeback room
+    enum { QUEUED, WRITTEN, SLOW };  // SLOW: the writer takes the slow path
+    std::atomic<int> state{QUEUED};
+    FastWrite(Fh *f, int64_t o, ceph::bufferlist *b) : fh(f), off(o), bl(b) {}
+  };
+  // the queued writes, newest first; pushed without a lock, taken under it
+  std::atomic<FastWrite*> fast_writes{nullptr};
+  void queue_fast_write(FastWrite *w) {
+    FastWrite *h = fast_writes.load(std::memory_order_relaxed);
+    do {
+      w->next = h;
+    } while (!fast_writes.compare_exchange_weak(h, w, std::memory_order_release,
+                                                std::memory_order_relaxed));
+  }
   unsigned flushing_caps = 0;
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen = 0;

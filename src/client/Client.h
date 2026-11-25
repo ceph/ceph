@@ -1376,6 +1376,7 @@ protected:
   bool _read_fast(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
                   int *pr, bool nowait = false);
   bool _write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr);
+  void _write_fast_batch(Inode *in, std::unique_lock<Inode::Lock>& il);
   bool _ll_preadv_fast(Fh *fh, const struct iovec *iov, int iovcnt,
                        int64_t off, Context *onfinish, bufferlist *bl,
                        int64_t *pr);
@@ -1591,6 +1592,9 @@ public:
   // time, and how many times each tries it before sleeping
   static inline std::atomic<int> lock_max_spinners{2};
   static inline std::atomic<int> lock_spin_tries{100};
+  // most buffered writes of one file done as one (client_write_combine_max,
+  // see _write_fast())
+  static inline std::atomic<uint64_t> write_combine_max{32};
   // whether this thread holds an oc_lock (is in an OCScope)
   static bool oc_lock_held() {
     return oc_scope != nullptr;

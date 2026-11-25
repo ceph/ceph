@@ -304,6 +304,24 @@ options:
   - client_oc_target_dirty
   - client_oc_max_dirty
   - client_oc_max_dirty_age
+- name: client_write_combine_max
+  type: uint
+  level: dev
+  desc: Most buffered writes of one file done as one
+  long_desc: The writers of one file queue their buffered writes, and
+    whichever takes the file's lock first does the writes queued by then,
+    at most this many, under one hold of the file's lock and of its object
+    cache shard's lock.  More let many threads writing one file take the
+    locks less often; each write waits for those done before it.
+  default: 32
+  min: 1
+  max: 4096
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_shards
 - name: client_oc_max_woken_writers
   type: uint
   level: dev

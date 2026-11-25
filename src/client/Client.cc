@@ -528,6 +528,7 @@ void Client::_apply_tuning()
   auto r = std::memory_order_relaxed;
   lock_max_spinners.store(conf.get_val<int64_t>("client_lock_max_spinners"), r);
   lock_spin_tries.store(conf.get_val<int64_t>("client_lock_spin_tries"), r);
+  write_combine_max.store(conf.get_val<uint64_t>("client_write_combine_max"), r);
   Inode::Lock::spread_slots.store(
     conf.get_val<uint64_t>("client_inode_lock_reader_slots"), r);
   Inode::Lock::spread_after.store(
@@ -19292,6 +19293,14 @@ int Client::ll_commit_blocks(Inode *in,
  * pool, a full pool, write-through caching) returns false, and the caller
  * writes under client_lock.  A writer throttled by writeback waits for it
  * at the end, with no lock held.  The caller holds a ref on f.
+ *
+ * The writers of one file all need its Inode::lock and its shard's oc_lock
+ * for the cache write, one at a time.  Each queues its write and takes
+ * Inode::lock; whoever gets it first does all the writes queued by then
+ * (_write_fast_batch()), and the others find theirs done (or, past a
+ * batch's end, still queued: then they take the lock again).  So a file
+ * written by many threads takes both locks, and checks the caps, once for
+ * many writes, not once for each.
  */
 bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
 {
@@ -19309,8 +19318,68 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
 
   OCFastPath fast;
   utime_t start = mono_clock_now();
-  std::unique_lock il(in->lock);
-  uint64_t endoff = off + len;
+  Inode::FastWrite w(f, off, &bl);
+  in->queue_fast_write(&w);
+  // Still queued when we hold Inode::lock: it is in the queue, and we do
+  // the oldest writes queued; ours may be past the batch's end, and wait
+  // for the next holder, or for us again
+  while (w.state.load(std::memory_order_acquire) == Inode::FastWrite::QUEUED) {
+    std::unique_lock il(in->lock);
+    if (w.state.load(std::memory_order_acquire) == Inode::FastWrite::QUEUED)
+      _write_fast_batch(in, il);
+  }
+  int st = w.state.load(std::memory_order_acquire);
+  if (st == Inode::FastWrite::SLOW)
+    return false;
+
+  if (w.wait_writeback) {
+    ceph_assert(!Inode::Lock::held_by_me());  // never wait holding it
+    oc_call(in, [&](ObjectCacher *oc) { oc->wait_for_writeback_space(len); });
+  }
+
+  update_write_io_size(len);
+  utime_t lat = mono_clock_now();
+  lat -= start;
+  subvolume_tracker->add_metric(in->ino, SimpleIOMetric{true, lat, (uint32_t)len});
+  update_io_stat_write(lat);
+  *pr = len;
+  return true;
+}
+
+/*
+ * Do the buffered writes queued on @in (_write_fast()), at most
+ * client_write_combine_max of them, oldest first, as one: under @il, which
+ * this lets go of, and one oc_lock hold.  Each is WRITTEN, or SLOW for its
+ * writer to write under client_lock, before @il is let go of: a writer
+ * that takes @il and finds its write still QUEUED knows it is in the queue.
+ * Called in _write_fast()'s OCFastPath.
+ */
+void Client::_write_fast_batch(Inode *in, std::unique_lock<Inode::Lock>& il)
+{
+  const auto& conf = cct->_conf;
+  ceph_assert(oc_fast_path);   // see _write_fast()
+  using FW = Inode::FastWrite;
+  std::vector<FW*> ws;
+  for (FW *p = in->fast_writes.exchange(nullptr, std::memory_order_acquire);
+       p; p = p->next)
+    ws.push_back(p);
+  std::reverse(ws.begin(), ws.end());
+  size_t max = std::max<size_t>(write_combine_max.load(std::memory_order_relaxed), 1);
+  if (ws.size() > max) {
+    // the newer ones are for the next holder
+    for (size_t i = max; i < ws.size(); i++)
+      in->queue_fast_write(ws[i]);
+    ws.resize(max);
+  }
+  auto done = [](FW *w, int st) {
+    w->state.store(st, std::memory_order_release);   // w may go away now
+  };
+  auto all_slow = [&] {
+    for (auto w : ws)
+      done(w, FW::SLOW);
+    il.unlock();
+  };
+
   if (in->inline_version != CEPH_INLINE_NONE ||
       in->is_fscrypt_enabled() ||
       (in->flags & (I_ERROR_FILELOCK | I_CAP_DROPPED)) ||
@@ -19318,11 +19387,9 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
        !(in->pool_perm_ok & CEPH_CAP_FILE_WR)) ||
       !(in->caps_file_wanted() & CEPH_CAP_FILE_WR) ||
       (in->mode & (S_ISUID | S_ISGID)) ||
-      endoff > in->size ||   // extending: max_size, quota, size updates
-      endoff > in->max_size ||
       !in->cap_snaps.empty() ||
       !in->snaprealm)
-    return false;
+    return all_slow();
 
   const int need = CEPH_CAP_FILE_WR | CEPH_CAP_AUTH_SHARED;
   int implemented;
@@ -19330,46 +19397,67 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
   int revoking = implemented & ~have;
   if ((have & need) != need || !(have & CEPH_CAP_FILE_BUFFER) ||
       (revoking & CEPH_CAP_FILE_BUFFER))
-    return false;
+    return all_slow();
   auto snapc = in->snaprealm->get_published_snap_context();
   if (!snapc || objecter->osdmap_pool_full(in->layout.pool_id))
-    return false;
+    return all_slow();
 
-  // map the range before taking oc_lock, as for reads
-  auto wr = oc_shard(in).oc->prepare_write(*snapc, bl, ceph::real_clock::now(),
-                                        0, 0);
-  Striper::file_to_extents(cct, in->ino, &in->layout, off, len,
-                           in->truncate_size, wr->extents);
+  // map each range before taking oc_lock, as for reads; one that extends
+  // the file (max_size, quota, size updates) goes the slow way
+  std::vector<std::pair<FW*, ObjectCacher::OSDWrite*>> wrs;
+  wrs.reserve(ws.size());
+  for (auto w : ws) {
+    uint64_t len = w->bl->length();
+    uint64_t endoff = w->off + len;
+    if (endoff > in->size || endoff > in->max_size) {
+      done(w, FW::SLOW);
+      continue;
+    }
+    auto wr = oc_shard(in).oc->prepare_write(*snapc, *w->bl,
+                                             ceph::real_clock::now(), 0, 0);
+    Striper::file_to_extents(cct, in->ino, &in->layout, w->off, len,
+                             in->truncate_size, wr->extents);
+    wrs.emplace_back(w, wr);
+  }
+  if (wrs.empty()) {
+    il.unlock();
+    return;
+  }
 
   in->get_cap_ref(CEPH_CAP_FILE_WR);
-  // a writer throttled by writeback waits below, with no lock held: the
+  // a writer throttled by writeback waits after, with no lock held: the
   // writeback completions that end the wait take Inode::lock
-  bool wait_writeback = false;
   bool write_thru = false;
   oc_call(in, [&](ObjectCacher *oc) {
     // write-through waits for its flush in writex(): client_lock path
     if (oc->get_max_dirty() == 0) {
       write_thru = true;
-      return 0;
+      return;
     }
     if (!in->oset.dirty_or_tx)
       get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-    return oc->writex(wr, &in->oset, nullptr, nullptr, true,
-                                &wait_writeback);
+    for (auto& [w, wr] : wrs)
+      oc->writex(wr, &in->oset, nullptr, nullptr, true, &w->wait_writeback);
   });
   if (write_thru) {
-    delete wr;
+    for (auto& [w, wr] : wrs) {
+      delete wr;
+      done(w, FW::SLOW);
+    }
     int last = put_cap_ref_fast(in, CEPH_CAP_FILE_WR);
     il.unlock();
     if (last) {
       std::scoped_lock cl(client_lock);
       _put_cap_ref_last(in, last);
     }
-    return false;
+    return;
   }
-  cap_hit();
-  ldout(cct, 10) << __func__ << " " << in->vino() << " " << off << "~" << len << dendl;
+  for (auto& [w, wr] : wrs) {
+    cap_hit();
+    ldout(cct, 10) << __func__ << " " << in->vino() << " " << w->off << "~"
+                   << w->bl->length() << dendl;
+  }
   // Stamp the inode, as _write_success() does, under Inode::lock alone
   // (see Inode.h: mtime, ctime, change_attr): with Fw already dirty there
   // is nothing to mark, and the Fb/Fw refs mostly drop without
@@ -19377,7 +19465,7 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
   // flush clears dirty_caps before it copies the times, so a stamp taken
   // with Fw still dirty goes out with it.
   in->mtime = in->ctime = ceph_clock_now();
-  in->change_attr++;
+  in->change_attr += wrs.size();
   bool dirty = in->auth_cap && (in->dirty_caps & CEPH_CAP_FILE_WR);
   // Fw is clean (a cap flush took it): one writer marks it dirty again
   // under client_lock.  The others see fw_marking and go on as if it
@@ -19401,6 +19489,9 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
   if (dirty)
     last = _put_cap_ref_fast(in, in->put_cap_ref(CEPH_CAP_FILE_BUFFER |
                                                  CEPH_CAP_FILE_WR));
+  // the writes are in the cache: their writers may go
+  for (auto& [w, wr] : wrs)
+    done(w, FW::WRITTEN);
   il.unlock();
 
   if (dirty) {
@@ -19420,18 +19511,6 @@ bool Client::_write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr)
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     put_cap_ref(in, CEPH_CAP_FILE_WR);
   }
-  if (wait_writeback) {
-    ceph_assert(!Inode::Lock::held_by_me());  // never wait holding it
-    oc_call(in, [&](ObjectCacher *oc) { oc->wait_for_writeback_space(len); });
-  }
-
-  update_write_io_size(len);
-  utime_t lat = mono_clock_now();
-  lat -= start;
-  subvolume_tracker->add_metric(in->ino, SimpleIOMetric{true, lat, (uint32_t)len});
-  update_io_stat_write(lat);
-  *pr = len;
-  return true;
 }
 
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
@@ -21195,6 +21274,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_permissions",
     "client_quota",
     "client_respect_subvolume_snapshot_visibility",
+    "client_write_combine_max",
     "fuse_default_permissions"
   });
   static_assert(std::is_sorted(begin(as_sv), end(as_sv)));
@@ -21273,7 +21353,8 @@ void Client::handle_conf_change(const ConfigProxy& conf,
       changed.count("client_oc_flush_min_age") ||
       changed.count("client_oc_max_woken_writers") ||
       changed.count("client_oc_max_writeback") ||
-      changed.count("client_oc_read_gate_retries")) {
+      changed.count("client_oc_read_gate_retries") ||
+      changed.count("client_write_combine_max")) {
     _apply_tuning();
   }
   if (changed.count("client_force_lazyio")) {

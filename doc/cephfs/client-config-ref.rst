@@ -78,3 +78,4 @@ Developer Options
 .. confval:: client_inject_fixed_oldest_tid
 .. confval:: client_inject_release_failure
 .. confval:: client_trace
+.. confval:: client_write_combine_max
