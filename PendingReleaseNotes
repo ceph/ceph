@@ -1,5 +1,26 @@
 >=22.0.0
 
+* Dashboard: Security hardening of the login tokens and of the Multi-Cluster
+  feature.
+
+  * The ``ttl`` parameter of ``POST /api/auth`` can no longer be used to extend
+    the lifetime of one's own token. Anyone can still request a shorter
+    lifetime, but only administrators can request a longer one, up to the new
+    ``ceph dashboard set-jwt-token-max-ttl`` limit (30 days by default).
+    Previously issued long-lived tokens of non-administrator users are no
+    longer accepted. Existing Multi-Cluster connections keep working.
+  * The Multi-Cluster configuration, which includes the tokens of the connected
+    clusters and the Prometheus credentials, was stored in the plain-text
+    ``MULTICLUSTER_CONFIG`` module option, readable by any user with read access
+    to the ``config-opt`` scope and visible in ``ceph config dump``. It is now
+    kept in the manager's private key/value store and it is migrated
+    automatically on upgrade. The ``api/multi-cluster`` endpoints no longer
+    return tokens or credentials, and ``ceph dashboard get-multicluster-config``
+    and the ``/api/settings/MULTICLUSTER_CONFIG`` setting have been removed.
+    The tokens of the clusters connected before upgrading were exposed to those
+    users: administrators of the remote clusters should reconnect them (which
+    issues new tokens) and consider rotating those users' passwords.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to

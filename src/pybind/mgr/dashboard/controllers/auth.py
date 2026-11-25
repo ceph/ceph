@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import http.cookies
-import json
 import logging
 import sys
 from typing import Optional
@@ -10,6 +9,7 @@ import cherrypy
 
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
+from ..services import multicluster_config as mc_store
 from ..services.auth import AuthManager, AuthType, BaseAuth, JwtManager, OAuth2
 from ..services.cluster import ClusterModel
 from ..settings import Settings
@@ -43,6 +43,37 @@ AUTH_SCHEMA = {
 }
 
 
+def _register_local_cluster(fsid, origin, username):
+    """
+    Make sure the local cluster is listed in the multi-cluster configuration.
+    No credentials are stored for it: the token of the logged-in user is
+    only returned to that user.
+    """
+    config = mc_store.load()
+    entry = {
+        "name": fsid,
+        "url": origin,
+        "cluster_alias": mc_store.LOCAL_CLUSTER_ALIAS,
+        "user": username
+    }
+    if 'config' not in config:
+        config = {
+            'current_url': origin,
+            'current_user': username,
+            'hub_url': origin,
+            'config': {fsid: [entry]}
+        }
+    elif fsid not in config['config']:
+        config['config'][fsid] = [entry]
+    elif not any(item.get('user') == username
+                 or item.get('cluster_alias') == mc_store.LOCAL_CLUSTER_ALIAS
+                 for item in config['config'][fsid]):
+        config['config'][fsid].append(entry)
+    else:
+        return
+    mc_store.save(config)
+
+
 @APIRouter('/auth', secure=False)
 @APIDoc("Initiate a session with Ceph", "Auth")
 class Auth(RESTController, ControllerAuthMixin):
@@ -53,7 +84,9 @@ class Auth(RESTController, ControllerAuthMixin):
                  parameters={
                      'username': (str, 'Username'),
                      'password': (str, 'Password'),
-                     'ttl': (int, 'Token Time to Live (in hours)')
+                     'ttl': (int, 'Token Time to Live (in hours). Only honoured to shorten the '
+                                  'token lifetime, or for administrators up to the limit set '
+                                  'by the cluster administrator (jwt_token_max_ttl)')
                  },
                  responses={201: AUTH_SCHEMA})
     def create(self, username, password, ttl: Optional[int] = None):
@@ -84,56 +117,7 @@ class Auth(RESTController, ControllerAuthMixin):
                 token = token.decode('utf-8') if isinstance(token, bytes) else token
 
                 self._set_token_cookie(url_prefix, token)
-                if isinstance(Settings.MULTICLUSTER_CONFIG, str):
-                    try:
-                        item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
-                    except json.JSONDecodeError:
-                        item_to_dict = {}
-                    multicluster_config = item_to_dict.copy()
-                else:
-                    multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
-                try:
-                    if fsid in multicluster_config['config']:
-                        cluster_configurations = multicluster_config['config'][fsid]
-                        for config_item in cluster_configurations:
-                            if config_item['user'] == username or config_item['cluster_alias'] == 'local-cluster':  # noqa E501  #pylint: disable=line-too-long
-                                config_item['token'] = token  # Update token
-                                break
-                        else:
-                            cluster_configurations.append({
-                                "name": fsid,
-                                "url": origin,
-                                "cluster_alias": "local-cluster",
-                                "user": username,
-                                "token": token
-                            })
-                    else:
-                        multicluster_config['config'][fsid] = [{
-                            "name": fsid,
-                            "url": origin,
-                            "cluster_alias": "local-cluster",
-                            "user": username,
-                            "token": token
-                        }]
-
-                except KeyError:
-                    multicluster_config = {
-                        'current_url': origin,
-                        'current_user': username,
-                        'hub_url': origin,
-                        'config': {
-                            fsid: [
-                                {
-                                    "name": fsid,
-                                    "url": origin,
-                                    "cluster_alias": "local-cluster",
-                                    "user": username,
-                                    "token": token
-                                }
-                            ]
-                        }
-                    }
-                Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
+                _register_local_cluster(fsid, origin, username)
                 return {
                     'token': token,
                     'username': username,

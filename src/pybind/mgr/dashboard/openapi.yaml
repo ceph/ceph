@@ -24,7 +24,9 @@ paths:
                   description: Password
                   type: string
                 ttl:
-                  description: Token Time to Live (in hours)
+                  description: Token Time to Live (in hours). Only honoured to shorten
+                    the token lifetime, or for administrators up to the limit set
+                    by the cluster administrator (jwt_token_max_ttl)
                   type: integer
                 username:
                   description: Username

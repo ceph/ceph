@@ -125,7 +125,9 @@ class Options(object):
                                                   'gateway', 'logs', 'crush', 'maps']),
                                         [str])
 
-    MULTICLUSTER_CONFIG = Setting({}, [dict, str])
+    # NOTE: the multi-cluster configuration holds credentials, so it is not a
+    # setting (settings are readable through the REST API and the CLI). It lives
+    # in the KV store, see ``services/multicluster_config.py``.
     MANAGED_BY_CLUSTERS = Setting([], [dict, list])
     UNSAFE_TLS_v1_2 = Setting(False, [bool])
 

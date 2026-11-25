@@ -14,6 +14,7 @@ import requests
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services import multicluster_config as mc_store
 from ..services.orchestrator import OrchClient
 from ..settings import Settings
 from ..tools import configure_cors
@@ -257,19 +258,15 @@ class MultiCluster(RESTController):
                 "ssl_certificate": ssl_certificate if ssl_certificate else '',
                 "prometheus_access_info": prometheus_access_info
             }]
-        Settings.MULTICLUSTER_CONFIG = json.dumps(multi_cluster_config)
+        mc_store.save(multi_cluster_config)
 
     def load_multi_cluster_config(self):
-        if isinstance(Settings.MULTICLUSTER_CONFIG, str):
-            try:
-                itemw_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
-            except json.JSONDecodeError:
-                itemw_to_dict = {}
-            multi_cluster_config = itemw_to_dict.copy()
-        else:
-            multi_cluster_config = Settings.MULTICLUSTER_CONFIG.copy()
-
-        return multi_cluster_config
+        """
+        Full configuration, including the credentials of the remote clusters.
+        For internal use only: it must be passed through ``mc_store.redact()``
+        before being returned by any API endpoint.
+        """
+        return mc_store.load()
 
     @Endpoint('PUT')
     @UpdatePermission
@@ -277,8 +274,11 @@ class MultiCluster(RESTController):
         multicluster_config = self.load_multi_cluster_config()
         multicluster_config.update({'current_url': config['url']})
         multicluster_config.update({'current_user': config['user']})
-        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
-        return multicluster_config
+        mc_store.save(multicluster_config)
+        # The browser talks directly to the selected cluster, so it needs the
+        # token of that cluster (and only that one).
+        return mc_store.redact(multicluster_config,
+                               reveal_token_for=(config['url'], config['user']))
 
     @Endpoint('PUT')
     @UpdatePermission
@@ -287,6 +287,15 @@ class MultiCluster(RESTController):
                           ssl_verify=False, ssl_certificate=None, ttl=None,
                           cluster_token=None):
         multicluster_config = self.load_multi_cluster_config()
+        if not password:
+            # Tokens are never sent to the browser anymore, so reconnecting
+            # without a password uses the one stored on the server. A token
+            # sent by an older client is only used if none is stored.
+            cluster_token = mc_store.find_token(multicluster_config, url, username) \
+                or cluster_token
+            if not cluster_token:
+                raise DashboardException(msg='A password is required to reconnect the cluster',
+                                         code='invalid_credentials', component='multi-cluster')
         if username and password and cluster_token is None:
             payload = {
                 'username': username,
@@ -324,7 +333,7 @@ class MultiCluster(RESTController):
                             time.sleep(5)
                             cluster['prometheus_url'] = prometheus_url
                             _set_prometheus_targets(prometheus_url)
-            Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
+            mc_store.save(multicluster_config)
         return True
 
     @Endpoint('PUT')
@@ -340,8 +349,8 @@ class MultiCluster(RESTController):
                         cluster['cluster_alias'] = cluster_alias
                         cluster['ssl_verify'] = verify
                         cluster['ssl_certificate'] = ssl_certificate if verify else ''
-        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
-        return multicluster_config
+        mc_store.save(multicluster_config)
+        return mc_store.redact(multicluster_config)
 
     @Endpoint(method='DELETE')
     @DeletePermission
@@ -380,14 +389,16 @@ class MultiCluster(RESTController):
                     del multicluster_config['config'][key]
                     break
 
-        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
-        return multicluster_config
+        mc_store.save(multicluster_config)
+        return mc_store.redact(multicluster_config)
 
     @Endpoint()
     @ReadPermission
     def get_config(self):
-        multi_cluster_config = self.load_multi_cluster_config()
-        return multi_cluster_config
+        # Never expose credentials (remote cluster tokens, Prometheus access
+        # info) to API clients: this endpoint is readable by any user able to
+        # read the config-opt scope.
+        return mc_store.redact(self.load_multi_cluster_config())
 
     def is_token_expired(self, jwt_token):
         split_message = jwt_token.split(".")
@@ -417,14 +428,21 @@ class MultiCluster(RESTController):
 
         if 'config' in multi_cluster_config:
             for _, config in multi_cluster_config['config'].items():
-                cluster_name = config[0]['name']
-                token = config[0]['token']
-                user = config[0]['user']
-                status = self.check_token_status_expiration(token)
-                time_left = self.get_time_left(token)
-                token_status_map[cluster_name] = {
+                # the local cluster has no (usable) stored token
+                entry = next((c for c in config
+                              if c.get('token')
+                              and c.get('cluster_alias') != mc_store.LOCAL_CLUSTER_ALIAS), None)
+                if entry is None:
+                    continue
+                token = entry['token']
+                try:
+                    status = self.check_token_status_expiration(token)
+                    time_left = self.get_time_left(token)
+                except (ValueError, KeyError, IndexError):
+                    status, time_left = 1, 0
+                token_status_map[entry['name']] = {
                     'status': status,
-                    'user': user,
+                    'user': entry['user'],
                     'time_left': time_left
                 }
 
