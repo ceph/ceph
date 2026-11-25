@@ -4,6 +4,7 @@
 #include "include/types.h"
 #include "client/MetaRequest.h"
 #include "client/Dentry.h"
+#include "client/Dir.h"
 #include "client/Inode.h"
 #include "messages/MClientReply.h"
 #include "common/Formatter.h"
@@ -68,16 +69,24 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("owner_gid", head.owner_gid);
 }
 
-void MetaRequest::set_dentry(DentryRef dn) {
+void MetaRequest::set_dentry(DentryRef dn, InodeRef dir) {
   ceph_assert(_dentry.get() == NULL);
+  if (dir)
+    _dentry_dir = std::move(dir);
+  else if (dn && dn->dir)
+    _dentry_dir = dn->dir->parent_inode;
   _dentry = std::move(dn);
 }
 Dentry *MetaRequest::dentry() {
   return _dentry.get();
 }
 
-void MetaRequest::set_old_dentry(DentryRef dn) {
+void MetaRequest::set_old_dentry(DentryRef dn, InodeRef dir) {
   ceph_assert(_old_dentry.get() == NULL);
+  if (dir)
+    _old_dentry_dir = std::move(dir);
+  else if (dn && dn->dir)
+    _old_dentry_dir = dn->dir->parent_inode;
   _old_dentry = std::move(dn);
 }
 Dentry *MetaRequest::old_dentry() {

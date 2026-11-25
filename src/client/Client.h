@@ -1019,6 +1019,7 @@ public:
 
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
+  Dentry *request_dentry_now(Dentry *dn, Inode *diri);
   Dentry *insert_dentry_inode(Dir *dir, const std::string& dname, LeaseStat *dlease,
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);

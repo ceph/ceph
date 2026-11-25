@@ -1563,6 +1563,24 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 /*
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
+/*
+ * The dentry a request was made with, as the cache has it when the reply
+ * comes: another request of this client (a rename of the same name, say)
+ * can have unlinked it meanwhile, and the name can be linked again to a
+ * new dentry.  Replies come in the order the MDS did the requests, so the
+ * dentry the cache now has under that name in that dir is the one this
+ * reply is about.  Null if the name is not in the cache.
+ */
+Dentry *Client::request_dentry_now(Dentry *dn, Inode *diri)
+{
+  if (!dn || dn->dir)
+    return dn;
+  if (!diri || !diri->dir)
+    return nullptr;
+  auto it = diri->dir->dentries.find(dn->name);
+  return it == diri->dir->dentries.end() ? nullptr : it->second;
+}
+
 Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 				    Inode *in, utime_t from, MetaSession *session,
 				    Dentry *old_dentry)
@@ -1577,19 +1595,28 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 		 << dendl;
 
   bool wrong = dn && dn->inode && dn->inode->vino() != in->vino();
+  if (old_dentry == dn)
+    old_dentry = nullptr;  // one name for both ends (a case-folding dir)
   if (dn && dn->inode && !wrong) {
     touch_dn(dn);
     ldout(cct, 12) << " had dentry " << dname
 	     << " with correct vino " << dn->inode->vino()
 	     << dendl;
+    // a rename whose target the cache already had right: its source name
+    // is gone all the same
+    if (old_dentry && old_dentry->dir) {
+      InodeRef tmp_ref(in);
+      clear_dir_complete_and_ordered(old_dentry->dir->parent_inode, false);
+      unlink(old_dentry, old_dentry->dir == dir, false);  // drop dentry
+    }
   }
   
   if (!dn || !dn->inode || wrong) {
     InodeRef tmp_ref(in);
-    // the source of a rename: another rename of this client that moved it
-    // first already unlinked it (old_dentry->dir is null then).  One in
-    // another dir goes first, before we take this dir's Inode::lock: a
-    // thread holds one Inode::lock at a time
+    // the source of a rename (request_dentry_now() found the one the cache
+    // has; null if the name is not cached).  One in another dir goes
+    // first, before we take this dir's Inode::lock: a thread holds one
+    // Inode::lock at a time
     if (old_dentry && old_dentry->dir && old_dentry->dir != dir) {
       clear_dir_complete_and_ordered(old_dentry->dir->parent_inode, false);
       unlink(old_dentry, false, false);  // drop dentry
@@ -2082,9 +2109,10 @@ Inode* Client::insert_trace(MetaRequest *request,
   if (p.end()) {
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
 
-    // a dentry another request of this client unlinked meanwhile (a
-    // concurrent rename of it) has no dir any more: leave it alone
-    Dentry *d = request->dentry();
+    // the dentries as the cache has them now: another request of this
+    // client (a concurrent rename) can have unlinked the ones the request
+    // was made with
+    Dentry *d = request_dentry_now(request->dentry(), request->dentry_dir());
     if (d && d->dir) {
       Inode *diri = d->dir->parent_inode;
       clear_dir_complete_and_ordered(diri, true);
@@ -2093,13 +2121,14 @@ Inode* Client::insert_trace(MetaRequest *request,
     if (d && reply->get_result() == 0) {
       if (op == CEPH_MDS_OP_RENAME) {
 	// rename
-	Dentry *od = request->old_dentry();
+	ceph_assert(request->old_dentry());
+	Dentry *od = request_dentry_now(request->old_dentry(),
+					request->old_dentry_dir());
 	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
-	ceph_assert(od);
-	if (od->dir)
+	if (od && od->dir)
 	  unlink(od, true, true);  // keep dir, dentry
       } else if ((op == CEPH_MDS_OP_RMDIR ||
-		  op == CEPH_MDS_OP_UNLINK) && d->dir) {
+		  op == CEPH_MDS_OP_UNLINK) && d && d->dir) {
 	// unlink, rmdir
 	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
 	unlink(d, true, true);  // keep dir, dentry
@@ -2175,7 +2204,10 @@ Inode* Client::insert_trace(MetaRequest *request,
     if (in) {
       Dir *dir = diri->open_dir();
       insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session,
-                          (op == CEPH_MDS_OP_RENAME) ? request->old_dentry() : NULL);
+                          (op == CEPH_MDS_OP_RENAME) ?
+                            request_dentry_now(request->old_dentry(),
+                                               request->old_dentry_dir()) :
+                            NULL);
     } else {
       Dentry *dn = NULL;
       if (diri->dir) {
@@ -2732,9 +2764,12 @@ void Client::put_request(MetaRequest *request)
       op = request->get_op();
     InodeRef other_in;
     request->take_other_inode(&other_in);
+    // a rename onto another name of the same inode (or one whose target the
+    // walk found already moved there) overwrote nothing: keep its dentries
+    bool same = other_in && other_in.get() == request->old_inode();
     delete request;
 
-    if (other_in &&
+    if (other_in && !same &&
 	(op == CEPH_MDS_OP_RMDIR ||
 	 op == CEPH_MDS_OP_RENAME ||
 	 op == CEPH_MDS_OP_RMSNAP)) {
@@ -18180,7 +18215,7 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
 
   req->set_filepath(wdr.getpath());
-  req->set_dentry(wdr.dn);
+  req->set_dentry(wdr.dn, wdr.diri);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -18242,7 +18277,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool che
   MetaRequest *req = new MetaRequest(op);
 
   if (op == CEPH_MDS_OP_RMDIR) {
-    req->set_dentry(wdr.dn);
+    req->set_dentry(wdr.dn, wdr.diri);
     req->dentry_drop = CEPH_CAP_FILE_SHARED;
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
     req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
@@ -18396,12 +18431,12 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   }
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
-    req->set_old_dentry(wdr_from.dn);
+    req->set_old_dentry(wdr_from.dn, wdr_from.diri);
     req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
     req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
 
     wdr_to.dn->is_renaming = true;
-    req->set_dentry(wdr_to.dn);
+    req->set_dentry(wdr_to.dn, wdr_to.diri);
     req->dentry_drop = CEPH_CAP_FILE_SHARED;
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 

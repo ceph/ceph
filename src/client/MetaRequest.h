@@ -28,6 +28,10 @@ private:
   InodeRef _inode, _old_inode, _other_inode;
   DentryRef _dentry;     //associated with path
   DentryRef _old_dentry; //associated with path2
+  // the dirs the two dentries were in when the request was made: by the
+  // time the reply comes, another request of this client can have unlinked
+  // them, and the name can be in the cache under a new dentry
+  InodeRef _dentry_dir, _old_dentry_dir;
   SecondaryArg arg2;
   int abort_rc = 0;
 public:
@@ -148,10 +152,18 @@ public:
   void take_other_inode(InodeRef *out) {
     out->swap(_other_inode);
   }
-  void set_dentry(DentryRef d);
+  // dir: the dir the walk found the dentry in (else the dentry's own,
+  // which a dentry already unlinked by another request does not have)
+  void set_dentry(DentryRef d, InodeRef dir = nullptr);
   Dentry *dentry();
-  void set_old_dentry(DentryRef d);
+  void set_old_dentry(DentryRef d, InodeRef dir = nullptr);
   Dentry *old_dentry();
+  Inode *dentry_dir() {
+    return _dentry_dir.get();
+  }
+  Inode *old_dentry_dir() {
+    return _old_dentry_dir.get();
+  }
 
   MetaRequest* get() {
     ref++;
