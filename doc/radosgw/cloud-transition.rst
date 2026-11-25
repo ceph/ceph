@@ -1,3 +1,5 @@
+.. _radosgw-cloud-transition:
+
 ================
 Cloud Transition
 ================
