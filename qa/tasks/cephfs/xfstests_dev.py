@@ -193,10 +193,10 @@ class XFSTestsDev(CephFSTestCase):
                       'centosstream', 'rhel', 'rocky'):
             deps = """\
                     acl attr automake bc dbench dump e2fsprogs fio gawk gcc \
-                    gdbm-devel git indent kernel-devel libacl-devel \
+                    gcc-c++ gdbm-devel git indent kernel-devel libacl-devel \
                     libaio-devel libcap-devel libtool libuuid-devel lvm2 \
                     make psmisc python3 quota sed sqlite udftools \
-                    xfsprogs""".split()
+                    xfsprogs xfsprogs-devel""".split()
             # EL10 ships neither dump nor udftools, not even in EPEL. xfstests
             # needs them only for ext* dump/restore and udf tests.
             if major_ver_num >= 10:
