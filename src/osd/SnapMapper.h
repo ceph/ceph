@@ -133,6 +133,7 @@ public:
 class SnapMapper : public Scrub::SnapMapReaderI {
   friend class MapperVerifier; // unit-test support
   friend class DirectMapper; // unit-test support
+  friend class ScrubberRunTest; // unit-test support
   friend std::ostream& operator<<(std::ostream &lhs, const SnapMapper &sm);
 
 public:
