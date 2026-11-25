@@ -115,11 +115,18 @@ fi
 
 counters=$(ec_counters)
 echo "after $cycle cycles across migrations: ${counters:-no EC direct read counters}"
-if [ -n "$counters" ] && [[ $OPTIONS =~ read_from_replica=(balance|localize) ]]; then
+if [ -n "$counters" ]; then
     read -r _ direct _ _ _ split _ _ <<< "$counters"
+    # balance always takes the direct-read path; localize needs a crush_location
+    # to have a local shard, so without one it (correctly) reads from the primary
+    # and does no direct reads -- only require them on balance.
     if ((direct == 0 || split == 0)); then
-        echo "no EC direct reads ($direct) or split reads ($split) across migration"
-        exit 1
+        if [[ $OPTIONS =~ read_from_replica=balance ]]; then
+            echo "no EC direct reads ($direct) or split reads ($split) across migration on balance"
+            exit 1
+        else
+            echo "WARNING: 0 direct/split reads ($direct/$split) on localize without a crush_location (primary reads)"
+        fi
     fi
 fi
 
