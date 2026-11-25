@@ -509,6 +509,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
                                   true));
     // cached reads take the read gate, not oc_lock (see _read_fast())
     sh->oc->enable_read_gate();
+    // the flusher here runs as soon as a shard is over its target: let it
+    // send each object's dirty data whole, see set_flush_whole_objects()
+    sh->oc->set_flush_whole_objects(true);
     if (percpu_slots)
       sh->oc->set_percpu_slots(percpu_slots);
     oc_group.push_back(sh->oc.get());

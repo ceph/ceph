@@ -1079,7 +1079,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 }
 
 void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
-					int64_t *max_amount, int *max_count)
+					int64_t *max_amount, int *max_count,
+					int64_t *sent_amount, int *sent_count)
 {
   list<BufferHead*> blist;
 
@@ -1121,6 +1122,10 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
     *max_count -= count;
   if (max_amount)
     *max_amount -= total_len;
+  if (sent_count)
+    *sent_count = count;
+  if (sent_amount)
+    *sent_amount = total_len;
 
   bh_write_scattered(blist);
 }
@@ -1421,7 +1426,14 @@ bool ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs,
     if (!bh) break;
     if (bh->last_write > cutoff) break;
 
-    if (scattered_write) {
+    if (scattered_write && flush_whole_objects) {
+      // all of the object's dirty data, then count it against the amount
+      int64_t whole = 0;
+      int whole_bhs = 0;
+      bh_write_adjacencies(bh, cutoff, NULL, NULL, &whole, &whole_bhs);
+      left -= whole;
+      left_bhs -= whole_bhs;
+    } else if (scattered_write) {
       bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL,
                            max_bhs > 0 ? &left_bhs : NULL);
     } else {

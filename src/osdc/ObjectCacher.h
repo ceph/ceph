@@ -548,6 +548,7 @@ class ObjectCacher {
   std::atomic<uint64_t> max_writeback{0};
   std::atomic<int64_t> flush_min_age_ns{0};  // see set_flush_min_age()
   std::atomic<int> flush_batch{0};           // see set_flush_batch()
+  bool flush_whole_objects = false;          // see set_flush_whole_objects()
   // Over its share of the limit, a member of a group may still send what
   // the others leave unused, as the dirty limits let it: one busy file
   // lives in one member, and its writeback would otherwise get only that
@@ -639,8 +640,13 @@ class ObjectCacher {
                const ZTracer::Trace &parent_trace);
   void bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace);
   void bh_write_scattered(std::list<BufferHead*>& blist);
+  // write @bh and the dirty BufferHeads of its object around it, up to
+  // *amount bytes and *max_count of them when not null (both lowered by
+  // what it sends); *sent_amount and *sent_count get what it sent
   void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
-			    int64_t *amount, int *max_count);
+			    int64_t *amount, int *max_count,
+			    int64_t *sent_amount = nullptr,
+			    int *sent_count = nullptr);
 
   void trim();
   bool flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0,
@@ -810,6 +816,19 @@ class ObjectCacher {
    */
   void set_flush_batch(int n) {
     flush_batch.store(std::max(n, 0), std::memory_order_relaxed);
+  }
+  /**
+   * When the flusher brings the cache down to its dirty target, send all
+   * the dirty data of each object it picks in one write (scattered
+   * writeback), not just as much as it is over the target.  A flusher
+   * that runs as soon as the cache is a little over its target was
+   * otherwise left a few KiB to send at a time, and sent a few small
+   * BufferHeads per write: 2.4 times as many writes as a flusher that
+   * runs late, and writes that waited for room.  Off by default.  Call
+   * before start().
+   */
+  void set_flush_whole_objects(bool on) {
+    flush_whole_objects = on;
   }
   void set_max_woken_writers(uint64_t n) {
     max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);
