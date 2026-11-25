@@ -20,7 +20,7 @@ import tempfile
 import time
 import errno
 import ssl
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, Type, TypeVar, cast
 
 import re
 import uuid
@@ -169,9 +169,12 @@ from cephadmlib.host_facts import HostFacts, list_networks, list_rdma
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
 from cephadmlib.daemon_form import (
     DaemonForm,
+    HostResourcesDaemonForm,
     UnexpectedDaemonTypeError,
+    choose as daemon_form_choose,
     create as daemon_form_create,
     register as register_daemon_form,
+    registered as registered_daemon_forms,
 )
 from cephadmlib.deploy import DeploymentType
 from cephadmlib.container_daemon_form import (
@@ -206,13 +209,6 @@ from cephadmlib.cluster_ops import (
 from cephadmlib.firewalld import Firewalld, update_firewalld
 from cephadmlib import templating
 from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons, update_osd_bluestore_affinity
-from cephadmlib.daemons.rgw import (
-    D3NStateAction,
-    _deploy_metrics_push_timer,
-    _retire_metrics_push_timer,
-    d3n_state,
-    prepare_d3n_cache,
-)
 from cephadmlib.daemons import (
     Ceph,
     CephExporter,
@@ -247,7 +243,6 @@ from cephadmlib.listing_updaters import (
     VersionStatusUpdater,
 )
 from cephadmlib.container_lookup import infer_local_ceph_image, identify
-from ceph.cephadm.d3n_types import D3NCache, D3NCacheError
 from ceph.cephadm.version_entry import UpgradeType, UpgradeStatus, CephVersionEntry
 from cephadmlib.user_utils import (
     setup_ssh_user,
@@ -1004,6 +999,21 @@ def _update_container_args_for_podman(
     )
 
 
+def _host_resources_form(
+    daemon_type: str,
+) -> Optional[Type[HostResourcesDaemonForm]]:
+    """Return the daemon form class of daemon_type if it manages host
+    resources through the HostResourcesDaemonForm hooks, otherwise None.
+    """
+    try:
+        form_cls: Type[DaemonForm] = daemon_form_choose(daemon_type)
+    except UnexpectedDaemonTypeError:
+        return None
+    if issubclass(form_cls, HostResourcesDaemonForm):
+        return form_cls
+    return None
+
+
 def deploy_daemon(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -1076,33 +1086,9 @@ def deploy_daemon(
         # dirs, conf, keyring
         create_daemon_dirs(ctx, ident, uid, gid, config, keyring)
 
-        if ident.daemon_type == 'rgw':
-            config_json = fetch_configs(ctx)
-            d3n_cache: Any = config_json.get('d3n_cache')
-
-            if d3n_cache:
-                try:
-                    d3n = D3NCache.from_json(d3n_cache)
-                except D3NCacheError as e:
-                    raise Error(str(e))
-                prepare_d3n_cache(ctx, d3n, uid, gid)
-                try:
-                    d3n_state(ctx, data_dir, D3NStateAction.WRITE, d3n, uid, gid)
-                except Exception as e:
-                    logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
-
-            metrics_push = config_json.get('metrics_push')
-            if metrics_push:
-                assert isinstance(metrics_push, dict)
-                _deploy_metrics_push_timer(ctx, ident, metrics_push)
-            else:
-                target = config_json.get('metrics_push_target')
-                _retire_metrics_push_timer(
-                    ctx,
-                    ident,
-                    desired=target if isinstance(target, dict) else None,
-                    force_delete=bool(config_json.get('metrics_push_cleanup')),
-                )
+        host_resources = _host_resources_form(ident.daemon_type)
+        if host_resources is not None:
+            host_resources.prepare_host_resources(ctx, ident, uid, gid)
 
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
@@ -4311,18 +4297,11 @@ def command_rm_daemon(ctx):
     except OSError:
         pass
 
-    # force remove rgw admin socket file if leftover
-    if ident.daemon_type in ['rgw']:
-        rgw_asok_path = f'/var/run/ceph/{ctx.fsid}/ceph-client.{ctx.name}.*.asok'
-        call(ctx, ['rm', '-rf', rgw_asok_path],
-             verbosity=CallVerbosity.DEBUG)
+    host_resources = _host_resources_form(ident.daemon_type)
+    if host_resources is not None:
+        host_resources.remove_host_resources(ctx, ident)
 
     data_dir = ident.data_dir(ctx.data_dir)
-
-    if ident.daemon_type == 'rgw':
-        d3n_state(ctx, data_dir, action=D3NStateAction.CLEANUP)
-        timer_unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
-        systemd_unit.remove_timer_unit(ctx, ctx.fsid, timer_unit_id)
 
     if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
@@ -4497,14 +4476,18 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     unlink_file(unit_dir / f'ceph-{ctx.fsid}@.service', missing_ok=True)
     unlink_file(unit_dir / f'ceph-{ctx.fsid}.target', missing_ok=True)
     shutil.rmtree(unit_dir / f'ceph-{ctx.fsid}.target.wants', ignore_errors=True)
-    # `systemctl edit` creates <unit>.d directories that match this glob.
+    # `systemctl edit` creates <unit>.d directories that match these globs.
     # unlink() raises IsADirectoryError on a real directory and would abort
     # rm-cluster before the cluster data is deleted.
-    for p in unit_dir.glob(f'ceph-{ctx.fsid}-metrics-push@*'):
-        if p.is_dir() and not p.is_symlink():
-            shutil.rmtree(p)
-        else:
-            unlink_file(p, missing_ok=True)
+    for form_cls in registered_daemon_forms():
+        if not issubclass(form_cls, HostResourcesDaemonForm):
+            continue
+        for pattern in form_cls.host_resource_unit_globs(ctx.fsid):
+            for p in unit_dir.glob(pattern):
+                if p.is_dir() and not p.is_symlink():
+                    shutil.rmtree(p)
+                else:
+                    unlink_file(p, missing_ok=True)
 
     # rm data
     shutil.rmtree(Path(ctx.data_dir) / ctx.fsid, ignore_errors=True)

@@ -1,5 +1,5 @@
-# rgw.py - host side resources of RGW daemons: the D3N cache and the
-# systemd timer that pushes bucket usage metrics to pushgateway.
+# rgw.py - the RGW daemon form and its host resources: the D3N cache and
+# the systemd timer that pushes bucket usage metrics to pushgateway.
 
 import json
 import logging
@@ -8,17 +8,20 @@ import shlex
 import shutil
 
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from ceph.cephadm.d3n_types import D3NCache
+from ceph.cephadm.d3n_types import D3NCache, D3NCacheError
 
 from .. import systemd_unit
 from .. import templating
 from ..call_wrappers import CallVerbosity, call, call_throws
 from ..context import CephadmContext
+from ..context_getters import fetch_configs
+from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..exceptions import Error
 from ..file_utils import unlink_file, write_new
+from .ceph import Ceph
 
 
 logger = logging.getLogger()
@@ -450,3 +453,68 @@ def _deploy_metrics_push_timer(
         timeout_sec=timeout,
         randomized_delay_sec=min(60, interval // 10),
     )
+
+
+@register_daemon_form
+class RGW(Ceph):
+    """Defines an RGW daemon. The container is set up by Ceph; this form
+    adds the D3N cache and the metrics push timer on the host.
+    """
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type == 'rgw'
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
+        return cls(ctx, ident)
+
+    @classmethod
+    def prepare_host_resources(
+        cls, ctx: CephadmContext, ident: DaemonIdentity, uid: int, gid: int
+    ) -> None:
+        data_dir = ident.data_dir(ctx.data_dir)
+        config_json = fetch_configs(ctx)
+        d3n_cache: Any = config_json.get('d3n_cache')
+
+        if d3n_cache:
+            try:
+                d3n = D3NCache.from_json(d3n_cache)
+            except D3NCacheError as e:
+                raise Error(str(e))
+            prepare_d3n_cache(ctx, d3n, uid, gid)
+            try:
+                d3n_state(ctx, data_dir, D3NStateAction.WRITE, d3n, uid, gid)
+            except Exception as e:
+                logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
+
+        metrics_push: Any = config_json.get('metrics_push')
+        if metrics_push:
+            assert isinstance(metrics_push, dict)
+            _deploy_metrics_push_timer(ctx, ident, metrics_push)
+        else:
+            target: Any = config_json.get('metrics_push_target')
+            _retire_metrics_push_timer(
+                ctx,
+                ident,
+                desired=target if isinstance(target, dict) else None,
+                force_delete=bool(config_json.get('metrics_push_cleanup')),
+            )
+
+    @classmethod
+    def remove_host_resources(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> None:
+        # force remove rgw admin socket file if leftover
+        rgw_asok_path = f'/var/run/ceph/{ident.fsid}/ceph-client.{ident.daemon_name}.*.asok'
+        call(ctx, ['rm', '-rf', rgw_asok_path],
+             verbosity=CallVerbosity.DEBUG)
+
+        data_dir = ident.data_dir(ctx.data_dir)
+        d3n_state(ctx, data_dir, action=D3NStateAction.CLEANUP)
+        timer_unit_id = f'metrics-push@{ident.daemon_type}.{ident.daemon_id}'
+        systemd_unit.remove_timer_unit(ctx, ident.fsid, timer_unit_id)
+
+    @classmethod
+    def host_resource_unit_globs(cls, fsid: str) -> List[str]:
+        return [f'ceph-{fsid}-metrics-push@*']

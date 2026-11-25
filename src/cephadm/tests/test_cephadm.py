@@ -3988,6 +3988,33 @@ def test_pushgateway_delete_accepts_already_gone(monkeypatch):
     assert seen['cmd'][-1].endswith('/zone/abc')
 
 
+def test_host_resources_form_selection():
+    """rgw resolves to a form with host resource hooks; other types do not."""
+    from cephadmlib.daemon_form import HostResourcesDaemonForm
+    form_cls = _cephadm._host_resources_form('rgw')
+    assert form_cls is _rgw.RGW
+    assert issubclass(form_cls, HostResourcesDaemonForm)
+    assert _cephadm._host_resources_form('mds') is None
+    assert _cephadm._host_resources_form('no-such-daemon') is None
+
+
+def test_rgw_remove_host_resources(tmp_path, monkeypatch):
+    """Removing an rgw daemon clears its D3N state and its metrics push timer."""
+    ctx, ident, data = _metrics_push_ident(tmp_path)
+    removed = []
+    monkeypatch.setattr(_rgw, 'call', lambda *a, **k: ('', '', 0))
+    monkeypatch.setattr(
+        _rgw, 'd3n_state', lambda ctx, d, action: removed.append((d, action)))
+    monkeypatch.setattr(
+        _rgw.systemd_unit, 'remove_timer_unit',
+        lambda ctx, fsid, unit_id: removed.append((fsid, unit_id)))
+    _rgw.RGW.remove_host_resources(ctx, ident)
+    assert removed == [
+        (data, _rgw.D3NStateAction.CLEANUP),
+        (ident.fsid, f'metrics-push@rgw.{ident.daemon_id}'),
+    ]
+
+
 class TestZapOsds(object):
     FSID = '50e242f4-59a8-11f1-b582-fa163efd19cc'
     OTHER_FSID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'

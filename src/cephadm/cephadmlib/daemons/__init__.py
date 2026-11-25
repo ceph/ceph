@@ -11,6 +11,7 @@ from .tracing import Tracing
 from .node_proxy import NodeProxy
 from .mgmt_gateway import MgmtGateway
 from .oauth2_proxy import OAuth2Proxy
+from .rgw import RGW
 
 __all__ = [
     'Ceph',
@@ -30,4 +31,5 @@ __all__ = [
     'NodeProxy',
     'MgmtGateway',
     'OAuth2Proxy',
+    'RGW',
 ]

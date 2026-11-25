@@ -95,6 +95,51 @@ class FirewalledServiceDaemonForm(DaemonForm, metaclass=abc.ABCMeta):
         return callable(getattr(other, 'firewall_service_name', None))
 
 
+class HostResourcesDaemonForm(DaemonForm, metaclass=abc.ABCMeta):
+    """The HostResourcesDaemonForm is an optional subclass for daemon forms
+    that own host resources beyond the daemon's own systemd unit and data
+    directory, such as a cache device or a systemd timer. The deploy,
+    rm-daemon and rm-cluster commands call these hooks, so that they need
+    no code specific to the daemon type.
+
+    The hooks are class methods: rm-daemon and rm-cluster run without the
+    deployment config that some forms need to be created.
+    """
+
+    @classmethod
+    @abc.abstractmethod
+    def prepare_host_resources(
+        cls, ctx: CephadmContext, ident: DaemonIdentity, uid: int, gid: int
+    ) -> None:
+        """Create or update the host resources of a daemon. Called on deploy
+        and reconfig, after the daemon's directories and config files are
+        written. The deployment config is available.
+        """
+        raise NotImplementedError()  # pragma: no cover
+
+    @classmethod
+    @abc.abstractmethod
+    def remove_host_resources(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> None:
+        """Remove the host resources of a daemon. Called by rm-daemon once
+        the daemon is stopped and before its data directory is removed.
+        """
+        raise NotImplementedError()  # pragma: no cover
+
+    @classmethod
+    def host_resource_unit_globs(cls, fsid: str) -> List[str]:
+        """Glob patterns, relative to the systemd unit directory, of the
+        unit files and drop-in directories rm-cluster must delete for this
+        form's daemons.
+        """
+        return []
+
+    @classmethod
+    def __subclasshook__(cls, other: Type[DF]) -> bool:
+        return callable(getattr(other, 'prepare_host_resources', None))
+
+
 _DAEMON_FORMERS = []
 
 
@@ -108,6 +153,11 @@ def register(cls: Type[DF]) -> Type[DF]:
     """
     _DAEMON_FORMERS.append(cls)
     return cls
+
+
+def registered() -> List[Type[DaemonForm]]:
+    """Return the registered daemon form classes, in registration order."""
+    return list(_DAEMON_FORMERS)
 
 
 def choose(daemon_type: str) -> Type[DF]:
