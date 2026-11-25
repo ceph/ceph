@@ -10918,7 +10918,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   }
 
   // the pools of a migration keep their PG counts until it is done
-  if ((var == "pg_num" || var == "pgp_num" || var == "pgp_num_actual") &&
+  if ((var == "pg_num" || var == "pg_num_actual" ||
+       var == "pgp_num" || var == "pgp_num_actual") &&
       p.is_migrating()) {
     ss << "pool " << var << " change is disabled while the pool is migrating";
     return -EPERM;
