@@ -293,11 +293,17 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
 
     def wait_for_health_clear(self, timeout):
         """
-        Wait until `ceph health` returns no messages
+        Wait until `ceph health` returns no messages, ignoring muted
+        health checks (e.g. AUTH_INSECURE_* muted for kernel clients
+        using legacy key types).
         """
         def is_clear():
             health = self.ceph_cluster.mon_manager.get_mon_health()
-            return len(health['checks']) == 0
+            unmuted = [name for name, check in health['checks'].items()
+                       if not check.get('muted', False)]
+            if unmuted:
+                log.debug(f'unmuted health checks: {unmuted}')
+            return len(unmuted) == 0
 
         self.wait_until_true(is_clear, timeout)
 
