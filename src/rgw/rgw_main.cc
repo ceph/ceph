@@ -108,14 +108,18 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
-  LinuxKeyringSecret::initialize_process_keyring();
-
   main.init_frontends1(false /* nfs */);
   main.init_numa();
 
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
+
+  if (const auto ec = LinuxKeyringSecret::initialize_process_keyring(); ec) {
+    ldpp_dout(&dp, 0) << "failed to install the process keyring: "
+                      << ec.message() << dendl;
+  }
+
   ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
