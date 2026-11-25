@@ -1842,6 +1842,7 @@ private:
   class RequestStateHook;
 
   RequestStateHook *m_request_state_hook = nullptr;
+  std::string m_admin_socket_name;
 
 public:
   /*** track pending operations ***/
@@ -2711,8 +2712,12 @@ private:
 			   static_cast<int64_t>(
 			     cct->_conf->objecter_inflight_ops)};
  public:
+  /// @param admin_socket_name Optional name for the admin socket command.
+  ///        If empty (default), registers as "objecter_requests".
+  ///        If non-empty, registers as "objecter_requests.<name>".
   Objecter(CephContext *cct, Messenger *m, MonClient *mc,
-	   boost::asio::io_context& service);
+	   boost::asio::io_context& service,
+	   std::string_view admin_socket_name = {});
   ~Objecter() override;
 
   void init();
