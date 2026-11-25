@@ -25,6 +25,24 @@ class CliFieldTransformer:
         return self.func(data)
 
 
+class CliEmptyMessage:
+    """Annotation to specify message when EXCLUSIVE_LIST is empty.
+
+    Template variables available:
+     - Fields from the response dict / parent NamedTuple (e.g., {subsystem_nqn})
+     - CLI command arguments passed to NvmeofCLICommand (e.g., {nqn})
+
+    Example:
+        listeners: Annotated[
+            List[Listener],
+            CliFlags.EXCLUSIVE_LIST,
+            CliEmptyMessage("No listeners for {subsystem_nqn}")
+        ]
+    """
+    def __init__(self, template: str):
+        self.template = template
+
+
 class GatewayInfo(NamedTuple):
     bool_status: Annotated[bool, CliFlags.DROP]
     status: int
@@ -91,7 +109,8 @@ class Subsystem(NamedTuple):
 class SubsystemList(NamedTuple):
     status: int
     error_message: str
-    subsystems: Annotated[List[Subsystem], CliFlags.EXCLUSIVE_LIST]
+    subsystems: Annotated[List[Subsystem], CliFlags.EXCLUSIVE_LIST,
+                          CliEmptyMessage("No subsystems")]
 
 
 class SubsystemStatus(NamedTuple):
@@ -133,7 +152,8 @@ class ConnectionList(NamedTuple):
     status: int
     error_message: str
     subsystem_nqn: str
-    connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST]
+    connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST,
+                           CliEmptyMessage("No connections for {subsystem_nqn}")]
 
 
 class LatencyStats(NamedTuple):
@@ -280,7 +300,9 @@ class Listener(NamedTuple):
 class ListenerList(NamedTuple):
     status: int
     error_message: str
-    listeners: Annotated[List[Listener], CliFlags.EXCLUSIVE_LIST]
+    listeners: Annotated[List[Listener], CliFlags.EXCLUSIVE_LIST,
+                         CliEmptyMessage("No listeners for {nqn}")]
+    nqn: Annotated[str, CliFlags.DROP] = ""
 
 
 class Host(NamedTuple):
@@ -296,7 +318,8 @@ class HostsInfo(NamedTuple):
     error_message: str
     allow_any_host: bool
     subsystem_nqn: str
-    hosts: Annotated[List[Host], CliFlags.EXCLUSIVE_LIST]
+    hosts: Annotated[List[Host], CliFlags.EXCLUSIVE_LIST,
+                     CliEmptyMessage("No hosts are allowed to access {subsystem_nqn}")]
 
 
 class PollGroupTransportInfo(NamedTuple):
