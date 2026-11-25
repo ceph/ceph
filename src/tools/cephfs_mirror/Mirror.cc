@@ -362,6 +362,14 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_file_systems_mirror_enable_failures);
     }
+    // Keep peers on this failed instance. The next
+    // cephfs_mirror_restart_mirror_on_failure_interval retry snapshots
+    // them, and add_peer() does not start a replayer while init has failed.
+    if (mirror_action.fs_mirror && mirror_action.fs_mirror->is_init_failed()) {
+      for (auto &peer : peers) {
+        mirror_action.fs_mirror->add_peer(peer);
+      }
+    }
     return;
   }
 

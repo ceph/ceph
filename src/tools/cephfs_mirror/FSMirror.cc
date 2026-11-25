@@ -477,6 +477,17 @@ void FSMirror::add_peer(const Peer &peer) {
   dout(10) << ": peer=" << peer << dendl;
 
   std::scoped_lock locker(m_lock);
+  // Init failure releases the cluster, ioctx, and mount. PeerReplayer::init()
+  // calls Rados::mon_command on that cluster and segfaults if it has been
+  // reset. Remember the peer so Mirror can replay it after
+  // cephfs_mirror_restart_mirror_on_failure_interval.
+  if (m_init_failed) {
+    dout(5) << ": skipping peer replayer init after FSMirror init failure: peer="
+            << peer << dendl;
+    m_all_peers.emplace(peer);
+    return;
+  }
+
   m_all_peers.emplace(peer);
   if (m_peer_replayers.find(peer) != m_peer_replayers.end()) {
     return;
@@ -505,6 +516,14 @@ void FSMirror::remove_peer(const Peer &peer) {
   std::unique_ptr<PeerReplayer> replayer;
   {
     std::scoped_lock locker(m_lock);
+    if (m_init_failed) {
+      // m_ioctx is closed after init failure; omap cleanup would fault.
+      // Drop the peer from the set that a later restart replays.
+      dout(5) << ": skipping peer replayer shutdown after FSMirror init failure: peer="
+              << peer << dendl;
+      m_all_peers.erase(peer);
+      return;
+    }
     m_all_peers.erase(peer);
     auto it = m_peer_replayers.find(peer);
     if (it != m_peer_replayers.end()) {
