@@ -229,6 +229,30 @@ as follows:
 :command:`global quota disable`
   Disable a global quota.
 
+:command:`ratelimit get`
+  Show user or bucket rate limit parameters.
+
+:command:`ratelimit set`
+  Set user or bucket rate limit parameters.
+
+:command:`ratelimit enable`
+  Enable user or bucket rate limiting.
+
+:command:`ratelimit disable`
+  Disable user or bucket rate limiting.
+
+:command:`global ratelimit get`
+  Show global rate limit parameters.
+
+:command:`global ratelimit set`
+  Set global rate limit parameters.
+
+:command:`global ratelimit enable`
+  Enable global rate limiting.
+
+:command:`global ratelimit disable`
+  Disable global rate limiting.
+
 :command:`realm create`
   Create a new realm.
 
@@ -962,6 +986,45 @@ Quota Options
 
     The scope of quota (bucket, user).
 
+
+Rate Limit Options
+==================
+
+.. option:: --ratelimit-scope
+
+   The scope of rate limiting (``bucket``, ``user``, or ``anonymous``).
+   Use ``--bucket`` for a bucket limit and ``--uid`` for a user limit.
+   The ``anonymous`` scope is available only with ``global ratelimit``.
+
+.. option:: --max-read-ops
+
+   Maximum number of read operations per accumulation interval per RGW
+   instance. A value of ``0`` disables this limit.
+
+.. option:: --max-write-ops
+
+   Maximum number of write operations per accumulation interval per RGW
+   instance. A value of ``0`` disables this limit.
+
+.. option:: --max-read-bytes
+
+   Maximum number of bytes read per accumulation interval per RGW
+   instance. A value of ``0`` disables this limit.
+
+.. option:: --max-write-bytes
+
+   Maximum number of bytes written per accumulation interval per RGW
+   instance. A value of ``0`` disables this limit.
+
+.. option:: --max-list-ops
+
+   Maximum number of bucket listing requests per accumulation interval per RGW
+   instance. A value of ``0`` disables this limit.
+
+.. option:: --max-delete-ops
+
+   Maximum number of delete operations per accumulation interval per RGW
+   instance. A value of ``0`` disables this limit.
 
 Orphans Search Options
 ======================
