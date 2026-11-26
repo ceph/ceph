@@ -12,7 +12,7 @@ import time
 import sys
 
 from assertions import (assert_equal as eq, assert_raises, assert_not_equal,
-                        assert_greater_equal)
+                        assert_greater_equal, SINGLE_OWNER_REFCOUNT)
 from datetime import datetime, timedelta, timezone
 from rados import (Rados,
                    LIBRADOS_SNAP_HEAD,
@@ -367,30 +367,33 @@ def test_aio_open():
 
             # this is a list so that the open_cb() can modify it
             image = [None]
-            def open_cb(_, image_):
-                image[0] = image_
+            try:
+                def open_cb(_, image_):
+                    image[0] = image_
 
-            comp = RBD().aio_open_image(open_cb, ioctx, image_name)
-            comp.wait_for_complete_and_cb()
-            eq(comp.get_return_value(), 0)
-            eq(sys.getrefcount(comp), 2)
-            assert_not_equal(image[0], None)
+                comp = RBD().aio_open_image(open_cb, ioctx, image_name)
+                comp.wait_for_complete_and_cb()
+                eq(comp.get_return_value(), 0)
+                eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
+                assert_not_equal(image[0], None)
 
-            image = image[0]
-            eq(image.get_name(), image_name)
-            check_stat(image.stat(), IMG_SIZE, order)
+                img = image[0]
+                eq(img.get_name(), image_name)
+                check_stat(img.stat(), IMG_SIZE, order)
 
-            closed = [False]
-            def close_cb(_):
-                closed[0] = True
+                closed = [False]
+                def close_cb(_):
+                    closed[0] = True
 
-            comp = image.aio_close(close_cb)
-            comp.wait_for_complete_and_cb()
-            eq(comp.get_return_value(), 0)
-            eq(sys.getrefcount(comp), 2)
-            eq(closed[0], True)
-
-            RBD().remove(ioctx, image_name)
+                comp = img.aio_close(close_cb)
+                comp.wait_for_complete_and_cb()
+                eq(comp.get_return_value(), 0)
+                eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
+                eq(closed[0], True)
+            finally:
+                if image[0] is not None:
+                    image[0].close()
+                RBD().remove(ioctx, image_name)
 
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
@@ -1548,7 +1551,7 @@ class TestImage(object):
         comp.wait_for_complete_and_cb()
         eq(retval[0], b'\0' * 20)
         eq(comp.get_return_value(), 20)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
         # test2: error case
         retval[0] = 1
@@ -1556,7 +1559,7 @@ class TestImage(object):
         comp.wait_for_complete_and_cb()
         eq(None, retval[0])
         assert(comp.get_return_value() < 0)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
         # test3: except case
         def cbex(_, buf):
@@ -1578,7 +1581,7 @@ class TestImage(object):
         comp.wait_for_complete_and_cb()
         eq(retval[0], 0)
         eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
         eq(self.image.read(256, 256), data)
 
     def test_aio_discard(self):
@@ -1592,7 +1595,7 @@ class TestImage(object):
         comp.wait_for_complete_and_cb()
         eq(retval[0], 0)
         eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
         eq(self.image.read(256, 256), b'\0' * 256)
 
     def test_aio_write_zeroes(self):
@@ -1606,7 +1609,7 @@ class TestImage(object):
         comp.wait_for_complete_and_cb()
         eq(retval[0], 0)
         eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
         eq(self.image.read(0, 256), b'\0' * 256)
 
     def test_aio_flush(self):
@@ -1617,7 +1620,7 @@ class TestImage(object):
         comp = self.image.aio_flush(cb)
         comp.wait_for_complete_and_cb()
         eq(retval[0], 0)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
     def test_metadata(self):
         metadata = list(self.image.metadata_list())
@@ -2868,81 +2871,82 @@ class TestMirroring(object):
 
     def test_aio_mirror_image_create_snapshot(self):
         peer_uuid = self.rbd.mirror_peer_add(ioctx, "cluster", "client")
-        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
-        self.image.mirror_image_disable(False)
+        try:
+            self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+            self.image.mirror_image_disable(False)
 
-        # this is a list so that the local cb() can modify it
-        info = [123]
-        def cb(_, _info):
-            info[0] = _info
+            # this is a list so that the local cb() can modify it
+            info = [123]
+            def cb(_, _info):
+                info[0] = _info
 
-        comp = self.image.aio_mirror_image_get_info(cb)
-        comp.wait_for_complete_and_cb()
-        assert_not_equal(info[0], None)
-        eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
-        info = info[0]
-        self.check_info(info, "", RBD_MIRROR_IMAGE_DISABLED, False)
+            comp = self.image.aio_mirror_image_get_info(cb)
+            comp.wait_for_complete_and_cb()
+            assert_not_equal(info[0], None)
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
+            info = info[0]
+            self.check_info(info, "", RBD_MIRROR_IMAGE_DISABLED, False)
 
-        mode = [123]
-        def cb(_, _mode):
-            mode[0] = _mode
+            mode = [123]
+            def cb(_, _mode):
+                mode[0] = _mode
 
-        comp = self.image.aio_mirror_image_get_mode(cb)
-        comp.wait_for_complete_and_cb()
-        eq(comp.get_return_value(), -errno.EINVAL)
-        eq(sys.getrefcount(comp), 2)
-        eq(mode[0], None)
+            comp = self.image.aio_mirror_image_get_mode(cb)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), -errno.EINVAL)
+            eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
+            eq(mode[0], None)
 
-        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
-        snaps = list(self.image.list_snaps())
-        eq(1, len(snaps))
-        snap = snaps[0]
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
-        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+            self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+            snaps = list(self.image.list_snaps())
+            eq(1, len(snaps))
+            snap = snaps[0]
+            eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+            eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
 
-        info = [None]
-        def cb(_, _info):
-            info[0] = _info
+            info = [None]
+            def cb(_, _info):
+                info[0] = _info
 
-        comp = self.image.aio_mirror_image_get_info(cb)
-        comp.wait_for_complete_and_cb()
-        assert_not_equal(info[0], None)
-        eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
-        info = info[0]
-        global_id = info['global_id']
-        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+            comp = self.image.aio_mirror_image_get_info(cb)
+            comp.wait_for_complete_and_cb()
+            assert_not_equal(info[0], None)
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
+            info = info[0]
+            global_id = info['global_id']
+            self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
 
-        mode = [None]
-        def cb(_, _mode):
-            mode[0] = _mode
+            mode = [None]
+            def cb(_, _mode):
+                mode[0] = _mode
 
-        comp = self.image.aio_mirror_image_get_mode(cb)
-        comp.wait_for_complete_and_cb()
-        eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
-        eq(mode[0], RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+            comp = self.image.aio_mirror_image_get_mode(cb)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
+            eq(mode[0], RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
 
-        snap_id = [None]
-        def cb(_, _snap_id):
-            snap_id[0] = _snap_id
+            snap_id = [None]
+            def cb(_, _snap_id):
+                snap_id[0] = _snap_id
 
-        comp = self.image.aio_mirror_image_create_snapshot(0, cb)
-        comp.wait_for_complete_and_cb()
-        assert_not_equal(snap_id[0], None)
-        eq(comp.get_return_value(), 0)
-        eq(sys.getrefcount(comp), 2)
+            comp = self.image.aio_mirror_image_create_snapshot(0, cb)
+            comp.wait_for_complete_and_cb()
+            assert_not_equal(snap_id[0], None)
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
-        snaps = list(self.image.list_snaps())
-        eq(2, len(snaps))
-        snap = snaps[1]
-        eq(snap['id'], snap_id[0])
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
-        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
-        eq([peer_uuid], snap['mirror']['mirror_peer_uuids'])
-
-        self.rbd.mirror_peer_remove(ioctx, peer_uuid)
+            snaps = list(self.image.list_snaps())
+            eq(2, len(snaps))
+            snap = snaps[1]
+            eq(snap['id'], snap_id[0])
+            eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+            eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+            eq([peer_uuid], snap['mirror']['mirror_peer_uuids'])
+        finally:
+            self.rbd.mirror_peer_remove(ioctx, peer_uuid)
 
 class TestTrash(object):
 

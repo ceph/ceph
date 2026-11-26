@@ -1,3 +1,14 @@
+import sys
+
+def single_owner_refcount():
+    obj = object()
+    return sys.getrefcount(obj)
+
+# Measure the refcount of a single-owner local variable once so tests match
+# CPython's bytecode/build-specific refcount behavior (e.g. LOAD_FAST_BORROW
+# in Python 3.14 vs. Py_STACKREF_DEBUG builds).
+SINGLE_OWNER_REFCOUNT = single_owner_refcount()
+
 def assert_lesser(a, b):
     assert a < b
 

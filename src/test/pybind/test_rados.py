@@ -1,5 +1,5 @@
 from __future__ import print_function
-from assertions import assert_equal as eq, assert_raises
+from assertions import assert_equal as eq, assert_raises, SINGLE_OWNER_REFCOUNT
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected, InvalidArgumentError,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
@@ -996,7 +996,7 @@ class TestIoctx(object):
         assert(loops <= 10)
 
         eq(retval[0], payload)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
     @pytest.mark.wait
     def test_aio_read_wait_for_complete_and_cb(self):
@@ -1024,7 +1024,7 @@ class TestIoctx(object):
         comp.wait_for_complete_and_cb()
         assert(retval[0] is not None)
         eq(retval[0], payload)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
     @pytest.mark.wait
     def test_aio_read_wait_for_complete_and_cb_error(self):
@@ -1052,7 +1052,7 @@ class TestIoctx(object):
         comp.wait_for_complete_and_cb()
         eq(None, retval[0])
         assert(comp.get_return_value() < 0)
-        eq(sys.getrefcount(comp), 2)
+        eq(sys.getrefcount(comp), SINGLE_OWNER_REFCOUNT)
 
     def test_lock(self):
         self.ioctx.lock_exclusive("foo", "lock", "locker", "desc_lock",
