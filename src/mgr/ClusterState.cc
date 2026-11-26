@@ -18,6 +18,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MPGStats.h"
+#include "osd/osd_types_fmt.h"
 
 #include <time.h>
 #include <boost/range/adaptor/reversed.hpp>
@@ -80,9 +81,30 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
   std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
-  bool is_in = with_osdmap([from](const OSDMap& osdmap) {
-    return osdmap.is_in(from);
-  });
+  const auto [exists, is_in, stale_before] =
+    with_osdmap([from](const OSDMap& osdmap) {
+      // pg stats produced before the reporter was last marked down
+      // describe a PG interval that has already ended. Keep the cutoff
+      // after the OSD is back up, so that a delayed pre-down report
+      // cannot clear PG_STATE_STALE.
+      const bool exists = osdmap.exists(from);
+      const epoch_t cutoff = exists ? osdmap.get_info(from).down_at : 0;
+      return std::make_tuple(exists, osdmap.is_in(from), cutoff);
+    });
+
+  // Once the reporter is removed from the OSDMap, its down_at is gone
+  // too, and the cutoff above can no longer filter its old reports. A
+  // delayed (or zombie) report would then match the version kept by
+  // the stale-marked PGs and clear PG_STATE_STALE, and would also
+  // re-create osd_stat and pool_statfs entries for the removed OSD.
+  // If our OSDMap is merely behind a new OSD, its next report will
+  // carry all of its PG stats.
+  if (!exists) {
+    dout(10) << fmt::format(
+		  "ignoring pg stats from osd.{}: not in the OSDMap", from)
+	     << dendl;
+    return;
+  }
 
   if (is_in) {
     pending_inc.update_stat(from, std::move(stats->osd_stat));
@@ -119,6 +141,15 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
                << dendl;
       continue;
     }
+    // In case the reporter was marked down after producing these stats
+    if (pg_stats.reported_epoch < stale_before) {
+      dout(15) << fmt::format(
+		    " got {} reported at {}:{} but osd.{} was marked down at e{}",
+		    pgid, pg_stats.reported_epoch, pg_stats.reported_seq,
+		    from, stale_before)
+	       << dendl;
+      continue;
+    }
     // In case we already heard about more recent stats from this PG
     // from another OSD
     const auto q = pg_map.pg_stat.find(pgid);
@@ -127,6 +158,17 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
       dout(15) << " had " << pgid << " from "
 	       << q->second.reported_epoch << ":"
 	       << q->second.reported_seq << dendl;
+      continue;
+    }
+    // ... or from another OSD, earlier in this same reporting window
+    if (const auto pq = pending_inc.pg_stat_updates.find(pgid);
+	pq != pending_inc.pg_stat_updates.end() &&
+	pq->second.get_version_pair() > pg_stats.get_version_pair()) {
+      dout(15) << fmt::format(
+		    " got {} reported at {}:{} but already pending {}:{}",
+		    pgid, pg_stats.reported_epoch, pg_stats.reported_seq,
+		    pq->second.reported_epoch, pq->second.reported_seq)
+	       << dendl;
       continue;
     }
 

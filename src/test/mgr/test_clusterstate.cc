@@ -158,6 +158,48 @@ TEST_F(ClusterStateTest, IngestPGStats_oldReportedSeq)
   ASSERT_FALSE(p_inc.pg_stat_updates.contains(pgid_old_version));
 }
 
+TEST_F(ClusterStateTest, IngestPGStats_RemovedOSD)
+{
+  // osd.0 is the primary of the PG, and reports it active
+  pg_t pgid(0, 1);
+  pgstat.acting_primary = 0;
+  stats->pg_stat[pgid] = pgstat;
+  cs->ingest_pgstats(stats);
+  cs->update_delta_stats();
+  ASSERT_TRUE(cs->test_get_pg_map().osd_stat.contains(0));
+
+  // osd.0 is removed from the OSDMap. Its PG is marked stale, keeping
+  // the version of that last report
+  OSDMap::Incremental rm_inc(osd_map.get_epoch() + 1);
+  rm_inc.new_state[0] = CEPH_OSD_EXISTS;
+  osd_map.apply_incremental(rm_inc);
+  publish_osdmap();
+  ASSERT_FALSE(cs->with_osdmap([](const OSDMap& o) { return o.exists(0); }));
+  cs->with_osdmap_and_pgmap([&](const OSDMap&, const PGMap&) {
+    cs->notify_osdmap(osd_map);
+  });
+  {
+    const PGMap pg_map = cs->test_get_pg_map();
+    ASSERT_TRUE(pg_map.pg_stat.at(pgid).state & PG_STATE_STALE);
+    ASSERT_EQ(pg_map.pg_stat.at(pgid).get_version_pair(),
+	      pgstat.get_version_pair());
+    ASSERT_FALSE(pg_map.osd_stat.contains(0));
+  }
+
+  // a delayed copy of that same report must neither clear
+  // PG_STATE_STALE nor re-create stats for the removed OSD
+  ingest_and_pginc();
+  ASSERT_TRUE(p_inc.pg_stat_updates.empty());
+  ASSERT_TRUE(p_inc.get_osd_stat_updates().empty());
+  ASSERT_TRUE(p_inc.pool_statfs_updates.empty());
+
+  cs->update_delta_stats();
+  const PGMap pg_map = cs->test_get_pg_map();
+  ASSERT_TRUE(pg_map.pg_stat.at(pgid).state & PG_STATE_STALE);
+  ASSERT_FALSE(pg_map.osd_stat.contains(0));
+  ASSERT_FALSE(pg_map.pool_statfs.contains(std::make_pair(int64_t{1}, 0)));
+}
+
 TEST_F(ClusterStateTest, UpdateDeltaStats)
 {
   pg_t pgid(0, 1);
