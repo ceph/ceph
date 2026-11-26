@@ -1846,6 +1846,27 @@ class TestCephadm(object):
         with pytest.raises(OrchestratorError, match=msg):
             self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': c}, **spec_kwargs)
 
+    # 'ceph orch daemon add osd host:data_devices=...,osds_per_device=2' hands
+    # the value over as a str; DriveGroupSpec does not coerce it.
+    @pytest.mark.parametrize('osds_per_device', ['2', '10'])
+    def test_fcm_fraction_refuses_osds_per_device_given_as_str(
+            self, cephadm_module, osds_per_device):
+        c = {'data_size_bytes': 900, 'device_bytes': 1000}
+        with pytest.raises(OrchestratorError, match='osds_per_device'):
+            self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': c},
+                           osds_per_device=osds_per_device)
+
+    def test_fcm_fraction_accepts_osds_per_device_one_given_as_str(self, cephadm_module):
+        c = {'data_size_bytes': 900, 'device_bytes': 1000}
+        assert self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': c},
+                              osds_per_device='1') == 0.9
+
+    def test_fcm_fraction_refuses_non_numeric_osds_per_device(self, cephadm_module):
+        c = {'data_size_bytes': 900, 'device_bytes': 1000}
+        with pytest.raises(OrchestratorError, match='osds_per_device'):
+            self._fraction(cephadm_module, ['/dev/sdb'], {'/dev/sdb': c},
+                           osds_per_device='two')
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_fcm_constraint_error_is_surfaced(
             self, _run_cephadm, cephadm_module: CephadmOrchestrator):
