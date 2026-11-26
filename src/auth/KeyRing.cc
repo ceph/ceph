@@ -101,17 +101,17 @@ int KeyRing::from_ceph_context(CephContext *cct, std::ostream* os)
 
 int KeyRing::set_modifier(std::string_view type,
 			  std::string_view val,
-			  EntityName& name,
+			  const EntityName& name,
 			  map<string, bufferlist>& caps)
 {
-  auto set_key_from_val = [&](void (KeyRing::*set)(EntityName&, CryptoKey&)) {
+  auto set_key_from_val = [&](void (KeyRing::*set)(const EntityName&, CryptoKey&&)) {
     CryptoKey key;
     try {
       key.decode_base64(string{val});
     } catch (const ceph::buffer::error& err) {
       return -EINVAL;
     }
-    (this->*set)(name, key);
+    (this->*set)(name, std::move(key));
     return 0;
   };
 
@@ -251,9 +251,9 @@ void KeyRing::print(ostream& out)
   }
 }
 
-void KeyRing::import(CephContext *cct, KeyRing& other)
+void KeyRing::import(CephContext *cct, const KeyRing& other)
 {
-  for (map<EntityName, EntityAuth>::iterator p = other.keys.begin();
+  for (auto p = other.keys.begin();
        p != other.keys.end();
        ++p) {
     ldout(cct, 10) << " importing " << p->first << dendl;
