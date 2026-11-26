@@ -1,0 +1,31 @@
+# Recreate for the libceph GET_INTERNAL_VERSIONS_V2 re-probe fix: once the client
+# has latched the GET_INTERNAL_VERSIONS (v1) fallback after a pre-V2 OSD, it must
+# re-probe V2 when the osdmap epoch advances (a rolling upgrade), not stay on v1
+# until a remount.
+#
+# Run against a ceph that has osd_debug_reject_internal_versions_v2 (branch
+# wip-aainscow-osd-reject-v2) and with the ec_split_v1_reads counter kernel.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(OSDMAP_FLAGS\)
+      - is_erasure
+      - slow request
+      - marked LAGGY
+      - noout flag
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      osd:
+        osd_debug_reject_internal_versions_v2: false
+- workunit:
+    clients:
+      client.0:
+        - rbd/krbd_split_read_v1_reprobe.sh
