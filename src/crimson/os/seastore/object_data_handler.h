@@ -254,6 +254,8 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   explicit ObjectDataBlock(extent_len_t length)
     : LogicalChildNode(length) {}
 
+  using LogicalChildNode::set_bptr;
+
   void do_on_state_commit() final {
     auto &prior = static_cast<ObjectDataBlock&>(*get_prior_instance());
     prior.delta = std::move(delta);

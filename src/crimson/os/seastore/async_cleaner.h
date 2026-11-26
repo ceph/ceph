@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/metrics_types.hh>
@@ -31,6 +32,12 @@ namespace crimson::os::seastore {
  */
 struct segment_info_t {
   segment_id_t id = NULL_SEG_ID;
+
+  boost::intrusive::list_member_hook<
+    boost::intrusive::link_mode<boost::intrusive::auto_unlink>> empty_hook;
+
+  boost::intrusive::list_member_hook<
+    boost::intrusive::link_mode<boost::intrusive::auto_unlink>> closed_bucket_hook;
 
   // segment_info_t is initiated as set_empty()
   Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
@@ -115,6 +122,10 @@ public:
   }
 
   const segment_info_t& operator[](segment_id_t id) const {
+    return segments[id];
+  }
+
+  segment_info_t& operator[](segment_id_t id) {
     return segments[id];
   }
 
@@ -214,6 +225,29 @@ public:
     }
   }
 
+  segment_id_t get_empty_segment(device_id_t preferred_device = DEVICE_ID_NULL) const {
+    if (total_empty_segments_count == 0 || device_ids.empty()) {
+      return NULL_SEG_ID;
+    }
+    if (preferred_device != DEVICE_ID_NULL &&
+        preferred_device < empty_segments_by_device.size() &&
+        !empty_segments_by_device[preferred_device].empty()) {
+      return empty_segments_by_device[preferred_device].front().id;
+    }
+    // Round-robin striping across available devices for wear-leveling and balanced throughput
+    std::size_t num_devs = device_ids.size();
+    for (std::size_t i = 0; i < num_devs; ++i) {
+      auto dev_idx = (next_device_cursor + i) % num_devs;
+      auto d_id = device_ids[dev_idx];
+      if (d_id < empty_segments_by_device.size() &&
+          !empty_segments_by_device[d_id].empty()) {
+        next_device_cursor = (dev_idx + 1) % num_devs;
+        return empty_segments_by_device[d_id].front().id;
+      }
+    }
+    return NULL_SEG_ID;
+  }
+
   void reset();
 
   void add_segment_manager(SegmentManager &segment_manager);
@@ -257,8 +291,41 @@ public:
   }
 
 private:
+  using empty_hook_options = boost::intrusive::member_hook<
+    segment_info_t,
+    boost::intrusive::list_member_hook<
+      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>,
+    &segment_info_t::empty_hook>;
+  using empty_list_t = boost::intrusive::list<
+    segment_info_t,
+    empty_hook_options,
+    boost::intrusive::constant_time_size<false>>;
+
+  void add_empty_segment(segment_id_t id) {
+    auto& info = segments[id];
+    ceph_assert(!info.empty_hook.is_linked());
+    auto d_id = id.device_id();
+    if (d_id >= empty_segments_by_device.size()) {
+      empty_segments_by_device.resize(d_id + 1);
+    }
+    empty_segments_by_device[d_id].push_back(info);
+    ++total_empty_segments_count;
+  }
+
+  void remove_empty_segment(segment_id_t id) {
+    auto& info = segments[id];
+    ceph_assert(info.empty_hook.is_linked());
+    info.empty_hook.unlink();
+    ceph_assert(total_empty_segments_count > 0);
+    --total_empty_segments_count;
+  }
+
   // See reset() for member initialization
   segment_map_t<segment_info_t> segments;
+  std::vector<empty_list_t> empty_segments_by_device;
+  std::vector<device_id_t> device_ids;
+  mutable std::size_t next_device_cursor = 0;
+  std::size_t total_empty_segments_count = 0;
 
   segment_off_t segment_size;
 
@@ -671,6 +738,9 @@ public:
   }
 
   bool try_reserve_inline_usage(std::size_t usage) final {
+    if (usage == 0) {
+      return true;
+    }
     reserved_usage += usage;
     if (should_block_io_on_trim()) {
       reserved_usage -= usage;
@@ -681,6 +751,9 @@ public:
   }
 
   void release_inline_usage(std::size_t usage) final {
+    if (usage == 0) {
+      return;
+    }
     ceph_assert(reserved_usage >= usage);
     reserved_usage -= usage;
   }
@@ -1559,14 +1632,15 @@ public:
 
 private:
   /*
-   * 10 buckets for the number of closed segments by usage
-   * 2 extra buckets for the number of open and empty segments
+   * Utilization buckets for closed segments by usage [0.0, 1.0)
+   * Plus 2 extra buckets for open and empty segments.
    */
+  static constexpr std::size_t NUM_CLOSED_UTIL_BUCKETS = 10;
   static constexpr double UTIL_STATE_OPEN = 1.05;
   static constexpr double UTIL_STATE_EMPTY = 1.15;
-  static constexpr std::size_t UTIL_BUCKETS = 12;
+  static constexpr std::size_t UTIL_BUCKETS = NUM_CLOSED_UTIL_BUCKETS + 2;
   static std::size_t get_bucket_index(double util) {
-    auto index = std::floor(util * 10);
+    auto index = std::floor(util * NUM_CLOSED_UTIL_BUCKETS);
     assert(index < UTIL_BUCKETS);
     return index;
   }
@@ -1714,12 +1788,33 @@ private:
     const segment_header_t& header,
     segment_id_t segment_id);
 
-  void adjust_segment_util(double old_usage, double new_usage) {
+  using closed_bucket_hook_options = boost::intrusive::member_hook<
+    segment_info_t,
+    boost::intrusive::list_member_hook<
+      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>,
+    &segment_info_t::closed_bucket_hook>;
+  using closed_bucket_list_t = boost::intrusive::list<
+    segment_info_t,
+    closed_bucket_hook_options,
+    boost::intrusive::constant_time_size<false>>;
+  std::array<closed_bucket_list_t, NUM_CLOSED_UTIL_BUCKETS> closed_util_buckets;
+
+  void adjust_segment_util(segment_id_t segment, double old_usage, double new_usage) {
     auto old_index = get_bucket_index(old_usage);
     auto new_index = get_bucket_index(new_usage);
     assert(stats.segment_util.buckets[old_index].count > 0);
     stats.segment_util.buckets[old_index].count--;
     stats.segment_util.buckets[new_index].count++;
+
+    auto& info = segments[segment];
+    if (old_index < NUM_CLOSED_UTIL_BUCKETS) {
+      if (info.closed_bucket_hook.is_linked()) {
+        info.closed_bucket_hook.unlink();
+      }
+    }
+    if (new_index < NUM_CLOSED_UTIL_BUCKETS && info.is_closed()) {
+      closed_util_buckets[new_index].push_back(info);
+    }
   }
 
   void init_mark_segment_closed(
@@ -1735,7 +1830,7 @@ private:
     ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
     segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
-    adjust_segment_util(old_usage, new_usage);
+    adjust_segment_util(segment, old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {
       ool_segment_seq_allocator.set_next_segment_seq(seq);
     }
@@ -1750,6 +1845,7 @@ private:
   // Adaptive state: peak open segments observed since last adjust.
   std::size_t peak_open_segments_window = 0;
   seastar::lowres_clock::time_point adaptive_last_time;
+  double last_adjusted_projected_used = 0.0;
 
   // Peak projected_used with slow exponential decay per adjust cycle. Decay
   // 0.5% per 30s window = half-life ~1 hour: long enough not to forget peaks

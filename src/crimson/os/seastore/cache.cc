@@ -1405,25 +1405,22 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
             t, type, length, opt.hint, rewrite_gen_printer_t{opt.gen});
   ceph_assert(get_extent_category(type) == data_category_t::DATA);
-  std::vector<CachedExtentRef> res;
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	ObjectDataBlock>(t, length, std::move(opt));
-      res.insert(res.begin(), extents.begin(), extents.end());
+ ObjectDataBlock>(t, length, std::move(opt));
+      return {extents.begin(), extents.end()};
     }
-    return res;
   case extent_types_t::TEST_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	TestBlock>(t, length, std::move(opt));
-      res.insert(res.begin(), extents.begin(), extents.end());
+ TestBlock>(t, length, std::move(opt));
+      return {extents.begin(), extents.end()};
     }
-    return res;
   default:
     ceph_assert(0 == "impossible");
-    return res;
+    return {};
   }
 }
 

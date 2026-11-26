@@ -267,6 +267,24 @@ ObjectDataHandler::delta_based_overwrite(
   odblock->overwrite(unaligned_offset, std::move(bl));
 }
 
+template <typename ExtentRef, typename IterT>
+static void populate_extent_bptr(
+  ExtentRef &extent,
+  IterT &iter)
+{
+  auto ext_len = extent->get_length();
+  auto cur_ptr = iter.get_current_ptr();
+  if (cur_ptr.length() >= ext_len) {
+    ceph::bufferptr slice(cur_ptr, 0, ext_len);
+    if (slice.is_page_aligned() && slice.is_n_page_sized()) {
+      extent->set_bptr(std::move(slice));
+      iter += ext_len;
+      return;
+    }
+  }
+  iter.copy(ext_len, extent->get_bptr().c_str());
+}
+
 ObjectDataHandler::write_ret do_zero(
   context_t ctx,
   LBAMapping zero_pos,
@@ -296,7 +314,7 @@ ObjectDataHandler::write_ret do_zero(
     assert(extents.size() == 1);
     auto &extent = extents.back();
     auto iter = data.tailbl->cbegin();
-    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+    populate_extent_bptr(extent, iter);
     zero_pos = co_await ctx.tm.get_pin(ctx.t, *extent
     ).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure("unexpected enospc"),
@@ -348,7 +366,7 @@ ObjectDataHandler::write_ret do_zero(
     assert(extents.size() == 1);
     auto &extent = extents.back();
     auto iter = data.headbl->cbegin();
-    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+    populate_extent_bptr(extent, iter);
   }
   co_return;
 }
@@ -383,7 +401,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     auto &extent = extents.back();
     assert(overwrite_range.aligned_begin == extent->get_laddr());
     auto iter = data.headbl->cbegin();
-    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+    populate_extent_bptr(extent, iter);
     auto mapping = co_await ctx.tm.get_pin(ctx.t, *extent
     ).handle_error_interruptible(
       crimson::ct_error::enoent::assert_failure("unexpected enospc"),
@@ -439,7 +457,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     assert((overwrite_range.aligned_end - ctx.tm.get_block_size()
       ).checked_to_laddr() == extent->get_laddr());
     auto iter = data.tailbl->cbegin();
-    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+    populate_extent_bptr(extent, iter);
   }
 }
 
@@ -480,7 +498,7 @@ ObjectDataHandler::write_ret do_write(
 	  extent->get_laddr(),
 	  off);
       }
-      iter.copy(extent->get_length(), extent->get_bptr().c_str());
+      populate_extent_bptr(extent, iter);
       off = (off + extent->get_length()).checked_to_laddr();
       left -= extent->get_length();
     }

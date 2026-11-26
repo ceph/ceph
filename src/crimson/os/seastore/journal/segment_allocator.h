@@ -105,10 +105,25 @@ class SegmentAllocator : public JournalAllocator {
  private:
   open_ret do_open(bool is_mkfs);
 
+  struct pre_opened_segment_t {
+    SegmentRef segment;
+    segment_seq_t seq = NULL_SEG_SEQ;
+    segment_nonce_t nonce = 0;
+    segment_off_t written_to = 0;
+    journal_seq_t journal_seq = JOURNAL_SEQ_NULL;
+  };
+
+  void maybe_pre_open_next_segment();
+  using pre_open_ertr = base_ertr;
+  pre_open_ertr::future<> do_pre_open();
+  roll_ertr::future<> roll_with_pre_opened();
+
   void reset() {
     current_segment.reset();
+    pre_opened_segment.reset();
+    pre_open_in_flight = false;
+    pre_open_promise.reset();
     written_to = 0;
-
     current_segment_nonce = 0;
   }
 
@@ -128,6 +143,10 @@ class SegmentAllocator : public JournalAllocator {
   SegmentSeqAllocator &segment_seq_allocator;
   segment_nonce_t current_segment_nonce;
   JournalTrimmer *trimmer;
+
+  std::optional<pre_opened_segment_t> pre_opened_segment;
+  bool pre_open_in_flight = false;
+  std::optional<seastar::shared_promise<>> pre_open_promise;
 };
 
 }

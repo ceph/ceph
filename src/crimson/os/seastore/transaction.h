@@ -19,6 +19,7 @@
 
 namespace crimson::os::seastore {
 
+class ExtentOolWriter;
 class SeaStore;
 
 struct io_stat_t {
@@ -318,18 +319,25 @@ public:
     }
   }
 
-  std::vector<CachedExtentRef> get_delayed_alloc_list() {
-    std::vector<CachedExtentRef> ret;
-    ret.reserve(delayed_alloc_list.size());
+  template <typename F>
+  void for_each_delayed_alloc_extent(F&& f) {
     for (auto& extent : delayed_alloc_list) {
       // delayed extents may be invalidated
       if (extent->is_valid()) {
-        ret.push_back(std::move(extent));
+        f(extent);
       } else {
         ++num_delayed_invalid_extents;
       }
     }
     delayed_alloc_list.clear();
+  }
+
+  std::vector<CachedExtentRef> get_delayed_alloc_list() {
+    std::vector<CachedExtentRef> ret;
+    ret.reserve(delayed_alloc_list.size());
+    for_each_delayed_alloc_extent([&ret](auto& extent) {
+      ret.push_back(std::move(extent));
+    });
     return ret;
   }
 
@@ -551,6 +559,19 @@ public:
     return handle;
   }
 
+  struct placement_cache_t {
+    ExtentOolWriter* data_writer = nullptr;
+    rewrite_gen_t data_gen = NULL_GENERATION;
+    ExtentOolWriter* md_writer = nullptr;
+    rewrite_gen_t md_gen = NULL_GENERATION;
+    bool has_data_placement = false;
+    bool has_md_placement = false;
+  };
+
+  placement_cache_t& get_placement_cache() {
+    return placement_cache;
+  }
+
   Transaction(
     OrderingHandle &&handle,
     bool weak,
@@ -580,6 +601,10 @@ public:
     views.clear();
   }
 
+private:
+  placement_cache_t placement_cache;
+
+public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 

@@ -172,48 +172,58 @@ void AvlAllocator::_add_to_tree(rbm_abs_addr start, rbm_abs_addr size)
   }
 }
 
+rbm_abs_addr AvlAllocator::_alloc_from_range(extent_range_t& rs, size_t size)
+{
+  LOG_PREFIX(AvlAllocator::_alloc_from_range);
+  rbm_abs_addr start = rs.start;
+  rbm_abs_addr end = start + size;
+  ceph_assert(size != 0);
+  ceph_assert(size <= rs.length());
+  ceph_assert(size <= available_size);
+
+  bool right_over = (rs.end != end);
+
+  _extent_size_tree_rm(rs);
+  if (!right_over) {
+    // Exact match: entire range is consumed, remove from extent_tree
+    extent_tree.erase_and_dispose(extent_tree.iterator_to(rs), dispose_rs{});
+  } else {
+    // Remainder on the right: update rs.start in-place (extent_tree order is preserved)
+    rs.start = end;
+    _extent_size_tree_try_insert(rs);
+  }
+  return start;
+}
+
 std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
   size_t size)
 {
   LOG_PREFIX(AvlAllocator::alloc_extent);
-  if (available_size < size) {
-    return std::nullopt;
-  }
-  if (extent_size_tree.empty()) {
+  if (available_size < size || extent_size_tree.empty()) {
     return std::nullopt;
   }
   ceph_assert(size > 0);
   ceph_assert(is_aligned(size, block_size));
   ceph_assert(size <= max_alloc_size);
 
-  interval_set<rbm_abs_addr> result;
-
-  auto try_to_alloc_block = [this, &result, FNAME] (uint64_t alloc_size) -> uint64_t
-  {
-    rbm_abs_addr start = find_block(alloc_size);
-    if (start != get_end()) {
-      _remove_from_tree(start, alloc_size);
-      DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
-	start, alloc_size, available_size);
-      result.insert(start, alloc_size);
-      return alloc_size;
-    }
-    return 0;
-  };
-  
-  rbm_abs_addr ret = try_to_alloc_block(size);
-  if (ret == 0) {
+  const auto comp = extent_size_tree.key_comp();
+  auto iter = extent_size_tree.lower_bound(
+    extent_range_t{base_addr, base_addr + size}, comp);
+  if (iter == extent_size_tree.end()) {
     return std::nullopt;
   }
 
-  assert(!result.empty());
-  assert(result.num_intervals() == 1);
-  for (auto p : result) {
-    DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
-    if (detailed) {
-      assert(!reserved_extent_tracker.contains(p.first, p.second));
-      reserved_extent_tracker.insert(p.first, p.second);
-    }
+  // Fast direct range allocation: eliminates redundant secondary extent_tree search
+  rbm_abs_addr start = _alloc_from_range(*iter, size);
+  DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
+        start, size, available_size);
+
+  interval_set<rbm_abs_addr> result;
+  result.insert(start, size);
+
+  if (detailed) {
+    assert(!reserved_extent_tracker.contains(start, size));
+    reserved_extent_tracker.insert(start, size);
   }
   return result;
 }
@@ -222,38 +232,38 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
   size_t size, rbm_abs_addr hint)
 {
   LOG_PREFIX(AvlAllocator::alloc_extents);
-  if (available_size < size) {
-    return std::nullopt;
-  }
-  if (extent_size_tree.empty()) {
+  if (available_size < size || extent_size_tree.empty()) {
     return std::nullopt;
   }
   ceph_assert(size > 0);
   ceph_assert(is_aligned(size, block_size));
 
-  interval_set<rbm_abs_addr> result;
-
-  auto try_to_alloc_block = [this, hint, &result, FNAME] (uint64_t alloc_size)
-  {
-    rbm_abs_addr start = hint;
-    while (alloc_size) {
-      extent_len_t len = find_block(std::min(max_alloc_size, alloc_size), start);
-      ceph_assert(len);
-      _remove_from_tree(start, len);
-      DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
-	start, len, available_size);
-      result.insert(start, len);
-      alloc_size -= len;
+  // Fast-path: single contiguous chunk allocation if size <= max_alloc_size
+  if (size <= max_alloc_size) {
+    auto res = alloc_extent(size);
+    if (res.has_value()) {
+      return res;
     }
-    return 0;
-  };
-  
-  try_to_alloc_block(size);
+  }
+
+  interval_set<rbm_abs_addr> result;
+  uint64_t alloc_size = size;
+  rbm_abs_addr start = hint;
+
+  while (alloc_size > 0) {
+    extent_len_t len = find_block(std::min(max_alloc_size, alloc_size), start);
+    ceph_assert(len > 0);
+    _remove_from_tree(start, len);
+    DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
+          start, len, available_size);
+    result.insert(start, len);
+    alloc_size -= len;
+  }
 
   assert(!result.empty());
-  for (auto p : result) {
-    DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
-    if (detailed) {
+  if (detailed) {
+    for (auto p : result) {
+      DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
       assert(!reserved_extent_tracker.contains(p.first, p.second));
       reserved_extent_tracker.insert(p.first, p.second);
     }

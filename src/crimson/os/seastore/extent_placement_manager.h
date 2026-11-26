@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <boost/container/small_vector.hpp>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
 
@@ -112,9 +113,44 @@ using TokenBucketRef = std::unique_ptr<TokenBucket>;
  * Write the extents as out-of-line and allocate the physical addresses.
  * Different writers write extents to different locations.
  */
+/**
+ * Inline capacities for boost::container::small_vector in EPM dispatching:
+ *
+ * 1. DEFAULT_OOL_WRITER_EXTENTS_CAPACITY (16):
+ *    - Typical client I/O transactions produce 1 to 8 delayed/OOL extents, so 16
+ *      covers the vast majority (>99%) of commit cycles entirely on the stack
+ *      without dynamic heap allocations (malloc/free).
+ *    - 16 intrusive pointers (16 * 8B = 128B) align cleanly to two 64-byte L1 CPU
+ *      cache lines while keeping Seastar fiber stack usage minimal.
+ *
+ * 2. DEFAULT_OOL_WRITERS_CAPACITY (16):
+ *    - Covers all named writers (journal, data/metadata writers across hot/cold tiers
+ *      and rewrite generations) in an alloc_map without heap allocation.
+ *
+ * If the number of extents or writers exceeds 16:
+ *    - boost::container::small_vector automatically and transparently falls back to
+ *      dynamic heap allocation. There is NO data loss, overflow, or functional failure;
+ *      the only penalty is the standard dynamic allocation overhead for that batch.
+ */
+static constexpr std::size_t DEFAULT_OOL_WRITER_EXTENTS_CAPACITY = 16;
+static constexpr std::size_t DEFAULT_OOL_WRITERS_CAPACITY = 16;
+using ool_extents_vec_t = boost::container::small_vector<CachedExtentRef, DEFAULT_OOL_WRITER_EXTENTS_CAPACITY>;
+using ool_extents_vec_base_t = boost::container::small_vector_base<CachedExtentRef>;
+using ool_logical_extents_vec_t = boost::container::small_vector<LogicalCachedExtentRef, DEFAULT_OOL_WRITER_EXTENTS_CAPACITY>;
+using ool_logical_extents_vec_base_t = boost::container::small_vector_base<LogicalCachedExtentRef>;
+
 class ExtentOolWriter {
+  uint8_t writer_id = 0;
 public:
   virtual ~ExtentOolWriter() {}
+
+  void set_writer_id(uint8_t id) {
+    writer_id = id;
+  }
+
+  uint8_t get_writer_id() const {
+    return writer_id;
+  }
 
   virtual backend_type_t get_type() const = 0;
 
@@ -134,7 +170,7 @@ public:
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) = 0;
+    ool_extents_vec_base_t &extents) = 0;
 
   using close_ertr = base_ertr;
   virtual close_ertr::future<> close() = 0;
@@ -177,7 +213,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) final;
+    ool_extents_vec_base_t &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -203,12 +239,13 @@ public:
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<CachedExtentRef> &extent);
+    ool_extents_vec_base_t &extents,
+    std::size_t extent_idx = 0);
 
   alloc_write_ertr::future<> write_record(
     Transaction& t,
     record_t&& record,
-    std::list<LogicalCachedExtentRef> &&extents,
+    ool_logical_extents_vec_t &&extents,
     bool with_atomic_roll_segment=false);
 
   store_index_t store_index;
@@ -244,7 +281,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents) final;
+    ool_extents_vec_base_t &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -304,7 +341,7 @@ private:
   };
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<CachedExtentRef> &extent);
+    ool_extents_vec_base_t &extents);
 
   RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
@@ -493,21 +530,57 @@ public:
            opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(
-      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
-
+    rewrite_gen_t gen;
     paddr_t addr;
+
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());
+      gen = adjust_generation(
+        category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
       addr = *opt.external_paddr;
     } else
 #endif
-      if (opt.gen == INLINE_GENERATION) {
-      addr = make_record_relative_paddr(0);
-    } else {
-      assert(category == data_category_t::METADATA);
-      addr = get_writer(opt.hint, category, opt.gen)->alloc_paddr(length);
+    {
+      auto& pcache = t.get_placement_cache();
+      if (likely(opt.gen == INIT_GENERATION &&
+                 opt.hint != placement_hint_t::COLD &&
+                 !opt.is_tracked &&
+                 (!has_cold_tier() || !background_process.is_ready()))) {
+        if (pcache.has_md_placement) {
+          gen = pcache.md_gen;
+          if (gen == INLINE_GENERATION) {
+            addr = make_record_relative_paddr(0);
+          } else {
+            assert(pcache.md_writer != nullptr);
+            addr = pcache.md_writer->alloc_paddr(length);
+          }
+        } else {
+          if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+            gen = INLINE_GENERATION;
+            addr = make_record_relative_paddr(0);
+            pcache.md_gen = gen;
+            pcache.md_writer = nullptr;
+            pcache.has_md_placement = true;
+          } else {
+            gen = OOL_GENERATION;
+            auto writer = get_writer(data_category_t::METADATA, OOL_GENERATION);
+            addr = writer->alloc_paddr(length);
+            pcache.md_gen = gen;
+            pcache.md_writer = writer;
+            pcache.has_md_placement = true;
+          }
+        }
+      } else {
+        gen = adjust_generation(
+          category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
+        if (gen == INLINE_GENERATION) {
+          addr = make_record_relative_paddr(0);
+        } else {
+          assert(category == data_category_t::METADATA);
+          addr = get_writer(opt.hint, category, gen)->alloc_paddr(length);
+        }
+      }
     }
     assert(!(category == data_category_t::DATA));
 
@@ -519,10 +592,10 @@ public:
     // according to the allocator.
     auto bp = create_extent_ptr_zero(length);
 
-    return alloc_result_t{addr, std::move(bp), opt.gen};
+    return alloc_result_t{addr, std::move(bp), gen};
   }
 
-  std::list<alloc_result_t> alloc_new_data_extents(
+  std::vector<alloc_result_t> alloc_new_data_extents(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
@@ -536,24 +609,49 @@ public:
            opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(
-      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
-    assert(opt.gen != INLINE_GENERATION);
+    assert(category == data_category_t::DATA);
+    rewrite_gen_t gen;
+    ExtentOolWriter* writer = nullptr;
+
+    auto& pcache = t.get_placement_cache();
+    if (likely(opt.gen == INIT_GENERATION &&
+               opt.hint != placement_hint_t::COLD &&
+               !opt.is_tracked &&
+               (!has_cold_tier() || !background_process.is_ready()))) {
+      if (pcache.has_data_placement) {
+        gen = pcache.data_gen;
+        writer = pcache.data_writer;
+      } else {
+        gen = OOL_GENERATION;
+        writer = get_writer(data_category_t::DATA, OOL_GENERATION);
+        pcache.data_gen = gen;
+        pcache.data_writer = writer;
+        pcache.has_data_placement = true;
+      }
+    } else {
+      gen = adjust_generation(
+        category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
+      assert(gen != INLINE_GENERATION);
+      writer = get_writer(opt.hint, category, gen);
+    }
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
-    std::list<alloc_result_t> allocs;
+    std::vector<alloc_result_t> allocs;
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(opt.external_paddr.has_value())) {
       assert(opt.external_paddr->is_fake());
-      auto bp = create_extent_ptr_zero(length);
-      allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), opt.gen});
+      auto bp = create_extent_ptr_rand(length);
+      allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), gen});
     } else
 #endif
     {
-      assert(category == data_category_t::DATA);
-      auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(
-        length, opt.paddr_hint);
+      auto addrs = writer->alloc_paddrs(length, opt.paddr_hint);
+      if (max_data_allocation_size && max_data_allocation_size < length) {
+        allocs.reserve((length + max_data_allocation_size - 1) / max_data_allocation_size);
+      } else {
+        allocs.reserve(addrs.size());
+      }
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -561,14 +659,14 @@ public:
           if (max_data_allocation_size) {
             len = std::min(max_data_allocation_size, len);
           }
-          auto bp = create_extent_ptr_zero(len);
+          auto bp = create_extent_ptr_uninit(len);
           auto start = ext.start.is_delayed()
                         ? ext.start
                         : ext.start + (ext.len - left);
-          allocs.emplace_back(alloc_result_t{start, std::move(bp), opt.gen});
+          allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
           SUBDEBUGT(seastore_epm,
                     "allocated {} 0x{:x}B extent at {}, opt.hint={}, opt.gen={}",
-                    t, type, len, start, opt.hint, opt.gen);
+                    t, type, len, start, opt.hint, gen);
           left -= len;
         }
       }
@@ -615,11 +713,13 @@ public:
    * delayed_extents is used to update lba mapping.
    * usage is used to reserve projected space
    */
-  using extents_by_writer_t =
-    std::map<ExtentOolWriter*, std::list<CachedExtentRef>>;
+  struct writer_extents_t {
+    ExtentOolWriter* writer = nullptr;
+    ool_extents_vec_t extents;
+  };
+  using extents_by_writer_t = boost::container::small_vector<writer_extents_t, DEFAULT_OOL_WRITERS_CAPACITY>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
-    std::vector<CachedExtentRef> delayed_extents;
     io_usage_t usage;
   };
 
@@ -775,6 +875,23 @@ private:
       write_policy_t policy,
       bool is_tracked) {
     assert(is_real_type(type));
+
+    // Fast-path: INIT_GENERATION non-tracked data and metadata extents when cold tier is absent or idle
+    if (likely(gen == INIT_GENERATION &&
+               hint != placement_hint_t::COLD &&
+               !is_tracked &&
+               (!has_cold_tier() || !background_process.is_ready()))) {
+      if (category == data_category_t::DATA) {
+        return OOL_GENERATION;
+      } else {
+        if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+          return INLINE_GENERATION;
+        } else {
+          return OOL_GENERATION;
+        }
+      }
+    }
+
     if (is_root_type(type)) {
       gen = INLINE_GENERATION;
     } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
@@ -1151,10 +1268,8 @@ private:
     }
 
     seastar::future<> wait_background() {
-      if (!blocking_io) {
-        blocking_io = seastar::shared_promise<>();
-      }
-      return blocking_io->get_shared_future();
+      background_waiters.emplace_back();
+      return background_waiters.back().get_future();
     }
 
   protected:
@@ -1413,11 +1528,16 @@ private:
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
-    std::optional<seastar::shared_promise<>> blocking_io;
+    struct io_waiter_t {
+      io_usage_t usage;
+      seastar::promise<> pr;
+      seastar::lowres_system_clock::time_point begin_time;
+    };
+    std::deque<std::unique_ptr<io_waiter_t>> io_waiters;
+    std::deque<seastar::promise<>> background_waiters;
     // Set by maybe_wake_blocked_io() whenever it actually unblocks a
     // user IO; consumed by run() to yield exactly once on that edge,
-    // giving the woken continuation a chance to retry the reservation
-    // before the next background cycle.
+    // giving the woken continuation a chance to make forward progress.
     bool pending_user_io_wake = false;
     std::optional<seastar::future<>> promote_process_join;
     std::optional<seastar::promise<>> blocking_promote;

@@ -484,7 +484,8 @@ BtreeLBAManager::alloc_extents(
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
   auto iter = btree.make_partial_iter(c, *cursor);
-  std::vector<LBACursorRef> ret;
+  std::vector<LBACursorRef> ret(extents.size());
+  size_t idx = extents.size();
   for (auto eiter = extents.rbegin(); eiter != extents.rend(); ++eiter) {
     auto ext = *eiter;
     assert(ext->has_laddr());
@@ -505,7 +506,7 @@ BtreeLBAManager::alloc_extents(
     auto &[it, inserted] = p;
     ceph_assert(inserted);
     TRACET("inserted {}", c.trans, *ext);
-    ret.emplace(ret.begin(), it.get_cursor(c));
+    ret[--idx] = it.get_cursor(c);
     iter = it;
 #ifndef NDEBUG
     if (eiter != extents.rend()) {
