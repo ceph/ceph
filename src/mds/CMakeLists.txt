@@ -52,10 +52,19 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
+# CephFS change notification: the notifier core and the file endpoint are
+# always built; only the Kafka endpoint needs librdkafka.
 list(APPEND mds_srcs ChangeNotifier.cc)
+if(WITH_MDS_KAFKA_ENDPOINT)
+  list(APPEND mds_srcs ChangeNotifyKafka.cc)
+endif()
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
   legacy-option-headers Boost::url
   heap_profiler cpu_profiler osdc ${LUA_LIBRARIES}
   PUBLIC dmclock::dmclock)
+if(WITH_MDS_KAFKA_ENDPOINT)
+  # target provided by the top-level librdkafka discovery
+  target_link_libraries(mds PRIVATE RDKafka::RDKafka)
+endif()
 target_include_directories(mds PRIVATE "${LUA_INCLUDE_DIR}")

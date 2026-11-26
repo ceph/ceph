@@ -82,6 +82,36 @@ private:
   std::string err;
 };
 
+/// mds_notify_kafka_* options. Secrets are named by file path and read when
+/// the endpoint is built; they are never stored, logged or reported.
+struct KafkaOptions {
+  std::string brokers;
+  std::string topic;
+  uint32_t message_timeout_ms = 5000;
+  uint64_t max_queue = 0;
+  std::string security_protocol;
+  std::string ssl_ca_location;
+  std::string ssl_certificate_location;
+  std::string ssl_key_location;
+  std::string ssl_key_password_file;
+  bool ssl_verify = true;
+  std::string sasl_mechanism;
+  std::string sasl_username;
+  std::string sasl_password_file;
+  /// message key: notify_stream_key(fs_name, rank)
+  int rank = -1;
+  std::string fs_name;
+};
+
+/// Kafka message key of a rank's stream: "<fs_name>.mds.<rank>".
+std::string notify_stream_key(const std::string &fs_name, int rank);
+
+/// Defined in ChangeNotifyKafka.cc, built with WITH_MDS_KAFKA_ENDPOINT.
+/// Returns nullptr and sets `err` if the producer cannot be created.
+std::unique_ptr<NotifyEndpoint> make_kafka_endpoint(CephContext *cct,
+                                                    const KafkaOptions &opts,
+                                                    std::string *err);
+
 /**
  * ChangeNotifier - MDS-side change notification producer, one per MDSRank.
  *

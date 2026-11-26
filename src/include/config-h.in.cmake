@@ -364,6 +364,9 @@
 /* Defined if libedkafka is available for rgw kafka push endpoint */
 #cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
 
+/* Defined if the MDS change notification Kafka endpoint is built */
+#cmakedefine WITH_MDS_KAFKA_ENDPOINT
+
 /* Defined if lua packages can be installed by radosgw */
 #cmakedefine WITH_RADOSGW_LUA_PACKAGES
 

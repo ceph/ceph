@@ -22,6 +22,7 @@
 #include <deque>
 #include <string>
 
+#include "acconfig.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/Thread.h"
@@ -106,6 +107,11 @@ std::string FileEndpoint::last_error() const
   return err;
 }
 
+std::string notify_stream_key(const std::string &fs_name, int rank)
+{
+  return fs_name + ".mds." + std::to_string(rank);
+}
+
 ChangeNotifier::ChangeNotifier(CephContext *cct, int rank, std::string fs_name)
   : cct(cct), rank(rank), fs_name(std::move(fs_name))
 {
@@ -125,17 +131,53 @@ void ChangeNotifier::configure(const ConfigProxy &conf)
     root.pop_back();
 
   const auto file = conf.get_val<std::string>("mds_notify_file");
+  KafkaOptions kafka;
+  kafka.brokers = conf.get_val<std::string>("mds_notify_kafka_brokers");
+  kafka.topic = conf.get_val<std::string>("mds_notify_kafka_topic");
   if (!file.empty()) {
+    // the file endpoint is for tests and wins when both are set
     auto ep = std::make_unique<FileEndpoint>(cct, file);
     if (ep->ok())
       endpoint = std::move(ep);
     else
       record_error(ep->last_error());
+  } else if (!kafka.brokers.empty() && !kafka.topic.empty()) {
+#ifdef WITH_MDS_KAFKA_ENDPOINT
+    kafka.message_timeout_ms =
+      conf.get_val<uint64_t>("mds_notify_kafka_message_timeout");
+    kafka.max_queue = conf.get_val<uint64_t>("mds_notify_kafka_max_queue");
+    kafka.security_protocol =
+      conf.get_val<std::string>("mds_notify_kafka_security_protocol");
+    kafka.ssl_ca_location =
+      conf.get_val<std::string>("mds_notify_kafka_ssl_ca_location");
+    kafka.ssl_certificate_location =
+      conf.get_val<std::string>("mds_notify_kafka_ssl_certificate_location");
+    kafka.ssl_key_location =
+      conf.get_val<std::string>("mds_notify_kafka_ssl_key_location");
+    kafka.ssl_key_password_file =
+      conf.get_val<std::string>("mds_notify_kafka_ssl_key_password_file");
+    kafka.ssl_verify = conf.get_val<bool>("mds_notify_kafka_ssl_verify");
+    kafka.sasl_mechanism =
+      conf.get_val<std::string>("mds_notify_kafka_sasl_mechanism");
+    kafka.sasl_username =
+      conf.get_val<std::string>("mds_notify_kafka_sasl_username");
+    kafka.sasl_password_file =
+      conf.get_val<std::string>("mds_notify_kafka_sasl_password_file");
+    kafka.rank = rank;
+    kafka.fs_name = fs_name;
+    std::string err;
+    endpoint = make_kafka_endpoint(cct, kafka, &err);
+    if (!endpoint)
+      record_error(err);
+#else
+    record_error("mds_notify_kafka_brokers is set, but this ceph-mds is "
+                 "built without the Kafka endpoint (WITH_MDS_KAFKA_ENDPOINT)");
+#endif
   }
 
   const bool want = conf.get_val<bool>("mds_notify_enable");
   if (!endpoint) {
-    if (want || !file.empty()) {
+    if (want || !file.empty() || !kafka.brokers.empty()) {
       std::lock_guard l(err_lock);
       derr << "no usable change notification endpoint (" << last_error
            << "); notification stays off" << dendl;
