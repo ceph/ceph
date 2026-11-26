@@ -7,6 +7,7 @@ import logging
 import random
 import signal
 import time
+import uuid
 import functools
 
 from io import BytesIO, StringIO
@@ -608,6 +609,14 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(
             p.returncode, 1,
             f'failed to search cephfs-mirror log {log_path}')
+
+    def assert_mirror_log_has_pattern(self, pattern):
+        log_path = self.get_mirror_daemon_log_path()
+        p = self.mount_a.run_shell(
+            ['grep', '-qE', pattern, log_path], check_status=False)
+        self.assertEqual(
+            p.returncode, 0,
+            f'pattern {pattern!r} not found in cephfs-mirror log {log_path}')
 
     def wait_for_mirror_daemon_recovery(self, fs_name, fs_id, dir_name, peer_uuid):
         # A new rados_inst alone does not mean mirroring is ready: wait until the
@@ -2333,6 +2342,77 @@ class TestMirroring(CephFSTestCase):
         try:
             self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
                                        'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError('expected admin socket to be unavailable')
+
+    def test_mirroring_init_failure_with_peer(self):
+        """A peer added after FSMirror init failure must not SIGSEGV.
+
+        The mgr mirroring module is disabled and the cephfs_mirror index
+        object is removed, so init fails when mirroring is enabled via the
+        monitor. peer_add then runs on that failed instance.
+        """
+        self.config_set('client.mirror', 'debug_cephfs_mirror', '5/5')
+        self.config_set('client.mirror', 'cephfs_mirror_action_update_interval', '2')
+        # Keep the failed instance in place long enough to observe peer handling.
+        self.config_set('client.mirror',
+                        'cephfs_mirror_restart_mirror_on_failure_interval', '120')
+
+        self.run_ceph_cmd("fs", "mirror", "disable", self.primary_fs_name)
+        time.sleep(10)
+        self.disable_mirroring_module()
+        self.wait_mirroring_module_disabled()
+
+        p = self.mount_a.client_remote.run(
+            args=['rados', '-p', self.fs.metadata_pool_name, 'rm', 'cephfs_mirror'],
+            stdout=StringIO(), stderr=StringIO(), timeout=30,
+            check_status=False, label='remove cephfs_mirror index object')
+        p.wait()
+
+        peer_spec = "client.mirror_remote@ceph"
+        peer_uuid = str(uuid.uuid4())
+        pid = self.get_mirror_daemon_pid()
+        try:
+            self.run_ceph_cmd("fs", "mirror", "enable", self.primary_fs_name)
+            self.run_ceph_cmd("fs", "mirror", "peer_add", self.primary_fs_name,
+                              peer_uuid, peer_spec, self.secondary_fs_name)
+            self.assertEqual(self.get_peer_uuid(peer_spec), peer_uuid)
+
+            status_cmd = (f'mirror status for fs: {self.primary_fs_name}',
+                          'fs', 'mirror', 'status',
+                          f'{self.primary_fs_name}@{self.primary_fs_id}')
+            with safe_while(sleep=2, tries=15,
+                            action='wait for failed state') as proceed:
+                while proceed():
+                    try:
+                        res = self.mirror_daemon_command(*status_cmd)
+                    except CommandFailedError:
+                        continue
+                    if res.get('state') == 'failed':
+                        break
+
+            # Action timer applies the queued peer after init has failed.
+            time.sleep(10)
+
+            alive = self.mount_a.run_shell(['kill', '-0', pid], check_status=False)
+            self.assertEqual(alive.returncode, 0,
+                             'cephfs-mirror exited after peer add on failed init')
+            self.assertEqual(self.get_mirror_daemon_pid(), pid)
+            res = self.mirror_daemon_command(*status_cmd)
+            self.assertEqual(res.get('state'), 'failed')
+            self.assert_mirror_log_lacks_pattern(r'Segmentation fault')
+            self.assert_mirror_log_has_pattern(
+                r'skipping peer replayer init after FSMirror init failure')
+        finally:
+            self.run_ceph_cmd("fs", "mirror", "disable", self.primary_fs_name)
+
+        time.sleep(10)
+        try:
+            self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
+                                       'fs', 'mirror', 'status',
+                                       f'{self.primary_fs_name}@{self.primary_fs_id}')
         except CommandFailedError:
             pass
         else:
