@@ -6037,7 +6037,15 @@ bool Server::xlock_policylock(const MDRequestRef& mdr, CInode *in, bool want_lay
 CInode* Server::try_get_auth_inode(const MDRequestRef& mdr, inodeno_t ino)
 {
   CInode *in = mdcache->get_inode(ino);
-  if (!in || in->state_test(CInode::STATE_PURGING)) {
+  if (!in) {
+    // A request that waited for an export to finish runs again after the
+    // inode has left the cache with its subtree. Look for the rank that has
+    // it now, as rdlock_path_pin_ref() does, rather than answer ESTALE.
+    dout(10) << __func__ << " " << ino << " is not in cache, looking for it" << dendl;
+    mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
+    return nullptr;
+  }
+  if (in->state_test(CInode::STATE_PURGING)) {
     respond_to_request(mdr, -ESTALE);
     return nullptr;
   }
