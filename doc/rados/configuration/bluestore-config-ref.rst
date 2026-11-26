@@ -379,6 +379,112 @@ Throttling
 .. confval:: bluestore_throttle_cost_per_io_hdd
 .. confval:: bluestore_throttle_cost_per_io_ssd
 
+.. _bluestore-discard:
+
+Discard (TRIM)
+==============
+
+Flash storage cannot overwrite data in place. An SSD must erase a block of
+flash before it can write to that block again, and the drive's firmware
+reclaims space in the background through garbage collection. When BlueStore
+frees space, for example after an object is deleted or overwritten, it can send
+the device a *discard* request for that range: TRIM on SATA SSDs, UNMAP on SAS
+SSDs, and Deallocate on NVMe SSDs. A discard tells the drive that it no longer
+needs to preserve the data in that range, which can make its garbage collection
+more efficient and help it sustain write performance.
+
+Discards are disabled by default. Discard requests are costly for many drives
+and can increase the latency of client operations. A single thread that sends
+discards might not keep up with the rate at which an OSD writes to its devices.
+How well a drive handles discards depends heavily on its model, vendor, and
+firmware, and many drives perform well without discards.
+
+Consider enabling discards for drives whose performance degrades without them,
+especially under workloads that often create and delete data, such as CI
+systems that create and delete many RBD volumes. Updating such a drive to the
+latest available firmware can also help, because newer firmware often improves
+the drive's garbage collection and its handling of discards.
+
+Some drives, especially older ones, do not implement discard properly. Before
+you enable discards for many OSDs, update one drive of each SKU to the latest
+available firmware and enable discards only on the OSD that uses that drive.
+Use that OSD as a canary: watch its latency (for example, with
+``ceph osd perf``) and the cluster's health before you enable discards on other
+OSDs that use drives of the same SKU.
+
+BlueStore sends discards only to devices that report support for them. To check
+whether the devices of an OSD support discards, run a command of the following
+form:
+
+.. prompt:: bash $
+
+   ceph osd metadata osd.<id> | grep support_discard
+
+A value of ``1`` means that the device supports discards.
+
+:confval:`bdev_enable_discard` can be changed at runtime, without restarting
+OSDs. To enable discards on a single OSD, such as a canary, run a command of
+the following form:
+
+.. prompt:: bash $
+
+   ceph config set osd.<id> bdev_enable_discard true
+
+To enable discards on all OSDs, run the following command:
+
+.. prompt:: bash $
+
+   ceph config set osd bdev_enable_discard true
+
+To disable discards, set the option to ``false``.
+
+Unless :confval:`bdev_async_discard_threads` is set, discards are synchronous:
+BlueStore sends each discard as the space is freed and waits for the discard to
+complete before it returns that space to the allocator. A slow discard can
+therefore delay client operations.
+
+To send discards asynchronously, set :confval:`bdev_async_discard_threads` to
+the number of threads that will send them. BlueStore then queues freed space
+for those threads and returns the space to the allocator after it has been
+discarded. To set the number of threads, run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph config set osd.<id> bdev_async_discard_threads <threads>
+
+The queue of asynchronous discards is limited by
+:confval:`bdev_async_discard_max_pending`, which counts queued discards, and by
+:confval:`bdev_discard_max_bytes`, which counts their total size. Space in the
+queue cannot be allocated until it has been discarded. When the queue reaches
+either limit, BlueStore returns newly freed space to the allocator without
+discarding it. As the queue nears either limit, the OSD raises a
+``BLOCK_DEVICE_DISCARD_QUEUE`` health warning (``DB_DEVICE_DISCARD_QUEUE`` or
+``WAL_DEVICE_DISCARD_QUEUE`` for a separate DB or WAL device). This warning
+means that discards are not keeping up with the OSD's writes. Adding discard
+threads might help.
+
+:confval:`bdev_async_discard` is deprecated and remains only for OSDs upgraded
+from releases that used it. When it is ``true`` and
+:confval:`bdev_async_discard_threads` is ``0``, BlueStore uses one discard
+thread. Use :confval:`bdev_async_discard_threads` instead.
+
+When BlueStore creates an OSD, it can discard the entire device, including any
+separate DB and WAL devices. The Umbrella release added
+:confval:`bluestore_discard_on_mkfs` to control this: when it is ``true``, which
+is the default, BlueStore discards the devices whether or not
+:confval:`bdev_enable_discard` is set. In earlier releases, BlueStore discards
+the devices only when :confval:`bdev_enable_discard` is ``true``. A change to
+:confval:`bluestore_discard_on_mkfs` affects only OSDs that are created after
+the change. If a drive does not handle discards properly, set the option to
+``false`` before you create OSDs on that drive.
+
+.. confval:: bdev_enable_discard
+.. confval:: bdev_async_discard_threads
+.. confval:: bdev_async_discard_max_pending
+.. confval:: bdev_discard_max_bytes
+.. confval:: bdev_async_discard
+.. confval:: bluestore_discard_on_mkfs
+
 SPDK Usage
 ==========
 
