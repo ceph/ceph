@@ -587,6 +587,13 @@ class CephadmServe:
         return f'rgw-smb.{daemon_id}'
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
+        if service_type == 'nfs-ganesha':
+            # NFS-Ganesha registers itself in the service map (CEPH block
+            # with register_service = true and nodeid = <cephadm daemon id>
+            # in ganesha.conf) as type 'nfs-ganesha' with id 'nfs.<nodeid>',
+            # which is already the cephadm daemon name.
+            return daemon_id
+
         if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs', 'rgw-smb']:
             name = f'{service_type}.{daemon_id}'
             return name

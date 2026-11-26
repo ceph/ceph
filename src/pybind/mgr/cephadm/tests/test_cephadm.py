@@ -1464,6 +1464,20 @@ class TestCephadm(object):
                 [('rgw-smb', '12347')],
                 {'12347': {'id': 'smb.rgw.cluster.nonexistent'}},
             ),
+            # nfs-ganesha registers in the service map as nfs.<cephadm daemon id>
+            (
+                [('nfs-ganesha', 'nfs.foo.0.0.host1.abcdef')],
+                [('nfs', 'foo.0.0.host1.abcdef')],
+                [],
+                {},
+            ),
+            (
+                [('nfs-ganesha', 'nfs.foo.0.0.host1.abcdef'),
+                 ('nfs-ganesha', 'nfs.foo.1.0.host2.ghijkl')],
+                [('nfs', 'foo.0.0.host1.abcdef')],
+                [('nfs', 'foo.1.0.host2.ghijkl')],
+                {},
+            ),
         ]
     )
     def test_check_for_stray_daemons(
