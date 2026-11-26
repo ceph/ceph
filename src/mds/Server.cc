@@ -8561,6 +8561,14 @@ void Server::_commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti)
   ceph_assert(g_conf()->mds_kill_link_at != 7);
 
   if (r == 0) {
+    // The last link went, and it was a remote one: the inode is a stray
+    // here. Flag it as _unlink_local() does, so that the stray is evaluated
+    // again when its last cap or replica goes. Without the flag it stays
+    // until the inode is no longer dirty.
+    if (targeti->get_inode()->nlink == 0) {
+      targeti->state_set(CInode::STATE_ORPHAN);
+    }
+
     // drop our pins, etc.
     mdr->cleanup();
 
