@@ -471,7 +471,7 @@ void ECPeeringTestFixture::unsuspend_primary_to_osd(int to_osd) {
 
 void ECPeeringTestFixture::inject_read_error_for_shard(const std::string& obj_name, int shard, int error_code)
 {
-  hobject_t hoid(object_t(obj_name), "", CEPH_NOSNAP, 0, pool_id, "");
+  hobject_t hoid = make_test_object(obj_name);
   ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
 
   OsdTestFixture* osd_fixture = get_osd_fixture(shard);
@@ -573,7 +573,6 @@ void ECPeeringTestFixture::ensure_osd_fixture_exists(int osd) {
   // Create a new store for this OSD
   osd_fixture->store = MockStore::create(g_ceph_context, osd);
   ceph_assert(osd_fixture->store);
-  osd_fixture->data_dir = osd_fixture->store->get_data_dir();
 
   // Create extent cache LRU for this OSD
   osd_fixture->lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
