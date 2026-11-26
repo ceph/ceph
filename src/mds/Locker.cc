@@ -31,6 +31,7 @@
 #include "RetryMessage.h"
 #include "RetryRequest.h"
 #include "SimpleLock.h"
+#include "SnapClient.h"
 #include "SnapRealm.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
@@ -89,6 +90,9 @@ Locker::Locker(MDSRank *m, MDCache *c) :
   need_snapflush_inodes(member_offset(CInode, item_to_flush)),
   mds(m), mdcache(c) {}
 
+// out of line: caps_waiting_for_snap holds refs to MClientCaps, which is
+// only forward declared in Locker.h
+Locker::~Locker() = default;
 
 void Locker::dispatch(const cref_t<Message> &m)
 {
@@ -3383,6 +3387,104 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
   return false;
 }
 
+class C_Locker_RetryClientCapsForSnap : public LockerContext {
+  inodeno_t ino;
+public:
+  C_Locker_RetryClientCapsForSnap(Locker *l, inodeno_t i) :
+    LockerContext(l), ino(i) {}
+  void finish(int r) override {
+    locker->retry_client_caps_for_snap(ino);
+  }
+};
+
+/*
+ * A snap create/destroy is prepared on every rank (notify_prep) before the
+ * snapserver agrees. Once the requesting rank commits it, it notifies the
+ * clients and sends MMDSSnapUpdate to the other ranks at the same time.
+ * Until a rank handles that update, its realms do not know the new seq,
+ * but a client may already have flushed caps to it with follows set to
+ * the new seq (or a FLUSHSNAP for the new snap). The COW for that flush
+ * would find no snap in the realm and silently skip the snapped inode and
+ * dentry, losing the snapshot's view of the inode. Wait for the snap
+ * update instead.
+ *
+ * Later cap messages for the same inode are queued behind a held one so
+ * that they are still handled in order.
+ */
+bool Locker::should_defer_client_caps_for_snap(const cref_t<MClientCaps> &m)
+{
+  const inodeno_t ino = m->get_ino();
+  if (auto it = caps_waiting_for_snap.find(ino); it != caps_waiting_for_snap.end()) {
+    dout(7) << "handle_client_caps on " << ino << " tid " << m->get_client_tid()
+	    << " queued behind " << it->second.size()
+	    << " cap message(s) waiting for snap update" << dendl;
+    it->second.push_back(m);
+    return true;
+  }
+
+  CInode *head_in = mdcache->get_inode(ino);
+  if (!head_in || !head_in->is_auth()) {
+    return false;
+  }
+
+  const snapid_t follows = m->get_snap_follows();
+  snapid_t first, last = CEPH_NOSNAP;
+  if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
+    /*
+     * The capsnap is for the first snap after follows that the client
+     * knows of, and the flush goes to the first snap after follows in the
+     * realm here. That is the same snap unless one between follows and it
+     * is not committed on this rank yet: this rank knows no snap after
+     * follows, or ops from different ranks committed here out of order.
+     * Snaps after the one the realm has do not matter; notify_prep makes
+     * every new op pending here before any client is told about it.
+     */
+    first = follows + 1;
+    SnapRealm *realm = head_in->find_snaprealm();
+    if (snapid_t next = realm->get_snap_following(follows); next != CEPH_NOSNAP) {
+      last = next - 1;
+    }
+  } else if (m->get_dirty() && follows > 0) {
+    // follows is the client's realm seq
+    SnapRealm *realm = head_in->find_snaprealm();
+    if (follows <= realm->get_newest_seq()) {
+      return false;
+    }
+    first = follows;
+  } else {
+    return false;
+  }
+
+  version_t tid = mds->snapclient->get_pending_tid(first, last);
+  if (!tid) {
+    return false;
+  }
+
+  dout(7) << "handle_client_caps " << ceph_cap_op_name(m->get_op())
+	  << " follows " << follows << " on " << *head_in
+	  << ", waiting for snap update (snap table tid " << tid << ")" << dendl;
+  caps_waiting_for_snap[ino].push_back(m);
+  mds->snapclient->wait_for_commit(tid, new C_Locker_RetryClientCapsForSnap(this, ino));
+  return true;
+}
+
+void Locker::retry_client_caps_for_snap(inodeno_t ino)
+{
+  auto it = caps_waiting_for_snap.find(ino);
+  if (it == caps_waiting_for_snap.end()) {
+    return;
+  }
+  auto msgs = std::move(it->second);
+  caps_waiting_for_snap.erase(it);
+
+  dout(10) << __func__ << " " << ino << " retrying " << msgs.size()
+	   << " cap message(s)" << dendl;
+  // in order: if the first one has to wait again, the rest queue behind it
+  for (auto& m : msgs) {
+    (new C_MDS_RetryMessage(mds, m))->complete(0);
+  }
+}
+
 void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 {
   client_t client = m->get_source().num();
@@ -3414,6 +3516,10 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 					  op == CEPH_CAP_OP_FLUSHSNAP);
     }
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
+  if (should_defer_client_caps_for_snap(m)) {
     return;
   }
 

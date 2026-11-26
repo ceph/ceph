@@ -33,7 +33,8 @@ using namespace std;
 
 void SnapClient::resend_queries()
 {
-  if (!waiting_for_version.empty() || (!synced && sync_reqid > 0)) {
+  if (!waiting_for_version.empty() || !waiting_for_commit.empty() ||
+      (!synced && sync_reqid > 0)) {
     version_t want;
     if (!waiting_for_version.empty())
       want = std::max<version_t>(cached_version, waiting_for_version.rbegin()->first);
@@ -60,6 +61,8 @@ void SnapClient::handle_query_result(const cref_t<MMDSTableRequest> &m)
     break;
   case 'F': // full
     {
+      const auto prepared = get_prepared_ops();
+
       decode(cached_snaps, p);
       decode(cached_pending_update, p);
       decode(cached_pending_destroy, p);
@@ -74,6 +77,8 @@ void SnapClient::handle_query_result(const cref_t<MMDSTableRequest> &m)
 	cached_last_destroyed = last_destroyed;
 
       cached_version = m->get_tid();
+
+      note_unnotified_commits(prepared);
     }
     break;
   default:
@@ -97,6 +102,8 @@ void SnapClient::handle_query_result(const cref_t<MMDSTableRequest> &m)
       }
     }
   }
+
+  kick_commit_waiters();
 
   if (m->op == TABLESERVER_OP_QUERY_REPLY && m->reqid >= sync_reqid)
     synced = true;
@@ -144,6 +151,9 @@ void SnapClient::notify_commit(version_t tid)
   } else {
     ceph_abort();
   }
+
+  unnotified_commits.erase(tid);
+  kick_commit_waiters();
 }
 
 void SnapClient::prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
@@ -232,6 +242,137 @@ void SnapClient::get_snaps(set<snapid_t>& result) const
     auto r = cached_pending_destroy.find(tid);
     if (r != cached_pending_destroy.end())
       result.erase(r->second.first);
+  }
+}
+
+bool SnapClient::is_pending(version_t tid) const
+{
+  if (unnotified_commits.count(tid)) {
+    return true;
+  }
+  if (committing_tids.count(tid)) {
+    return false;
+  }
+  return cached_pending_update.count(tid) || cached_pending_destroy.count(tid);
+}
+
+version_t SnapClient::get_pending_tid(snapid_t first, snapid_t last) const
+{
+  version_t tid = 0;
+  snapid_t tid_seq = 0;
+
+  /*
+   * Do not filter by get_last_seq(): snapids are allocated at prepare, but
+   * ops from different ranks can commit in any order, so a snap committed
+   * here may have a larger seq than one that is still pending.
+   */
+  auto consider = [&](version_t t, snapid_t s) {
+    if (s < first || s > last || !is_pending(t)) {
+      return;
+    }
+    if (!tid || s < tid_seq) {
+      tid = t;
+      tid_seq = s;
+    }
+  };
+  for (const auto& [t, info] : cached_pending_update) {
+    // a rename (TABLE_OP_UPDATE) carries an existing snapid
+    if (cached_snaps.count(info.snapid)) {
+      continue;
+    }
+    consider(t, info.snapid);
+  }
+  for (const auto& [t, p] : cached_pending_destroy) {
+    consider(t, p.second);
+  }
+  for (const auto& [t, s] : unnotified_commits) {
+    consider(t, s);
+  }
+  return tid;
+}
+
+void SnapClient::wait_for_commit(version_t tid, MDSContext *c)
+{
+  ceph_assert(is_pending(tid));
+  auto& waiters = waiting_for_commit[tid];
+  if (waiters.empty()) {
+    /*
+     * The commit normally arrives with MMDSSnapUpdate. A prepare that was
+     * rolled back is never committed and stays in the cache until the next
+     * refresh, so ask for one. A refresh that shows the op committed does
+     * not release the waiters (see note_unnotified_commits()).
+     */
+    dout(10) << __func__ << " tid " << tid << ", refreshing" << dendl;
+    refresh(cached_version, nullptr);
+  }
+  waiters.push_back(c);
+}
+
+void SnapClient::kick_commit_waiters()
+{
+  MDSContext::vec finished;
+  for (auto it = waiting_for_commit.begin(); it != waiting_for_commit.end(); ) {
+    if (is_pending(it->first)) {
+      ++it;
+      continue;
+    }
+    dout(10) << __func__ << " tid " << it->first << dendl;
+    finished.insert(finished.end(), it->second.begin(), it->second.end());
+    it = waiting_for_commit.erase(it);
+  }
+  if (!finished.empty()) {
+    mds->queue_waiters(finished);
+  }
+}
+
+/*
+ * creates/destroys in the cache that this rank has not been notified of
+ * committing yet
+ */
+std::vector<SnapClient::prepared_op_t> SnapClient::get_prepared_ops() const
+{
+  std::vector<prepared_op_t> ops;
+  for (const auto& [tid, info] : cached_pending_update) {
+    // a rename (TABLE_OP_UPDATE) carries an existing snapid
+    if (!committing_tids.count(tid) && !cached_snaps.count(info.snapid)) {
+      ops.push_back({tid, info.snapid, info.snapid, false});
+    }
+  }
+  for (const auto& [tid, p] : cached_pending_destroy) {
+    if (!committing_tids.count(tid)) {
+      ops.push_back({tid, p.first, p.second, true});
+    }
+  }
+  return ops;
+}
+
+/*
+ * A refresh drops an op from the pending maps as soon as the snapserver
+ * commits it. This rank may not have handled the MMDSSnapUpdate for it
+ * yet, so its snaprealms do not have the snap, but get_last_seq() already
+ * covers it. Keep such ops in unnotified_commits until notify_commit().
+ *
+ * An op that left the pending maps without being committed was rolled back.
+ * (A create that was committed and then destroyed looks the same, which is
+ * fine: the snap is gone either way.)
+ */
+void SnapClient::note_unnotified_commits(const std::vector<prepared_op_t>& ops)
+{
+  for (const auto& op : ops) {
+    if (cached_pending_update.count(op.tid) ||
+	cached_pending_destroy.count(op.tid)) {
+      continue;
+    }
+    const bool have_snap = cached_snaps.count(op.snapid);
+    const bool committed = op.destroy ? !have_snap : have_snap;
+    dout(10) << __func__ << " tid " << op.tid
+	     << (op.destroy ? " destroy " : " create ") << op.snapid
+	     << " seq " << op.seq
+	     << (committed ? " committed, not notified yet" : " rolled back")
+	     << dendl;
+    if (committed) {
+      unnotified_commits[op.tid] = op.seq;
+    }
   }
 }
 
