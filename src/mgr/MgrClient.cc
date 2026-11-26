@@ -93,7 +93,17 @@ void MgrClient::shutdown()
   }
 
   // forget about in-flight commands if we are prematurely shut down
-  // (e.g., by control-C)
+  // (e.g., by control-C), but complete them first: a caller may be
+  // waiting on on_finish (librados blocks on a C_SaferCond), and the
+  // context may own state that is only released when it runs (the mon's
+  // C_MgrProxyCommand).  Never delete them directly, since some live on
+  // the caller's stack.
+  for (auto& [tid, op] : command_table.get_commands()) {
+    if (op.on_finish) {
+      ldout(cct, 10) << "cancelling pending command " << tid << dendl;
+      op.on_finish->complete(-ECANCELED);
+    }
+  }
   command_table.clear();
   if (service_daemon &&
       session &&
