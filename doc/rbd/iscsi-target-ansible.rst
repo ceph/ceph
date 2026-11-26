@@ -4,8 +4,8 @@ Configuring the iSCSI Target using Ansible
 
 The Ceph iSCSI gateway is the iSCSI target node and also a Ceph client
 node. The Ceph iSCSI gateway can be provisioned on dedicated node
-or be colocated on a Ceph Object Store Disk (OSD) node. The following steps will
-install and configure the Ceph iSCSI gateway for basic operation.
+or be colocated on a node that runs :term:`Ceph OSD` daemons. The following
+steps will install and configure the Ceph iSCSI gateway for basic operation.
 
 **Requirements:**
 
@@ -50,29 +50,17 @@ advanced variables.
 +--------------------------------------+--------------------------------------+
 | Variable                             | Meaning/Purpose                      |
 +======================================+======================================+
-| ``seed_monitor``                     | Each gateway needs access to the     |
-|                                      | ceph cluster for rados and rbd       |
-|                                      | calls. This means the iSCSI gateway  |
-|                                      | must have an appropriate             |
-|                                      | ``/etc/ceph/`` directory defined.    |
-|                                      | The ``seed_monitor`` host is used to |
-|                                      | populate the iSCSI gateway’s         |
-|                                      | ``/etc/ceph/`` directory.            |
+| ``iscsi_pool_name``                  | Pool that holds the ``gateway.conf`` |
+|                                      | configuration object. The default is |
+|                                      | ``rbd``.                             |
 +--------------------------------------+--------------------------------------+
-| ``cluster_name``                     | Define a custom storage cluster      |
-|                                      | name.                                |
+| ``copy_admin_key``                   | If ``True`` (the default), copy the  |
+|                                      | ``client.admin`` keyring to each     |
+|                                      | gateway.                             |
 +--------------------------------------+--------------------------------------+
-| ``gateway_keyring``                  | Define a custom keyring name.        |
-+--------------------------------------+--------------------------------------+
-| ``deploy_settings``                  | If set to ``true``, then deploy the  |
-|                                      | settings when the playbook is ran.   |
-+--------------------------------------+--------------------------------------+
-| ``perform_system_checks``            | This is a boolean value that checks  |
-|                                      | for multipath and lvm configuration  |
-|                                      | settings on each gateway. It must be |
-|                                      | set to true for at least the first   |
-|                                      | run to ensure multipathd and lvm are |
-|                                      | configured properly.                 |
+| ``generate_crt``                     | If ``True``, generate a self-signed  |
+|                                      | certificate for the API. The default |
+|                                      | is ``False``.                        |
 +--------------------------------------+--------------------------------------+
 | ``api_user``                         | The user name for the API. The       |
 |                                      | default is `admin`.                  |
@@ -162,8 +150,9 @@ interacting with the ``rbd-target-api`` Systemd service.
 
 The ``ceph-ansible`` package provides an Ansible playbook to
 remove the iSCSI gateway configuration and related RBD images. The
-Ansible playbook is ``/usr/share/ceph-ansible/purge_gateways.yml``. When
-this Ansible playbook is ran a prompted for the type of purge to
+Ansible playbook is
+``/usr/share/ceph-ansible/infrastructure-playbooks/purge-iscsi-gateways.yml``.
+When this Ansible playbook is ran a prompted for the type of purge to
 perform:
 
 *lio* :
@@ -191,7 +180,7 @@ correct mode is chosen, this operation will delete data.
 
 ::
 
-    [root@rh7-iscsi-client ceph-ansible]# ansible-playbook purge_gateways.yml
+    [root@rh7-iscsi-client ceph-ansible]# ansible-playbook infrastructure-playbooks/purge-iscsi-gateways.yml
     Which configuration elements should be purged? (all, lio or abort) [abort]: all
 
 
