@@ -1,5 +1,6 @@
 from typing import (
     Any,
+    Callable,
     Collection,
     Dict,
     Iterator,
@@ -1058,49 +1059,69 @@ def _check_share_modifications(
         )
 
 
+def _check_linked_cluster_exists(
+    resource: SMBResource,
+    staging: Staging,
+    linked_to_cluster: Optional[str],
+) -> None:
+    """Raise an ErrorResult if a resource is linked to a cluster id that
+    does not exist (in the staged view of the store).
+    """
+    if not linked_to_cluster:
+        return
+    if linked_to_cluster not in ClusterEntry.ids(staging):
+        raise ErrorResult(
+            resource,
+            msg='linked_to_cluster id not valid',
+            status={
+                'unknown_id': linked_to_cluster,
+            },
+        )
+
+
+def _check_not_in_use_by_clusters(
+    resource: SMBResource,
+    staging: Staging,
+    resource_id: str,
+    ref_fn: Callable[[resources.Cluster], Collection[str]],
+    msg: str,
+) -> None:
+    """Raise an ErrorResult if any (staged) cluster references resource_id
+    via the references returned by ref_fn.
+    """
+    clusters = [
+        cluster_id
+        for cluster_id in ClusterEntry.ids(staging)
+        if resource_id in ref_fn(staging.get_cluster(cluster_id))
+    ]
+    log.debug('clusters referencing %r: %r', resource_id, clusters)
+    if clusters:
+        raise ErrorResult(
+            resource,
+            msg=msg,
+            status={
+                'clusters': clusters,
+            },
+        )
+
+
 @cross_check_resource.register
 def _check_join_auth_resource(
     join_auth: resources.JoinAuth, staging: Staging, **_: Any
 ) -> None:
     """Check that the JoinAuth resource can be updated."""
     if join_auth.intent == Intent.PRESENT:
-        return _check_join_auths_present(join_auth, staging)
-    return _check_join_auths_removed(join_auth, staging)
-
-
-def _check_join_auths_removed(
-    join_auth: resources.JoinAuth, staging: Staging
-) -> None:
-    cids = set(ClusterEntry.ids(staging))
-    refs_in_use: Dict[str, List[str]] = {}
-    for cluster_id in cids:
-        cluster = staging.get_cluster(cluster_id)
-        for ref in auth_refs(cluster):
-            refs_in_use.setdefault(ref, []).append(cluster_id)
-    log.debug('refs_in_use: %r', refs_in_use)
-    if join_auth.auth_id in refs_in_use:
-        raise ErrorResult(
-            join_auth,
-            msg='join auth resource in use by clusters',
-            status={
-                'clusters': refs_in_use[join_auth.auth_id],
-            },
+        _check_linked_cluster_exists(
+            join_auth, staging, join_auth.linked_to_cluster
         )
-
-
-def _check_join_auths_present(
-    join_auth: resources.JoinAuth, staging: Staging
-) -> None:
-    if join_auth.linked_to_cluster:
-        cids = set(ClusterEntry.ids(staging))
-        if join_auth.linked_to_cluster not in cids:
-            raise ErrorResult(
-                join_auth,
-                msg='linked_to_cluster id not valid',
-                status={
-                    'unknown_id': join_auth.linked_to_cluster,
-                },
-            )
+        return
+    _check_not_in_use_by_clusters(
+        join_auth,
+        staging,
+        join_auth.auth_id,
+        auth_refs,
+        'join auth resource in use by clusters',
+    )
 
 
 @cross_check_resource.register
@@ -1109,43 +1130,17 @@ def _check_users_and_groups_resource(
 ) -> None:
     """Check that the UsersAndGroups resource can be updated."""
     if users_and_groups.intent == Intent.PRESENT:
-        return _check_users_and_groups_present(users_and_groups, staging)
-    return _check_users_and_groups_removed(users_and_groups, staging)
-
-
-def _check_users_and_groups_removed(
-    users_and_groups: resources.UsersAndGroups, staging: Staging
-) -> None:
-    refs_in_use: Dict[str, List[str]] = {}
-    cids = set(ClusterEntry.ids(staging))
-    for cluster_id in cids:
-        cluster = staging.get_cluster(cluster_id)
-        for ref in ug_refs(cluster):
-            refs_in_use.setdefault(ref, []).append(cluster_id)
-    log.debug('refs_in_use: %r', refs_in_use)
-    if users_and_groups.users_groups_id in refs_in_use:
-        raise ErrorResult(
-            users_and_groups,
-            msg='users and groups resource in use by clusters',
-            status={
-                'clusters': refs_in_use[users_and_groups.users_groups_id],
-            },
+        _check_linked_cluster_exists(
+            users_and_groups, staging, users_and_groups.linked_to_cluster
         )
-
-
-def _check_users_and_groups_present(
-    users_and_groups: resources.UsersAndGroups, staging: Staging
-) -> None:
-    if users_and_groups.linked_to_cluster:
-        cids = set(ClusterEntry.ids(staging))
-        if users_and_groups.linked_to_cluster not in cids:
-            raise ErrorResult(
-                users_and_groups,
-                msg='linked_to_cluster id not valid',
-                status={
-                    'unknown_id': users_and_groups.linked_to_cluster,
-                },
-            )
+        return
+    _check_not_in_use_by_clusters(
+        users_and_groups,
+        staging,
+        users_and_groups.users_groups_id,
+        ug_refs,
+        'users and groups resource in use by clusters',
+    )
 
 
 @cross_check_resource.register
@@ -1154,44 +1149,17 @@ def _check_tls_credential_resource(
 ) -> None:
     """Check that the tls credential resource can be updated."""
     if resource.intent == Intent.PRESENT:
-        return _check_tls_credential_present(resource, staging)
-    return _check_tls_credential_removed(resource, staging)
-
-
-def _check_tls_credential_removed(
-    tls_cred: resources.TLSCredential, staging: Staging
-) -> None:
-    cids = set(ClusterEntry.ids(staging))
-    refs_in_use: Dict[str, List[str]] = {}
-    for cluster_id in cids:
-        cluster = staging.get_cluster(cluster_id)
-        for ref in tls_refs(cluster):
-            refs_in_use.setdefault(ref, []).append(cluster_id)
-    log.debug('refs_in_use: %r', refs_in_use)
-    if tls_cred.tls_credential_id in refs_in_use:
-        raise ErrorResult(
-            tls_cred,
-            msg='tls credential resource in use by clusters',
-            status={
-                'clusters': refs_in_use[tls_cred.tls_credential_id],
-            },
+        _check_linked_cluster_exists(
+            resource, staging, resource.linked_to_cluster
         )
-
-
-def _check_tls_credential_present(
-    tls_cred: resources.TLSCredential, staging: Staging
-) -> None:
-    # TODO: dedupe this logic across join auth and usersgroups
-    if tls_cred.linked_to_cluster:
-        cids = set(ClusterEntry.ids(staging))
-        if tls_cred.linked_to_cluster not in cids:
-            raise ErrorResult(
-                tls_cred,
-                msg='linked_to_cluster id not valid',
-                status={
-                    'unknown_id': tls_cred.linked_to_cluster,
-                },
-            )
+        return
+    _check_not_in_use_by_clusters(
+        resource,
+        staging,
+        resource.tls_credential_id,
+        tls_refs,
+        'tls credential resource in use by clusters',
+    )
 
 
 @cross_check_resource.register
@@ -1245,15 +1213,9 @@ def _check_rgw_credential_present(
     rgw_cred: resources.RGWCredential, staging: Staging
 ) -> None:
     if rgw_cred.linked_to_cluster:
-        cids = set(ClusterEntry.ids(staging))
-        if rgw_cred.linked_to_cluster not in cids:
-            raise ErrorResult(
-                rgw_cred,
-                msg='linked_to_cluster id not valid',
-                status={
-                    'unknown_id': rgw_cred.linked_to_cluster,
-                },
-            )
+        _check_linked_cluster_exists(
+            rgw_cred, staging, rgw_cred.linked_to_cluster
+        )
 
         # Validate credentials against RGW (skip for external clusters)
         if not _is_external_cluster(rgw_cred.linked_to_cluster, staging):
@@ -1317,22 +1279,13 @@ def _check_external_ceph_cluster_resource(
     """Check that the external ceph cluster resource is valid."""
     if ext_cluster.intent == Intent.PRESENT:
         return
-    cids = set(ClusterEntry.ids(staging))
-    refs_in_use: Dict[str, List[str]] = {}
-    for cluster_id in cids:
-        cluster = staging.get_cluster(cluster_id)
-        for ref in ext_cluster_refs(cluster):
-            refs_in_use.setdefault(ref, []).append(cluster_id)
-    log.debug('ext cluster refs in use: %r', refs_in_use)
-    my_id = ext_cluster.external_ceph_cluster_id
-    if my_id in refs_in_use:
-        raise ErrorResult(
-            ext_cluster,
-            msg='external ceph cluster resource in use by clusters',
-            status={
-                'clusters': refs_in_use[my_id],
-            },
-        )
+    _check_not_in_use_by_clusters(
+        ext_cluster,
+        staging,
+        ext_cluster.external_ceph_cluster_id,
+        ext_cluster_refs,
+        'external ceph cluster resource in use by clusters',
+    )
 
 
 def _tls_ref(src: Optional[resources.TLSSource]) -> str:

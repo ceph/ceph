@@ -667,7 +667,7 @@ class ClusterConfigHandler:
             ):
                 cluster_id = result.src.cluster_id
                 entry = self.public_store[
-                    external.cluster_placeholder_key(cluster_id)
+                    external.cluster_info_key(cluster_id)
                 ]
                 if (
                     not entry.exists()
@@ -865,7 +865,7 @@ class ClusterConfigHandler:
                 previous_orch,
             )
             entry = self.public_store[
-                external.cluster_placeholder_key(cluster.cluster_id)
+                external.cluster_info_key(cluster.cluster_id)
             ]
             info = dict(entry.get())
             # Record the submission attempt even if it fails.
@@ -1573,10 +1573,7 @@ def _swap_pending_cluster_info(
     change_group: ClusterChangeGroup,
     orch_needed: bool,
 ) -> Simplified:
-    # TODO: its not just a  placeholder any more. rename the key func!
-    pentry = store[
-        external.cluster_placeholder_key(change_group.cluster.cluster_id)
-    ]
+    pentry = store[external.cluster_info_key(change_group.cluster.cluster_id)]
     try:
         existing = pentry.get()
     except KeyError:
