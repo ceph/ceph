@@ -5,8 +5,8 @@ Configuring the iSCSI Target using the Command Line Interface
 The Ceph iSCSI gateway is both an iSCSI target  and a Ceph client;
 think of it as a "translator" between Ceph's RBD interface
 and the iSCSI standard. The Ceph iSCSI gateway can run on a
-standalone node or be colocated with other daemons eg. on
-a Ceph Object Store Disk (OSD) node.  When co-locating, ensure
+standalone node or be colocated with other daemons, for example on
+a node that runs :term:`Ceph OSD` daemons.  When co-locating, ensure
 that sufficient CPU and memory are available to share.
 The following steps install and configure the Ceph iSCSI gateway for basic operation.
 
@@ -30,6 +30,9 @@ The following steps install and configure the Ceph iSCSI gateway for basic opera
      .. important::
         If previous versions of these packages exist, then they must
         be removed first before installing the newer versions.
+
+   On EL 9, the distribution's own repositories have neither
+   ``tcmu-runner`` nor ``ceph-iscsi``.
 
 Do the following steps on the Ceph iSCSI gateway node before proceeding
 to the *Installing* section:
@@ -81,9 +84,9 @@ For rpm based instructions execute the following commands:
 
 **Setup:**
 
-#. gwcli requires a pool with the name ``rbd``, so it can store metadata
-   like the iSCSI configuration. To check if this pool has been created
-   run:
+#. gwcli stores its configuration in a RADOS object named ``gateway.conf``
+   in the pool that the ``pool`` setting in ``iscsi-gateway.cfg`` names
+   (default ``rbd``). To check if this pool has been created run:
 
    .. prompt:: bash #
 
@@ -92,14 +95,29 @@ For rpm based instructions execute the following commands:
    If it does not exist instructions for creating pools can be found on the
    :ref:`RADOS pool operations page <rados_pools>`.
 
+#. As ``root``, on a node that has the admin keyring, create a CephX user
+   for the gateways, with the capabilities that cephadm gives its
+   gateways, and make its keyring readable only by ``root``:
+
+   .. prompt:: bash #
+
+      ceph auth get-or-create client.iscsi-gw mon 'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"' mgr 'allow command "service status"' osd 'allow rwx' -o /etc/ceph/ceph.client.iscsi-gw.keyring
+      chmod 600 /etc/ceph/ceph.client.iscsi-gw.keyring
+
+   Copy this keyring to ``/etc/ceph/`` on every iSCSI gateway node, keeping
+   it readable only by ``root``.
+
 #. As ``root``, on a iSCSI gateway node, create a file named
-   ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
+   ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory, readable only by
+   ``root``, because it holds the API password:
 
    .. prompt:: bash #
 
       touch /etc/ceph/iscsi-gateway.cfg
+      chmod 600 /etc/ceph/iscsi-gateway.cfg
 
-   #. Edit the ``iscsi-gateway.cfg`` file and add the following lines:
+   #. Edit the ``iscsi-gateway.cfg`` file and add the following lines,
+      replacing the values in angle brackets:
 
       .. code-block:: ini
 
@@ -109,9 +127,12 @@ For rpm based instructions execute the following commands:
           # colocated on an OSD node.
           cluster_name = ceph
 
-          # Place a copy of the ceph cluster's admin keyring in the gateway's /etc/ceph
-          # directory and reference the filename here
-          gateway_keyring = ceph.client.admin.keyring
+          # CephX user that the gateway connects as. Its keyring,
+          # /etc/ceph/ceph.client.iscsi-gw.keyring, must be on each gateway.
+          cluster_client_name = client.iscsi-gw
+
+          # Pool that holds the gateway.conf configuration object.
+          pool = rbd
 
 
           # API settings.
@@ -121,14 +142,17 @@ For rpm based instructions execute the following commands:
           # not locked to a specific node. SSL cert and key files *must* be called
           # 'iscsi-gateway.crt' and 'iscsi-gateway.key' and placed in the '/etc/ceph/' directory
           # on *each* gateway node. With the SSL files in place, you can use 'api_secure = true'
-          # to switch to https mode.
+          # to switch to https mode. With api_secure = false, the API password
+          # and the CHAP secrets cross the network unencrypted.
 
           # To support the API, the bare minimum settings are:
           api_secure = false
 
+          # Replace the default API user name and password, admin and admin.
+          api_user = <api-user>
+          api_password = <api-password>
+
           # Additional API configuration options are as follows, defaults shown.
-          # api_user = admin
-          # api_password = admin
           # api_port = 5000
           # trusted_ip_list = 192.168.0.10,192.168.0.11
 
@@ -143,7 +167,7 @@ For rpm based instructions execute the following commands:
         The ``iscsi-gateway.cfg`` file must be identical on all iSCSI gateway nodes.
 
    #. As ``root``, copy the ``iscsi-gateway.cfg`` file to all iSCSI
-      gateway nodes.
+      gateway nodes, keeping it readable only by ``root``.
 
 #. As ``root``, on all iSCSI gateway nodes, enable and start the API
    service:
@@ -193,9 +217,13 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21
        > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22
 
-   If not using RHEL/CentOS or using an upstream or ceph-iscsi-test kernel,
-   the skipchecks=true argument must be used. This will avoid the Red Hat kernel
-   and rpm checks:
+   Use ``skipchecks=true`` only if creating a gateway fails with
+   ``failed package validation checks - OS is unsupported`` on a distribution
+   that your ceph-iscsi build does not recognize, for example Rocky Linux with
+   ceph-iscsi 3.9 or earlier. It also skips the checks that the gateway name
+   resolves, that the IP addresses are on that gateway, and that
+   ``iscsi-gateway.cfg`` is the same on every gateway, so check these yourself
+   first:
 
    .. code-block:: console
 
@@ -222,11 +250,17 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    .. code-block:: console
 
-       > /iscsi-target...at:rh7-client>  auth username=myusername password=mypassword
+       > /iscsi-target...at:rh7-client>  auth username=<initiator-user> password=<initiator-secret>
+
+   Replace the values in angle brackets with your own: user names of 8 to 64
+   characters and secrets of 12 to 16 characters, from the characters listed
+   below. gwcli rejects the placeholders as shown.
 
    .. warning::
-      CHAP must always be configured. Without CHAP, the target will
-      reject any login requests.
+      Set CHAP credentials for every client of the target. If some clients
+      have CHAP and others do not, the clients without CHAP cannot log in.
+      If no client has CHAP (``auth nochap``), the gateway checks only the
+      initiator name, which any host can claim.
 
    To use mutual (bidirectional) authentication, also set the target CHAP
    username and password which the initiator would use when authenticating
@@ -234,7 +268,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    .. code-block:: console
 
-       > /iscsi-target...at:rh7-client>  auth username=myusername password=mypassword mutual_username=mytgtusername mutual_password=mytgtpassword
+       > /iscsi-target...at:rh7-client>  auth username=<initiator-user> password=<initiator-secret> mutual_username=<target-user> mutual_password=<target-secret>
 
    .. note::
       CHAP usernames must be between 8 and 64 characters long.  Valid
