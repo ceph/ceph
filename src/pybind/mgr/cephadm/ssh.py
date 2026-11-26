@@ -519,6 +519,31 @@ class SSHManager:
         with self.mgr.async_timeout_handler(host, " ".join(cmd)):
             return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
 
+    async def _sftp_put(self,
+                        host: str,
+                        conn: "SSHClientConnection",
+                        local_path: str,
+                        remote_path: str,
+                        ) -> None:
+        """Copy a local file to a host over SFTP.
+
+        The transfer doesn't go through _execute_command(), so the
+        connection it failed on is reset here. Not on every failure: an
+        SFTP failure (permission denied, no space left...) doesn't
+        necessarily invalidate the SSH connection, which may be in use by
+        other commands for the host. Only reset it on a transport failure,
+        or when the connection is no longer valid. A failure that leaves
+        the connection valid (a ChannelOpenError, for example) is handled
+        by the next command run on it, in _execute_command().
+        """
+        try:
+            async with conn.start_sftp_client() as sftp:
+                await sftp.put(local_path, remote_path)
+        except Exception as e:
+            if isinstance(e, asyncssh.DisconnectError) or not self._is_conn_valid(conn):
+                await self._reset_con(host, conn)
+            raise
+
     async def _write_remote_file(self,
                                  host: str,
                                  path: str,
@@ -555,8 +580,7 @@ class SSHManager:
                 f.write(content)
                 f.flush()
                 conn = await self._remote_connection(host, addr)
-                async with conn.start_sftp_client() as sftp:
-                    await sftp.put(f.name, tmp_path)
+                await self._sftp_put(host, conn, f.name, tmp_path)
             if uid is not None and gid is not None:
                 # shlex quote takes str or byte object, not int
                 chown = RemoteCommand(
@@ -595,8 +619,7 @@ class SSHManager:
             remote_tmp_path = f'/tmp/cephadm-{self.mgr._cluster_fsid}.new'
 
             conn = await self._remote_connection(host, addr)
-            async with conn.start_sftp_client() as sftp:
-                await sftp.put(local_tmp_path, remote_tmp_path)
+            await self._sftp_put(host, conn, local_tmp_path, remote_tmp_path)
 
             invoker_cmd = RemoteCommand(
                 Executables.INVOKER,

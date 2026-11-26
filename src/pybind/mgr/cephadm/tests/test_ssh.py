@@ -380,6 +380,67 @@ class TestSSHConnectionReset:
         other.close.assert_not_called()
         assert ssh.cons['host1'] is other
 
+    @staticmethod
+    def _open_conn():
+        conn = mock.MagicMock()
+        conn.is_connected.return_value = True
+        conn.is_closing.return_value = False
+        conn.is_closed.return_value = False
+        return conn
+
+    @staticmethod
+    def _sftp_deploy(ssh, path):
+        if path == 'write_remote_file':
+            return ssh._write_remote_file('host1', '/path', b'content', addr='1::4'), \
+                OrchestratorError
+        return ssh._deploy_cephadm_binary_via_invoker(
+            'host1', '/usr/bin/cephadm', b'binary-content', addr='1::4'), \
+            Exception
+
+    @pytest.mark.parametrize('path', ['write_remote_file', 'deploy_via_invoker'])
+    @pytest.mark.parametrize('exc, conn_valid, reset', [
+        # the transport failed: reset the connection
+        (asyncssh.DisconnectError(11, 'bye'), True, True),
+        (ConnectionLost('reason'), False, True),
+        # not a transport error, but the connection is no longer valid
+        (OSError('connection reset'), False, True),
+        # the connection is still valid: keep it, other commands may be
+        # using it, and _execute_command() handles it if it is broken
+        (asyncssh.ChannelOpenError(1, '', ''), True, False),
+        (asyncssh.SFTPNoSpaceOnFilesystem('no space'), True, False),
+        (asyncssh.SFTPPermissionDenied('denied'), True, False),
+    ])
+    def test_sftp_failure_resets_only_broken_connection(self, cephadm_module, path,
+                                                        exc, conn_valid, reset):
+        # start_sftp_client()/sftp.put() don't go through _execute_command(),
+        # so the cephadm binary deployment resets the connection itself
+        ssh = cephadm_module.ssh
+        other = self._open_conn()
+
+        failed = self._open_conn()
+        failed.is_closing.return_value = not conn_valid
+        sftp = failed.start_sftp_client.return_value.__aenter__.return_value
+        sftp.put = AsyncMock(side_effect=exc)
+
+        async def remote_connection(host, addr=None):
+            # meanwhile, another command opened a new connection to the host
+            ssh.cons['host1'] = other
+            return failed
+
+        with mock.patch.object(ssh, '_check_execute_command', new=AsyncMock(return_value='')), \
+             mock.patch.object(ssh, '_execute_command', new=AsyncMock(return_value=('', '', 0))), \
+             mock.patch.object(ssh, '_remote_connection', side_effect=remote_connection):
+            coro, expected = self._sftp_deploy(ssh, path)
+            with pytest.raises(expected):
+                cephadm_module.wait_async(coro)
+        if reset:
+            failed.close.assert_called_once_with()
+        else:
+            failed.close.assert_not_called()
+        # a connection opened since then is left alone either way
+        other.close.assert_not_called()
+        assert ssh.cons['host1'] is other
+
     @mock.patch("cephadm.ssh.SSHManager._execute_command")
     def test_run_cephadm_error_keeps_connection(self, execute_command, cephadm_module):
         ssh = cephadm_module.ssh
