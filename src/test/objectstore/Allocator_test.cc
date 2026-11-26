@@ -935,6 +935,14 @@ TEST_P(AllocTest, test_claim_range_geometry)
     {"starts_at_zero",    8, 0, 4, {{0, 8}},                      4},
     {"ends_at_capacity",  8, 4, 4, {{0, 8}},                      4},
     {"single_block",     32, 8, 1, {{8, 1}},                      1},
+    // Touching runs in different bins (StupidAllocator never merges them).
+    // Claiming the right end of [8,24) leaves [8,16). That piece drops to
+    // [0,8)'s bin, merges with it, and is promoted back into the bin that
+    // erase() is still working on.
+    {"left_piece_rejoins_bin",  32, 16, 8, {{0, 8}, {8, 16}},     8},
+    // Mirror case with the right-hand piece. erase() has already removed
+    // the original run by the time it hands over the right piece.
+    {"right_piece_rejoins_bin", 32,  0, 8, {{0, 16}, {16, 8}},    8},
   };
 
   // init_add_free() always puts free space in the tree, while release()

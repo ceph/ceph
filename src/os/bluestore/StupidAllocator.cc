@@ -443,18 +443,24 @@ int64_t StupidAllocator::claim_range(uint64_t offset, uint64_t length, PExtentVe
         auto o = it.get_start();
         auto l = it.get_len();
 
+        // A leftover piece too small for bin i is moved only after erase()
+        // returns: erase() still holds the original run in free[i], and
+        // _insert_free() can merge the piece and promote it back into free[i].
+        std::vector<std::pair<uint64_t, uint64_t>> demote;
         free[i].erase(o, l,
           [&](uint64_t off, uint64_t len) {
-            unsigned newbin = _choose_bin(len);
-            if (newbin != i) {
-              ldout(cct, 30) << __func__ << " demoting1 0x" << std::hex << off << "~" << len
-                             << std::dec << " to bin " << newbin << dendl;
-              _insert_free(off, len);
-              return true;
+            if (_choose_bin(len) == i) {
+              return false;
             }
-            return false;
+            demote.emplace_back(off, len);
+            return true;
           });
-        
+        for (auto& [off, len] : demote) {
+          ldout(cct, 30) << __func__ << " demoting1 0x" << std::hex << off << "~" << len
+                         << std::dec << " from bin " << i << dendl;
+          _insert_free(off, len);
+        }
+
         // Add the allocated extent to the PExtentVector
         sum += l;
         while (l > max_extent_len) {
