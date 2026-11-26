@@ -118,6 +118,40 @@ The following configurable options have to be added for STS integration:
 .. note:: The STS and S3 APIs co-exist in the same namespace, and both S3
    and STS APIs can be accessed via the same endpoint.
 
+.. _rgw-sts-key:
+
+Migrating the STS key
+---------------------
+
+Upgrading Ceph does not change an ``rgw_sts_key`` that is already configured.
+The length of the key selects the encryption used for session tokens:
+
+* A key of 16 characters uses AES-128-CBC.
+* A key of 32 characters uses AES-256 with HMAC-SHA384 authentication.
+
+To see the keys that are configured:
+
+.. prompt:: bash #
+
+   ceph config dump | grep rgw_sts_key
+
+To migrate, generate a key of exactly 32 characters. For example:
+
+.. prompt:: bash #
+
+   openssl rand -base64 24
+
+Set the new key on all gateways in all zones of the realm:
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_sts_key {key}
+
+Gateways pick up the new key without a restart.
+
+Session tokens issued with the old key stop working when the key changes.
+Clients must request new temporary credentials.
+
 Examples
 ========
 
