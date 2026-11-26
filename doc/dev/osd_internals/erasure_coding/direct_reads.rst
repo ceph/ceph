@@ -113,7 +113,7 @@ media error). The shard has nothing to reconstruct the data from, so it
 bounces the read with ``EAGAIN``, as it does for a missing object, and the
 Objecter reissues it to the primary as a normal read, which decodes the data
 from the other shards. The shard counts each such bounce in the
-``ec_direct_read_redirect_eio`` OSD perf counter and writes it to the OSD log.
+``ec_direct_read_redirect_eio`` perf counter and writes it to the OSD log.
 The cluster log gets the 1st, 2nd, 4th, 8th and later bounces of each PG.
 
 The bounce does not repair the shard. A deep scrub finds the damaged shard.
