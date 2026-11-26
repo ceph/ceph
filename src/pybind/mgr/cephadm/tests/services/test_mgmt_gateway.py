@@ -214,7 +214,7 @@ class TestMgmtGateway:
 
                                                  location / {
                                                      proxy_pass https://dashboard_servers;
-                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                     proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
                                                  }
 
                                                  location /grafana {
@@ -268,7 +268,7 @@ class TestMgmtGateway:
                                                  location /internal/dashboard {
                                                      rewrite ^/internal/dashboard/(.*) /$1 break;
                                                      proxy_pass https://dashboard_servers;
-                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                     proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
                                                  }
 
                                                  location /internal/grafana {
@@ -486,7 +486,7 @@ class TestMgmtGateway:
 
                                                  location / {
                                                      proxy_pass https://dashboard_servers;
-                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                     proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
                                                      auth_request /oauth2/auth;
                                                      error_page 401 = /oauth2/sign_in;
 
@@ -612,7 +612,7 @@ class TestMgmtGateway:
                                                  location /internal/dashboard {
                                                      rewrite ^/internal/dashboard/(.*) /$1 break;
                                                      proxy_pass https://dashboard_servers;
-                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                     proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
                                                  }
 
                                                  location /internal/grafana {
