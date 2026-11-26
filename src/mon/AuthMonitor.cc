@@ -198,7 +198,6 @@ void AuthMonitor::on_active()
     return;
 
   mon.start_server();
-  mon.clear_used_pending_keys();
 
   if (is_writeable()) {
     bool propose = false;
