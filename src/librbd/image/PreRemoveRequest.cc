@@ -178,6 +178,14 @@ void PreRemoveRequest<I>::check_image_snaps() {
 
   m_image_ctx->image_lock.lock_shared();
   for (auto& snap_info : m_image_ctx->snap_info) {
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+      &snap_info.second.snap_namespace);
+    if (mirror_ns != nullptr && mirror_ns->group_spec.is_valid()) {
+      m_image_ctx->image_lock.unlock_shared();
+      lderr(cct) << "image has group mirror snapshots - not removing" << dendl;
+      finish(-EBUSY);
+      return;
+    }
     if (auto_delete_snapshot(snap_info.second)) {
       m_snap_infos.insert(snap_info);
     } else if (!ignore_snapshot(snap_info.second)) {

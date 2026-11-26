@@ -5,9 +5,6 @@
 #define CEPH_LIBRBD_MIRROR_IMAGE_REMOVE_REQUEST_H
 
 #include "include/rados/librados.hpp"
-#include "common/ceph_mutex.h"
-#include "cls/rbd/cls_rbd_types.h"
-
 #include <string>
 
 class Context;
@@ -41,16 +38,10 @@ private:
    *
    * <start>
    *    |
-   * GET_GROUP
-   *    |
-   *    v
-   * GET_MIRROR_GROUP (skip if no group)
-   *    |
-   *    v
    * REMOVE_MIRROR_IMAGE
    *    |
    *    v
-   * NOTIFY_MIRRORING_WATCHER (skip if not needed)
+   * NOTIFY_MIRRORING_WATCHER
    *    |
    *    v
    * <finish>
@@ -64,16 +55,6 @@ private:
   Context* m_on_finish;
 
   CephContext* m_cct;
-  bufferlist m_out_bl;
-  librados::IoCtx m_group_io_ctx;
-  cls::rbd::GroupSpec m_group_spec;
-  cls::rbd::MirrorGroup m_mirror_group;
-
-  void get_group();
-  void handle_get_group(int r);
-
-  void get_mirror_group();
-  void handle_get_mirror_group(int r);
 
   void remove_mirror_image();
   void handle_remove_mirror_image(int r);

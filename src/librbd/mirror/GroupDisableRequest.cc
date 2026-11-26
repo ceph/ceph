@@ -18,6 +18,7 @@
 #include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/ImageStateUpdateRequest.h"
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
+#include "librbd/mirror/snapshot/RemoveStandaloneSnapshotsRequest.h"
 #include "librbd/mirror/snapshot/GroupPrepareImagesRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -374,7 +375,7 @@ void GroupDisableRequest<I>::remove_group_mirror_snapshot() {
 
   if (m_group_snap_index >= m_group_snaps.size()) {
     // All mirror group snapshots removed
-    remove_mirror_images();
+    remove_standalone_snapshots();
     return;
   }
 
@@ -406,6 +407,30 @@ void GroupDisableRequest<I>::handle_remove_group_mirror_snapshot(int r) {
   // Procced to removal of next mirror group snapshot
   ++m_group_snap_index;
   remove_group_mirror_snapshot();
+}
+
+template <typename I>
+void GroupDisableRequest<I>::remove_standalone_snapshots() {
+  auto ctx = create_context_callback<GroupDisableRequest<I>,
+    &GroupDisableRequest<I>::handle_remove_standalone_snapshots>(this);
+  auto gather_ctx = new C_Gather(m_cct, ctx);
+  for (auto image_ctx : m_image_ctxs) {
+    auto req = snapshot::RemoveStandaloneSnapshotsRequest<I>::create(
+      image_ctx, cls::rbd::GroupSpec{m_group_id, m_group_ioctx.get_id()},
+      gather_ctx->new_sub());
+    req->send();
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void GroupDisableRequest<I>::handle_remove_standalone_snapshots(int r) {
+  if (r < 0) {
+    m_ret_val = r;
+    close_images();
+    return;
+  }
+  remove_mirror_images();
 }
 
 template <typename I>

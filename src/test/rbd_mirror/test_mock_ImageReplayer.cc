@@ -178,7 +178,8 @@ struct MockReplayer : public Replayer {
   MOCK_CONST_METHOD0(get_error_code, int());
   MOCK_CONST_METHOD0(get_error_description, std::string());
   MOCK_METHOD1(prune_snapshot, void(uint64_t snapshot_id));
-  MOCK_METHOD1(set_remote_snap_id_end_limit, void(uint64_t snapshot_id));
+  MOCK_METHOD2(set_remote_snap_id_end_limit,
+    void(uint64_t snapshot_id, const cls::rbd::GroupSpec& local_group_spec));
   MOCK_METHOD0(get_remote_snap_id_end_limit, uint64_t());
 };
 
@@ -410,6 +411,12 @@ public:
   MockImageReplayer *m_image_replayer = nullptr;
 };
 
+// Test sequence:
+// 1. Bootstrap and start an image replayer.
+// 2. Request snapshot pruning while running, then stop and request pruning
+//   again.
+// Expected: The running engine accepts pruning; the stopped replayer reports
+//   that it cannot accept it.
 TEST_F(TestMockImageReplayer, StartStop) {
   // START
 
@@ -443,6 +450,9 @@ TEST_F(TestMockImageReplayer, StartStop) {
   ASSERT_EQ(image_replayer::HEALTH_STATE_OK,
             m_image_replayer->get_health_state());
 
+  EXPECT_CALL(mock_replayer, prune_snapshot(123));
+  ASSERT_TRUE(m_image_replayer->prune_snapshot(123));
+
   // STOP
   expect_shut_down(mock_replayer, 0);
   expect_close(mock_state_builder, 0);
@@ -451,6 +461,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
   ASSERT_EQ(0, stop_ctx.wait());
+  ASSERT_FALSE(m_image_replayer->prune_snapshot(123));
   ASSERT_EQ(image_replayer::HEALTH_STATE_OK,
             m_image_replayer->get_health_state());
 }
