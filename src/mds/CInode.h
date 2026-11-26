@@ -888,6 +888,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void open_snaprealm(bool no_split=false);
   void close_snaprealm(bool no_join=false);
   SnapRealm *find_snaprealm() const;
+  // the same, always walking up, for mds_cache_ancestry_verify
+  SnapRealm *find_snaprealm_walk() const;
+  void verify_realm_cache(SnapRealm *r) const;
   void encode_snap(ceph::buffer::list& bl);
   void decode_snap(ceph::buffer::list::const_iterator& p);
 
@@ -979,6 +982,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   // -- authority --
   mds_authority_t authority() const override;
+  // the same, always walking up, for mds_cache_ancestry_verify
+  mds_authority_t authority_walk() const;
 
   // -- auth pins --
   bool can_auth_pin(int *err_ret=nullptr) const override;
@@ -1052,6 +1057,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    */
   static std::atomic<uint64_t> ancestry_gen;
   static std::atomic<bool> cache_ancestry;   // mds_cache_ancestry
+  static std::atomic<bool> verify_ancestry;  // mds_cache_ancestry_verify
   static void ancestry_changed() {
     ancestry_gen.fetch_add(1, std::memory_order_relaxed);
   }

@@ -413,6 +413,8 @@ public:
   bool should_merge() const;
 
   mds_authority_t authority() const override;
+  // the same, always walking up, for mds_cache_ancestry_verify
+  mds_authority_t authority_walk() const;
   mds_authority_t get_dir_auth() const { return dir_auth; }
   // see CInode::ancestry_gen
   mutable uint64_t auth_cache_gen = 0;

@@ -3159,6 +3159,7 @@ void CInode::auth_unpin(void *by)
 
 std::atomic<uint64_t> CInode::ancestry_gen{1};
 std::atomic<bool> CInode::cache_ancestry{true};
+std::atomic<bool> CInode::verify_ancestry{false};
 
 mds_authority_t CInode::authority() const
 {
@@ -3167,8 +3168,17 @@ mds_authority_t CInode::authority() const
 
   const uint64_t gen = ancestry_gen.load(std::memory_order_relaxed);
   const bool cache = cache_ancestry.load(std::memory_order_relaxed);
-  if (cache && auth_cache_gen == gen)
+  if (cache && auth_cache_gen == gen) {
+    if (verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]] {
+      if (mds_authority_t w = authority_walk(); w != auth_cache) {
+        // not *this: printing an inode calls authority() again
+        derr << __func__ << " cached " << auth_cache << " != " << w
+             << " found walking up, on " << ino() << dendl;
+        ceph_abort_msg("stale CInode::authority() cache");
+      }
+    }
     return auth_cache;
+  }
 
   mds_authority_t a = CDIR_AUTH_UNDEF;
   if (parent)
@@ -3183,6 +3193,17 @@ mds_authority_t CInode::authority() const
     auth_cache_gen = gen;
   }
   return a;
+}
+
+mds_authority_t CInode::authority_walk() const
+{
+  if (inode_auth.first >= 0)
+    return inode_auth;
+  if (parent)
+    return parent->dir->authority_walk();
+  if (!projected_parent.empty())
+    return projected_parent.front()->dir->authority_walk();
+  return CDIR_AUTH_UNDEF;
 }
 
 
@@ -3373,8 +3394,11 @@ SnapRealm *CInode::find_snaprealm() const
 
   const uint64_t gen = ancestry_gen.load(std::memory_order_relaxed);
   const bool cache = cache_ancestry.load(std::memory_order_relaxed);
-  if (cache && realm_cache_gen == gen)
+  if (cache && realm_cache_gen == gen) {
+    if (verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]]
+      verify_realm_cache(realm_cache);
     return realm_cache;
+  }
 
   // walk up to the nearest realm, or to an ancestor that knows it
   SnapRealm *r = nullptr;
@@ -3395,10 +3419,33 @@ SnapRealm *CInode::find_snaprealm() const
   }
 
   if (cache) {
+    if (verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]]
+      verify_realm_cache(r);
     realm_cache = r;
     realm_cache_gen = gen;
   }
   return r;
+}
+
+void CInode::verify_realm_cache(SnapRealm *r) const
+{
+  if (SnapRealm *w = find_snaprealm_walk(); w != r) {
+    derr << __func__ << " cached " << r << " != " << w
+         << " found walking up, on " << ino() << dendl;
+    ceph_abort_msg("stale CInode::find_snaprealm() cache");
+  }
+}
+
+SnapRealm *CInode::find_snaprealm_walk() const
+{
+  const CInode *cur = this;
+  while (!cur->snaprealm) {
+    const CDentry *pdn = cur->get_oldest_parent_dn();
+    if (!pdn)
+      break;
+    cur = pdn->get_dir()->get_inode();
+  }
+  return cur->snaprealm;
 }
 
 void CInode::encode_snap_blob(bufferlist &snapbl)

@@ -3102,14 +3102,30 @@ mds_authority_t CDir::authority() const
 
   const uint64_t gen = CInode::ancestry_gen.load(std::memory_order_relaxed);
   const bool cache = CInode::cache_ancestry.load(std::memory_order_relaxed);
-  if (cache && auth_cache_gen == gen)
+  if (cache && auth_cache_gen == gen) {
+    if (CInode::verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]] {
+      if (mds_authority_t w = authority_walk(); w != auth_cache) {
+        // not *this: printing a dirfrag calls authority() again
+        derr << __func__ << " cached " << auth_cache << " != " << w
+             << " found walking up, on " << dirfrag() << dendl;
+        ceph_abort_msg("stale CDir::authority() cache");
+      }
+    }
     return auth_cache;
+  }
   mds_authority_t a = inode->authority();
   if (cache) {
     auth_cache = a;
     auth_cache_gen = gen;
   }
   return a;
+}
+
+mds_authority_t CDir::authority_walk() const
+{
+  if (is_subtree_root())
+    return dir_auth;
+  return inode->authority_walk();
 }
 
 /** is_subtree_root()
