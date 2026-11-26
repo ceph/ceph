@@ -960,7 +960,10 @@ Quota Options
 
 .. option:: --quota-scope
 
-    The scope of quota (bucket, user).
+    The scope of quota (bucket, user, account). With ``--account-id``, use
+    ``account`` to limit the account's total usage, or ``bucket`` to apply a
+    quota to each bucket owned by the account. Use ``user`` with ``--uid``
+    for a user quota.
 
 
 Orphans Search Options
@@ -1110,6 +1113,11 @@ Show only summary of usage information for all users::
 Trim usage information for user until March 1st, 2012::
 
         $ radosgw-admin usage trim --uid=johnny --end-date=2012-04-01
+
+Set and enable a 10 GiB quota for an account::
+
+        $ radosgw-admin quota set --quota-scope=account --account-id={accountid} --max-size=10G
+        $ radosgw-admin quota enable --quota-scope=account --account-id={accountid}
 
 
 Availability
