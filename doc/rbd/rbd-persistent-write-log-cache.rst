@@ -51,7 +51,11 @@ disabled.
 
 Here are some cache configuration settings:
 
-- ``rbd_persistent_cache_path`` A file folder to cache data.
+- ``rbd_persistent_cache_path`` A file folder to cache data. Set it to a
+  directory on the SSD. The default, ``/tmp``, is a RAM-backed ``tmpfs`` on
+  some distributions, such as Debian 13 and Fedora, and is emptied at boot on
+  others, such as Debian 12 and Ubuntu 24.04, so a cache there does not
+  survive a reboot, and the writes that it had not flushed are lost.
 
 - ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
   size is 1 GB.
@@ -112,6 +116,12 @@ For example::
 
 Invalidate Cache
 ----------------
+
+.. warning:: Invalidating discards every write in the cache that has not
+   been flushed to the cluster, and those writes are lost. If ``rbd status``
+   shows ``clean: false``, flush the cache first with
+   ``rbd persistent-cache flush``, on the host that holds the cache, unless
+   you mean to lose those writes.
 
 To invalidate (discard) a cache file with ``rbd``, specify the
 ``persistent-cache invalidate`` command, the pool name and the image name.  ::

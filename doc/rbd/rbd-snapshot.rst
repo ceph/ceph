@@ -106,6 +106,15 @@ For example:
 Roll back Snapshot
 ------------------
 
+.. warning:: Rolling back replaces the current content of the image with the
+   content of the snapshot, and every write made since the snapshot is lost,
+   unless a later snapshot holds it. Unmount and unmap the image, or shut
+   down the virtual machine that uses it, before you roll back.
+   ``rbd snap rollback`` fails with
+   ``rbd: rollback failed: (30) Read-only file system`` while another client
+   holds the exclusive lock of the image, but it does not stop for a client
+   that has the image open without the lock.
+
 To roll back to a snapshot,  use the ``rbd snap rollback`` command and specify
 the pool name, the image name, and the snap name:
 
@@ -198,7 +207,7 @@ Each cloned image (child) stores a reference to its parent image, which enables
 the cloned image to open the parent snapshot and read it.
 
 A copy-on-write clone of a snapshot behaves exactly like any other Ceph
-block device image. You can read to, write from, clone, and resize cloned
+block device image. You can read from, write to, clone, and resize cloned
 images. There are no special restrictions with cloned images. However, the
 copy-on-write clone of a snapshot depends on the snapshot, so you must
 protect the snapshot before you clone it. The diagram below depicts this
