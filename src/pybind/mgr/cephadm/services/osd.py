@@ -202,10 +202,18 @@ class OSDService(CephService):
             raise DeviceConstraintError(
                 f'Devices {sorted(fractions)} require a size reservation, so '
                 'data_allocate_fraction must not be set in the OSD spec.')
-        if drive_group.osds_per_device and drive_group.osds_per_device > 1:
-            raise DeviceConstraintError(
-                f'Devices {sorted(fractions)} require a size reservation, so '
-                'osds_per_device must not be greater than 1.')
+        if drive_group.osds_per_device:
+            # The CLI's key=value form hands this over as a str.
+            try:
+                osds_per_device = int(drive_group.osds_per_device)
+            except (TypeError, ValueError):
+                raise DeviceConstraintError(
+                    'osds_per_device must be a whole number, got '
+                    f'{drive_group.osds_per_device!r}.')
+            if osds_per_device > 1:
+                raise DeviceConstraintError(
+                    f'Devices {sorted(fractions)} require a size reservation, so '
+                    'osds_per_device must not be greater than 1.')
 
         # One fraction is applied to every device, and the isclose check above
         # still admits a spread: rel_tol 1e-5 of a 30 TB drive is a few hundred
