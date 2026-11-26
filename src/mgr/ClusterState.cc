@@ -119,15 +119,36 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
                << dendl;
       continue;
     }
+    // A PG's stats cannot be newer than the osdmap of the OSD that sends
+    // them. If they claim to be, their version fields are bogus (the report
+    // was corrupted before it reached us); stored, they would make every
+    // later report look older and pin this PG.
+    if (pg_stats.reported_epoch > stats->epoch) {
+      dout(1) << " got " << pgid << " from osd." << from
+	      << " reported at " << pg_stats.reported_epoch << ":"
+	      << pg_stats.reported_seq << " but the osd is at e" << stats->epoch
+	      << ", ignoring" << dendl;
+      continue;
+    }
     // In case we already heard about more recent stats from this PG
-    // from another OSD
+    // from another OSD (a late report from a previous primary). A newer
+    // report from the OSD that sent the stored stats replaces them even if
+    // the stored version pair is higher: only primaries report and one
+    // OSD's reports reach us in order, so a higher stored pair from the
+    // same OSD is bogus (e.g. a corrupted reported_seq).
     const auto q = pg_map.pg_stat.find(pgid);
     if (q != pg_map_pg_stat_end_it &&
 	q->second.get_version_pair() > pg_stats.get_version_pair()) {
-      dout(15) << " had " << pgid << " from "
-	       << q->second.reported_epoch << ":"
-	       << q->second.reported_seq << dendl;
-      continue;
+      if (q->second.acting_primary != from) {
+	dout(15) << " had " << pgid << " from "
+		 << q->second.reported_epoch << ":"
+		 << q->second.reported_seq << dendl;
+	continue;
+      }
+      dout(10) << " had " << pgid << " from osd." << from << " at "
+	       << q->second.reported_epoch << ":" << q->second.reported_seq
+	       << ", taking its " << pg_stats.reported_epoch << ":"
+	       << pg_stats.reported_seq << dendl;
     }
 
     pending_inc.pg_stat_updates.insert_or_assign(pgid, pg_stats);
