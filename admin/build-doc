@@ -92,12 +92,28 @@ fi
 
 cd build-doc
 
+#
+# Build the Javadoc for the CephFS Java API page.  Ant writes it straight
+# to where that page links in the HTML output, so only `html` and
+# `livehtml` build it.
+#
+build_javadoc() {
+    JAVA_OUTDIR=$TOPDIR/build-doc/output/html/cephfs/api/libcephfs-java/javadoc
+    rm -rf "$JAVA_OUTDIR"
+    ant -buildfile "$TOPDIR/src/java/build.xml" -Ddoc.dir="$JAVA_OUTDIR" docs
+    if [ ! -s "$JAVA_OUTDIR/index.html" ]; then
+        echo "$0: Ant did not write $JAVA_OUTDIR/index.html" 1>&2
+        exit 1
+    fi
+}
+
 for target in $sphinx_targets; do
     # Build with -W so that warnings are treated as errors and this fails
     case $target in
         html)
             $vdir/bin/sphinx-build -W --keep-going -a -b dirhtml -d doctrees \
                                    $TOPDIR/doc $TOPDIR/build-doc/output/$target
+            build_javadoc
             ;;
         man)
             $vdir/bin/sphinx-build -W --keep-going -a -b man -t man -d doctrees \
@@ -106,6 +122,7 @@ for target in $sphinx_targets; do
             ;;
         livehtml)
             $vdir/bin/pip install --quiet sphinx-autobuild
+            build_javadoc
             $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' -b dirhtml "$@" \
                                        $TOPDIR/doc $TOPDIR/build-doc/output/html
             ;;
@@ -115,22 +132,5 @@ for target in $sphinx_targets; do
             ;;
     esac
 done
-
-#
-# Build and install JavaDocs
-#
-JAVADIR=$TOPDIR/src/java
-
-# Clean and build JavaDocs
-rm -rf $JAVADIR/doc
-ant -buildfile $JAVADIR/build.xml docs
-
-# Create clean target directory
-JAVA_OUTDIR=$TOPDIR/build-doc/output/html/cephfs/api/libcephfs-java/javadoc
-rm -rf $JAVA_OUTDIR
-mkdir $JAVA_OUTDIR
-
-# Copy JavaDocs to target directory
-cp -a $JAVADIR/doc/* $JAVA_OUTDIR/
 
 echo "SUCCESS"
