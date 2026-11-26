@@ -36,7 +36,7 @@ The following configuration options are suggested::
 
    ::
 
-       ceph daemon <daemon_type>.<id> config set osd_client_watch_timeout 15
+       ceph daemon <daemon_type>.<id> config set <parameter_name> <new_value>
 
    ::
 
