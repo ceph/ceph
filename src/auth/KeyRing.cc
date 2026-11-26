@@ -253,12 +253,10 @@ void KeyRing::print(ostream& out)
 
 void KeyRing::import(CephContext *cct, const KeyRing& other)
 {
-  for (auto p = other.keys.begin();
-       p != other.keys.end();
-       ++p) {
-    ldout(cct, 10) << " importing " << p->first << dendl;
-    ldout(cct, 30) << "    " << p->second << dendl;
-    keys[p->first] = p->second;
+  for (auto& [ename, eauth] : other.keys) {
+    ldout(cct, 10) << " importing " << ename << dendl;
+    ldout(cct, 30) << "    " << eauth << dendl;
+    keys[ename] = eauth;
   }
 }
 
