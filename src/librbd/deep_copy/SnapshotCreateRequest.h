@@ -79,6 +79,7 @@ private:
   void send_set_head();
   void handle_set_head(int r);
 
+  bool has_matching_group_snapshot();
   void send_create_snap();
   void handle_create_snap(int r);
 
