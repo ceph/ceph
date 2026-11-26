@@ -112,11 +112,64 @@ static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry
   stats->total_entries -= entry.count;
 }
 
+using sc_stats_t = decltype(cls_user_header::storage_class_stats);
+
+// the per-storage-class stats of a bucket entry are unknown if the entry has
+// objects but no per-storage-class stats, e.g. when an older client wrote it
+static bool entry_sc_stats_unknown(const cls_user_bucket_entry& entry)
+{
+  return !entry.storage_class_stats.has_value() &&
+         (entry.count > 0 || entry.size > 0);
+}
+
+// add the per-storage-class stats of an entry. if they are unknown, the sum
+// becomes unknown too
+static void add_sc_stats(sc_stats_t& sc_stats, const cls_user_bucket_entry& entry)
+{
+  if (!sc_stats.has_value()) {
+    return;
+  }
+  if (entry_sc_stats_unknown(entry)) {
+    sc_stats.reset();
+    return;
+  }
+  if (!entry.storage_class_stats.has_value()) {
+    return; // no objects
+  }
+  for (const auto& [storage_class, stats] : *entry.storage_class_stats) {
+    auto& s = (*sc_stats)[storage_class];
+    s.total_entries += stats.count;
+    s.total_bytes += stats.size;
+    s.total_bytes_rounded += stats.size_rounded;
+  }
+}
+
+static void dec_sc_stats(sc_stats_t& sc_stats, const cls_user_bucket_entry& entry)
+{
+  if (!sc_stats.has_value()) {
+    return;
+  }
+  if (entry_sc_stats_unknown(entry)) {
+    sc_stats.reset();
+    return;
+  }
+  if (!entry.storage_class_stats.has_value()) {
+    return; // no objects
+  }
+  for (const auto& [storage_class, stats] : *entry.storage_class_stats) {
+    auto& s = (*sc_stats)[storage_class];
+    s.total_entries -= stats.count;
+    s.total_bytes -= stats.size;
+    s.total_bytes_rounded -= stats.size_rounded;
+  }
+}
+
 static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
 {
   target_entry->size = src_entry.size;
   target_entry->size_rounded = src_entry.size_rounded;
   target_entry->count = src_entry.count;
+  target_entry->storage_class_stats = src_entry.storage_class_stats;
 }
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -140,18 +193,16 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
-
     string key;
 
     get_key_by_bucket_name(update_entry.bucket.name, &key);
-
     cls_user_bucket_entry entry;
     ret = get_existing_bucket_entry(hctx, key, entry);
 
     if (ret == -ENOENT) {
-     if (!op.add)
-      continue; /* racing bucket removal */
-
+     if (!op.add) {
+       continue; /* racing bucket removal */
+     }
      entry = update_entry;
 
      ret = 0;
@@ -166,9 +217,9 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
+      dec_sc_stats(header.storage_class_stats, entry);
       dec_header_stats(&header.stats, entry);
     }
-
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
@@ -181,18 +232,25 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
+    }
 
+    // like the totals, add the stats of the stored entry
+    add_sc_stats(header.storage_class_stats, entry);
     add_header_stats(&header.stats, entry);
   }
-
   bufferlist bl;
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
 
-  if (header.last_stats_update < op.time)
+  if (header.last_stats_update < op.time) {
     header.last_stats_update = op.time;
+  }
+
+  if (header.stats.total_entries == 0) {
+    header.storage_class_stats.emplace();
+  }
 
   encode(header, bl);
   
@@ -268,7 +326,6 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     CLS_LOG(0, "ERROR: get existing bucket entry, key=%s ret=%d", key.c_str(), ret);
     return ret;
   }
-
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
   ret = remove_entry(hctx, key);
@@ -279,6 +336,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return 0;
   }
 
+  dec_sc_stats(header.storage_class_stats, entry);
   dec_header_stats(&header.stats, entry);
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
@@ -398,6 +456,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
   }
 
   cls_user_header header;
+  header.storage_class_stats.emplace();
   bool truncated = false;
   string from_index, prefix;
   do {
@@ -423,6 +482,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 	return -EIO;
       }
       add_header_stats(&header.stats, e);
+      add_sc_stats(header.storage_class_stats, e);
     }
     if (!keys.empty()) {
       from_index = keys.rbegin()->first;
@@ -457,6 +517,10 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   cls_user_header header;
   string from_index{op.marker}, prefix;
   cls_user_reset_stats2_ret ret;
+  /* continue from the stats accumulated by the previous calls. an older
+   * client sends no per-storage-class stats, so they stay unknown */
+  cls_user_stats acc_stats = op.acc_stats;
+  sc_stats_t sc_stats = op.storage_class_stats;
 
   map<string, buffer::list> keys;
   int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
@@ -479,22 +543,30 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 	      __func__, kv.first.c_str());
       return -EIO;
     }
-    add_header_stats(&ret.acc_stats, e);
+    add_header_stats(&acc_stats, e);
+    add_sc_stats(sc_stats, e);
   }
 
   if (! ret.truncated) {
     buffer::list bl;
     header.last_stats_update = op.time;
-    header.stats = ret.acc_stats;
+    header.stats = acc_stats;
+    header.storage_class_stats = std::move(sc_stats);
     encode(header, bl);
 
     CLS_LOG(20, "%s: updating header", __func__);
     rc = cls_cxx_map_write_header(hctx, &bl);
 
-    /* return final result */
+    /* return final result. the reply to a write is limited to
+     * osd_max_write_op_reply_len (64 bytes), so it doesn't carry the
+     * per-storage-class stats */
+    ret.acc_stats = acc_stats;
     encode(ret, *out);
     return rc;
   }
+
+  ret.acc_stats = acc_stats;
+  ret.storage_class_stats = std::move(sc_stats);
 
   /* try-update marker */
   if(!keys.empty())
