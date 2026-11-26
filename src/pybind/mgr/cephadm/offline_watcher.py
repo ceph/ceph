@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional, TYPE_CHECKING
 
-import multiprocessing as mp
+import concurrent.futures
 import threading
 
 from .serve import CephadmServe
@@ -23,7 +23,8 @@ class OfflineHostWatcher(threading.Thread):
         super(OfflineHostWatcher, self).__init__(target=self.run)
 
     def run(self) -> None:
-        self.thread_pool = mp.pool.ThreadPool(10)
+        # not multiprocessing.pool.ThreadPool, see CephadmOrchestrator._worker_pool
+        self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)
         while not self.stop:
             # only need to take action if we have hosts to check
             if self.hosts or self.new_hosts:
@@ -32,11 +33,10 @@ class OfflineHostWatcher(threading.Thread):
                     self.new_hosts = None
                 logger.debug(f'OfflineHostDetector: Checking if hosts: {self.hosts} are offline.')
                 assert self.hosts is not None
-                self.thread_pool.map(self.check_host, self.hosts)
+                list(self.thread_pool.map(self.check_host, self.hosts))
             self.event.wait(20)
             self.event.clear()
-        self.thread_pool.close()
-        self.thread_pool.join()
+        self.thread_pool.shutdown(wait=True)
 
     def check_host(self, host: str) -> None:
         if host not in self.mgr.offline_hosts:

@@ -1,5 +1,5 @@
 import asyncio
-import concurrent
+import concurrent.futures
 import json
 import errno
 import ipaddress
@@ -34,7 +34,6 @@ from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
 import datetime
 import os
 import random
-import multiprocessing.pool
 import subprocess
 from prettytable import PrettyTable
 
@@ -775,7 +774,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         self.cephadm_binary_path = self._get_cephadm_binary_path()
 
-        self._worker_pool = multiprocessing.pool.ThreadPool(10)
+        # Not multiprocessing.pool.ThreadPool: its locks are registered with
+        # multiprocessing's resource tracker, a helper process started from
+        # sys.executable. Inside ceph-mgr that is not a python binary, and
+        # with the forkserver start method (the Linux default since Python
+        # 3.14) the registration fails and the module does not load.
+        self._worker_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
         self.ssh._reconfig_ssh()
 
@@ -866,8 +870,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
-        self._worker_pool.close()
-        self._worker_pool.join()
+        self._worker_pool.shutdown(wait=True)
         self.http_server.shutdown()
         self.offline_watcher.shutdown()
         self.run = False
@@ -1344,8 +1347,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if not self.ssh_key or not self.ssh_pub:
             return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`', {}
 
-        # mypy is unable to determine type for _processes since it's private
-        worker_count: int = self._worker_pool._processes  # type: ignore
+        worker_count: int = self._worker_pool._max_workers
         ret = {
             "workers": worker_count,
             "paused": self.paused,
