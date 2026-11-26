@@ -1,0 +1,46 @@
+# EC direct reads continuing correctly across pool migrations WHILE OSDs are
+# thrashed -- the teuthology, less-aggressive counterpart of the squad5 chaos
+# migration coverage. The workunit does continuous balance direct-read verify
+# and migrates its data pool's pg_num in a loop; thrashosds marks OSDs out/in
+# underneath. Stresses migration-follow + EC direct/split reads + OSD thrash
+# together, which the plain FS-stress suites never did.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(OSDMAP_FLAGS\)
+      - \(CACHE_POOL_
+      - is_erasure
+      - slow request
+      - marked LAGGY
+      - osds down
+      - is down
+      - Degraded data redundancy
+      - Reduced data availability
+      - Monitor daemon marked osd
+      - noup flag
+  thrashosds:
+    min_in: 3
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default map options: ms_mode=crc,read_from_replica=balance
+- thrashosds:
+    timeout: 1800
+    min_in: 3
+    chance_pgnum_grow: 0
+    chance_pgpnum_fix: 0
+    chance_test_min_size: 0
+- workunit:
+    clients:
+      client.0:
+        - rbd/krbd_pool_migration_direct_read.sh
+    env:
+      DURATION: "600"
