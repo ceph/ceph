@@ -46,7 +46,8 @@ namespace asio {
  * - post / dispatch: general parallel work
  * - post_serial / dispatch_serial: strictly ordered functor path
  * - queue(Context*, r): legacy Context completions, always via post_serial
- * - post_channel: work pinned to one execution channel (object completions)
+ * - post_channel / dispatch_channel: work pinned to one execution channel
+ *   (object completions; dispatch may run inline on that channel)
  *
  * Exported from librbd.so for out-of-tree implementations
  */
@@ -119,6 +120,22 @@ public:
    */
   virtual void post_channel(Channel channel, Work fn) {
     post(std::move(fn));
+  }
+
+  /**
+   * Like post_channel(), but may run @p fn inline when the caller is
+   * already on @p channel. Default: inline when channel == current_channel()
+   * and channel is non-null; otherwise post_channel().
+   *
+   * Used by ContextWQExecutor so Objecter Op::complete does not re-enqueue
+   * when reply handling was already posted onto the Op's channel.
+   */
+  virtual void dispatch_channel(Channel channel, Work fn) {
+    if (channel != nullptr && channel == current_channel()) {
+      fn();
+      return;
+    }
+    post_channel(channel, std::move(fn));
   }
 
 protected:

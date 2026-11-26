@@ -39,8 +39,11 @@ public:
 
   template <typename Function>
   void execute(Function&& f) const {
-    m_wq->post_channel(m_channel,
-                       ContextWQ::Work(std::forward<Function>(f)));
+    // dispatch_channel runs inline when already on m_channel so Objecter
+    // reply handling posted onto the Op's channel does not re-enqueue
+    // through Op::complete → ContextWQExecutor.
+    m_wq->dispatch_channel(m_channel,
+                           ContextWQ::Work(std::forward<Function>(f)));
   }
 
   // --- asio execution properties (work_guard / prefer / require) ---

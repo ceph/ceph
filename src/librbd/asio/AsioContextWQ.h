@@ -34,6 +34,7 @@ public:
   void dispatch(Work fn) override;
   void post_serial(Work fn) override;
   void dispatch_serial(Work fn) override;
+  void dispatch_channel(Channel channel, Work fn) override;
   void queue(Context* ctx, int r = 0) override;
 
 private:

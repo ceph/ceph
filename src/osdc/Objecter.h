@@ -2929,6 +2929,14 @@ private:
   void ms_fast_dispatch2(const MessageRef& m) override;
 
   void handle_osd_op_reply(cref_t<MOSDOpReply> m);
+  /**
+   * If objecter_dispatch_to_op_executor is set and the Op for @p m has an
+   * asio any_completion_handler, post handle_osd_op_reply onto that
+   * handler's associated executor and return true. Otherwise return false
+   * so the caller can use the session-strand or messenger-thread path.
+   * Mutually exclusive with objecter_dispatch_to_session_strand.
+   */
+  bool maybe_dispatch_osd_op_reply(const MessageRef& m);
   void handle_osd_backoff(cref_t<MOSDBackoff> m);
   void handle_watch_notify(cref_t<MWatchNotify> m);
   void handle_osd_map(class MOSDMap *m);
@@ -4247,7 +4255,8 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
-
+  // Startup-only; read in Objecter(). Mutually exclusive with session strand.
+  bool dispatch_to_op_executor = false;
   bool dispatch_to_session_strand = false;
 
 public:

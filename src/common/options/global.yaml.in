@@ -2520,7 +2520,15 @@ options:
   type: bool
   level: advanced
   desc: Offload OSD session message handlers to a per-session ASIO strand instead of running them on the messenger thread
-  long_desc: When false (default), OSD op replies, watch notifies, backoffs, and OSD command replies are handled directly on the messenger thread (pre-strand behavior). When true, handlers are posted to the per-OSDSession strand. Enable for NFS-Ganesha / FSAL_CEPH workloads that benefit from not blocking messenger dispatch; leave disabled for latency-sensitive small-IO clients such as librbd fio.
+  long_desc: When false (default), OSD op replies, watch notifies, backoffs, and OSD command replies are handled directly on the messenger thread (pre-strand behavior). When true, handlers are posted to the per-OSDSession strand. Enable for NFS-Ganesha / FSAL_CEPH workloads that benefit from not blocking messenger dispatch; leave disabled for latency-sensitive small-IO clients such as librbd fio. Mutually exclusive with objecter_dispatch_to_op_executor; if both are set, the Objecter disables the session strand.
+  default: false
+  flags:
+  - startup
+- name: objecter_dispatch_to_op_executor
+  type: bool
+  level: advanced
+  desc: Post OSD op reply handling onto the Op's associated completion executor instead of running it on the messenger thread
+  long_desc: When false (default), MOSDOpReply follows the messenger-thread or session-strand path. When true, if the Op carries an asio any_completion_handler with a bound executor (e.g. librbd ContextWQExecutor / SpdkContextWQ channel), handle_osd_op_reply is posted to that executor so Objecter and the librbd completion run on the same thread and ContextWQExecutor can dispatch inline. Complements objecter_dispatch_to_session_strand (ASIO pool for NFS) with a per-Op executor path for RBD/NVMe-oF; the two are mutually exclusive. Startup only. Enable with rbd_with_spdk_wq on the NVMe-oF gateway.
   default: false
   flags:
   - startup

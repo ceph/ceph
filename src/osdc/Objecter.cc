@@ -1098,6 +1098,11 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
   switch (m->get_type()) {
   case CEPH_MSG_OSD_OPREPLY: {
+    // Prefer Op completion executor (librbd ContextWQ / SpdkContextWQ) over
+    // the per-session ASIO strand: stacking both would double-hop RBD I/O.
+    if (maybe_dispatch_osd_op_reply(m)) {
+      return;
+    }
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s && dispatch_to_session_strand) {
@@ -4101,6 +4106,55 @@ bs::error_code Objecter::process_op_reply_handlers(Op *op, const vector<OSDOp>& 
 }
 
 
+bool Objecter::maybe_dispatch_osd_op_reply(const MessageRef& m)
+{
+  if (!dispatch_to_op_executor) {
+    return false;
+  }
+
+  auto reply = cref_cast<MOSDOpReply>(m);
+  ceph_tid_t tid = reply->get_tid();
+
+  shunique_lock sul(rwlock, ceph::acquire_shared);
+  if (!initialized) {
+    return false;
+  }
+
+  ConnectionRef con = reply->get_connection();
+  auto priv = con->get_priv();
+  auto s = static_cast<OSDSession*>(priv.get());
+  if (!s || s->con != con) {
+    return false;
+  }
+
+  unique_lock sl(s->lock);
+  auto iter = s->ops.find(tid);
+  if (iter == s->ops.end()) {
+    return false;
+  }
+
+  Op *op = iter->second;
+  auto *comp = std::get_if<Op::OpComp>(&op->onfinish);
+  if (!comp || !(*comp)) {
+    // Context* / fu2 completions stay on messenger or session-strand path.
+    return false;
+  }
+
+  auto ex = boost::asio::get_associated_executor(*comp, service.get_executor());
+  sl.unlock();
+  sul.unlock();
+
+  ldout(cct, 15) << __func__ << " tid " << tid
+		 << " dispatching handle_osd_op_reply to Op executor" << dendl;
+  // any_completion_executor does not satisfy asio::post()'s blocking.never
+  // constraint; Op::complete uses dispatch() for the same reason. On the
+  // messenger thread ContextWQExecutor::execute still hops via the channel.
+  boost::asio::dispatch(ex, [this, m]() {
+    handle_osd_op_reply(cref_cast<MOSDOpReply>(m));
+  });
+  return true;
+}
+
 void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 {
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
@@ -6008,7 +6062,24 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
-  dispatch_to_session_strand = cct->_conf.get_val<bool>("objecter_dispatch_to_session_strand");
+  dispatch_to_session_strand =
+    cct->_conf.get_val<bool>("objecter_dispatch_to_session_strand");
+  dispatch_to_op_executor =
+    cct->_conf.get_val<bool>("objecter_dispatch_to_op_executor");
+  // Session strand posts every OSD-session message onto the asio pool.
+  // Op-executor posts only OPREPLY onto the Op's bound executor (ContextWQ).
+  // Stacking them double-hops RBD/NVMe-oF completions; refuse the pair.
+  if (dispatch_to_session_strand && dispatch_to_op_executor) {
+    lderr(cct) << "objecter_dispatch_to_session_strand and "
+	       << "objecter_dispatch_to_op_executor are mutually exclusive; "
+	       << "disabling objecter_dispatch_to_session_strand" << dendl;
+    dispatch_to_session_strand = false;
+  }
+  if (dispatch_to_op_executor) {
+    ldout(cct, 1) << "objecter_dispatch_to_op_executor=true: OSD op replies "
+		  << "with a bound completion executor will be handled on "
+		  << "that executor" << dendl;
+  }
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||

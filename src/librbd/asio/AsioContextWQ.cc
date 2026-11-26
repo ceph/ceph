@@ -67,6 +67,12 @@ void AsioContextWQ::dispatch_serial(Work fn) {
   boost::asio::dispatch(*m_api_strand, std::move(fn));
 }
 
+void AsioContextWQ::dispatch_channel(Channel, Work fn) {
+  // AsioContextWQ has no channels; preserve asio dispatch semantics so a
+  // caller already on the io_context may run inline.
+  boost::asio::dispatch(*m_io_context, std::move(fn));
+}
+
 void AsioContextWQ::queue(Context* ctx, int r) {
   if (m_shutdown.load(std::memory_order_acquire)) {
     ctx->complete(-ESHUTDOWN);
