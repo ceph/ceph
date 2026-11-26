@@ -172,7 +172,10 @@ The ``peer_add`` command supports passing the remote cluster Monitor address
 and the user key. However, bootstrapping a peer is the recommended way to add a
 peer.
 
-.. note:: Only a single peer is currently supported.
+.. note:: Only one peer that is added with ``peer_add`` or with a bootstrap
+          token in the default ``legacy`` mode is supported. A file system can
+          also have per-share peers, one for each remote file system. See the
+          :ref:`Per-share Peers<cephfs_mirroring_per_share_peers>` section.
           The ``peer_add`` command is deprecated and will be removed in a future
           release. Use the ``peer_bootstrap create`` command instead. See the
           :ref:`Bootstrap Peers<cephfs_mirroring_bootstrap_peers>` section.
@@ -183,17 +186,25 @@ To remove a peer, run a command of the following form:
 
    ceph fs snapshot mirror peer_remove <fs_name> <peer_uuid>
 
+A per-share peer that still has directories mapped to it is not removed, and
+the command fails with ``EBUSY``. Remove those directories first.
+
 To list file system mirror peers, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph fs snapshot mirror peer_list <fs_name>
 
+Each peer entry includes ``auth_mode``, which is ``legacy`` or ``per_share``.
+
 To configure a directory for mirroring, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph fs snapshot mirror add <fs_name> <path>
+   ceph fs snapshot mirror add <fs_name> <path> [<peer_uuid>]
+
+``<peer_uuid>`` maps the directory to a per-share peer. See the
+:ref:`Per-share Peers<cephfs_mirroring_per_share_peers>` section.
 
 To list the configured directories, run a command of the following form:
 
@@ -260,6 +271,110 @@ Import the bootstrap token in the primary cluster via::
 e.g.::
 
   $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
+
+.. _cephfs_mirroring_per_share_peers:
+
+Per-share Peers
+---------------
+
+For a legacy peer, the primary cluster holds the key of a remote user that has
+``rwps`` access to the whole remote file system. ``peer_bootstrap create`` in
+``legacy`` mode creates this user with
+``fs authorize <fs_name> <client_entity> / rwps``, and the user for
+``peer_add`` is created with the same command (see
+:ref:`Creating Users<cephfs_mirroring_creating_users>`). For a per-share peer,
+the primary cluster holds a super-key instead, and the super-key has no MDS or
+OSD capabilities. The record of a per-share peer is stored in the
+``cephfs_mirror`` object in the metadata pool of the primary file system, not
+in the file system map. Its secret is stored in the Monitor config-key store of
+the primary cluster.
+
+A file system can have one per-share peer for each remote file system, in
+addition to one legacy peer.
+
+.. note:: Synchronizing a directory that is mapped to a per-share peer requires
+   a mirror daemon that supports per-share peers. Until such a mirror daemon
+   runs, the mirroring module does not assign the directory to any mirror
+   daemon, and ``dirmap`` reports the directory as ``stalled``.
+
+Creating the super-key
+~~~~~~~~~~~~~~~~~~~~~~
+
+Create the super-key on the remote cluster. Its name must be
+``client.mirror_peer.<peer_uuid>``, where ``<peer_uuid>`` is a UUID in
+lowercase canonical form. This UUID becomes the UUID of the peer on the primary
+cluster. The super-key must not have ``mds`` or ``osd`` capabilities::
+
+  $ ceph auth get-or-create client.mirror_peer.0f6d5e0a-6a1c-4c55-9a43-3c1c9d0b3a11 mon 'allow r'
+
+Creating and importing the token
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a bootstrap token in ``per_share`` mode on the remote cluster::
+
+  $ ceph fs snapshot mirror peer_bootstrap create <fs_name> client.mirror_peer.<peer_uuid> <site-name> per_share
+
+In ``per_share`` mode, the command does not create or modify the user. The
+command fails with ``EINVAL`` if the name does not have the form
+``client.mirror_peer.<peer_uuid>`` or if the super-key has ``mds`` or ``osd``
+capabilities. The command fails with ``ENOENT`` if the super-key does not exist.
+
+Import the token on the primary cluster::
+
+  $ ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
+
+The import fails with ``EEXIST`` if another per-share peer of ``<fs_name>``
+already mirrors to the same remote file system. Importing a token for a
+per-share peer that already exists changes nothing, even if the token carries a
+different key or site name. For example, after the super-key is rotated, the
+key of the existing per-share peer cannot be updated by importing a token.
+
+Mapping directories to a per-share peer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To map a directory to a per-share peer, pass the UUID of the peer when adding
+the directory::
+
+  $ ceph fs snapshot mirror add <fs_name> <path> <peer_uuid>
+
+A directory is mapped to at most one peer. A directory that is not mapped to a
+per-share peer is mirrored to the legacy peer, if the file system has one.
+
+When ``<peer_uuid>`` is given, it must be a per-share peer of ``<fs_name>``.
+The command fails with ``EINVAL`` if ``<peer_uuid>`` is a legacy peer, and
+with ``ENOENT`` if ``<peer_uuid>`` is not a peer of ``<fs_name>``.
+
+When ``<peer_uuid>`` is not given:
+
+- If the file system has a legacy peer, the directory is not mapped.
+- If the file system has no legacy peer and one per-share peer, the directory
+  is mapped to that per-share peer.
+- If the file system has no legacy peer and more than one per-share peer, the
+  command fails with ``EINVAL``.
+- If the file system has no peers, the directory is not mapped.
+
+``dirmap`` reports the per-share peer of a mapped directory in ``peer_uuid``::
+
+  $ ceph fs snapshot mirror dirmap cephfs /d0
+  {
+      "peer_uuid": "0f6d5e0a-6a1c-4c55-9a43-3c1c9d0b3a11",
+      "reason": "no mirror daemon running supports per-share peers",
+      "state": "stalled"
+  }
+
+Removing a per-share peer
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``peer_remove`` removes the record and the secret of a per-share peer. The
+command fails with ``EBUSY`` while directories are mapped to the peer, so
+remove those directories first. A directory that is being removed counts as
+mapped until its removal is complete.
+
+``ceph fs snapshot mirror disable`` removes all per-share peers of the file
+system, but it keeps the mappings of the directories. When mirroring is enabled
+again, these directories are mapped to a peer that does not exist. Importing a
+token for the same super-key restores the peer. To map such a directory to a
+different peer, remove the directory and add it again.
 
 
 .. _cephfs_mirroring_mirroring_status:

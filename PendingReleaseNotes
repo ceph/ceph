@@ -194,6 +194,19 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* CephFS: The mirroring module supports per-share peers. In the new
+  ``per_share`` mode of ``ceph fs snapshot mirror peer_bootstrap create``, the
+  token carries a super-key named ``client.mirror_peer.<uuid>`` that has no MDS
+  or OSD capabilities, and importing the token stores the peer in the
+  ``cephfs_mirror`` object instead of the file system map. A file system can
+  have one per-share peer for each remote file system. ``ceph fs snapshot
+  mirror add`` accepts an optional ``peer_uuid`` that maps the directory to a
+  per-share peer. The output of ``peer_list`` includes the ``auth_mode`` of
+  each peer, and the output of ``dirmap`` includes the ``peer_uuid`` of a
+  mapped directory. Directories that are mapped to a per-share peer are
+  assigned only to mirror daemons that support per-share peers. See "Per-share
+  Peers" in ``doc/cephfs/cephfs-mirroring.rst``.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,

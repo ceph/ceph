@@ -632,6 +632,19 @@ If no mirror daemons are running, the same command shows the following:
 This signifies that no mirror daemons are running and that mirroring is
 stalled.
 
+A directory that is mapped to a per-share peer is assigned only to a mirror
+daemon that advertises the ``per_share`` feature in its reply to the heartbeat
+notify of the mirroring module. ``dirmap`` includes the UUID of the peer. If no
+such mirror daemon is running, the same command shows the following:
+
+::
+
+  {
+    "peer_uuid": "0f6d5e0a-6a1c-4c55-9a43-3c1c9d0b3a11",
+    "reason": "no mirror daemon running supports per-share peers",
+    "state": "stalled"
+  }
+
 Re-adding Peers
 ---------------
 
