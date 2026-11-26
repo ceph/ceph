@@ -74,6 +74,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   bool inject_event_stall = false;         // route grants to stalled_events
   bool inject_keep_preempt = false;        // route preempt events to stalled_events
+  bool inject_local_reservation_stall = false; // route local reservation grants to stalled_events
   bool inject_fail_reserve_recovery_space = false;
 
   std::function<int(ObjectStore::Transaction&&)> queue_transaction_callback;

@@ -6586,18 +6586,6 @@ boost::statechart::result PeeringState::NotBackfilling::react(const QueryUnfound
   return discard_event();
 }
 
-boost::statechart::result
-PeeringState::NotBackfilling::react(const RemoteBackfillReserved &evt)
-{
-  return discard_event();
-}
-
-boost::statechart::result
-PeeringState::NotBackfilling::react(const RemoteReservationRejectedTooFull &evt)
-{
-  return discard_event();
-}
-
 void PeeringState::NotBackfilling::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);

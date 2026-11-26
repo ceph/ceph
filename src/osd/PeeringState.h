@@ -940,6 +940,8 @@ public:
       boost::statechart::custom_reaction< DeferBackfill >,
       boost::statechart::custom_reaction< UnfoundRecovery >,
       boost::statechart::custom_reaction< UnfoundBackfill >,
+      boost::statechart::custom_reaction< RemoteBackfillReserved >,
+      boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
       boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
       boost::statechart::custom_reaction< RemoteReservationRevoked>,
       boost::statechart::custom_reaction< DoRecovery>,
@@ -984,6 +986,16 @@ public:
       return discard_event();
     }
     boost::statechart::result react(const UnfoundBackfill& evt) {
+      return discard_event();
+    }
+    // The primary does not wait for an ack after releasing the backfill
+    // reservations, so a GRANT, REJECT_TOOFULL, REVOKE_TOOFULL or REVOKE
+    // sent before the RELEASE was received can arrive in any state. The
+    // states that are waiting for one of these handle it themselves.
+    boost::statechart::result react(const RemoteBackfillReserved&) {
+      return discard_event();
+    }
+    boost::statechart::result react(const RemoteReservationRejectedTooFull&) {
       return discard_event();
     }
     boost::statechart::result react(const RemoteReservationRevokedTooFull&) {
@@ -1119,10 +1131,6 @@ public:
       boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >
       > reactions;
     explicit WaitLocalBackfillReserved(my_context ctx);
-    boost::statechart::result react(const RemoteBackfillReserved& evt) {
-      /* no-op */
-      return discard_event();
-    }
     void exit();
   };
 
@@ -1206,15 +1214,11 @@ public:
   struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
     typedef boost::mpl::list<
       boost::statechart::custom_reaction< QueryUnfound >,
-      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
-      boost::statechart::custom_reaction< RemoteBackfillReserved >,
-      boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >
+      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>
       > reactions;
     explicit NotBackfilling(my_context ctx);
     void exit();
     boost::statechart::result react(const QueryUnfound& q);
-    boost::statechart::result react(const RemoteBackfillReserved& evt);
-    boost::statechart::result react(const RemoteReservationRejectedTooFull& evt);
   };
 
   struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {

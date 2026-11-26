@@ -2451,6 +2451,90 @@ TEST_F(PeeringStateTest, Issue71493) {
   verify_all_active_clean(expected, expected_tail);
 }
 
+// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/77096
+TEST_F(PeeringStateTest, Issue77096) {
+  // Scenario: the primary releases its backfill reservations and starts a
+  // new attempt, but a reply sent by a backfill target before it received
+  // the RELEASE is only processed afterwards. The problematic sequence is:
+  //
+  // Primary requests remote backfill reservations
+  // A backfill target revokes its reservation, the primary sends RELEASE
+  //   to the others and retries
+  // Primary enters WaitLocalBackfillReserved for the new attempt
+  // Primary processes a REJECT_TOOFULL or GRANT for the old attempt
+  //   Without the fix the PG enters Crashed
+  dout(0) << "== Issue77096 ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  // Hold the local backfill reservation on the primary so that it stays
+  // in WaitLocalBackfillReserved
+  get_listener(acting[0])->inject_local_reservation_stall = true;
+  // Full peering cycle
+  test_peering();
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered,
+            "Started/Primary/Active/WaitLocalBackfillReserved");
+  // Replies for an earlier attempt arrive while waiting for the local
+  // reservation
+  dout(0) << "= stale REJECT_TOOFULL and GRANT in WaitLocalBackfillReserved =" << dendl;
+  for (auto evt : {
+         std::make_shared<PGPeeringEvent>(
+           osdmap->get_epoch(), osdmap->get_epoch(),
+           RemoteReservationRejectedTooFull()),
+         std::make_shared<PGPeeringEvent>(
+           osdmap->get_epoch(), osdmap->get_epoch(),
+           RemoteBackfillReserved())}) {
+    get_ps(acting[0])->handle_event(evt, get_ctx(acting[0]));
+    dispatch_all();
+    EXPECT_EQ(get_listener(acting[0])->last_state_entered,
+              "Started/Primary/Active/WaitLocalBackfillReserved");
+  }
+  // Grant the local reservation, the new attempt carries on
+  get_listener(acting[0])->inject_local_reservation_stall = false;
+  dispatch_all_events(true);
+  dispatch_all();
+  // Verify that we got to active+backfill
+  verify_all_active_backfilling(expected, expected_tail);
+  // A stale GRANT while backfilling is ignored as well
+  dout(0) << "= stale GRANT in Backfilling =" << dendl;
+  auto grant = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(), osdmap->get_epoch(), RemoteBackfillReserved());
+  get_ps(acting[0])->handle_event(grant, get_ctx(acting[0]));
+  dispatch_all();
+  verify_primary_active_backfilling(acting[0]);
+  // Backfill the object
+  test_prepare_backfill_for_missing(9, 1, expected);
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, expected);
+  test_recover_got(9, expected);
+  test_object_recovered();
+  test_update_peer_last_backfill(9, 1, hobject_t::get_max());
+  test_update_backfill_progress(9, hobject_t::get_max()); // MOSDPGBackfill::OP_BACKFILL_PROGRESS
+  // Signal backfill has completed
+  test_event_recovery_done(9); // MOSDPGBackfill::OP_BACKFILL_FINISH
+  test_event_backfilled();
+  dispatch_all();
+  EXPECT_TRUE(new_epoch(true));
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+}
+
 // Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/73891
 TEST_F(PeeringStateTest, Issue73891) {
   // Scenario: 3+2 EC pool [0,1,2,3,4]
