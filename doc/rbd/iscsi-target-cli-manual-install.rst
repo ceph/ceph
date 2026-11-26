@@ -2,6 +2,8 @@
 Manual ceph-iscsi Installation
 ==============================
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Requirements**
 
 To complete the installation of ceph-iscsi, there are 4 steps:

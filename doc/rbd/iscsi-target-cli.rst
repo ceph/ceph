@@ -2,6 +2,8 @@
 Configuring the iSCSI Target using the Command Line Interface
 =============================================================
 
+.. include:: iscsi-deprecation.inc.rst
+
 The Ceph iSCSI gateway is both an iSCSI target  and a Ceph client;
 think of it as a "translator" between Ceph's RBD interface
 and the iSCSI standard. The Ceph iSCSI gateway can run on a

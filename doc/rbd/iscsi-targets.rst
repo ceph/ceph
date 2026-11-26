@@ -2,6 +2,8 @@
 iSCSI Targets
 =============
 
+.. include:: iscsi-deprecation.inc.rst
+
 Traditionally, block-level access to a Ceph storage cluster has been
 limited to QEMU and ``librbd``, which is a key enabler for adoption
 within OpenStack environments. Starting with the Ceph Luminous release,

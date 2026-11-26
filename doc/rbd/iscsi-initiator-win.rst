@@ -2,6 +2,8 @@
 iSCSI Initiator for Microsoft Windows
 -------------------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Prerequisite:**
 
 -  Microsoft Windows Server 2016 or later

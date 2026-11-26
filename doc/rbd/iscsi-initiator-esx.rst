@@ -2,6 +2,8 @@
 iSCSI Initiator for VMware ESX
 ------------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Prerequisite:**
 
 -  VMware ESX 6.5 or later using Virtual Machine compatibility 6.5 with VMFS 6.

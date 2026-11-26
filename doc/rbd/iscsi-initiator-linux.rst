@@ -2,6 +2,8 @@
 iSCSI Initiator for Linux
 -------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Prerequisite:**
 
 -  Package ``iscsi-initiator-utils``

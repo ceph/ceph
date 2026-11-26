@@ -2,6 +2,8 @@
 iSCSI Gateway Requirements
 ==========================
 
+.. include:: iscsi-deprecation.inc.rst
+
 It is recommended to provision two to four iSCSI gateway nodes to
 realize a highly available Ceph iSCSI gateway solution.
 
