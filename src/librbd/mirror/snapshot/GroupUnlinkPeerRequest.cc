@@ -36,6 +36,35 @@ void GroupUnlinkPeerRequest<I>::send() {
   list_group_snaps();
 }
 
+template <typename I>
+void GroupUnlinkPeerRequest<I>::list_group_snaps() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<
+    GroupUnlinkPeerRequest<I>,
+    &GroupUnlinkPeerRequest<I>::handle_list_group_snaps>(
+      this);
+
+  m_group_snaps.clear();
+  auto req = group::ListSnapshotsRequest<I>::create(
+    m_group_io_ctx, m_group_id, true, true, &m_group_snaps, ctx);
+
+  req->send();
+}
+
+template <typename I>
+void GroupUnlinkPeerRequest<I>::handle_list_group_snaps(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to list group snapshots of group ID '"
+                 << m_group_id << "': " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  unlink_peer();
+}
 
 template <typename I>
 void GroupUnlinkPeerRequest<I>::unlink_peer() {
@@ -69,8 +98,6 @@ void GroupUnlinkPeerRequest<I>::unlink_peer() {
       if (ns == nullptr) {
 	continue;
       }
-      // FIXME: after relocate, on new primary the previous primary demoted
-      // snap is not getting deleted, until the next demotion.
       if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
 	// Reset the count if the group was demoted.
 	count = 0;
@@ -96,64 +123,10 @@ void GroupUnlinkPeerRequest<I>::unlink_peer() {
   finish(0);
 }
 
-
-template <typename I>
-void GroupUnlinkPeerRequest<I>::list_group_snaps() {
-  ldout(m_cct, 10) << dendl;
-
-  auto ctx = util::create_context_callback<
-    GroupUnlinkPeerRequest<I>,
-    &GroupUnlinkPeerRequest<I>::handle_list_group_snaps>(
-      this);
-
-  m_group_snaps.clear();
-  auto req = group::ListSnapshotsRequest<I>::create(
-    m_group_io_ctx, m_group_id, true, true, &m_group_snaps, ctx);
-
-  req->send();
-}
-
-
-
-template <typename I>
-void GroupUnlinkPeerRequest<I>::handle_list_group_snaps(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to list group snapshots of group ID '"
-                 << m_group_id << "': " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  unlink_peer();
-}
-
 template <typename I>
 void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_snap,
                                                  std::string mirror_peer_uuid) {
   ldout(m_cct, 10) << "snap id: " << group_snap.id << dendl;
-  bool found = false;
-
-  m_has_newer_mirror_snap = false;
-  for (auto it = m_group_snaps.begin(); it != m_group_snaps.end(); it++) {
-    if (it->id  == group_snap.id) {
-      found = true;
-    } else if (found) {
-      auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-          &it->snapshot_namespace);
-      if (ns != nullptr) {
-        m_has_newer_mirror_snap = true;
-        break;
-      }
-    }
-  }
-
-  if (!found) {
-    ldout(m_cct, 15) << "missing snapshot: snap_id=" << group_snap.id << dendl;
-    finish(-ENOENT);
-    return;
-  }
 
   const auto& ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
       group_snap.snapshot_namespace);
@@ -294,13 +267,8 @@ void GroupUnlinkPeerRequest<I>::handle_update_peer_uuids_on_group_snap(
     return;
   }
 
-  if (m_has_newer_mirror_snap) {
-    remove_group_snapshot(group_snap);
-  } else {
-    list_group_snaps();
-  }
+  remove_group_snapshot(group_snap);
 }
-
 
 template <typename I>
 void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
