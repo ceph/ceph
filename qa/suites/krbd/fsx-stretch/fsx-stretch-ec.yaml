@@ -1,0 +1,63 @@
+# fsx on a stretch (num_zones) EC pool: ceph_test_rbd_fsx's aggressive random
+# read/write/truncate/hole-punch driving EC direct/split reads on a pool spread
+# over two zones, mapped read_from_replica=balance. Combines heavy FS stress with
+# the zoned direct-read path (T14) -- on sepia the zoned path had only the light
+# verify_reads workload.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(MON_
+      - \(MDS_
+      - is_erasure
+      - slow request
+      - marked LAGGY
+roles:
+- [mon.a, mon.b, mon.c, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default data pool: zdata
+        rbd default map options: ms_mode=crc,read_from_replica=balance
+- exec:
+    client.0:
+      - |
+        set -ex
+        for dc in dc1 dc2; do
+          sudo ceph osd crush add-bucket $dc datacenter
+          sudo ceph osd crush move $dc root=default
+        done
+        i=0
+        for osd in $(sudo ceph osd ls); do
+          dc=dc1; [ $((i % 2)) -eq 1 ] && dc=dc2
+          h=zh-$osd
+          sudo ceph osd crush add-bucket $h host || true
+          sudo ceph osd crush move $h datacenter=$dc
+          sudo ceph osd crush set osd.$osd 1.0 root=default datacenter=$dc host=$h
+          i=$((i + 1))
+        done
+        dcs="dc1 dc2 dc3"; j=0
+        for m in $(sudo ceph mon dump -f json 2>/dev/null | python3 -c 'import json,sys; print(" ".join(x["name"] for x in json.load(sys.stdin)["mons"]))'); do
+          dc=$(echo $dcs | cut -d" " -f$(( (j % 3) + 1 )))
+          sudo ceph mon set_location $m datacenter=$dc || true
+          j=$((j + 1))
+        done
+        sudo ceph osd pool create zdata --pool_type erasure --k 2 --m 1 --num_zones 2 --pg_num 32
+        sudo ceph osd pool set zdata allow_ec_overwrites true
+        sudo ceph osd pool set zdata allow_ec_optimizations true
+        sudo ceph osd pool application enable zdata rbd
+        for _ in $(seq 60); do sudo ceph osd pool ls detail | grep "'zdata'" | grep -q split_reads && break; sleep 2; done
+- rbd_fsx:
+    clients: [client.0]
+    ops: 20000
+    krbd: true
+    readbdy: 512
+    writebdy: 512
+    truncbdy: 512
+    holebdy: 512
+    punch_holes: true
