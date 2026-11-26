@@ -361,6 +361,53 @@ TEST_P(LibRadosSplitOpECPP, SmallRead) {
   ioctx.set_no_version_on_read(false);
 }
 
+// A direct sparse read that the OSD trims to zero length must return no
+// data. It used to assert in interval_set::range_start() on the OSD
+// (https://tracker.ceph.com/issues/83048).
+TEST_P(LibRadosSplitOpECPP, SparseReadEmptyObject) {
+  SKIP_IF_CRIMSON();
+  ObjectWriteOperation write1;
+  write1.create(true);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+
+  ioctx.set_no_version_on_read(true);
+  std::map<uint64_t, uint64_t> extents;
+  bufferlist sparse_bl, bl;
+  int sparse_rval = -1;
+  ObjectReadOperation read;
+  read.sparse_read(0, get_ec_stripe_unit(), &extents, &sparse_bl, &sparse_rval);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, balanced_read_flags));
+  ioctx.set_no_version_on_read(false);
+
+  ASSERT_EQ(0, sparse_rval);
+  ASSERT_TRUE(extents.empty());
+  ASSERT_EQ(0u, sparse_bl.length());
+}
+
+TEST_P(LibRadosSplitOpECPP, SparseReadPastEnd) {
+  SKIP_IF_CRIMSON();
+  bufferlist data;
+  data.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, data);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+
+  // Starts at the end of the object, within its first chunk.
+  ioctx.set_no_version_on_read(true);
+  std::map<uint64_t, uint64_t> extents;
+  bufferlist sparse_bl, bl;
+  int sparse_rval = -1;
+  ObjectReadOperation read;
+  read.sparse_read(data.length(), get_ec_stripe_unit() - data.length(),
+                   &extents, &sparse_bl, &sparse_rval);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, balanced_read_flags));
+  ioctx.set_no_version_on_read(false);
+
+  ASSERT_EQ(0, sparse_rval);
+  ASSERT_TRUE(extents.empty());
+  ASSERT_EQ(0u, sparse_bl.length());
+}
+
 TEST_P(LibRadosSplitOpECPP, ReadTwoShards) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
