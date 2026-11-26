@@ -193,7 +193,9 @@ int CephxServiceHandler::handle_request(
 	break;
       }
 
-      if (!cipher_is_allowed(eauth.key.get_type())) {
+      if (!cipher_is_allowed(eauth.key.get_type()) &&
+	  (eauth.pending_key.empty() ||
+	   !cipher_is_allowed(eauth.pending_key.get_type()))) {
 	ldout(cct, 20) << __func__
                        << " authentication failed due to unallowed cipher type: "
                        << CryptoManager::get_key_type_name(eauth.key.get_type()) << dendl;
@@ -220,8 +222,10 @@ int CephxServiceHandler::handle_request(
       std::string error;
       cephx_calc_client_server_challenge(cct, eauth.key, server_challenge,
 					 req.client_challenge, &expected_key, error);
-      if ((!error.empty() || req.key != expected_key) &&
-	  !eauth.pending_key.empty()) {
+      if ((!cipher_is_allowed(eauth.key.get_type()) || !error.empty() ||
+	   req.key != expected_key) &&
+	  !eauth.pending_key.empty() &&
+	  cipher_is_allowed(eauth.pending_key.get_type())) {
 	ldout(cct, 10) << "normal key failed for " << entity_name
 		       << ", trying pending_key" << dendl;
 	// try pending_key instead
@@ -232,7 +236,6 @@ int CephxServiceHandler::handle_request(
 					   error);
 	if (error.empty()) {
 	  used_key = &eauth.pending_key;
-	  key_server->note_used_pending_key(entity_name, eauth.pending_key);
 	}
       }
       if (!error.empty()) {
@@ -248,6 +251,9 @@ int CephxServiceHandler::handle_request(
 		<< " expected_key=" << expected_key << dec << dendl;
         ret = -EACCES;
 	break;
+      }
+      if (used_key == &eauth.pending_key) {
+	key_server->note_used_pending_key(entity_name, eauth.pending_key);
       }
 
       CryptoKey session_key;
@@ -276,7 +282,7 @@ int CephxServiceHandler::handle_request(
       info.ticket.init_timestamps(ceph_clock_now(), ttl);
       info.validity.set_from_double(ttl);
 
-      key_server->generate_secret(session_key, eauth.key.get_type());
+      key_server->generate_secret(session_key, used_key->get_type());
 
       info.session_key = session_key;
       if (psession_key) {
@@ -341,7 +347,7 @@ int CephxServiceHandler::handle_request(
 	      key_server->build_session_auth_info(
 		service_id,
 		info.ticket,
-                eauth.key.get_type(),
+                used_key->get_type(),
 		svc_info);
 	      info_vec.push_back(svc_info);
 	    }
