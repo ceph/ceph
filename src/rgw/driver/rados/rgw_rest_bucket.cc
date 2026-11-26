@@ -163,6 +163,33 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
   op_state.set_bucket_id(bucket_id);
   op_state.set_new_bucket_name(new_bucket_name);
 
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, uid.tenant, bucket, bucket_id, y);
+  if (op_ret < 0) {
+    return;
+  }
+  // a bucket id may name an instance other than the one the name points to
+  if (!bucket_id.empty()) {
+    op_ret = rgw_admin_api_verify_bucket_lock(s, driver, uid.tenant, bucket, "", y);
+    if (op_ret < 0) {
+      return;
+    }
+  }
+  // link points the destination name at this bucket, replacing whatever
+  // bucket that name points to now, the same name in uid's tenant unless
+  // new-bucket-name says otherwise (see RGWBucketAdminOp::link)
+  std::string dst_tenant = uid.tenant;
+  std::string dst_name = new_bucket_name.empty() ? bucket : new_bucket_name;
+  if (auto pos = dst_name.find('/'); pos != std::string::npos) {
+    if (!new_bucket_name.empty()) {
+      dst_tenant = dst_name.substr(0, pos);
+    }
+    dst_name = dst_name.substr(pos + 1);
+  }
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, dst_tenant, dst_name, "", y, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, s->err, y);
   if (op_ret < 0) {
@@ -201,6 +228,11 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
 
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
+
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, uid.tenant, bucket, "", y);
+  if (op_ret < 0) {
+    return;
+  }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, s->err, y);
@@ -244,7 +276,14 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   // As this is an admin endpoint, checking by system_request is not sufficient
   const bool is_forwarded = s->info.args.exists(RGW_SYS_PARAM_PREFIX "zonegroup");
 
-  op_ret = RGWBucketAdminOp::remove_bucket(driver, *s->penv.site, op_state, y, s, bypass_gc, true, is_forwarded);
+  // remove_bucket loads tenant/bucket_name as given, without splitting
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, tenant, bucket_name, "", y, false);
+  if (op_ret < 0) {
+    return;
+  }
+  // forward as the caller, the master checks the admin lock against it
+  const rgw_owner caller = s->user->get_id();
+  op_ret = RGWBucketAdminOp::remove_bucket(driver, *s->penv.site, op_state, y, s, bypass_gc, true, is_forwarded, &caller);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -281,6 +320,11 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name, &bucket_arg_existed);
   if (! bucket_arg_existed) {
     op_ret = -EINVAL;
+    return;
+  }
+
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, uid.tenant, bucket_name, "", y);
+  if (op_ret < 0) {
     return;
   }
 
@@ -359,6 +403,10 @@ void RGWOp_Sync_Bucket::execute(optional_yield y)
   op_state.set_tenant(tenant);
   op_state.set_sync_bucket(sync_bucket);
 
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, tenant, bucket, "", y);
+  if (op_ret < 0) {
+    return;
+  }
   op_ret = RGWBucketAdminOp::sync_bucket(driver, op_state, s, y);
 }
 
@@ -389,6 +437,10 @@ void RGWOp_Object_Remove::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
+  op_ret = rgw_admin_api_verify_bucket_lock(s, driver, "", bucket, "", y);
+  if (op_ret < 0) {
+    return;
+  }
   op_ret = RGWBucketAdminOp::remove_object(driver, op_state, s, y);
 }
 

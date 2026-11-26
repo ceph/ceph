@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        # the race tests turn the delay on with rgw_inject_delay_pattern,
+        # nothing is delayed while the pattern is unset
+        rgw inject delay sec: 10
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rgw/run-bucket-admin-lock.sh

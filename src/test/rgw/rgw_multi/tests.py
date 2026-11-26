@@ -820,6 +820,83 @@ def test_bucket_remove_via_admin():
         assert check_all_buckets_dont_exist(zone, [empty_bucket])
 
 
+def test_bucket_admin_lock():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    master_zone = realm.meta_master_zone()
+    master = next(z for z in zonegroup_conns.rw_zones if z.zone == master_zone)
+    secondary = next(z for z in zonegroup_conns.rw_zones if z.zone != master_zone)
+
+    bucket = gen_bucket_name()
+    master.create_bucket(bucket)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    master_zone.cluster.admin(['bucket', 'admin-lock', '--bucket', bucket] +
+                              master_zone.zone_args())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # the owner can't change or delete the bucket through another zone
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{'Effect': 'Allow', 'Principal': {'AWS': ['*']},
+                       'Action': 's3:GetObject',
+                       'Resource': f'arn:aws:s3:::{bucket}/*'}]})
+    for call, kwargs in ((secondary.s3_client.put_bucket_policy, {'Policy': policy}),
+                         (secondary.s3_client.delete_bucket, {})):
+        try:
+            call(Bucket=bucket, **kwargs)
+            assert False, f'{call.__name__} on a locked bucket succeeded'
+        except ClientError as e:
+            assert e.response['Error']['Code'] == 'AccessDenied', e.response
+
+    # the lock can only be set or removed on the metadata master
+    _, ret = secondary.zone.cluster.admin(
+        ['bucket', 'admin-unlock', '--bucket', bucket] + secondary.zone.zone_args(),
+        check_retcode=False)
+    assert ret != 0
+
+    master_zone.cluster.admin(['bucket', 'admin-unlock', '--bucket', bucket] +
+                              master_zone.zone_args())
+    zonegroup_meta_checkpoint(zonegroup)
+    secondary.s3_client.put_bucket_policy(Bucket=bucket, Policy=policy)
+    secondary.s3_client.delete_bucket_policy(Bucket=bucket)
+
+    # a secondary that hasn't synced the lock yet forwards the owner's change
+    # to the master, which has to refuse it as the owner. stop metadata sync
+    # on the secondary so its copy stays unlocked
+    secondary_zone = secondary.zone
+    secondary_zone.cluster.ceph_admin(['config', 'set', 'client', 'rgw_run_sync_thread', 'false'])
+    try:
+        for gateway in secondary_zone.gateways:
+            gateway.stop()
+            gateway.start()
+        master_zone.cluster.admin(['bucket', 'admin-lock', '--bucket', bucket] +
+                                  master_zone.zone_args())
+        stats, _ = secondary_zone.cluster.admin(
+            ['bucket', 'stats', '--bucket', bucket] + secondary_zone.zone_args(),
+            read_only=True)
+        assert json.loads(stats)['admin_locked'] is False
+        try:
+            secondary.s3_client.put_bucket_policy(Bucket=bucket, Policy=policy)
+            assert False, 'forwarded put_bucket_policy on a locked bucket succeeded'
+        except ClientError as e:
+            assert e.response['Error']['Code'] == 'AccessDenied', e.response
+        try:
+            master.s3_client.get_bucket_policy(Bucket=bucket)
+            assert False, 'the master applied the forwarded policy'
+        except ClientError as e:
+            assert e.response['Error']['Code'] == 'NoSuchBucketPolicy', e.response
+    finally:
+        secondary_zone.cluster.ceph_admin(['config', 'rm', 'client', 'rgw_run_sync_thread'])
+        for gateway in secondary_zone.gateways:
+            gateway.stop()
+            gateway.start()
+    master_zone.cluster.admin(['bucket', 'admin-unlock', '--bucket', bucket] +
+                              master_zone.zone_args())
+    zonegroup_meta_checkpoint(zonegroup)
+    master.s3_client.delete_bucket(Bucket=bucket)
+    zonegroup_meta_checkpoint(zonegroup)
+
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
