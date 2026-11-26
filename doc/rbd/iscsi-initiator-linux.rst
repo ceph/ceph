@@ -56,21 +56,22 @@ Install the iSCSI initiator and multipath tools:
 
 #. Enable CHAP authentication and provide the initiator CHAP username
    and password by uncommenting and setting the following options in
-   the ``/etc/iscsi/iscsid.conf`` file:
+   the ``/etc/iscsi/iscsid.conf`` file. Use the values that you set with
+   the gwcli ``auth`` command:
 
    ::
 
        node.session.auth.authmethod = CHAP
-       node.session.auth.username = myusername
-       node.session.auth.password = mypassword
+       node.session.auth.username = <initiator-user>
+       node.session.auth.password = <initiator-secret>
 
    If you intend to use mutual (bidirectional) authentication, provide the
    target CHAP username and password:
 
    ::
 
-       node.session.auth.username_in = mytgtusername
-       node.session.auth.password_in = mytgtpassword
+       node.session.auth.username_in = <target-user>
+       node.session.auth.password_in = <target-secret>
 
 #. Discover the target portals:
 
@@ -102,8 +103,8 @@ Install the iSCSI initiator and multipath tools:
 
    ::
 
-       mpathbt (360014059ca317516a69465c883a29603) dm-1 LIO-ORG ,IBLOCK
-       size=1.0G features='0' hwhandler='1 alua' wp=rw
+       mpathbt (360014059ca317516a69465c883a29603) dm-1 LIO-ORG ,TCMU device
+       size=1.0G features='1 queue_if_no_path' hwhandler='1 alua' wp=rw
        |-+- policy='queue-length 0' prio=50 status=active
        | `- 28:0:0:1 sde  8:64  active ready running
        `-+- policy='queue-length 0' prio=10 status=enabled
