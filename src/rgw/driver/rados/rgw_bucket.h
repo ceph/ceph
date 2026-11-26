@@ -413,6 +413,10 @@ public:
 			 RGWFormatterFlusher& flusher, optional_yield y,
                          const DoutPrefixProvider *dpp,
 			 bool warnings_only = false);
+  static int limit_check(rgw::sal::Driver* driver, rgw::sal::Bucket& bucket,
+			 RGWFormatterFlusher& flusher, optional_yield y,
+                         const DoutPrefixProvider *dpp,
+			 bool warnings_only = false);
   static int set_quota(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
 
   static int list_stale_instances(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
