@@ -28,6 +28,11 @@ if TYPE_CHECKING:
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
 
+# consecutive failed mgr -> agent messenger deliveries after which a host's
+# agent is considered unreachable (e.g. its listener port is firewalled),
+# even though the agent may still be successfully reporting to the mgr
+AGENT_MESSENGER_FAILURE_THRESHOLD = 3
+
 
 class AgentEndpoint:
 
@@ -769,8 +774,17 @@ class HostData:
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
             if 'ls' in data and data['ls']:
-                self.mgr._process_ls_output(host, data['ls'])
-                self.mgr.update_failed_daemon_health_check()
+                if self.mgr.agent_helpers.agent_push_unreachable(host):
+                    # we may have just deployed a daemon here over SSH while
+                    # waiting out this host's unreachable agent. A daemon
+                    # list from before that deploy would make us think the
+                    # new daemon never happened and redeploy it again.
+                    self.mgr.log.debug(
+                        f'Ignoring daemon list from agent on {host}: its mgr push channel '
+                        'is still unreachable, so this report may predate a recent deploy.')
+                else:
+                    self.mgr._process_ls_output(host, data['ls'])
+                    self.mgr.update_failed_daemon_health_check()
             if 'networks' in data and data['networks']:
                 self.mgr.cache.update_host_networks(host, data['networks'])
             if 'facts' in data and data['facts']:
@@ -869,6 +883,18 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 self.agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
+                if self.agent_response != 'ACK':
+                    # the agent's listener sends back an error string instead
+                    # of ACK when it couldn't process the message. The
+                    # connection itself worked, but the push didn't, so this
+                    # must still count as a failed delivery.
+                    self.mgr.log.error(
+                        f'Agent on {self.host} did not acknowledge the message: '
+                        f'{self.agent_response}. Agent config deps left unchanged for retry')
+                    self.mgr.agent_cache.record_message_failure(self.host)
+                    self.mgr.agent_cache.sending_agent_message[self.host] = False
+                    return
+                self.mgr.agent_cache.record_message_success(self.host)
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
                     self.mgr.log.info(
@@ -888,12 +914,14 @@ class AgentMessageThread(threading.Thread):
                 self.mgr.log.error(
                     f'Failed to contact agent on host {self.host}: {e}. '
                     f'Agent config deps left unchanged for retry')
+                self.mgr.agent_cache.record_message_failure(self.host)
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
         # Leave agent config deps unchanged so _check_agent can retry next cycle.
         self.mgr.log.error(
             f'Could not connect to agent on host {self.host}. '
             f'Agent config deps left unchanged for retry')
+        self.mgr.agent_cache.record_message_failure(self.host)
         self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
 
@@ -967,6 +995,48 @@ class CephadmAgentHelpers:
                 count=len(down_agent_hosts),
                 detail=detail,
             )
+
+    def agent_push_unreachable(self, host: str) -> bool:
+        # an agent can keep polling the mgr successfully (so _agent_down()
+        # never trips) while the mgr is unable to push anything to its
+        # listener, e.g. because that port is firewalled. Track that
+        # separately via consecutive messenger delivery failures.
+        failures = self.mgr.agent_cache.messenger_failures.get(host, 0)
+        return failures >= AGENT_MESSENGER_FAILURE_THRESHOLD
+
+    def _metadata_wait_cap(self) -> float:
+        down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+        return max(300.0, 5 * down_mult * float(self.mgr.agent_refresh_rate))
+
+    def ok_to_apply_despite_stale_metadata(self) -> bool:
+        # _apply_all_services() normally waits for every host's agent-reported
+        # metadata to be current before applying non agent specs. A host whose
+        # agent cannot be pushed to would otherwise block that wait forever,
+        # since it can keep reporting in and never gets picked up by
+        # _agent_down(). Stop waiting on such hosts, and as a last resort cap
+        # the overall wait so a blind spot in that detection can't wedge
+        # reconciliation indefinitely either.
+        cache = self.mgr.cache
+        stale = sorted(h for h in cache.get_hosts() if not cache.host_metadata_up_to_date(h)
+                       and not cache.is_host_unreachable(h))
+        if not stale:
+            return True
+        unreachable_agents = [h for h in stale if self.agent_push_unreachable(h)]
+        if len(unreachable_agents) == len(stale):
+            self.mgr.log.warning(
+                f'Applying other specs even though the agent on {unreachable_agents} has not '
+                'acknowledged recent metadata requests and appears unreachable')
+            return True
+        wait_since = self.mgr.agent_cache.apply_wait_since
+        if wait_since is not None:
+            cap = self._metadata_wait_cap()
+            elapsed = (datetime_now() - wait_since).total_seconds()
+            if elapsed > cap:
+                self.mgr.log.warning(
+                    f'Metadata has not been up to date on {stale} for over {int(cap)} '
+                    'seconds. Applying other specs anyway.')
+                return True
+        return False
 
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed

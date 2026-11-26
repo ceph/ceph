@@ -672,8 +672,28 @@ class CephadmServe:
         # since the agent is the one who gather the metadata. If we don't we
         # end up stuck between wanting metadata to be up to date to apply specs
         # and needing to apply the agent spec to get up to date metadata
-        if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
-            self.log.info('Metadata not up to date on all hosts. Skipping non agent specs')
+        metadata_fresh = not self.mgr.use_agent or self.mgr.cache.all_host_metadata_up_to_date()
+        if metadata_fresh:
+            # only clear the wait timer once metadata has actually caught up.
+            # ok_to_apply_despite_stale_metadata() can let us proceed while
+            # still stale, and clearing the timer there would make the wait
+            # cap restart from scratch on every single pass instead of
+            # staying expired until the real problem is gone
+            self.mgr.agent_cache.apply_wait_since = None
+        metadata_blocked = (
+            not metadata_fresh
+            and not self.mgr.agent_helpers.ok_to_apply_despite_stale_metadata()
+        )
+        if metadata_blocked:
+            if self.mgr.agent_cache.apply_wait_since is None:
+                self.mgr.agent_cache.apply_wait_since = datetime_now()
+            stale_hosts = sorted(
+                h for h in self.mgr.cache.get_hosts()
+                if not self.mgr.cache.host_metadata_up_to_date(h)
+                and not self.mgr.cache.is_host_unreachable(h)
+            )
+            self.log.info(
+                f'Metadata not up to date on {stale_hosts}. Skipping non agent specs')
             try:
                 specs.append(self.mgr.spec_store['agent'].spec)
             except Exception as e:

@@ -2134,6 +2134,17 @@ class AgentCache():
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
         self.sending_agent_message = {}  # type: Dict[str, bool]
+        # consecutive failed mgr -> agent messenger deliveries, per host
+        self.messenger_failures = {}  # type: Dict[str, int]
+        # when _apply_all_services() started waiting on stale agent metadata,
+        # cleared once it stops waiting
+        self.apply_wait_since = None  # type: Optional[datetime.datetime]
+
+    def record_message_failure(self, host: str) -> None:
+        self.messenger_failures[host] = self.messenger_failures.get(host, 0) + 1
+
+    def record_message_success(self, host: str) -> None:
+        self.messenger_failures[host] = 0
 
     def load(self):
         # type: () -> None
