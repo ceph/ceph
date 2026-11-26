@@ -1,13 +1,14 @@
 meta:
 - desc: |
-   install ceph/squid v19.2.3
+   install ceph/tentacle v20.2.5, which predates subvolume
+   snapshot_visibility and has packages for every supported distro
 tasks:
 - install:
-    tag: v19.2.3
+    tag: v20.2.5
     exclude_packages:
       - ceph-osd-classic
       - ceph-osd-crimson
-- print: "**** done installing squid v19.2.3"
+- print: "**** done installing tentacle v20.2.5"
 - ceph:
     log-ignorelist:
       - overall HEALTH_

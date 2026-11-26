@@ -15,7 +15,7 @@ tasks:
 - exec:
     mon.a:
     - ceph fs subvolume create cephfs sv1
-    - ceph fs subvolume snapshot_visibility get cephfs sv1 >/dev/null 2>&1; rc=$?; [ "$rc" -eq 22 ] || { echo "expected the subvolume snapshot visibility get command to fail with EINVAL (22) in 19.2.3 but got $rc"; exit 1; }
+    - ceph fs subvolume snapshot_visibility get cephfs sv1 >/dev/null 2>&1; rc=$?; [ "$rc" -eq 22 ] || { echo "expected the subvolume snapshot visibility get command to fail with EINVAL (22) in 20.2.5 but got $rc"; exit 1; }
 - print: "**** subvolume sv1 created"
 - print: "*** upgrading cluster"
 - sequential: [ignore-auth-warn-pkg]
