@@ -210,7 +210,7 @@ protected:
     return tid;
   }
 
-  ceph_tid_t submit_write()
+  ceph_tid_t submit_write(Context* onfinish = nullptr)
   {
     osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
@@ -220,7 +220,7 @@ protected:
     objecter->op_submit(new Objecter::Op(object_t("obj"),
                                          object_locator_t(ec_pool_id),
                                          std::move(ops), CEPH_OSD_FLAG_WRITE,
-                                         (Context*)nullptr, nullptr),
+                                         onfinish, nullptr),
                         &tid);
     poll();
     return tid;
@@ -390,6 +390,38 @@ TEST_F(TestSplitOpMapChange, RWOrderedFullTryReadSentOnFullPool)
   set_pool_full(true);
   submit_read(0, 1, CEPH_OSD_FLAG_RWORDERED | CEPH_OSD_FLAG_FULL_TRY);
   EXPECT_EQ(1u, sent_to(primary).size());
+}
+
+// The pool gets the EIO flag while a watch registers.  The scan completes the
+// watch before it reaches the register op, so another io_context thread can
+// run the watch's completion first, after which the caller may free its
+// version (librados releases the AioCompletion that holds it).  A write ahead
+// of the register op stands in for that thread: the scan completes it inline,
+// and it runs the io_context.
+TEST_F(TestSplitOpMapChange, WatchVersionNotWrittenAfterPoolEIO)
+{
+  submit_write(new LambdaContext([this](int) { poll(); }));
+
+  constexpr version_t reused = 0xdead;
+  version_t objver = 0;
+  bool completed = false;
+  auto info = objecter->linger_register(object_t("obj"),
+                                        object_locator_t(ec_pool_id), 0);
+  ObjectOperation op;
+  op.watch(info->get_cookie(), CEPH_OSD_WATCH_OP_WATCH);
+  ceph::buffer::list inbl;
+  objecter->linger_watch(info.get(), op, {}, ceph::real_clock::now(), inbl,
+                         [&](boost::system::error_code, ceph::buffer::list) {
+                           completed = true;
+                           objver = reused;
+                         },
+                         &objver);
+  poll();
+  ASSERT_EQ(2u, sent_to(primary).size());
+
+  modify_pool([](pg_pool_t& pool) { pool.set_flag(pg_pool_t::FLAG_EIO); });
+  EXPECT_TRUE(completed);
+  EXPECT_EQ(reused, objver);
 }
 
 // A balanced read of a pool over two zones whose acting set holds only one
