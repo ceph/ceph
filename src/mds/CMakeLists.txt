@@ -52,6 +52,7 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
+list(APPEND mds_srcs ChangeNotifier.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
   legacy-option-headers Boost::url

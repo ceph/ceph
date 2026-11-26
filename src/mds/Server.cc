@@ -2143,6 +2143,26 @@ void Server::force_clients_readonly()
 void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn, LogEvent *le, MDSLogContextBase *fin)
 {
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
+
+  // MDS change notification: classify namespace ops here, where the
+  // affected dentries and the EUpdate op type are available pre-commit.
+  // While notification is off this costs one relaxed atomic load.
+  if (mds->change_notifier->enabled()) {
+    ChangeNotifier::OpHint hint;
+    // a rename's source is the dentry the request named (the last entry of
+    // the source trace), not the inode's primary dentry
+    if (mdr->client_request) {
+      const int op = mdr->client_request->get_op();
+      if (op == CEPH_MDS_OP_RENAME && !mdr->dn[1].empty())
+        hint.srcdn = mdr->dn[1].back();
+      // setattr journals the same op string for chmod and for truncate;
+      // only a size change is a content change
+      else if (op == CEPH_MDS_OP_SETATTR)
+        hint.size_change =
+          mdr->client_request->head.args.setattr.mask & CEPH_SETATTR_SIZE;
+    }
+    mds->change_notifier->journal_op(le, in, dn, hint);
+  }
   ceph_assert(!mdr->has_completed);
 
   // note trace items for eventual reply.

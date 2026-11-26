@@ -626,6 +626,9 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "get qos info");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("notify status", asok_hook,
+                                     "show CephFS change notification status and counters");
+  ceph_assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()
