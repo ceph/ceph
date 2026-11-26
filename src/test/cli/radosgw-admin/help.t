@@ -214,6 +214,12 @@
     mfa remove                       delete MFA TOTP token
     mfa check                        check MFA TOTP token
     mfa resync                       re-sync MFA TOTP token
+    sts keyring init                 initialize the sts token-sealing keyring
+    sts keyring rotate               prepend a new key to the sts keyring
+    sts keyring promote              make a staged key seal new sts tokens
+    sts keyring list                 list the key ids of the sts keyring
+    sts keyring rm                   remove a key from the sts keyring
+    sts keyring trim                 remove the oldest keys from the sts keyring
     topic list                       list bucket notifications topics
     topic get                        get a bucket notifications topic
     topic rm                         remove a bucket notifications topic
@@ -424,6 +430,12 @@
      --totp-seconds                the time resolution that is being used for TOTP generation
      --totp-window                 the number of TOTP tokens that are checked before and after the current token when validating token
      --totp-pin                    the valid value of a TOTP token at a certain time
+  
+  STS keyring options:
+     --key-id                      sts keyring key id (40 hexadecimal characters)
+     --stage                       sts keyring rotate adds a key that only verifies until promoted
+     --max-keys                    keep at most this many keys after sts keyring rotate/trim
+     --legacy                      operate on the stored legacy sts key instead of the keyring
   
   Bucket notifications options:
      --topic                       bucket notifications topic name
