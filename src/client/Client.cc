@@ -1620,8 +1620,16 @@ std::string Client::_unwrap_name(Inode& diri, const std::string& dname, const st
     /* no reverse of normalization / encoding */
 
     if (is_insensitive) {
-      ldout(cct, 25) << __func__ << ":  = " << binstrprint(alternate_name) << dendl;
-      newdname = newaltn;
+      /* Prefer the original (pre-fold) name when present. If alternate_name
+       * is missing, keep the MDS primary name so readdir/path consumers do
+       * not see an empty dentry name. */
+      if (!newaltn.empty()) {
+        ldout(cct, 25) << __func__ << ":  = " << binstrprint(newaltn) << dendl;
+        newdname = std::move(newaltn);
+      } else {
+        ldout(cct, 25) << __func__ << ":  alternate_name empty, keeping "
+                       << binstrprint(newdname) << dendl;
+      }
     }
   }
 
