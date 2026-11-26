@@ -160,12 +160,11 @@ public:
 	mark_notable();
     } else if (~_pending & c) {
       // adding bits only.  remove obsolete revocations?
+      bool was_revoking = revoking();
       _pending |= c;
       _issued |= c;
-      // drop old _revokes with no bits we don't have
-      while (!_revokes.empty() &&
-	     (_revokes.back().before & ~_pending) == 0)
-	_revokes.pop_back();
+      drop_obsolete_revokes();
+      maybe_finish_revoking(was_revoking);
     } else {
       // no change.
       ceph_assert(_pending == c);
@@ -178,8 +177,11 @@ public:
     if (reval)
       revalidate();
 
+    bool was_revoking = revoking();
     _pending |= c;
     _issued |= c;
+    drop_obsolete_revokes();
+    maybe_finish_revoking(was_revoking);
     clear_new();
 
     inc_last_seq();
@@ -195,13 +197,9 @@ public:
       changed = true;
     }
     if (changed) {
-      bool was_revoking = (_issued & ~_pending);
+      bool was_revoking = revoking();
       calc_issued();
-      if (was_revoking && _issued == _pending) {
-	item_revoking_caps.remove_myself();
-	item_client_revoking_caps.remove_myself();
-	maybe_clear_notable();
-      }
+      maybe_finish_revoking(was_revoking);
     }
   }
   ceph_seq_t get_mseq() const { return mseq; }
@@ -351,6 +349,28 @@ private:
     _issued = _pending;
     for (const auto &r : _revokes) {
       _issued |= r.before;
+    }
+  }
+
+  // drop old _revokes with no bits we don't have
+  void drop_obsolete_revokes() {
+    while (!_revokes.empty() &&
+	   (_revokes.back().before & ~_pending) == 0)
+      _revokes.pop_back();
+  }
+
+  /*
+   * A revocation is over once _issued == _pending: either the client acked
+   * it, or the revoked bits were issued to the client again. Unlink the cap
+   * from the revoking lists then. Otherwise caps_tick() keeps warning about
+   * (and mds_cap_revoke_eviction_timeout may evict the client for) a revoke
+   * the client has nothing left to ack.
+   */
+  void maybe_finish_revoking(bool was_revoking) {
+    if (was_revoking && _issued == _pending) {
+      item_revoking_caps.remove_myself();
+      item_client_revoking_caps.remove_myself();
+      maybe_clear_notable();
     }
   }
 
