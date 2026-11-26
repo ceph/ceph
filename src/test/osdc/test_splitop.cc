@@ -789,11 +789,12 @@ public:
 class ReplicaSplitOpProbe : public ReplicaSplitOp {
 public:
   using ReplicaSplitOp::ReplicaSplitOp;
+  using SplitOp::abort;
   using SplitOp::init;
-  using SplitOp::sub_reads;
+  using SplitOp::primary_sub_read_key;
   using SplitOp::reference_sub_read;
   using SplitOp::reference_sub_read_key;
-  using SplitOp::abort;
+  using SplitOp::sub_reads;
   ~ReplicaSplitOpProbe() { abort = true; }
 };
 
@@ -897,6 +898,24 @@ protected:
     op->target.actual_pgid = spg_t(pg_t(0, pool), shard_id_t(primary_shard));
     return op;
   }
+
+  Objecter::Op* make_call_and_read_op(int64_t pool,
+                                      const std::vector<int>& acting,
+                                      uint64_t len, int flags)
+  {
+    osdc_opvec ops(2);
+    ops[0].op.op = CEPH_OSD_OP_CALL;
+    ops[1].op.op = CEPH_OSD_OP_READ;
+    ops[1].op.extent.offset = 0;
+    ops[1].op.extent.length = len;
+    auto op = new Objecter::Op(object_t("obj"), object_locator_t(pool),
+                               std::move(ops), flags, (Context*)nullptr,
+                               nullptr);
+    op->target.acting = acting;
+    op->target.acting_primary = acting[0];
+    op->target.actual_pgid = spg_t(pg_t(0, pool), shard_id_t(0));
+    return op;
+  }
 };
 
 // LOCALIZE_READS from zone 1 with a zone-1 primary reads zone-1 data shards.
@@ -974,6 +993,7 @@ TEST_F(TestSplitOpInit, ReplicaLocalizeReadsOnlyLocalZone)
     srand(seed);
     auto op = make_read_op(rep_pool_id, acting, 0, 4 * 4096,
                            CEPH_OSD_FLAG_LOCALIZE_READS);
+    op->target.acting_primary = acting[0];
     {
       ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, true);
       split.init_reference_sub_read();
@@ -1157,6 +1177,7 @@ TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
                              std::move(ops), CEPH_OSD_FLAG_BALANCE_READS,
                              (Context*)nullptr, nullptr);
   op->target.acting = acting;
+  op->target.acting_primary = acting[0];
   {
     ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
     split.init_reference_sub_read();
@@ -1167,6 +1188,71 @@ TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
     auto& ref = split.sub_reads.at(split.reference_sub_read_key);
     ASSERT_GE((int)ref.abs_shard, 0);
     EXPECT_EQ(split.reference_sub_read.osd, acting[(int)ref.abs_shard]);
+  }
+  op->put();
+}
+
+TEST_F(TestSplitOpInit, ReplicaSplitSendsCallToThePrimary)
+{
+  const std::vector<int> acting = {0, 1, 2, 3};
+  bool saw_non_primary_reference_sub_read_key = false;
+  for (unsigned seed = 0; seed < 16; seed++) {
+    srand(seed);
+    auto op = make_call_and_read_op(rep_pool_id, acting, 4 * 4096,
+                                    CEPH_OSD_FLAG_BALANCE_READS);
+    {
+      ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
+      split.init_reference_sub_read();
+      ASSERT_FALSE(split.abort) << "seed " << seed;
+      EXPECT_EQ(0, split.primary_sub_read_key) << "seed " << seed;
+      if (split.reference_sub_read_key != 0) {
+        saw_non_primary_reference_sub_read_key = true;
+      }
+
+      split.init(op->ops[0], 0, false, false); // the call
+      split.init(op->ops[1], 1, false, false); // the read
+      ASSERT_FALSE(split.abort) << "seed " << seed;
+
+      ASSERT_TRUE(split.sub_reads.contains(0)) << "seed " << seed;
+      EXPECT_TRUE(split.sub_reads.at(0).details.contains(0))
+          << "call not sent to the primary; seed " << seed;
+      for (auto& [key, sr] : split.sub_reads) {
+        if (key != 0) {
+          EXPECT_FALSE(sr.details.contains(0))
+              << "call also sent to osd index " << key << "; seed " << seed;
+        }
+      }
+    }
+    op->put();
+  }
+  EXPECT_TRUE(saw_non_primary_reference_sub_read_key);
+}
+
+TEST_F(TestSplitOpInit, ReplicaPrimaryKeyFollowsActingPrimary)
+{
+  const std::vector<int> acting = {0, 1, 2, 3};
+  auto op = make_call_and_read_op(rep_pool_id, acting, 4 * 4096,
+                                  CEPH_OSD_FLAG_BALANCE_READS);
+  op->target.acting_primary = 2;
+  {
+    ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
+    split.init_reference_sub_read();
+    ASSERT_FALSE(split.abort);
+    EXPECT_EQ(2, split.primary_sub_read_key);
+  }
+  op->put();
+}
+
+TEST_F(TestSplitOpInit, ReplicaPrimaryMissingFromActingAborts)
+{
+  const std::vector<int> acting = {0, 1, 2, 3};
+  auto op = make_call_and_read_op(rep_pool_id, acting, 4 * 4096,
+                                  CEPH_OSD_FLAG_BALANCE_READS);
+  op->target.acting_primary = 7;
+  {
+    ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
+    split.init_reference_sub_read();
+    EXPECT_TRUE(split.abort);
   }
   op->put();
 }

@@ -317,6 +317,7 @@ class SplitOp {
   virtual bool version_mismatch_v2() const = 0;
   virtual void init_reference_sub_read() = 0;
   void init(OSDOp &op, int ops_index, bool single_op, bool has_primary_ops);
+  void init_single_shard_op(OSDOp& op, int ops_index, int sub_read_key);
 
   Objecter::Op *orig_op;
   Objecter &objecter;
@@ -354,6 +355,7 @@ class SplitOp {
   int flags = 0;
   pg_shard_t reference_sub_read;
   int reference_sub_read_key = -1; ///< acting index of the reference entry; sub_reads is keyed by acting index
+  int primary_sub_read_key = -1; ///< acting index of the primary
   std::map<int, std::vector<int>> op_offset_map;
 
 private:

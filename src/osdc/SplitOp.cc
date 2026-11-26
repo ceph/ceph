@@ -47,6 +47,7 @@ void ECSplitOp::init_reference_sub_read() {
     if (shard_id_t(i) == primary_abs_shard) {
       reference_sub_read = pg_shard_t(target.acting[i], primary_abs_shard);
       reference_sub_read_key = i;
+      primary_sub_read_key = i;
       ldout(cct, DBG_LVL) << __func__ << " set reference_sub_read=" << reference_sub_read
                           << " for primary_abs_shard=" << (int)primary_abs_shard << dendl;
       return;
@@ -390,6 +391,21 @@ void ReplicaSplitOp::init_reference_sub_read() {
   if (valid_indices.size() < 2) {
     abort = true;
     ldout(cct, DBG_LVL) << __func__ << " ABORT: Not enough valid OSDs" << dendl;
+    return;
+  }
+
+  primary_sub_read_key = -1;
+  for (int i = 0; i < (int)target.acting.size(); i++) {
+    if (target.acting[i] == target.acting_primary) {
+      primary_sub_read_key = i;
+      break;
+    }
+  }
+  if (primary_sub_read_key == -1) {
+    abort = true;
+    ldout(cct, DBG_LVL) << __func__ << " ABORT: Primary "
+                        << target.acting_primary << " not in acting set"
+                        << dendl;
     return;
   }
 
@@ -888,16 +904,24 @@ void SplitOp::init(OSDOp &op, int ops_index, bool single_op,
     init_read(op, false, ops_index, single_op, has_primary_ops);
     break;
   }
+  case CEPH_OSD_OP_CALL: {
+    init_single_shard_op(op, ops_index, primary_sub_read_key);
+    break;
+  }
   default: {
-    if (!sub_reads.contains(reference_sub_read_key)) {
-      sub_reads.emplace(reference_sub_read_key, orig_op->ops.size() + 1,
-                        shard_id_t(reference_sub_read_key));
-    }
-    Details &d = sub_reads.at(reference_sub_read_key).details[ops_index];
-    orig_op->pass_thru_op(sub_reads.at(reference_sub_read_key).rd, ops_index, &d.bl, &d.rval);
+    init_single_shard_op(op, ops_index, reference_sub_read_key);
     break;
   }
   }
+}
+
+void SplitOp::init_single_shard_op(OSDOp& op, int ops_index, int sub_read_key)
+{
+  sub_reads.emplace(sub_read_key, orig_op->ops.size() + 1,
+                    shard_id_t(sub_read_key));
+  Details& d = sub_reads.at(sub_read_key).details[ops_index];
+  orig_op->pass_thru_op(sub_reads.at(sub_read_key).rd, ops_index, &d.bl,
+                        &d.rval);
 }
 
 #undef dout_prefix
@@ -1288,7 +1312,8 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // Initialize reference_sub_read now that acting set is populated
   split_read->init_reference_sub_read();
 
-  if (split_read->reference_sub_read_key == -1) {
+  if (split_read->reference_sub_read_key == -1 ||
+      split_read->primary_sub_read_key == -1) {
     split_read->abort = true;
   }
 
