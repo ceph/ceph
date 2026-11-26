@@ -14,6 +14,14 @@ add_executable(unittest_mds_sessionfilter
 add_ceph_unittest(unittest_mds_sessionfilter)
 target_link_libraries(unittest_mds_sessionfilter mds osdc ceph-common global ${BLKID_LIBRARIES})
 
+# unittest_mds_inode_encoded_len
+add_executable(unittest_mds_inode_encoded_len
+  TestInodeEncodedLen.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mds_inode_encoded_len)
+target_link_libraries(unittest_mds_inode_encoded_len mds global ${BLKID_LIBRARIES})
+
 # unittest_mds_quiesce_db
 add_executable(unittest_mds_quiesce_db
   TestQuiesceDb.cc

@@ -99,6 +99,7 @@ struct sr_t {
   bool is_snapdir_visible() const { return flags & SNAPDIR_VISIBILITY; }
 
   void encode(ceph::buffer::list &bl) const;
+  uint64_t get_variable_encoded_len() const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
   static std::list<sr_t> generate_test_instances();

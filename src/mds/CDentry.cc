@@ -726,6 +726,7 @@ void CDentry::dump(Formatter *f) const
 
   f->dump_unsigned("version", get_version());
   f->dump_unsigned("projected_version", get_projected_version());
+  f->dump_unsigned("counted_size", counted_size);
 
   f->dump_int("auth_pins", auth_pins);
 
