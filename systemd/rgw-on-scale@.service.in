@@ -1,0 +1,81 @@
+[Unit]
+Description=RGW on IBM Storage Scale S3 endpoint (instance %i)
+PartOf=rgw-on-scale.target
+After=network-online.target local-fs.target remote-fs.target
+Wants=network-online.target
+Before=rgw-on-scale.target
+
+[Service]
+Type=simple
+
+# Defaults first, then the sysconfig drop-ins so operators can override.
+# The per-instance file wins over the shared one.
+Environment=RGW_ON_SCALE_CONF=/etc/ceph/rgw-on-scale.conf
+Environment=RGW_ON_SCALE_STATE=/var/lib/ceph/rgw-on-scale
+Environment=RGW_ON_SCALE_LOG_DIR=/var/log/ceph
+Environment=RGW_ON_SCALE_EXTRA_ARGS=
+EnvironmentFile=-@CEPH_SYSTEMD_ENV_DIR@/rgw-on-scale
+EnvironmentFile=-@CEPH_SYSTEMD_ENV_DIR@/rgw-on-scale-%i
+
+# global_init() aborts if it cannot create/chmod the run dir, so /run/ceph
+# must exist before ExecStart.  Preserve=yes is required: without it systemd
+# deletes /run/ceph when ANY instance stops, taking the other instances'
+# admin sockets with it.
+RuntimeDirectory=ceph
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+# Per-instance private state.  The LMDB listing cache MUST NOT be shared
+# between instances: BucketCache::Lmdbs purges <database_root>/rgw_posix_lmdbs
+# on construction, so a second instance starting would wipe the first
+# instance's live LMDB environments.
+ExecStartPre=/usr/bin/install -d -m 0750 ${RGW_ON_SCALE_STATE}/%i
+ExecStartPre=/usr/bin/install -d -m 0755 ${RGW_ON_SCALE_LOG_DIR}
+
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/rgw-standalone -f \
+	--no-mon-config \
+	-c ${RGW_ON_SCALE_CONF} \
+	-n client.rgw.%i \
+	--log-file=${RGW_ON_SCALE_LOG_DIR}/rgw-on-scale.%i.log \
+	--admin-socket=/run/ceph/rgw-on-scale.%i.asok \
+	--rgw_nsfs_database_root=${RGW_ON_SCALE_STATE}/%i \
+	--rgw_luarocks_location=${RGW_ON_SCALE_STATE}/%i/luarocks \
+	$RGW_ON_SCALE_EXTRA_ARGS
+
+# Runs as root: setfsuid/setfsgid identity impersonation needs CAP_SETUID,
+# and the GPFS LWE/DMAPI paths need root for handle operations.  This is
+# the deliberate difference from ceph-radosgw@.service, which uses
+# --setuser ceph.
+User=root
+Group=root
+
+Restart=on-failure
+RestartSec=5s
+StartLimitBurst=5
+StartLimitInterval=30s
+
+LimitNOFILE=1048576
+LimitNPROC=1048576
+TasksMax=infinity
+
+# Hardening.  Three of the ceph-radosgw@.service settings are deliberately
+# relaxed for Scale:
+#   PrivateDevices=no  - GPFS needs /dev/ss0
+#   ProtectHome=no     - the Scale filesystem may be mounted under /home
+#   ProtectSystem=full - /var/lib and /var/log must stay writable
+PrivateDevices=no
+ProtectHome=no
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=rgw-on-scale.target

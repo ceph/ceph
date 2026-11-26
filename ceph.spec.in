@@ -1946,6 +1946,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/crash
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/crash/posted
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/radosgw
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/rgw-on-scale
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
@@ -2619,11 +2620,22 @@ fi
 %endif
 %{_bindir}/rgw-standalone
 %{_bindir}/rgw-standalone-admin
+%{_sbindir}/rgw-on-scale
+%{_unitdir}/rgw-on-scale@.service
+%{_unitdir}/rgw-on-scale.target
 %dir %{_localstatedir}/lib/ceph/radosgw
+%dir %attr(750,root,root) %{_localstatedir}/lib/ceph/rgw-on-scale
 
-%post rgw-standalone -p /sbin/ldconfig
+%post rgw-standalone
+/sbin/ldconfig
+%systemd_post rgw-on-scale.target
 
-%postun rgw-standalone -p /sbin/ldconfig
+%preun rgw-standalone
+%systemd_preun rgw-on-scale.target
+
+%postun rgw-standalone
+/sbin/ldconfig
+%systemd_postun rgw-on-scale.target
 
 %files osd
 %{_bindir}/ceph-clsinfo

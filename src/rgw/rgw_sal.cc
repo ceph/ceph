@@ -379,8 +379,19 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 
 #ifdef WITH_RADOSGW_STANDALONE
   {
-    /* Shortcut the whole thing, and only allow POSIXDriver for Standalone */
+    /* Standalone has no RADOS linked in, so only the filesystem-backed
+     * drivers are selectable.  posix stays the default for backwards
+     * compatibility; nsfs is opt-in via rgw_backend_store.  No filters
+     * are available either. */
+    cfg.filter_name = "none";
     cfg.store_name = "posix";
+
+    const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_NSFS
+    if (config_store == "nsfs") {
+      cfg.store_name = "nsfs";
+    }
+#endif /* WITH_RADOSGW_NSFS */
     return cfg;
   }
 #endif /* WITH_RADOSGW_STANDALONE */
