@@ -1553,6 +1553,25 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_defer_open_client_range
+  type: bool
+  level: advanced
+  desc: give a client no writeable range until it asks for one
+  long_desc: An open for write normally gives the client a writeable range
+    (max_size) at once, which takes the filelock wrlock and journals an inode
+    update, and again when the range is dropped at close. Many applications open
+    files read-write and never write. With this enabled the open hands out the
+    caps but no range, and counts as a read for the balancer. A client gets a
+    new range only when it asks for one, on its first write past max_size,
+    which costs one extra round trip to the MDS; a client that has a range
+    still gets it grown ahead of its writes.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+  see_also:
+  - mds_client_writeable_range_max_inc_objs
 - name: mds_min_caps_per_client
   type: uint
   level: advanced
