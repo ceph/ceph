@@ -12,8 +12,8 @@ The ``rbd`` python module provides file-like access to RBD images.
 Example: Creating and writing to an image
 =========================================
 
-To use ``rbd``, you must first import it and ``rados``, connect to RADOS,
-and open an I/O context::
+To use the ``rbd`` module, you must first import it and ``rados``, connect
+to RADOS, and open an I/O context::
 
     import rados
     import rbd
