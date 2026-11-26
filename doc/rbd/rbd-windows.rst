@@ -100,8 +100,8 @@ The following sample imports an RBD image and boots a Hyper-V VM using it::
     qemu-img convert -O raw cirros-0.5.1-x86_64-disk.img cirros-0.5.1-x86_64-disk.raw
 
     rbd import cirros-0.5.1-x86_64-disk.raw
-    # Let's give it a hefty 100MB size.
-    rbd resize cirros-0.5.1-x86_64-disk.raw --size=100MB
+    # Let's give it a hefty 200MB size.
+    rbd resize cirros-0.5.1-x86_64-disk.raw --size=200MB
 
     rbd device map cirros-0.5.1-x86_64-disk.raw
 
