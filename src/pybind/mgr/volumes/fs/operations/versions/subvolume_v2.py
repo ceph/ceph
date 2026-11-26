@@ -118,18 +118,30 @@ class SubvolumeV2(SubvolumeV1):
         return os.path.join(self.base_path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
 
     def snapshot_data_path(self, snapname):
+        """
+        Path to the UUID data directory inside a v2 snapshot.
+
+        Use readdir d_type (is_dir) and the listed name only — do not path-stat
+        every entry. With casesensitive=false on the subvolume root (e.g.
+        inherited from a group charmap), path-looking up non-UUID entries such
+        as '.meta' can ENOENT even though the snap exists; that used to abort
+        discovery and surface a misleading "snapshot does not exist".
+        """
         snap_base_path = self.snapshot_path(snapname)
         uuid_str = None
         try:
             with self.fs.opendir(snap_base_path) as dir_handle:
                 d = self.fs.readdir(dir_handle)
                 while d:
-                    if d.d_name not in (b".", b".."):
-                        d_full_path = os.path.join(snap_base_path, d.d_name)
-                        stx = self.fs.statx(d_full_path, cephfs.CEPH_STATX_MODE, cephfs.AT_SYMLINK_NOFOLLOW)
-                        if stat.S_ISDIR(stx.get('mode')):
-                            if self.is_valid_uuid(d.d_name.decode('utf-8')):
-                                uuid_str = d.d_name
+                    if d.d_name not in (b".", b"..") and d.is_dir():
+                        try:
+                            name = d.d_name.decode('utf-8')
+                        except UnicodeDecodeError:
+                            d = self.fs.readdir(dir_handle)
+                            continue
+                        if self.is_valid_uuid(name):
+                            uuid_str = d.d_name
+                            break
                     d = self.fs.readdir(dir_handle)
         except cephfs.Error as e:
             if e.errno == errno.ENOENT:
@@ -137,7 +149,8 @@ class SubvolumeV2(SubvolumeV1):
             raise VolumeException(-e.args[0], e.args[1])
 
         if not uuid_str:
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+            raise VolumeException(-errno.ENOENT,
+                                  "snapshot '{0}' does not exist or has no data path".format(snapname))
 
         return os.path.join(snap_base_path, uuid_str)
 
