@@ -239,6 +239,12 @@ ErasureCodeIsaTableCache::getDecodingTableFromCache(std::string &signature,
 {
   // --------------------------------------------------------------------------
   // LRU decoding matrix cache
+  //
+  // IMPORTANT: The signature parameter MUST include k and m values to ensure
+  // cache key uniqueness. Different (k,m) configurations with similar erasure
+  // patterns would otherwise collide, causing buffer size mismatches that lead
+  // to heap-buffer-overflow or data corruption. The table size is k*(m+k)*32
+  // bytes and depends on both k and m.
   // --------------------------------------------------------------------------
 
   dout(12) << "[ get table    ] = " << signature << dendl;
@@ -278,6 +284,9 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
 {
   // --------------------------------------------------------------------------
   // LRU decoding matrix cache
+  //
+  // IMPORTANT: The signature parameter MUST include k and m values to ensure
+  // cache key uniqueness. See getDecodingTableFromCache() for details.
   // --------------------------------------------------------------------------
 
   dout(12) << "[ put table    ] = " << signature << dendl;
