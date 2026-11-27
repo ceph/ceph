@@ -24,6 +24,77 @@ All directories are initially created as a single fragment.  This fragment
 may be *split* to divide up the directory into more fragments, and these
 fragments may be *merged* to reduce the number of fragments in the directory.
 
+How directories are stored
+==========================
+
+Each fragment of a directory is stored as one object in the file system's
+metadata pool. The object's name is the directory's inode number and the
+fragment ID, both in hexadecimal. For example, an unfragmented directory with
+inode number ``0x10000000000`` is stored in the object
+``10000000000.00000000``.
+
+Each entry in the fragment is a key in the omap of that object. The key is the
+entry's name followed by ``_head`` (or by a snapshot ID, for an entry kept for
+a snapshot), and the value holds the entry's inode, or a link to the inode for
+a hard link. The fragment's own metadata is stored in the omap header.
+
+The number of entries in a fragment is therefore the number of keys in one
+object's omap. An object with a very large omap is slow for the OSDs to read,
+recover, and scrub. A deep scrub that finds an object with more than
+``osd_deep_scrub_large_omap_object_key_threshold`` keys (200000 by default)
+raises the ``LARGE_OMAP_OBJECTS`` health warning, so the warning appears only
+after a deep scrub of that object's placement group. Splitting a large
+directory into fragments keeps each object small, spreads the directory over
+several objects and so over several placement groups and OSDs, and lets
+different MDS ranks serve different fragments of a busy directory.
+``mds_bal_split_size`` (described below) counts the entries kept for snapshots
+as well as the current entries, so a fragment ordinarily splits long before
+its object gets that large. ``mds_bal_fragment_size_max``, the hard limit,
+counts only the current files and subdirectories.
+
+The cost is that each fragment is a separate object to fetch and to write, and
+that operations that need the whole directory, such as listing it, must load
+every fragment.
+
+The MDS places each entry in a fragment by a hash of the entry's name. A
+fragment covers the hash values that start with a given set of bits. The
+fragment ID holds the number of those bits in its top byte and their value in
+its lower three bytes. A directory that has never been split has one fragment,
+written ``*``, which covers every hash value and has the ID ``00000000``. When
+that fragment is split with the default ``mds_bal_split_bits`` of 3, it is
+replaced by eight fragments, written ``000*`` through ``111*``, each of which
+holds the entries whose name hashes start with those three bits. Each box
+below shows a fragment and the object that stores it:
+
+.. mermaid::
+
+   flowchart TB
+       dir["Directory, inode 0x10000000000"]
+       dir --> f0["000*<br/>10000000000.03000000"]
+       dir --> f1["001*<br/>10000000000.03200000"]
+       dir --> fx["010* to 110*<br/>10000000000.03400000 to .03c00000"]
+       dir --> f7["111*<br/>10000000000.03e00000"]
+       f0 --> o0["omap header: fragment metadata<br/>omap keys: name_head"]
+
+To list the fragments of a directory, run the following command against the
+MDS rank that holds the directory (rank ``0`` if the file system has one
+active MDS). The directory must be in that MDS's cache:
+
+.. prompt:: bash #
+
+   ceph tell mds.<fsname>:<rank> dirfrag ls <path>
+
+Each fragment is listed with its ``value``, its ``bits``, and ``str``, which
+is ``<value>/<bits>`` with the value in hexadecimal. After the split above,
+the first fragment is listed as ``0/3`` and the last as ``e00000/3``. To find
+a fragment's object, put its ``bits`` in the top byte and its ``value`` in the
+lower three bytes: ``e00000/3`` is stored in ``10000000000.03e00000``. To list
+the entries in that fragment, run the following command:
+
+.. prompt:: bash #
+
+   rados -p <metadata_pool> listomapkeys 10000000000.03e00000
+
 Splitting and merging
 =====================
 
