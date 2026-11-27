@@ -505,6 +505,13 @@ placement group count fixed, so that clients that still refer to it by its
 original pool ID are directed to the new pool. While it exists, clients must
 support Vampire features. It is removed when the new pool is deleted.
 
+These settings control how many placement groups migrate at a time, and how
+long a migration waits before it retries a reservation that was refused, for
+example because an OSD is too full:
+
+.. confval:: mon_pool_migration_max_pg_ratio
+.. confval:: osd_pool_migration_retry_interval
+
 .. _associate-pool-to-application:
 
 Associating a Pool with an Application
