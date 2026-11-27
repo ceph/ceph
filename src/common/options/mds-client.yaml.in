@@ -104,8 +104,8 @@ options:
 - name: client_mountpoint
   type: str
   level: advanced
-  desc: default mount-point
-  fmt_desc: Directory to mount on the CephFS file system. An alternative to the
+  desc: Default mountpoint
+  fmt_desc: Directory on which to mount the CephFS file system. An alternative to the
     ``-r`` option of the ``ceph-fuse`` command.
   default: /
   services:
@@ -361,7 +361,7 @@ options:
 - name: fuse_default_permissions
   type: bool
   level: advanced
-  desc: pass default_permisions to FUSE on mount
+  desc: Pass default_permissions to FUSE on mount
   fmt_desc: When set to ``false``, ``ceph-fuse`` utility checks does its own
     permissions checking, instead of relying on the permissions enforcement in
     FUSE. Set to ``false`` together with the ``client acl type=posix_acl``
@@ -569,8 +569,8 @@ options:
 - name: client_collect_and_send_global_metrics
   type: bool
   level: advanced
-  desc: to enable and force collecting and sending the global metrics to MDS
-  long_desc: To be careful for this, when connecting to some old ceph clusters
+  desc: Whether to enable and force collecting and sending the global metrics to MDS
+  long_desc: Warning, when connecting to some old Ceph clusters
     it may crash the MDS daemons while upgrading.
   default: false
   tags:
