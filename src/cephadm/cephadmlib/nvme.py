@@ -27,9 +27,24 @@ DEFAULT_TIMEOUT_MS = 10000
 # struct nvme_passthru_cmd from include/uapi/linux/nvme_ioctl.h, 72 bytes.
 _PASSTHRU_FORMAT = '<BBHIIIQQIIIIIIIIII'
 _PASSTHRU_FIELDS = (
-    'opcode', 'flags', 'rsvd1', 'nsid', 'cdw2', 'cdw3', 'metadata', 'addr',
-    'metadata_len', 'data_len', 'cdw10', 'cdw11', 'cdw12', 'cdw13', 'cdw14',
-    'cdw15', 'timeout_ms', 'result',
+    'opcode',
+    'flags',
+    'rsvd1',
+    'nsid',
+    'cdw2',
+    'cdw3',
+    'metadata',
+    'addr',
+    'metadata_len',
+    'data_len',
+    'cdw10',
+    'cdw11',
+    'cdw12',
+    'cdw13',
+    'cdw14',
+    'cdw15',
+    'timeout_ms',
+    'result',
 )
 
 _NAMESPACE_PATH = re.compile(r'/dev/nvme\d+n\d+')
@@ -50,8 +65,10 @@ def describe_device(device_path: str) -> Dict[str, Any]:
     bytes mean.
     """
     if not _NAMESPACE_PATH.fullmatch(device_path):
-        raise Error(f'{device_path!r} is not an NVMe namespace path '
-                    '(expected /dev/nvmeXnY)')
+        raise Error(
+            f'{device_path!r} is not an NVMe namespace path '
+            '(expected /dev/nvmeXnY)'
+        )
 
     namespace = os.path.basename(device_path)
 
@@ -71,15 +88,18 @@ def describe_device(device_path: str) -> Dict[str, Any]:
         'pci_device': device,
         'nsid': nsid,
         'identify_controller': identify(
-            device_path, CNS_CONTROLLER, nsid=0).hex(),
+            device_path, CNS_CONTROLLER, nsid=0
+        ).hex(),
         'identify_namespace': identify(
-            device_path, CNS_NAMESPACE, nsid=nsid).hex(),
+            device_path, CNS_NAMESPACE, nsid=nsid
+        ).hex(),
     }
 
 
 def identify(device_path: str, cns: int, nsid: int) -> bytes:
     """Issue one Identify admin command and return its 4096-byte response."""
     buf = ctypes.create_string_buffer(IDENTIFY_BYTES)
+    # fmt: off
     cmd = bytearray(struct.pack(
         _PASSTHRU_FORMAT,
         NVME_ADMIN_IDENTIFY,        # opcode
@@ -96,6 +116,7 @@ def identify(device_path: str, cns: int, nsid: int) -> bytes:
         DEFAULT_TIMEOUT_MS,
         0,                          # result
     ))
+    # fmt: on
 
     try:
         fd = os.open(device_path, os.O_RDONLY)
@@ -107,7 +128,7 @@ def identify(device_path: str, cns: int, nsid: int) -> bytes:
         # invalid field, namespace not ready -- the kernel returns the NVMe
         # status as a positive value and leaves the buffer untouched, so an
         # unchecked return means reporting 4096 zero bytes as a good Identify.
-        status = fcntl.ioctl(fd, NVME_IOCTL_ADMIN_CMD, cmd)
+        status = int(fcntl.ioctl(fd, NVME_IOCTL_ADMIN_CMD, cmd))
     except OSError as e:
         raise Error(f'NVMe Identify (CNS {cns}) on {device_path} failed: {e}')
     finally:
@@ -115,7 +136,8 @@ def identify(device_path: str, cns: int, nsid: int) -> bytes:
     if status:
         raise Error(
             f'NVMe Identify (CNS {cns}) on {device_path} returned status '
-            f'0x{status:x}')
+            f'0x{status:x}'
+        )
     return buf.raw
 
 
@@ -159,6 +181,7 @@ def _pci_candidates(namespace: str) -> List[str]:
         entries = []
     candidates.extend(
         os.path.join(base, entry, 'device')
-        for entry in entries if _CONTROLLER_NAME.fullmatch(entry)
+        for entry in entries
+        if _CONTROLLER_NAME.fullmatch(entry)
     )
     return candidates
