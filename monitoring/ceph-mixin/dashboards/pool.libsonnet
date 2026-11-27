@@ -556,7 +556,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         $.addTargetSchema(
           |||
             topk($topk,
-              rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) +
+              rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) *
               on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s}
             )
           ||| % $.matchers(),
@@ -777,14 +777,14 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets([
         $.addTargetSchema(
           |||
-            rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
+            rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) *
               on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
           ||| % $.matchers(),
           'reads'
         ),
         $.addTargetSchema(
           |||
-            rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval]) +
+            rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval]) *
               on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
           ||| % $.matchers(),
           'writes'
