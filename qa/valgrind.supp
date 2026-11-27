@@ -9,6 +9,16 @@
    fun:_Zda*
 }
 {
+   <newer glibc sized-free entry points confuse valgrind MismatchedFree (e.g. ubuntu 26.04)>
+   Memcheck:Free
+   fun:free_sized
+}
+{
+   <newer glibc sized-free entry points confuse valgrind MismatchedFree (e.g. ubuntu 26.04)>
+   Memcheck:Free
+   fun:free_aligned_sized
+}
+{
    older boost mersenne twister uses uninitialized memory for randomness
    Memcheck:Cond
    ...
