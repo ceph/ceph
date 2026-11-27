@@ -2138,4 +2138,17 @@ TEST(ECUtil, ro_range_to_shard_range)
   EXPECT_EQ(0u, s.ro_range_to_shard_range(4096, 2048, raw_shard_id_t(0)).second);
   EXPECT_EQ(std::make_pair(uint64_t(0), uint64_t(2048)),
             s.ro_range_to_shard_range(4096, 2048, raw_shard_id_t(1)));
+
+  // An EC direct sparse read at or beyond the end of the object is trimmed
+  // to zero length before it is mapped, e.g. any read of an empty object
+  // (https://tracker.ceph.com/issues/83048). It holds no data of any shard.
+  for (unsigned k : {2, 3, 4}) {
+    stripe_info_t s0(k, 2, chunk_size * k);
+    for (uint64_t off = 0; off < 3 * s0.get_stripe_width(); off += 1024) {
+      for (unsigned raw = 0; raw < s0.get_k_plus_m(); raw++) {
+        EXPECT_EQ(0u, s0.ro_range_to_shard_range(off, 0, raw_shard_id_t(raw)).second)
+          << "k=" << k << " " << off << "~0 raw shard " << raw;
+      }
+    }
+  }
 }
