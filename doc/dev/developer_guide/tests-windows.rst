@@ -136,7 +136,7 @@ As said before, another great advantage is that it runs integration tests that
 quickly catch regressions which often affect Linux builds as well. This spares
 developers from having to wait for the full Teuthology results.
 
-.. _Windows CI job: https://github.com/ceph/ceph-build/blob/main/ceph-windows-pull-requests/config/definitions/ceph-windows-pull-requests.yml
+.. _Windows CI job: https://github.com/ceph/ceph-build/blob/main/ceph-pr-pipeline/README.md
 .. _A small PowerShell framework: https://github.com/ceph/ceph-win32-tests/
 .. _Windows build script: https://github.com/ceph/ceph/blob/main/win32_build.sh
 .. _dependencies: https://github.com/ceph/ceph/blob/main/win32_deps_build.sh

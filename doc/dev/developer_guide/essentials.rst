@@ -126,7 +126,7 @@ IRC
 In addition to mailing lists, the Ceph community also communicates in real time
 using `Internet Relay Chat`_.
 
-.. _`Internet Relay Chat`: http://www.irchelp.org/
+.. _`Internet Relay Chat`: https://www.irchelp.org/
 
 The Ceph community gathers in the #ceph channel of the Open and Free Technology
 Community (OFTC) IRC network.
@@ -305,7 +305,7 @@ With some configuration, Dependabot can perform non-security updates (for
 example, it can upgrade to the latest minor version or patch version).
 
 Dependabot supports `several languages and package managers
-<https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/about-dependabot-version-updates#supported-repositories-and-ecosystems>`_.
+<https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories>`_.
 As of July 2022, the Ceph project receives alerts only from pip (based on the
 `requirements.txt` files) and npm (`package*.json`). It is possible to extend
 these alerts to git submodules, Golang, and Java. As of July 2022, there is no

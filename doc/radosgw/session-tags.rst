@@ -7,7 +7,7 @@ is only supported as part of the web token passed to AssumeRoleWithWebIdentity).
 tags are passed along as aws:PrincipalTag in the session credentials (temporary credentials)
 that is returned back by STS. These Principal Tags consist of the session tags that come in
 as part of the web token and the tags that are attached to the role being assumed. Please note
-that the tags have to be always specified in the following namespace: https://aws.amazon.com/tags.
+that the tags have to be always specified in the following namespace: ``https://aws.amazon.com/tags``.
 
 An example of the session tags that are passed in by the IDP in the web token is as follows:
 

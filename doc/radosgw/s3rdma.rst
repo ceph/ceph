@@ -513,6 +513,6 @@ count.
 .. _cuObject server release notes: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-server-release-notes/index.html
 .. _cuObject client release notes: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-client-release-notes/index.html
 .. _cuObject client API: https://docs.nvidia.com/gpudirect-storage/cuobject/cuObjClient-api/index.html
-.. _systemd resource-limit documentation: https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#LimitMEMLOCK=
+.. _systemd resource-limit documentation: https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#LimitCPU=
 .. _Linux RDMA documentation: https://docs.kernel.org/infiniband/user_verbs.html
-.. _NVIDIA cuObject server requirements and installation: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-server-release-notes/index.html#getting-started
+.. _NVIDIA cuObject server requirements and installation: https://docs.nvidia.com/gpudirect-storage/cuobject/cuobject-server-release-notes/getting-started.html

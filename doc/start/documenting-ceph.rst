@@ -251,6 +251,10 @@ To scan for the reachability of external links, execute:
 
     admin/build-doc linkcheck
 
+The results are written to ``build-doc/output/linkcheck/output.txt``.  Release
+notes, changelogs, relative links, and links to Ceph pull requests, commits,
+and tracker issues are not checked.
+
 Running ``admin/build-doc`` creates a ``build-doc`` directory under
 ``ceph``.  You may need to create a directory under ``ceph/build-doc`` for
 Javadoc file output:
@@ -955,13 +959,13 @@ convention was preferred because it made the documents more readable in a
 command line interface. As of 2023, though, we have no preference for one over
 the other. Use whichever convention makes the text easier to read.
 
-Using a part of a sentence as a hyperlink, `like this <docs.ceph.com>`_, is
-discouraged. The convention of writing "See X" is preferred. Here are some
+Using a part of a sentence as a hyperlink, `like this <https://docs.ceph.com>`_,
+is discouraged. The convention of writing "See X" is preferred. Here are some
 preferred formulations:
 
-#. For more information, see `docs.ceph.com <docs.ceph.com>`_.
+#. For more information, see `docs.ceph.com <https://docs.ceph.com>`_.
 
-#. See `docs.ceph.com <docs.ceph.com>`_.
+#. See `docs.ceph.com <https://docs.ceph.com>`_.
 
 
 Conventions
@@ -1088,7 +1092,7 @@ The bolded notation must be turned off by means of the escape character (\\), as
 .. _ditaa: http://ditaa.sourceforge.net/
 .. _Document Title: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#document-title-subtitle
 .. _Sections: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#sections
-.. _Cross referencing arbitrary locations: http://www.sphinx-doc.org/en/master/usage/restructuredtext/roles.html#role-ref
+.. _Cross referencing arbitrary locations: https://www.sphinx-doc.org/en/master/usage/referencing.html#role-ref
 .. _The TOC tree: http://sphinx-doc.org/markup/toctree.html
 .. _Showing code examples: http://sphinx-doc.org/markup/code.html
 .. _paragraph level markup: http://sphinx-doc.org/markup/para.html

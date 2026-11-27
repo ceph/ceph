@@ -19775,7 +19775,7 @@ paths:
         \        in again, the weight will be changed to 1.\n\n        Because of\
         \ this \u2018ceph osd reweight\u2019 is a temporary solution. You should\n\
         \        only use it to keep your cluster running while you\u2019re ordering\
-        \ more\n        hardware.\n\n        - Craig Lewis (http://lists.ceph.com/pipermail/ceph-users-ceph.com/2014-June/040967.html)\n\
+        \ more\n        hardware.\n\n        - Craig Lewis (https://www.mail-archive.com/ceph-users@lists.ceph.com/msg10964.html)\n\
         \        "
       parameters:
       - in: path

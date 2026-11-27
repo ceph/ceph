@@ -252,9 +252,9 @@ If the cluster has started but an OSD isn't starting, check the following:
   restart the problematic daemon(s). If segmentation faults recur, search the Ceph
   bug tracker `https://tracker.ceph.com/projects/ceph
   <https://tracker.ceph.com/projects/ceph/>`_ and the ``dev`` and
-  ``ceph-users`` mailing list archives `https://ceph.io/resources
-  <https://ceph.io/resources>`_ to see if others have experienced and reported
-  these issues. If this truly is a new and unique failure, post to the ``dev``
+  ``ceph-users`` mailing list archives
+  `https://lists.ceph.io/hyperkitty/ <https://lists.ceph.io/hyperkitty/>`_ to
+  see if others have experienced and reported these issues. If this truly is a new and unique failure, post to the ``dev``
   email list and provide the following information: the specific Ceph release
   being run, ``ceph.conf`` (with secrets XXX'd out), your Monitor status
   output, and excerpts from your log file(s).

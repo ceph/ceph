@@ -434,7 +434,7 @@ In the transit engine example above, the Object Gateway would encrypt the secret
 
 .. _Vault: https://www.vaultproject.io/docs/
 .. _Token authentication method: https://www.vaultproject.io/docs/auth/token.html
-.. _Vault agent: https://www.vaultproject.io/docs/agent/index.html
+.. _Vault agent: https://developer.hashicorp.com/vault/docs/agent-and-proxy/agent
 .. _KV Secrets engine: https://www.vaultproject.io/docs/secrets/kv/
 .. _Transit engine: https://www.vaultproject.io/docs/secrets/transit
 .. _namespaces: https://www.vaultproject.io/docs/enterprise/namespaces/index.html

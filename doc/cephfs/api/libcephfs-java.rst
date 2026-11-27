@@ -11,8 +11,8 @@ Libcephfs (Javadoc)
     are encouraged to contribute!
 
 ..
-    The admin/build-docs script runs Ant to build the Javadoc files, and
-    copies them to api/libcephfs-java/javadoc/.
+    The admin/build-doc script runs Ant to write the Javadoc files to
+    api/libcephfs-java/javadoc/.
 
 
 View the auto-generated `Javadoc pages for the CephFS Java bindings <javadoc/>`_.
