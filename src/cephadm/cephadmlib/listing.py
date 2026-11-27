@@ -202,12 +202,15 @@ def daemons_matching(
     daemon_type: Optional[str] = None,
     fsid: Optional[str] = None,
     daemon_type_predicate: Optional[Callable[[str], bool]] = None,
+    include_legacy: bool = True,
 ) -> Iterator[Union[LegacyDaemonEntry, DaemonEntry]]:
     """Iterate over the daemons configured on the current node, matching daemon
     name or daemon type if supplied.
     """
     for entry in daemons(ctx, legacy_dir):
         if isinstance(entry, LegacyDaemonEntry):
+            if not include_legacy:
+                continue
             if fsid is not None and fsid != entry.fsid:
                 continue
             if daemon_type is not None and daemon_type != entry.daemon_type:
