@@ -30,7 +30,7 @@ class HostControllerTest(DashboardTestCase):
     def test_data_daemons(self):
         return self.ORCHESTRATOR_TEST_DATA['daemons']
 
-    @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
+    @DashboardTestCase.RunAs('test', 'test', ['rgw-manager'])
     def test_access_permissions(self):
         self._get(self.URL_HOST, version='1.1')
         self.assertStatus(403)
