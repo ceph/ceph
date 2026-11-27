@@ -139,21 +139,21 @@ The following output describes the same chain as the plain-text example above
            "pool_id": 3,
            "pool_name": ".migrate-1",
            "migration_target": 5,
-           "migrating_pgs": "[]",
+           "migrating_pgs": [],
            "lowest_migrated_pg": 0
        },
        {
            "pool_id": 4,
            "pool_name": ".migrate-2",
            "migration_target": 5,
-           "migrating_pgs": "[]",
+           "migrating_pgs": [],
            "lowest_migrated_pg": 0
        },
        {
            "pool_id": 5,
            "pool_name": "test-pool",
            "migration_root": 3,
-           "migrating_pgs": "[]",
+           "migrating_pgs": [],
            "lowest_migrated_pg": 0
        }
    ]
@@ -319,7 +319,8 @@ following:
    for erasure-coded pools. This flag can only be enabled for erasure-coded
    pools and requires all OSDs to be running Tentacle or later. If the pool
    does not support EC optimizations (e.g., non-EC pool, unsupported erasure
-   code profile, or insufficient OSD version), the flag is silently ignored.
+   code profile, or insufficient OSD version), the pool is not created and
+   the command fails with an error that gives the reason.
 
   :Type: Boolean
   :Required: No.
@@ -444,23 +445,38 @@ while keeping the original pool name, run:
    ceph osd pool migrate {pool-name} [options]
 
 PGs in the source pool (renamed to ``.migrate-<n>``) will be migrated to the new
-pool. The new pool will inherit any configuration values from the source pool that 
-are not explicitly specified in the command. This can be used to perform 
-non-disruptive configuration changes that would not otherwise be possible, 
-such as moving all objects from a replicated pool to an erasure coded pool or
-moving objects to a pool that uses a different erasure code profile (including a
-different plugin). This makes it possible to change an erasure coded pool's profile,
-for example to change the plugin or change the k and m values, which cannot otherwise
-be changed in place.
+pool. This can be used to perform non-disruptive configuration changes that would
+not otherwise be possible, such as moving all objects from a replicated pool to an
+erasure coded pool or moving objects to a pool that uses a different erasure code
+profile (including a different plugin). This makes it possible to change an
+erasure coded pool's profile, for example to change the plugin or change the k
+and m values, which cannot otherwise be changed in place.
 
 ``ceph osd pool migrate`` takes the options of ``ceph osd pool create``,
-including ``--num_zones`` and the other options of pools over several zones. A
-migration with no options gives the new pool the source pool's ``num_zones``
-and ``replica`` as well.
+including ``--num_zones`` and the other options of pools over several zones.
+Options that are not given take their defaults, as they do for ``ceph osd pool
+create`` (see :ref:`pool-creation-defaults`), not the source pool's values:
+migrating an erasure coded pool with no options gives a replicated pool of the
+default size. A migration to the layout that the pool already has moves every
+object for nothing but a new pool id, so it is refused unless
+``--yes-i-really-mean-it`` is given.
+
+To copy every object to a new pool that keeps all of the source pool's
+settings, run:
+
+.. prompt:: bash $
+
+   ceph osd pool migrate {pool-name} --inherit-params
+
+The new pool then takes the source pool's layout, zones and replica included,
+and the settings that ``ceph osd pool create`` does not take: its flags,
+erasure code optimizations, ``min_size``, pool options, applications and
+quotas. This is usually needed only by support and by tests.
+``--inherit-params`` cannot be combined with any other pool option.
 
 The new pool shares a CRUSH rule or erasure code profile only if the command
 names it. Otherwise the new pool gets its own rule, named ``{pool-name}``: a
-copy of the source pool's rule for a migration with no options, or a new rule.
+copy of the source pool's rule for ``--inherit-params``, or a new rule.
 An erasure coded pool also gets its own profile, ``{pool-name}-k{k}-m{m}``, as
 ``ceph osd pool create`` gives one. The source pool's own rule and profile take
 the same suffix as the source pool, for example ``myrule.migrate-1``, unless
@@ -470,9 +486,31 @@ fails with ``EEXIST`` and changes nothing.
 
 ``ceph osd pool migrate`` can be run again, as the monitors do when an
 election interrupts it. On a pool that is already being migrated, a migration
-with no options succeeds without changing anything; one with options succeeds
-without changing anything if it asks for the layout that the pool is being
-migrated to, and fails otherwise.
+with ``--inherit-params`` succeeds without changing anything; any other
+succeeds without changing anything if it asks for the layout that the pool is
+being migrated to, and fails otherwise.
+
+Pool migration is experimental. Before it can be used:
+
+- ``poolmigration`` must be listed in the
+  ``enable_experimental_unrecoverable_data_corrupting_features``
+  option.
+- Every OSD must be running Vampire or later.
+- The cluster's ``require_min_compat_client`` setting must be Vampire or later,
+  because only Vampire and later clients can follow objects as they move to
+  the new pool.
+
+The renamed source pool is kept after the migration finishes, with its
+placement group count fixed, so that clients that still refer to it by its
+original pool ID are directed to the new pool. While it exists, clients must
+support Vampire features. It is removed when the new pool is deleted.
+
+These settings control how many placement groups migrate at a time, and how
+long a migration waits before it retries a reservation that was refused, for
+example because an OSD is too full:
+
+.. confval:: mon_pool_migration_max_pg_ratio
+.. confval:: osd_pool_migration_retry_interval
 
 .. _associate-pool-to-application:
 

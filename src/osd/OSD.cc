@@ -2090,12 +2090,44 @@ void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
 
 void OSDService::send_pg_migrated_pool(std::optional<int64_t> migration_target, pg_t pgid)
 {
-  dout(20) << __func__
-	   << " send_pg_migrated_pool " << pgid << dendl;
   ceph_assert(migration_target.has_value());
-  monc->send_mon_message(new MOSDPGMigratedPool(osdmap->get_epoch(),
+  std::lock_guard l(pg_migrated_pool_lock);
+  dout(20) << __func__ << " " << pgid << dendl;
+  // Remember it until the osdmap shows the PG has stopped migrating, so it
+  // can be resent on a new mon session.
+  pg_migrated_pool[pgid] = *migration_target;
+  monc->send_mon_message(new MOSDPGMigratedPool(get_osdmap_epoch(),
 						*migration_target,
 						pgid));
+}
+
+void OSDService::send_pg_migrated_pool()
+{
+  std::lock_guard l(pg_migrated_pool_lock);
+  epoch_t epoch = get_osdmap_epoch();
+  for (const auto& [pgid, migration_target] : pg_migrated_pool) {
+    dout(20) << __func__ << " resending " << pgid << dendl;
+    monc->send_mon_message(new MOSDPGMigratedPool(epoch,
+						  migration_target,
+						  pgid));
+  }
+}
+
+void OSDService::prune_pg_migrated_pool()
+{
+  std::lock_guard l(pg_migrated_pool_lock);
+  auto o = get_osdmap();
+  auto i = pg_migrated_pool.begin();
+  while (i != pg_migrated_pool.end()) {
+    auto p = o->get_pg_pool(i->first.pool());
+    if (!p || !p->is_pg_migrating(i->first) ||
+	p->migration_target != i->second) {
+      dout(20) << __func__ << " pruning " << i->first << dendl;
+      i = pg_migrated_pool.erase(i);
+    } else {
+      ++i;
+    }
+  }
 }
 
 // ---
@@ -6845,6 +6877,7 @@ void OSD::ms_handle_connect(Connection *con)
       service.send_pg_temp();
       service.send_ready_to_merge();
       service.send_pg_created();
+      service.send_pg_migrated_pool();
       requeue_failures();
       send_failures();
 
@@ -9376,6 +9409,7 @@ void OSD::consume_map()
   }
 
   service.prune_pg_created();
+  service.prune_pg_migrated_pool();
 
   unsigned pushes_to_free = 0;
   for (auto& shard : shards) {

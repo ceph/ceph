@@ -707,7 +707,7 @@ public:
     recovery_handler->on_pool_migration_target_suspended(toofull);
   }
   void pool_migration_request_target_reservation() final {
-    // TODO Jamie - Crimson stub - not implemented yet
+    // TODO - Crimson stub - not implemented yet
     ceph_abort("pool_migration_request_target_reservation not implemented in crimson");
   }
   void pool_migration_release_target_reservation() final {
@@ -725,7 +725,8 @@ public:
 
 
   bool try_reserve_recovery_space(
-    int64_t primary_num_bytes, int64_t local_num_bytes, int64_t num_objects) final {
+    int64_t primary_num_bytes, int64_t local_num_bytes, int64_t num_objects,
+    bool pool_migration) final {
     // TODO
     return true;
   }
@@ -1413,7 +1414,7 @@ private:
   interval_set<snapid_t> snap_trimq;
 
   std::optional<hobject_t> consider_updating_migration_watermark(
-    std::set<hobject_t> &deleted) override;
+    std::set<hobject_t> &deleted, const eversion_t &version) override;
 };
 
 struct PG::do_osd_ops_params_t {

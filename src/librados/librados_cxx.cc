@@ -860,6 +860,7 @@ void librados::NObjectIteratorImpl::get_next()
   int ret = rados_nobjects_list_next2(ctx.get(), &entry, &key, &nspace,
                                       &entry_size, &key_size, &nspace_size);
   if (ret == -ENOENT) {
+    ctx->nlc->at_end_of_pool = true;
     return;
   }
   else if (ret) {

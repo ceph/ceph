@@ -474,7 +474,7 @@ function TEST_osd_pool_create_migrate_from() {
   SRC_POOL_NAME="ecpool"
   REPPOOL_NAME="metadatapool"
 
-  #setup the cluster 
+  #setup the cluster
   #create an erasure code profile
   ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd
 
@@ -504,36 +504,37 @@ function TEST_osd_pool_create_migrate_from() {
   #resize the ec pool to have small number of pgs
   ceph osd pool set $SRC_POOL_NAME pg_num 2 || return 1
 
-  #Wait some of the PGs to be merged
-  sleep 10  
+  #wait for the merge to finish: a pool cannot start migrating while its
+  #pg_num is changing
+  local i
+  for ((i = 0; i < 600; i++)); do
+    test "$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$SRC_POOL_NAME\") |
+      .pg_num == 2 and .pg_num_pending == 2")" = true && break
+    sleep 1
+  done
+  test $i -lt 600 || return 1
 
   #migrate the pool, the new pool takes over the name and the old pool is
   #renamed to .migrate-1
-  ceph osd pool migrate $SRC_POOL_NAME || return 1
+  ceph osd pool migrate $SRC_POOL_NAME --inherit-params || return 1
   TGT_POOL_NAME=$SRC_POOL_NAME
   SRC_POOL_NAME=".migrate-1"
-   
+
   #reenable autoscaling
   ceph osd pool unset noautoscale || return 1
 
   #check that changing the pg_num on either pool is blocked
-  ceph osd pool set $SRC_POOL_NAME pg_num 10
-  ceph osd pool set $TGT_POOL_NAME pg_num 10
+  expect_failure $dir "while the pool is migrating" ceph osd pool set $SRC_POOL_NAME pg_num 10 || return 1
+  expect_failure $dir "while the pool is migrating" ceph osd pool set $TGT_POOL_NAME pg_num 10 || return 1
 
-  #Let the message reach the logs
-  sleep 2
-  
-  grep "pool pg_num change is disabled; you must unset nopgchange flag for the pool first" $dir/mon.a.log || return 1
-
-  #check that the daemonServer was blocked from changing the pg_num on the two
-  #pools involved in the migration
-  SRC_POOL_ID=$(ceph osd dump | grep " '$SRC_POOL_NAME' " | awk '{print $2}')
-  TGT_POOL_ID=$(ceph osd dump | grep " '$TGT_POOL_NAME' " | awk '{print $2}')
+  #check that the daemonServer was blocked from changing the pg_num on the
+  #source pool
+  SRC_POOL_ID=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$SRC_POOL_NAME\") | .pool")
+  TGT_POOL_ID=$(ceph osd dump --format=json | jq ".pools[] | select(.pool_name == \"$TGT_POOL_NAME\") | .pool")
   echo "Source pool id: $SRC_POOL_ID"
   echo "Target pool id: $TGT_POOL_ID"
-  
+
   grep "Pool $SRC_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
-  grep "Pool $TGT_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
 
   teardown $dir || return 1
 }
@@ -685,31 +686,69 @@ function creating() {
     pool_field $1 flags_names | tr , '\n' | grep -qx creating
 }
 
-function TEST_pool_migrate_copies_pool() {
+# A migration with no options takes the defaults, as a new pool does, and one
+# to the layout the pool has must be confirmed; --inherit-params copies the
+# pool and takes no other option
+function TEST_pool_migrate_takes_the_defaults() {
     local dir=$1
     run_mon_for_pool_migration $dir || return 1
     ceph osd erasure-code-profile set mprofile k=2 m=1 crush-failure-domain=osd || return 1
     ceph osd pool create mec 8 8 erasure mprofile || return 1
     ceph osd pool create mrep 4 4 replicated || return 1
     ceph osd pool set mrep size 2 || return 1
-
-    # a migration with no options copies the pool, and must be confirmed
-    expect_failure $dir "pointless migration" \
-        ceph osd pool migrate mec || return 1
-    ceph osd pool ls | grep -qx mec || return 1
-    ! ceph osd pool ls --show-all | grep -q 'migrate-' || return 1
-
-    ceph osd pool migrate mec --yes-i-really-mean-it || return 1
-    test "$(pool_field mec type)" = 3 || return 1
-    test "$(pool_field mec pg_num)" = 8 || return 1
+    ceph osd pool create mdefault || return 1
+    ceph osd pool migrate mec || return 1
+    test "$(pool_field mec type)" = 1 || return 1
     test "$(pool_field mec size)" = 3 || return 1
-    test "$(pool_field mec num_zones)" = 1 || return 1
+    test "$(pool_field mec pg_num)" = "$(pool_field mdefault pg_num)" || return 1
     test "$(pool_field .migrate-1 migration_target)" = "$(pool_field mec pool)" || return 1
-
-    ceph osd pool migrate mrep --yes-i-really-mean-it || return 1
+    expect_failure $dir "pointless migration" \
+        ceph osd pool migrate mdefault || return 1
+    ceph osd pool ls | grep -qx mdefault || return 1
+    test "$(ceph osd pool ls --show-all | grep -c 'migrate-')" = 1 || return 1
+    ceph osd pool migrate mdefault --inherit-params || return 1
+    test "$(pool_field .migrate-2 migration_target)" = "$(pool_field mdefault pool)" || return 1
+    expect_failure $dir "cannot be combined" \
+        ceph osd pool migrate mrep --inherit-params --size 2 || return 1
+    ceph osd pool migrate mrep --inherit-params || return 1
     test "$(pool_field mrep type)" = 1 || return 1
     test "$(pool_field mrep pg_num)" = 4 || return 1
     test "$(pool_field mrep size)" = 2 || return 1
+}
+
+# --inherit-params keeps every setting of the source, those that osd pool
+# create does not take included
+function TEST_pool_migrate_inherit_params() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd || return 1
+    ceph config set mon osd_pool_default_flag_ec_optimizations true || return 1
+    ceph osd pool create inherited 4 4 erasure ec-prof || return 1
+    ceph config set mon osd_pool_default_flag_ec_optimizations false || return 1
+    ceph osd pool set inherited allow_ec_overwrites true || return 1
+    ceph osd pool set inherited min_size 2 || return 1
+    ceph osd pool set inherited nodelete true || return 1
+    ceph osd pool set inherited noscrub true || return 1
+    ceph osd pool set inherited compression_mode aggressive || return 1
+    ceph osd pool application enable inherited rbd || return 1
+    ceph osd pool set-quota inherited max_objects 1000 || return 1
+    ceph osd pool migrate inherited --inherit-params || return 1
+
+    ceph osd dump --format=json > $dir/osdmap.json || return 1
+    # the settings of a pool, less its identity, its migration state, the
+    # pg_num freeze during the migration and the target's creation
+    pool_settings() {
+        jq -S ".pools[] | select(.pool_name == \"$1\") |
+            del(.pool, .pool_name, .create_time, .last_change, .migration_src,
+                .migration_target, .migration_root, .migrating_pgs,
+                .lowest_migrated_pg, .flags, .pg_autoscale_mode, .crush_rule,
+                .erasure_code_profile) |
+            .flags_names |= (split(\",\") - [\"nopgchange\", \"creating\"] | join(\",\"))" $dir/osdmap.json
+    }
+    test "$(pool_settings inherited | jq -r .application_metadata.rbd)" = "{}" || return 1
+    diff <(pool_settings .migrate-1) <(pool_settings inherited) || return 1
+    test "$(ceph osd erasure-code-profile get inherited-k2-m1 -f json | jq -cS .)" = \
+        "$(ceph osd erasure-code-profile get ec-prof.migrate-1 -f json | jq -cS .)" || return 1
 }
 
 function TEST_pool_migrate_takes_create_arguments() {
@@ -742,7 +781,7 @@ function TEST_pool_migrate_gives_target_own_rule_and_profile() {
 
     # the source keeps its rule and profile under new names, and the target
     # has copies named after it
-    ceph osd pool migrate mcopy --yes-i-really-mean-it || return 1
+    ceph osd pool migrate mcopy --inherit-params || return 1
     creating mcopy || return 1
     test "$(pool_field .migrate-1 crush_rule)" = $rule || return 1
     test "$(rule_of .migrate-1)" = mcopy.migrate-1 || return 1
@@ -771,7 +810,7 @@ function TEST_pool_migrate_gives_target_own_rule_and_profile() {
     ceph osd crush rule create-replicated myrule default osd || return 1
     ceph osd pool create mrep 4 4 replicated myrule || return 1
     rule=$(pool_field mrep crush_rule)
-    ceph osd pool migrate mrep --yes-i-really-mean-it || return 1
+    ceph osd pool migrate mrep --inherit-params || return 1
     creating mrep || return 1
     test "$(rule_of mrep)" = mrep || return 1
     test "$(pool_field .migrate-3 crush_rule)" = $rule || return 1
@@ -790,12 +829,12 @@ function TEST_pool_migrate_keeps_shared_rule_and_profile() {
     local steps=$(ceph osd crush rule dump $default_rule -f json | jq -c 'del(.rule_id, .rule_name)')
 
     # the target has copies of the rules and profiles that keep their names
-    ceph osd pool migrate mshared --yes-i-really-mean-it || return 1
+    ceph osd pool migrate mshared --inherit-params || return 1
     test "$(rule_of .migrate-1)" = rshared || return 1
     test "$(profile_of .migrate-1)" = pshared || return 1
     test "$(rule_of mshared)" = mshared || return 1
     test "$(profile_of mshared)" = mshared-k2-m1 || return 1
-    ceph osd pool migrate mdefault --yes-i-really-mean-it || return 1
+    ceph osd pool migrate mdefault --inherit-params || return 1
     test "$(rule_of .migrate-2)" = $default_rule || return 1
     test "$(rule_of mdefault)" = mdefault || return 1
     test "$(ceph osd crush rule dump mdefault -f json | jq -c 'del(.rule_id, .rule_name)')" = "$steps" || return 1
@@ -831,24 +870,24 @@ function TEST_pool_migrate_name_clash() {
     # the name for the source's rule is taken
     ceph osd crush rule create-erasure mclash.migrate-1 pclash || return 1
     expect_failure $dir "EEXIST.*rule 'mclash.migrate-1'" \
-        ceph osd pool migrate mclash --yes-i-really-mean-it || return 1
+        ceph osd pool migrate mclash --inherit-params || return 1
     ceph osd crush rule rm mclash.migrate-1 || return 1
     # the name for the source's profile is taken
     ceph osd erasure-code-profile set pclash.migrate-1 k=2 m=1 crush-failure-domain=osd || return 1
     expect_failure $dir "EEXIST.*profile 'pclash.migrate-1'" \
-        ceph osd pool migrate mclash --yes-i-really-mean-it || return 1
+        ceph osd pool migrate mclash --inherit-params || return 1
     ceph osd erasure-code-profile rm pclash.migrate-1 || return 1
     # the name for the target's profile is taken, with other contents
     ceph osd erasure-code-profile set mclash-k2-m1 k=2 m=1 crush-failure-domain=host || return 1
     expect_failure $dir "EEXIST.*'mclash-k2-m1'" \
-        ceph osd pool migrate mclash --yes-i-really-mean-it || return 1
+        ceph osd pool migrate mclash --inherit-params || return 1
     ceph osd erasure-code-profile rm mclash-k2-m1 || return 1
     # the name for the target's rule is another pool's rule
     ceph osd pool create mrep 4 4 replicated || return 1
     ceph osd crush rule create-erasure mrep pclash || return 1
     ceph osd pool create other 4 4 erasure pclash mrep || return 1
     expect_failure $dir "EEXIST.*rule 'mrep'" \
-        ceph osd pool migrate mrep --yes-i-really-mean-it || return 1
+        ceph osd pool migrate mrep --inherit-params || return 1
 
     # the failures renamed nothing, and left nothing behind
     ceph osd pool create later 4 4 replicated || return 1
@@ -917,6 +956,30 @@ function TEST_pool_migrate_again_to_layout() {
         ceph osd pool migrate mec --pool_type erasure --k 4 --m 2 --osd_failure_domain host \
         --enable_ec_optimizations || return 1
     test "$(ceph osd pool ls --show-all | grep -c 'migrate-')" = 2 || return 1
+}
+
+# --enable_ec_optimizations must give a pool what osd_pool_default_flag_ec_optimizations does
+function TEST_enable_ec_optimizations() {
+  local dir=$1
+
+  run_mon $dir a || return 1
+  ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd || return 1
+
+  ceph config set mon osd_pool_default_flag_ec_optimizations true || return 1
+  ceph osd pool create default_opt 4 4 erasure ec-prof || return 1
+  ceph config set mon osd_pool_default_flag_ec_optimizations false || return 1
+  local stripe_width=$(pool_field default_opt stripe_width)
+
+  ceph osd pool create requested_opt 4 4 erasure ec-prof --enable_ec_optimizations || return 1
+  test "$(pool_field requested_opt stripe_width)" = "$stripe_width" || return 1
+  pool_field requested_opt flags_names | grep -q split_reads || return 1
+
+  ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
+  ceph osd set-require-min-compat-client vampire || return 1
+  ceph osd pool create migrated 4 4 erasure ec-prof || return 1
+  ceph osd pool migrate migrated --pool_type erasure --erasure_code_profile ec-prof --enable_ec_optimizations || return 1
+  test "$(pool_field migrated stripe_width)" = "$stripe_width" || return 1
+  pool_field migrated flags_names | grep -q split_reads || return 1
 }
 
 main osd-pool-create "$@"

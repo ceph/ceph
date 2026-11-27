@@ -2077,6 +2077,16 @@ Other thresholds that can raise the two health checks above are
 :confval:`mon_osd_nearfull_ratio` and :confval:`mon_osd_full_ratio`. For details and
 resolution, see :ref:`storage-capacity` and :ref:`no-free-drive-space`.
 
+POOL_MIGRATION
+______________
+
+One or more pools are being migrated to a new pool. The message reports how
+many objects have been migrated so far and how many pools and placement groups
+are taking part. The warning clears when every migration has finished. No
+action is needed unless a migration has stopped making progress, in which
+case look for placement groups in the ``migration_toofull``,
+``migration_unfound`` or ``migration_error`` states. See :ref:`migratepool`.
+
 OBJECT_MISPLACED
 ________________
 

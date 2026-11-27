@@ -1939,7 +1939,7 @@ TEST(OSDMonitor, TargetPgMigratingEmptySet) {
   pg_t source_pg(5, 1);
 
   std::set<pg_t> migrating_pgs;  // empty
-  
+
   bool result = OSDMonitor::target_pg_migrating(migrating_pgs, source_pg,
                                                  source_pgnum, target_pgnum);
   ASSERT_FALSE(result);

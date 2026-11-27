@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <tuple>
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
@@ -3333,7 +3334,13 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
       if (root_pool >= 0) {
         const pg_pool_t *spi = osdmap->get_pg_pool(root_pool);
         if (!spi) {
+          // Don't park the op via NEED_RESEND: returning before the t->pgid /
+          // acting refresh means a later map resolving to the same mapping
+          // sees no change and strands it behind newer ops. Instead let
+          // _check_op_pool_dne confirm absence against the mon's latest map
+          // (op stays in its session, in order) rather than failing -ENOENT now.
           t->osd = -1;
+          t->pool_ever_existed = false;
           return RECALC_OP_TARGET_POOL_DNE;
         }
         t->target_oloc.pool = root_pool;
@@ -3354,7 +3361,9 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
       // pool is migrating or has finished migration
       const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);
       if (!tpi) {
+        // As for the missing root pool above.
         t->osd = -1;
+        t->pool_ever_existed = false;
         return RECALC_OP_TARGET_POOL_DNE;
       }
       if (tpi->has_flag(pg_pool_t::FLAG_EIO)) {
@@ -3363,14 +3372,16 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
       bool migrated = false;
       if (!tpi->is_migration_target()) {
         // pool migration has finished
-        migrated = true;
+        migrated = !force_resend;
       } else {
         if (*tpi->migration_src != t->target_oloc.pool) {
           // cascaded pool migration, redirect to latest source pool
           // first, then work out the state of this migration
           const pg_pool_t *spi = osdmap->get_pg_pool(*tpi->migration_src);
           if (!spi) {
+            // As for the missing root pool above.
             t->osd = -1;
+            t->pool_ever_existed = false;
             return RECALC_OP_TARGET_POOL_DNE;
           }
           if (spi->has_flag(pg_pool_t::FLAG_EIO)) {
@@ -3391,8 +3402,9 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
           actual_pgid = pg_t(actual_ps, pgid.pool());
         }
         if (pi->has_pg_migrated(actual_pgid)) {
-          // PG has finished migration
-          migrated = true;
+          // PG has finished migration; route forced resends to the source PG
+          // so it can answer idempotently from pg_log/dups or redirect
+          migrated = !force_resend;
         } else if (pi->is_pg_migrating(actual_pgid)) {
           // PG is migrating - check watermark
           const auto& iter = pool_migration_watermarks.find(actual_pgid);
@@ -3416,6 +3428,17 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
         actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
         actual_pgid = pg_t(actual_ps, pgid.pool());
       }
+    }
+  }
+  // The OSD drops ops sent before the last_force_op_resend of the pool they
+  // arrive in, and pool migration can route them away from the base pool.
+  if (t->target_oloc.pool != t->base_oloc.pool &&
+      osdmap->get_epoch() == pi->last_force_op_resend) {
+    if (t->last_force_resend < pi->last_force_op_resend) {
+      t->last_force_resend = pi->last_force_op_resend;
+      force_resend = true;
+    } else if (t->last_force_resend == 0) {
+      force_resend = true;
     }
   }
   ldout(cct,20) << __func__ << " target " << t->target_oid << " "
@@ -4181,7 +4204,16 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 
   int rc = m->get_result();
 
-  if (m->is_redirect_reply()) {
+  if (m->is_redirect_reply() && m->get_redirect().is_pool_migration() &&
+      (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD)) {
+    // A direct read is planned for the shards of the pool that it was sent
+    // to, and resent unrouted it would go to the same shard: it takes the
+    // -EAGAIN path, as a direct read does when its PG changes. The cached
+    // watermark is left alone: the read is routed again, and if the source
+    // primary redirects it, that moves the watermark on the path below.
+    ldout(cct, 5) << " got pool migration redirect for direct read" << dendl;
+    rc = -EAGAIN;
+  } else if (m->is_redirect_reply()) {
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     const request_redirect_t& r = m->get_redirect();
 
@@ -4200,10 +4232,9 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
         }
       }
       r.update_migration_watermark(new_watermark);
-      // Remove all ops (including this one) from the OSDSession
-      // that need to be retried because the watermark has advanced.
-      // Other removed ops that are still inflight will later fail
-      // with redirect but will be ignored as stray
+      // Resend every op for this PG, on any session, whose object is between
+      // the cached watermark and the new one, this op included. A late reply
+      // to a removed op is ignored as stray or by the retry attempt check.
       //
       // Exclusive rwlock is required to:
       // 1. Ensure safe update of pool_migration_watermark
@@ -4212,31 +4243,70 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
       // 3. Permit linger ops to be moved between sessions
       bool found = false;
       ldout(cct, 15) << __func__ << " redirect for " << op->target.target_oid << " previous=" << previous_watermark << " new=" << new_watermark << dendl;
-      for (auto it = s->ops.begin(); it != s->ops.end(); ) {
-        if (it->second->target.actual_pgid.pgid == m->get_pg()) {
-          auto hobj = it->second->target.get_hobj(it->second->target.pgid);
-          if (previous_watermark.get_head() <= hobj && hobj < new_watermark.get_head()) {
-            ldout(cct, 20) << __func__ << " found for retrying " << it->second->tid << " " <<it->second->target.get_hobj() << dendl;
-            if (it->second->has_completion())
-              num_in_flight--;
-            retry.push_back(it->second);
-            if (it->second == op) {
-              found = true;
+      auto collect = [&](OSDSession *from) {
+        // from->lock is locked
+        for (auto it = from->ops.begin(); it != from->ops.end(); ) {
+          if (it->second->target.actual_pgid.pgid == m->get_pg()) {
+            auto hobj = it->second->target.get_hobj(it->second->target.pgid);
+            if (previous_watermark.get_head() <= hobj && hobj < new_watermark.get_head()) {
+              ldout(cct, 20) << __func__ << " found for retrying " << it->second->tid << " " << it->second->target.get_hobj()
+                             << " on osd." << from->osd << dendl;
+              if (it->second->has_completion())
+                num_in_flight--;
+              retry.push_back(it->second);
+              if (it->second == op) {
+                found = true;
+              }
+              _session_op_remove(from, it);
+            } else {
+              ldout(cct, 20) << __func__ << " not retrying " << it->second->tid << " " << it->second->target.get_hobj() << dendl;
+              ++it;
             }
-            _session_op_remove(s, it);
           } else {
-            ldout(cct, 20) << __func__ << " not retrying " << it->second->tid << " " << it->second->target.get_hobj() << dendl;
             ++it;
           }
-        } else {
-          ++it;
         }
+      };
+      collect(s);
+      if (!found) {
+        // Its object is already below the cached watermark, but it was sent
+        // to the source PG, on an older map say: retry it on its own.
+        ldout(cct, 15) << __func__ << " redirect for " << op->tid
+                       << " outside [" << previous_watermark << ","
+                       << new_watermark << "), retrying it alone" << dendl;
+        if (op->has_completion())
+          num_in_flight--;
+        retry.push_back(op);
+        _session_op_remove(s, op);
       }
-      ceph_assert(found);
       sl.unlock();
 
-      r.update_migration_watermark(
-         pool_migration_watermarks[m->get_pg()]);
+      // In-range ops on other sessions (reads on replicas, writes on an old
+      // primary's session) would otherwise reach the target after newer ops.
+      // rwlock keeps new ops out; one session lock is held at a time.
+      for (auto& p : osd_sessions) {
+        OSDSession *other = p.second;
+        if (other == s) {
+          continue;
+        }
+        unique_lock osl(other->lock);
+        collect(other);
+      }
+      {
+        unique_lock hsl(homeless_session->lock);
+        collect(homeless_session);
+      }
+      // Resend in submission order, whichever session each op came from.
+      retry.sort([](const Op *a, const Op *b) { return a->tid < b->tid; });
+
+      // Redirects from different sessions can arrive out of order, so only
+      // ever move the cached watermark forward.
+      {
+        hobject_t& cached = pool_migration_watermarks[m->get_pg()];
+        if (cached < new_watermark) {
+          cached = new_watermark;
+        }
+      }
 
       for (auto& it : retry) {
         _op_submit(it, sul, NULL);
@@ -4585,6 +4655,12 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
         list_context->pool_id = list_context->tgt_pool_id;
         break;
     }
+    if (!pool) { // a pool in the migration chain is gone
+      rl.unlock();
+      put_nlist_context_budget(list_context);
+      onfinish->complete(-ENOENT);
+      return;
+    }
   }
 
   ldout(cct, 10) << "Starting to read pool: " << list_context->pool_id << " at pos: " << list_context->pos << dendl;
@@ -4650,7 +4726,18 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 {
   ldout(cct, 10) << __func__ << " " << list_context << dendl;
 
-  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  bool migrating;
+  {
+    shared_lock rl(rwlock);
+    const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+    if (!pool) { // pool is gone
+      rl.unlock();
+      put_nlist_context_budget(list_context);
+      final_finish->complete(-ENOENT);
+      return;
+    }
+    migrating = pool->is_migrating();
+  }
 
   auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
@@ -4696,7 +4783,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
   // returned, otherwise the src and intermediate reads will re-emit every
   // object that was already paged out, causing massive duplication.
   if (list_context->current_stage == NListContext::TGT_READ &&
-      !pool->is_migrating()) {
+      !migrating) {
     if (list_context->list.size() >= list_context->max_entries) {
       ldout(cct, 20) << " hit max, returning results so far, "
          << list_context->list << dendl;
@@ -4709,7 +4796,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
   }
 
   //handling a pool currently in a pool-migration
-  if (pool->is_migrating()) {
+  if (migrating) {
     switch (list_context->current_stage) {
       case NListContext::TGT_READ:
         ldout(cct,10) << "Checking the tgt reading stage" << dendl;
@@ -4766,36 +4853,39 @@ void Objecter::combine_result_lists(NListContext *list_context) {
   //add all the objects from the tgt pool read
   for (const auto& obj : list_context->tgt_list) {
     uint32_t hash = get_object_hash_position(list_context->tgt_pool_id, obj.get_oid(), obj.get_nspace());
-    hash = reverse_bits_32(hash);
+    hash = hobject_t::_reverse_bits(hash);
     sortingPair.emplace_back(hash,obj);
   }
   //add all the objects from the src pool read
   for (const auto& obj : list_context->src_list) {
     uint32_t hash = get_object_hash_position(list_context->src_pool_id, obj.get_oid(), obj.get_nspace());
-    hash = reverse_bits_32(hash);
+    hash = hobject_t::_reverse_bits(hash);
     sortingPair.emplace_back(hash,obj);
   }
   //add all the objects from the second tgt pool read
   for (const auto& obj : list_context->intermediate_list) {
     uint32_t hash = get_object_hash_position(list_context->tgt_pool_id, obj.get_oid(), obj.get_nspace());
-    hash = reverse_bits_32(hash);
+    hash = hobject_t::_reverse_bits(hash);
     sortingPair.emplace_back(hash,obj);
   }
 
   // Sort the combined list of objects
   std::sort(sortingPair.begin(),sortingPair.end(),
     [](const HashObjectPair& a, const HashObjectPair& b) {
-      if (a.first != b.first) {
-        return a.first < b.first;
-      }
-      return a.second.oid < b.second.oid;
+      // Sort on everything that identifies an object, so that copies of the
+      // same object end up next to each other for std::unique below.
+      return std::tie(a.first, a.second.nspace, a.second.locator, a.second.oid) <
+             std::tie(b.first, b.second.nspace, b.second.locator, b.second.oid);
     });
 
   //deduplicate the objects in the mega list
   auto unique = std::unique(sortingPair.begin(), sortingPair.end(),
-  [](const HashObjectPair& a, HashObjectPair& b) {
-    //object is a duplicate if the ouid and the namespace are the same.
-    return a.second.oid == b.second.oid && a.second.nspace == b.second.nspace;
+  [](const HashObjectPair& a, const HashObjectPair& b) {
+    // Objects with the same name but a different locator key are different
+    // objects.
+    return a.second.oid == b.second.oid &&
+           a.second.nspace == b.second.nspace &&
+           a.second.locator == b.second.locator;
   });
   sortingPair.erase(unique, sortingPair.end());
 
@@ -4803,15 +4893,6 @@ void Objecter::combine_result_lists(NListContext *list_context) {
   for (const auto& object : sortingPair) {
     list_context->list.push_back(std::move(object.second));
   }
-}
-
-// Helper function to reverse the 32 bits of a hash.
-uint32_t Objecter::reverse_bits_32(uint32_t n) {
-  n = ((n >> 1)  & 0x55555555) | ((n & 0x55555555) << 1);
-  n = ((n >> 2)  & 0x33333333) | ((n & 0x33333333) << 2);
-  n = ((n >> 4)  & 0x0F0F0F0F) | ((n & 0x0F0F0F0F) << 4);
-  n = ((n >> 8)  & 0x00FF00FF) | ((n & 0x00FF00FF) << 8);
-  return (n >> 16) | (n << 16);
 }
 
 void Objecter::put_nlist_context_budget(NListContext *list_context)

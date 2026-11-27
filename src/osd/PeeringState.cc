@@ -4284,7 +4284,8 @@ void PeeringState::merge_from(
 
   info.last_complete = info.last_update;  // to fake out trim()
   pg_log.reset_recovery_pointers();
-  pg_log.trim(info.last_update, info);
+  const bool migration_src = pool.info.is_migration_src();
+  pg_log.trim(info.last_update, info, true, false, migration_src);
 
   vector<PGLog*> log_from;
   for (auto& i : sources) {
@@ -4322,7 +4323,7 @@ void PeeringState::merge_from(
     source->pg_log.roll_forward(&info, handler.get());
     source->info.last_complete = source->info.last_update;  // to fake out trim()
     source->pg_log.reset_recovery_pointers();
-    source->pg_log.trim(source->info.last_update, source->info);
+    source->pg_log.trim(source->info.last_update, source->info, true, false, migration_src);
     log_from.push_back(&source->pg_log);
 
     // combine stats
@@ -5192,7 +5193,7 @@ bool PeeringState::append_log_entries_update_missing(
       // write can result in trim_to being ahead of crt
       trim = pg_log.get_can_rollback_to();
     }
-    pg_log.trim(trim, info);
+    pg_log.trim(trim, info, true, false, pool.info.is_migration_src());
   }
   dirty_info = true;
   write_if_dirty(t);
@@ -5382,7 +5383,7 @@ void PeeringState::append_log(
     // write can result in trim_to being ahead of crt
     trim_to = pg_log.get_can_rollback_to();
   }
-  pg_log.trim(trim_to, info, transaction_applied, async);
+  pg_log.trim(trim_to, info, transaction_applied, async, pool.info.is_migration_src());
 
   // update the local pg, pg log
   dirty_info = true;
@@ -6722,13 +6723,14 @@ PeeringState::MigratingSource::react(const DeferPoolMigration &c)
   psdout(10) << "defer pool migration, retry delay " << c.delay << dendl;
   ps->state_set(PG_STATE_MIGRATION_WAIT);
   suspend_migration();
-
-  pl->schedule_event_after(
-    std::make_shared<PGPeeringEvent>(
-      ps->get_osdmap_epoch(),
-      ps->get_osdmap_epoch(),
-      DoPoolMigration()),
-    c.delay);
+  if (!pl->pool_migration_resume_after_drain(c.delay)) {
+    pl->schedule_event_after(
+      std::make_shared<PGPeeringEvent>(
+        ps->get_osdmap_epoch(),
+        ps->get_osdmap_epoch(),
+        DoPoolMigration()),
+      c.delay);
+  }
   return transit<NotMigrating>();
 }
 
@@ -6768,13 +6770,15 @@ PeeringState::MigratingSource::react(const PoolMigrationStoppedTooFull &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_TOOFULL);
   suspend_migration();
-
-  pl->schedule_event_after(
-    std::make_shared<PGPeeringEvent>(
-      ps->get_osdmap_epoch(),
-      ps->get_osdmap_epoch(),
-      DoPoolMigration()),
-    ps->cct->_conf.get_val<double>("osd_pool_migration_retry_interval"));
+  float delay = ps->cct->_conf.get_val<double>("osd_pool_migration_retry_interval");
+  if (!pl->pool_migration_resume_after_drain(delay)) {
+    pl->schedule_event_after(
+      std::make_shared<PGPeeringEvent>(
+        ps->get_osdmap_epoch(),
+        ps->get_osdmap_epoch(),
+        DoPoolMigration()),
+      delay);
+  }
   return transit<NotMigrating>();
 }
 
@@ -6784,6 +6788,9 @@ PeeringState::MigratingSource::react(const PoolMigrationStoppedRevoked &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_WAIT);
   suspend_migration();
+  if (pl->pool_migration_resume_after_drain(0)) {
+    return transit<NotMigrating>();
+  }
   return transit<WaitLocalPoolMigrationReserved>();
 }
 
@@ -6791,7 +6798,7 @@ boost::statechart::result
 PeeringState::MigratingSource::react(const PoolMigrationStoppedError &evt)
 {
   DECLARE_LOCALS;
-  psdout(1) << "migration stopped due to I/O error " << evt.error_code << dendl;
+  psdout(1) << "migration stopped with error " << evt.error_code << dendl;
   ps->state_set(PG_STATE_MIGRATION_ERROR);
   ps->state_clear(PG_STATE_MIGRATING);
   suspend_migration();
@@ -6932,7 +6939,7 @@ PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRe
       context< Active >().remote_shards_to_reserve_migration.end()) {
     if (*migration_osd_it == ps->pg_whoami) {
       if (!pl->try_reserve_recovery_space(
-	     num_bytes, 0, num_objects)) {
+	     num_bytes, 0, num_objects, true)) {
 	post_event(RemotePoolMigrationRejectedTooFull());
       } else {
 	pl->request_remote_recovery_reservation(
@@ -7200,7 +7207,7 @@ PeeringState::RepNotRecovering::react(const RemotePoolMigrationRequest &evt)
 {
   DECLARE_LOCALS;
   if (!pl->try_reserve_recovery_space(
-	evt.source_num_bytes, 0, evt.source_num_objects)) {
+	evt.source_num_bytes, 0, evt.source_num_objects, true)) {
     post_event(RemotePoolMigrationRejectedTooFull());
   } else {
     pl->request_remote_recovery_reservation(
@@ -8505,7 +8512,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MTrim& trim)
     // write can result in trim_to being ahead of crt
     trim_to = ps->pg_log.get_can_rollback_to();
   }
-  ps->pg_log.trim(trim.trim_to, ps->info);
+  ps->pg_log.trim(trim.trim_to, ps->info, true, false, ps->pool.info.is_migration_src());
   ps->dirty_info = true;
   return discard_event();
 }

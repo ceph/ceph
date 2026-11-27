@@ -3,6 +3,7 @@ Rados modle-based integration tests
 """
 
 import contextlib
+import json
 import logging
 from typing import Any, Dict
 
@@ -411,6 +412,16 @@ def task(ctx, config):
                     crush_name, crush_prof,
                     num_zones=config.get('num_zones', None),
                     erasure_code_profile_name=profile_name)
+            if config.get('migrate_pool', False):
+                # Pool migration needs vampire clients. By now the read
+                # balancer (reef), an msr EC profile (squid) or the suite's
+                # initial setting may have left it lower. Release names
+                # sort alphabetically, so only raise it, never lower it.
+                dump = json.loads(manager.raw_cluster_cmd(
+                    'osd', 'dump', '--format=json'))
+                if dump['require_min_compat_client'] < 'vampire':
+                    manager.raw_cluster_cmd(
+                        'osd', 'set-require-min-compat-client', 'vampire')
             tests = {}
             existing_pools = config.get('pools', [])
             created_pools = []

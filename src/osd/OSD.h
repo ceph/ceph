@@ -494,7 +494,13 @@ public:
   void prune_sent_ready_to_merge(const OSDMapRef& osdmap);
 
   // -- pg migrated pool --
+  ceph::mutex pg_migrated_pool_lock = ceph::make_mutex("OSDService::pg_migrated_pool_lock");
+  /// PGs that have reported finishing their migration (pgid -> migration
+  /// target) and are still listed as migrating in our osdmap
+  std::map<pg_t, int64_t> pg_migrated_pool;
   void send_pg_migrated_pool(std::optional<int64_t> migration_target, pg_t pgid);
+  void send_pg_migrated_pool();
+  void prune_pg_migrated_pool();
 
   // -- pg_temp --
 private:

@@ -589,6 +589,7 @@ public:
 	stats = stat;
 	return false;
       });
+    update_pool_migration_local_bytes();
   }
 
   void schedule_recovery_work(
@@ -1212,6 +1213,13 @@ protected:
   std::set<hobject_t> pool_migrations_in_flight;
   /// new writes blocked by pool migration
   std::set<hobject_t> pool_migration_blocked_writes;
+  /// Deletes that advanced the watermark but have not committed on every
+  /// shard yet: version of the delete -> the watermark it moved past. Until
+  /// they commit the advance can be rolled back by peering, so do_op must not
+  /// redirect ops for objects at or above the oldest entry.
+  std::map<eversion_t, hobject_t> pool_migration_uncommitted_watermarks;
+  /// ops waiting for an entry in pool_migration_uncommitted_watermarks to commit
+  std::list<OpRequestRef> waiting_for_pool_migration_commit;
   /// count of snaps being migrated per head object
   std::map<hobject_t,int> pool_migration_clones_in_flight;
   /// Heads with a live C_Migrate callback. Distinct from a head whose own copy
@@ -1240,8 +1248,9 @@ protected:
   PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   /// Error code that triggered quiesce (for logging and decision making)
   int pool_migration_quiesce_error_code = 0;
-  /// Flag to track if last_pool_migration_started has been reset during quiesce
-  bool pool_migration_quiesce_last_started_reset = false;
+  /// a suspended source resumes this long after its in-flight copies drain
+  bool pool_migration_resume_pending = false;
+  float pool_migration_resume_delay = 0;
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
@@ -1269,7 +1278,8 @@ protected:
   {
     pool_migration_watermark = watermark;
   }
-  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
+  std::optional<hobject_t> consider_updating_migration_watermark(
+    std::set<hobject_t> &deleted, const eversion_t &version) override;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
@@ -1486,6 +1496,7 @@ protected:
   void stop_pool_migration_revoked();
   void stop_pool_migration_error(int error_code);
   void on_pool_migration_source_suspended() override;
+  bool pool_migration_resume_after_drain(float delay) override;
   void on_pool_migration_target_reserved(HBHandle *handle) override;
   void on_pool_migration_target_suspended(bool toofull) override;
 
@@ -1528,7 +1539,10 @@ protected:
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
-  void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
+  /// r is passed to the copy callback; a copy-from op is only answered
+  /// for an r other than -ECANCELED
+  void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids,
+                   int r = -ECANCELED);
   void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_pool_migration_copy_ops(std::vector<ceph_tid_t> *tids);
 
@@ -1721,12 +1735,21 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
+  void release_recovering(const hobject_t &oid);
   void handle_pool_migration_copy_failure(hobject_t oid, int r, bool stale = false);
+  /// true if soid is in the range of objects whose migration is in progress
+  bool is_pool_migration_in_progress(const hobject_t& soid) const;
+  /// requeue blocked writes for objects that have left that range
+  void kick_pool_migration_blocked_writes();
+  /// drop heads from pool_migrations_in_flight that no outstanding op will drain
+  void drop_pool_migration_heads_without_ops();
   void handle_pool_migration_quiesce_complete();
 
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
+  void pool_migration_source_delete_pending();
+  void queue_pool_migration_source_deletes();
   void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark,
                                     HBHandle *handle = nullptr);
 

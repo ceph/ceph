@@ -25,7 +25,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 
-#include <cls/sem_set/ops.h>
 #include <iomanip> // for std::setw()
 #include <sstream>
 #include <algorithm>
@@ -2830,7 +2829,7 @@ void PGMap::get_health_checks(
     << "migrating";
 
     checks->add(
-        "POOL MIGRATION",
+        "POOL_MIGRATION",
         HEALTH_WARN,
         ss.str(),
         total_migrating_pools);

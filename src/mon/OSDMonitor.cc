@@ -4480,12 +4480,12 @@ bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (!have_pg_pool(m->pgid.pool())) {
-    // Pool deleted or being deleted
-    dout(20) << __func__ << " pool for " << m->pgid << " dne or being deleted" << dendl;
+  if (!osdmap.have_pg_pool(m->pgid.pool())) {
+    // Pool deleted
+    dout(20) << __func__ << " pool for " << m->pgid << " dne" << dendl;
     goto ignore;
   }
-  pi = std::as_const(*this).get_pg_pool(m->pgid.pool());
+  pi = *osdmap.get_pg_pool(m->pgid.pool());
 
   if (pi.get_pg_num() <= m->pgid.ps()) {
     // Duplicated message
@@ -4512,19 +4512,24 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   dout(10) << __func__ << " " << *m << dendl;
   if (!have_pg_pool(m->pgid.pool())) {
     dout(1) << __func__ << " source pool " << m->pgid.pool() << " deleted during migration" << dendl;
+    mon.no_reply(op);
     return false;
   }
-  pg_pool_t source_p = get_pg_pool(m->pgid.pool());
+  pg_pool_t source_p = std::as_const(*this).get_pg_pool(m->pgid.pool());
 
-  // Checked in preprocess
-  ceph_assert(source_p.migrating_pgs.contains(m->pgid));
-  ceph_assert(source_p.migration_target == m->migration_target);
+  if (!source_p.migrating_pgs.contains(m->pgid) ||
+      source_p.migration_target != m->migration_target) {
+    dout(10) << __func__ << " " << m->pgid << " already finished in this update" << dendl;
+    mon.no_reply(op);
+    return false;
+  }
 
   pg_t pgid = m->pgid;
   source_p.migrating_pgs.erase(pgid);
 
   if (!have_pg_pool(source_p.migration_target.value())) {
     dout(1) << __func__ << " target pool " << source_p.migration_target.value() << " deleted during migration" << dendl;
+    mon.no_reply(op);
     return false;
   }
 
@@ -4532,17 +4537,16 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
     dout(0) << "finished migration of pool " << pgid.pool() << dendl;
     pg_pool_t& target_p = get_pg_pool(source_p.migration_target.value());
-    // If the default flag is not set and its not on crimson then reset the pool
-    // flag for nopgchange
-    if (!(g_conf()->osd_pool_default_flag_nopgchange) && !(target_p.has_flag(pg_pool_t::FLAG_CRIMSON))) {
-      target_p.unset_flag(pg_pool_t::FLAG_NOPGCHANGE);
-    }
     target_p.migration_src.reset();
+    // Migration completed: routing changed, so force clients to re-resolve on
+    // the new map instead of completing stale-map ops with -ENOENT.
+    source_p.set_last_force_op_resend(pending_inc.epoch);
+    target_p.set_last_force_op_resend(pending_inc.epoch);
     target_p.last_change = pending_inc.epoch;
   } else if (source_p.lowest_migrated_pg == 0) {
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
-    const pg_pool_t target_p = std::as_const(*this).get_pg_pool(source_p.migration_target.value());
+    pg_pool_t& target_p = get_pg_pool(source_p.migration_target.value());
     auto migration_ratio = g_conf().get_val<double>("mon_pool_migration_max_pg_ratio");
     uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num(), migration_ratio);
     uint64_t num_pgs_to_add = migrating_pgs_target_total > source_p.migrating_pgs.size()
@@ -4562,12 +4566,19 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
       source_p.migrating_pgs.emplace(source_pg);
       source_p.lowest_migrated_pg -= 1;
     }
+    // A PG advanced source -> target, so routing changed: force clients to
+    // re-resolve on the new map instead of completing stale-map ops with -ENOENT.
+    source_p.set_last_force_op_resend(pending_inc.epoch);
+    target_p.set_last_force_op_resend(pending_inc.epoch);
   }
 
   source_p.last_change = pending_inc.epoch;
 
   pending_inc.new_pools[m->pgid.pool()] = source_p;
 
+  // the OSD expects no reply, but a peon that forwarded this keeps the routed
+  // request, and reports it as a slow op, until told there will be none
+  mon.no_reply(op);
   return true;
 }
 
@@ -6586,80 +6597,74 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ss.str());
     } else {
       if (f)
- f->open_array_section("pools");
+        f->open_array_section("pools");
       std::vector<int64_t> displayed_pools;
       for (auto &[pid, pdata] : osdmap.get_pools()) {
- // Without --show-all, suppress source/intermediate pools and only
- // show the tip of each migration chain (the target pool).
- // With --show-all, show every pool in the chain.
- if (!show_all && pdata.is_migration_src()) {
-   continue;
- }
- if (f) {
-   if (detail == "detail") {
-       // Without --show-all, show the root pool's ID for the migration
-       // target so operators see the original pool ID that clients still
-       // reference.  With --show-all, every pool uses its own real ID.
-       int64_t display_pid = pid;
-       if (!show_all && osdmap.is_pool_migration_target(pid)) {
-         for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
-  if (scan_pool.migration_target.has_value() &&
-      *scan_pool.migration_target == pid &&
-      scan_pid < display_pid) {
-    display_pid = scan_pid;
-  }
-         }
-       }
-     f->open_object_section("pool");
-     f->dump_int("pool_id", display_pid);
-     f->dump_string("pool_name", osdmap.get_pool_name(pid));
-     pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
-     osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
-     f->close_section();
-   } else {
-     f->dump_string("pool_name", osdmap.get_pool_name(pid));
-   }
- } else {
-    if (show_all) {
-      auto found = std::find(displayed_pools.begin(), displayed_pools.end(), pid);
-      if (found != displayed_pools.end()) {
-        continue; // This pool has alreay been displayed as part of a migration cascade
-      }
-      auto check_id = pdata.migration_target.value_or(pid);
-      std::vector<int64_t> cascade;
-
-      for (auto &[pool_id, pool_data] : osdmap.get_pools()) { // Loop through all the pools to get the migration cascade 
-        if (pool_data.migration_target == check_id) {
-          cascade.push_back(pool_id);
+        // Without --show-all, suppress source/intermediate pools and only
+        // show the tip of each migration chain (the target pool).
+        // With --show-all, show every pool in the chain.
+        if (!show_all && pdata.is_migration_src()) {
+          continue;
         }
-      }
-      if (cascade.empty()) { //if there is no cascade then this pool is not in a migration cascade so output it normally
-        rdata.append(osdmap.get_pool_name(pid) + "\n"); // since this is a standalone pool there is also no need to add it to the outputted pools list as it will only ever occur once
-      } else { // there is a migration cascade so now output them together 
-        rdata.append(osdmap.get_pool_name(cascade.front()) + "\n"); // Print the root pool unindented
-        displayed_pools.push_back(cascade.front()); //Add this pool to the list of pools that has been outputted already
-        for (size_t i = 1; i < cascade.size(); i++) {
-          rdata.append("    " + osdmap.get_pool_name(cascade[i]) + "\n"); // Print the other pools in the cascade indented
-          displayed_pools.push_back(cascade[i]);
+        if (f) {
+          if (detail == "detail") {
+            // Without --show-all, show the root pool's ID for the migration
+            // target so operators see the original pool ID that clients still
+            // reference.  With --show-all, every pool uses its own real ID.
+            int64_t display_pid = pid;
+            if (!show_all && osdmap.is_pool_migration_target(pid)) {
+              for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
+                if (scan_pool.migration_target.has_value() &&
+                    *scan_pool.migration_target == pid &&
+                    scan_pid < display_pid) {
+                  display_pid = scan_pid;
+                }
+              }
+            }
+            f->open_object_section("pool");
+            f->dump_int("pool_id", display_pid);
+            f->dump_string("pool_name", osdmap.get_pool_name(pid));
+            pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
+            osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
+            f->close_section();
+          } else {
+            f->dump_string("pool_name", osdmap.get_pool_name(pid));
+          }
+        } else if (show_all) {
+          if (std::find(displayed_pools.begin(), displayed_pools.end(), pid) !=
+              displayed_pools.end()) {
+            continue; // already shown as part of a migration chain
+          }
+          auto check_id = pdata.migration_target.value_or(pid);
+          // all the pools in the migration chain that ends at check_id
+          std::vector<int64_t> cascade;
+          for (auto &[pool_id, pool_data] : osdmap.get_pools()) {
+            if (pool_data.migration_target == check_id) {
+              cascade.push_back(pool_id);
+            }
+          }
+          if (cascade.empty()) {
+            // not part of a migration chain, so it is only shown once
+            rdata.append(osdmap.get_pool_name(pid) + "\n");
+          } else {
+            // the root unindented, then the rest of the chain indented,
+            // ending with the current target pool
+            rdata.append(osdmap.get_pool_name(cascade.front()) + "\n");
+            displayed_pools.push_back(cascade.front());
+            for (size_t i = 1; i < cascade.size(); i++) {
+              rdata.append("    " + osdmap.get_pool_name(cascade[i]) + "\n");
+              displayed_pools.push_back(cascade[i]);
+            }
+            rdata.append("    " + osdmap.get_pool_name(check_id) + "\n");
+            displayed_pools.push_back(check_id);
+          }
+        } else {
+          rdata.append(osdmap.get_pool_name(pid) + "\n");
         }
-        rdata.append("    " + osdmap.get_pool_name(check_id) + "\n"); //finally print the current target pool also indented
-        displayed_pools.push_back(check_id);
-      }
-    } else {
-      rdata.append(osdmap.get_pool_name(pid) + "\n");
-    }
-
-
-
-
-
-
-
-}
       }
       if (f) {
- f->close_section();
- f->flush(rdata);
+        f->close_section();
+        f->flush(rdata);
       }
     }
 
@@ -8676,7 +8681,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       uint32_t stripe_unit = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
 
       if (stripe_unit == 0) {
-        if (((erasure_code->get_supported_optimizations() & 
+        if (((erasure_code->get_supported_optimizations() &
               ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
             (ec_optimized ||
              cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
@@ -9344,6 +9349,29 @@ int OSDMonitor::check_pg_num(int64_t pool,
   return 0;
 }
 
+// the settings of a pool that 'osd pool create' does not take, for
+// 'osd pool migrate --inherit-params'
+static void inherit_pool_settings(const pg_pool_t &src, pg_pool_t &p)
+{
+  constexpr uint64_t state_flags = pg_pool_t::FLAG_FULL |
+    pg_pool_t::FLAG_INCOMPLETE_CLONES | pg_pool_t::FLAG_FULL_QUOTA |
+    pg_pool_t::FLAG_NEARFULL | pg_pool_t::FLAG_BACKFILLFULL |
+    pg_pool_t::FLAG_SELFMANAGED_SNAPS | pg_pool_t::FLAG_POOL_SNAPS |
+    pg_pool_t::FLAG_CREATING;
+  p.flags = (p.flags & state_flags) | (src.flags & ~state_flags);
+  p.min_size = src.min_size;
+  p.stripe_width = src.stripe_width;
+  p.nonprimary_shards = src.nonprimary_shards;
+  p.peering_crush_bucket_count = src.peering_crush_bucket_count;
+  p.peering_crush_bucket_barrier = src.peering_crush_bucket_barrier;
+  p.peering_crush_mandatory_member = src.peering_crush_mandatory_member;
+  p.peering_crush_bucket_target = src.peering_crush_bucket_target;
+  p.quota_max_bytes = src.quota_max_bytes;
+  p.quota_max_objects = src.quota_max_objects;
+  p.opts = src.opts;
+  p.application_metadata = src.application_metadata;
+}
+
 /**
  * @param name The name of the new pool
  * @param crush_rule The crush rule to use. If <0, will use the system default
@@ -9397,7 +9425,8 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const std::optional<int64_t> source_pool_id,
                                  bool enable_ec_optimizations,
                                  ostream *ss,
-                                 const string& rule_defaults)
+                                 const string& rule_defaults,
+                                 bool inherit_params)
 {
   if (crimson && pg_autoscale_mode.empty()) {
     // default pg_autoscale_mode to off for crimson, we'll error out below if
@@ -9563,7 +9592,8 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   uint32_t stripe_width = 0;
   // a pool over zones is always FastEC
-  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, num_zones > 1,
+  r = prepare_pool_stripe_width(pool_type, erasure_code_profile,
+                                enable_ec_optimizations || num_zones > 1,
                                 &stripe_width, ss);
   if (r) {
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
@@ -9732,7 +9762,13 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   // for 'Classic' - we support both EC-optimized and non-optimized EC pools.
   // For Crimson - only EC-optimized pools are supported.
-  if (pi->is_erasure()) {
+  if (enable_ec_optimizations) {
+    // Requested on the command line, so report why it cannot be done.
+    if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
+      *ss << r.error().message;
+      return r.error().error;
+    }
+  } else if (pi->is_erasure()) {
     if (crimson) {
       if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
         // for Crimson - failure is not an option
@@ -9768,14 +9804,6 @@ int OSDMonitor::prepare_new_pool(string& name,
       (pool_type == pg_pool_t::TYPE_REPLICATED ||
        (pi->allows_ecoptimizations() && !crimson))) {
     pi->set_flag(pg_pool_t::FLAG_OMAP);
-  }
-
-  if (enable_ec_optimizations) {
-    // User requested EC optimizations via command line
-    if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
-      *ss << r.error().message;
-      return r.error().error;
-    }
   }
 
   if (source_pool_id) {
@@ -9825,12 +9853,20 @@ int OSDMonitor::prepare_new_pool(string& name,
     spi->migration_src.reset();
     spi->migration_target = pool;
     pi->migration_src = source_pool_id.value();
+    // the target takes the source's name and its clients: keep its applications
+    pi->application_metadata = spi->application_metadata;
     pi->migration_target.reset();
     pi->migration_root = spi->migration_root.value_or(source_pool_id.value());
     spi->migration_root.reset();
+    // Routing changed: force clients to re-resolve on the new map so a stale
+    // client view of the migration state cannot synthesize a spurious -ENOENT.
+    spi->set_last_force_op_resend(pending_inc.epoch);
+    pi->set_last_force_op_resend(pending_inc.epoch);
+    if (inherit_params) {
+      inherit_pool_settings(*sp, *pi);
+    }
 
     spi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
-    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
       // The target pool for pool migration must have overwrites enabled
       // because clients will use the source pool to decide how to align
@@ -9839,7 +9875,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
     spi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
 
-    // FLAG_NOPGCHANGE only blocks new admin pg_num commands, not the mgr-driven
+    // Refusing pg_num commands on a migrating pool does not stop the mgr-driven
     // convergence toward pg_num_target or an in-flight merge (pg_num_pending <
     // pg_num). Pin both to the current pg_num so neither pool splits or merges
     // while migrating.
@@ -10911,6 +10947,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     return -EACCES;
   }
 
+  // the pools of a migration keep their PG counts until it is done
+  if ((var == "pg_num" || var == "pg_num_actual" ||
+       var == "pgp_num" || var == "pgp_num_actual") &&
+      p.is_migrating()) {
+    ss << "pool " << var << " change is disabled while the pool is migrating";
+    return -EPERM;
+  }
+
   if (var == "size") {
     if (int r = check_size_change(p, &ss); r < 0) {
       return r;
@@ -10998,12 +11042,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   } else if (var == "pg_num_actual") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
-      return -EPERM;
-    }
-    // Backstop the freeze applied at migration start: the mgr must not step
-    // pg_num toward its target while the pool is migrating.
-    if (p.is_migrating()) {
-      ss << "pool pg_num change is disabled while the pool is migrating";
       return -EPERM;
     }
     // check for Crimson pools
@@ -11284,12 +11322,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     bool clearing = (val == "false" || (interr.empty() && n == 0));
-    // A migrating pool keeps NOPGCHANGE for its whole lifetime; clearing it
-    // would let pg_num diverge from the value frozen at migration start.
-    if (var == "nopgchange" && clearing && p.is_migrating()) {
-      ss << "nopgchange cannot be cleared while the pool is migrating";
-      return -EPERM;
-    }
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
     } else if (clearing) {
@@ -16437,8 +16469,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // the named pool is the target of a migration already
     bool migrating_to = false;
 
-    // a migration with no parameters gives the target the source pool's
-    // settings, its zones and replica among them
+    // a migration takes its arguments and the defaults, as a new pool does;
+    // --inherit-params, on its own, gives the target the source pool's
+    // settings instead, its zones and replica among them
     bool migrate_no_params = false;
     if (is_migrate) {
       migrate_no_params = std::ranges::none_of(
@@ -16450,6 +16483,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           "zone_failure_domain", "osd_failure_domain", "replica", "class",
           "min_size", "crush_rule", "pg_autoscale_mode", "no_class"},
         [&cmdmap](const char *arg) { return cmdmap.contains(arg); });
+    }
+    const bool inherit_params =
+      is_migrate && cmd_getval_or<bool>(cmdmap, "inherit_params", false);
+    if (inherit_params && !migrate_no_params) {
+      ss << "--inherit-params cannot be combined with other pool parameters";
+      err = -EINVAL;
+      goto reply_no_propose;
     }
 
     if (is_migrate) {
@@ -16494,6 +16534,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
+      // Wait for a pending migration of this pool, from a resent command
+      // say: the rollback of a rename here would undo its pending rename.
+      if (pending_inc.new_pool_names.count(pool_id)) {
+        goto wait;
+      }
+      for (auto& [id, name] : pending_inc.new_pool_names) {
+        if (name == poolstr) {
+          goto wait;
+        }
+      }
+
       string old_pool_name;
       int suffix_iter = 1;
       while (true) {
@@ -16518,10 +16569,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
 
       const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
-      // the monitors run a command again, as after an election: a
-      // migration with no parameters leaves a pool that is being migrated
-      // as it is
-      if (src->is_migration_target() && migrate_no_params) {
+      // the monitors run a command again, as after an election:
+      // --inherit-params leaves a pool that is being migrated as it is
+      if (src->is_migration_target() && inherit_params) {
         ss << "pool '" << poolstr << "' is already being migrated";
         err = 0;
         goto reply_no_propose;
@@ -16586,13 +16636,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     // A migration's target is built from the arguments and the defaults, as
-    // a new pool is, or with no arguments from the source pool's parameters
+    // a new pool is, or with --inherit-params from the source pool's parameters
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
     if (is_migrate) {
       source_pool_id = migrating_to ? pool_id : migrate_pool_id;
       source_pool = &std::as_const(*this).get_pg_pool(*source_pool_id);
-      if (migrate_no_params) {
+      if (inherit_params) {
         pool_type_str = source_pool->get_type_name();
         pg_num_min = source_pool->get_pg_num_min();
         pg_num_max = source_pool->get_pg_num_max();
@@ -16637,7 +16687,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmdmap_t args = cmdmap;
     int64_t expected_num_objects = cmd_getval_or<int64_t>(
       cmdmap, "expected_num_objects",
-      migrate_no_params ? source_pool->expected_num_objects : 0);
+      inherit_params ? source_pool->expected_num_objects : 0);
     if (string positional_rule;
         pool_type == pg_pool_t::TYPE_REPLICATED &&
         cmd_getval(cmdmap, "erasure_code_profile", positional_rule) &&
@@ -16688,7 +16738,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
     apply_command_line(params, args);
-    if (migrate_no_params) {
+    if (inherit_params) {
       params = pool_create_params_of(
         load_pool_defaults(g_conf()), *source_pool, *osdmap.crush,
         source_pool->is_erasure() ?
@@ -16763,10 +16813,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    // For osd pool migrate with no parameters: the new pool is a full copy of
-    // the source pool, so the migration would be pointless.  Warn the user and
-    // require --yes-i-really-mean-it to proceed.
-    if (migrate_no_params && !confirm) {
+    // A migration to the layout the pool has moves every object for nothing
+    // but a new pool id; --inherit-params asks for that, anything else has to
+    // be confirmed.
+    if (is_migrate && !inherit_params && !confirm &&
+        pool_has_layout(*source_pool, poolstr, params, args,
+                        enable_ec_optimizations, zone_failure_domain, root,
+                        osd_failure_domain, device_class, repl_size,
+                        replica)) {
       ss << "The target pool would be identical to the source pool '" << poolstr << "'. "
          << "No migration is necessary. If you still want to perform this pointless migration, "
          << "add the --yes-i-really-mean-it flag.";
@@ -16881,7 +16935,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int64_t fast_read_param = cmd_getval_or<int64_t>(
-      cmdmap, "fast_read", migrate_no_params ? source_pool->fast_read : -1);
+      cmdmap, "fast_read", inherit_params ? source_pool->fast_read : -1);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
@@ -16890,9 +16944,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     const int64_t min_size = params.is_given("min_size") ? params.min_size : 0;
     int64_t target_size_bytes =
-      migrate_no_params ? source_pool->get_target_size_bytes() : 0;
+      inherit_params ? source_pool->get_target_size_bytes() : 0;
     double target_size_ratio =
-      migrate_no_params ? source_pool->get_target_size_ratio() : 0.0;
+      inherit_params ? source_pool->get_target_size_ratio() : 0.0;
     cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
     cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
     const string pg_autoscale_mode =
@@ -16934,7 +16988,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = prepare_pool_migration_names(
         migrate_pool_id, source_pool_name, poolstr, params,
         erasure_code_profile, zone_failure_domain, root, osd_failure_domain,
-        device_class, migrate_no_params, &crush_rule, &ss);
+        device_class, inherit_params, &crush_rule, &ss);
       if (err == -EAGAIN) {
         goto wait;
       }
@@ -16957,7 +17011,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                            force_create,
                            source_pool_id,
                            enable_ec_optimizations,
-                           &ss, rule_from_defaults(params));
+                           &ss, rule_from_defaults(params), inherit_params);
     if (err < 0) {
       switch(err) {
       case -EEXIST:
@@ -17922,7 +17976,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
  update:
   getline(ss, rs);
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
- 				    get_last_committed() + 1));
+				    get_last_committed() + 1));
   return true;
 
  wait:
@@ -18139,22 +18193,30 @@ bool OSDMonitor::_is_removed_snap(int64_t pool, snapid_t snap)
 	     << " - purged, [" << begin << "," << end << ")" << dendl;
     return true;
   }
-  // check the migration target pool
+  // A removal is recorded against the migration target of its time, which a
+  // later migration makes a source: check the target and every source
   const pg_pool_t *pi = osdmap.get_pg_pool(pool);
   if (pi && pi->migration_target.has_value()) {
     int64_t target_pool = pi->migration_target.value();
-    if (osdmap.in_removed_snaps_queue(target_pool, snap)) {
-      dout(10) << __func__ << " pool " << pool << " snap " << snap
-	       << " - in osdmap removed_snaps_queue for migration target pool "
-	       << target_pool << dendl;
-      return true;
-    }
-    r = lookup_purged_snap(target_pool, snap, &begin, &end);
-    if (r == 0) {
-      dout(10) << __func__ << " pool " << pool << " snap " << snap
-	       << " - purged in migration target pool " << target_pool
-	       << ", [" << begin << "," << end << ")" << dendl;
-      return true;
+    for (const auto& [chain_pool, chain_pi] : osdmap.get_pools()) {
+      if (chain_pool == pool ||
+          (chain_pool != target_pool &&
+           chain_pi.migration_target != target_pool)) {
+        continue;
+      }
+      if (osdmap.in_removed_snaps_queue(chain_pool, snap)) {
+        dout(10) << __func__ << " pool " << pool << " snap " << snap
+                 << " - in osdmap removed_snaps_queue for migration pool "
+                 << chain_pool << dendl;
+        return true;
+      }
+      r = lookup_purged_snap(chain_pool, snap, &begin, &end);
+      if (r == 0) {
+        dout(10) << __func__ << " pool " << pool << " snap " << snap
+                 << " - purged in migration pool " << chain_pool
+                 << ", [" << begin << "," << end << ")" << dendl;
+        return true;
+      }
     }
   }
   return false;

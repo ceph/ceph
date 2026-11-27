@@ -887,11 +887,18 @@ protected:
 
   PoolMigrationInterval pool_migration_info;
 
-  // The primary's num_bytes and local num_bytes for this pg, only valid
-  // during backfill for non-primary shards.
+  // The size this PG's shard will reach and its current size, while space
+  // is reserved for incoming data: on a backfill target (never the primary)
+  // and on every shard of a pool migration target, primary included.
   // Both of these are adjusted for EC to reflect the on-disk bytes
   std::atomic<int64_t> primary_num_bytes = 0;
   std::atomic<int64_t> local_num_bytes = 0;
+  // The reservation is for pool migration rather than backfill
+  std::atomic<bool> pool_migration_reserved = false;
+
+  // The on-disk bytes of this PG's shard for num_bytes and num_objects of
+  // logical data
+  int64_t shard_num_bytes(int64_t num_bytes, int64_t num_objects);
 
 public:
   // Space reserved for backfill is primary_num_bytes - local_num_bytes
@@ -905,14 +912,18 @@ public:
       return 0;
   }
 
+  // Backfill only: pool migration data arrives as ordinary writes, not
+  // pushes, and is tracked by update_pool_migration_local_bytes()
   bool is_remote_backfilling() {
-    return primary_num_bytes.load() > 0;
+    return primary_num_bytes.load() > 0 && !pool_migration_reserved.load();
   }
 
   bool try_reserve_recovery_space(int64_t primary,
 				  int64_t local,
-				  int64_t num_objects) override;
+				  int64_t num_objects,
+				  bool pool_migration) override;
   void unreserve_recovery_space() override;
+  void update_pool_migration_local_bytes();
 
   // If num_bytes are inconsistent and local_num- goes negative
   // it's ok, because it would then be ignored.
@@ -1083,6 +1094,7 @@ protected:
     UNREADABLE_OBJECT,
     DEGRADED_OBJECT,
     BLOCKED_OBJECT,
+    POOL_MIGRATION_COMMIT,
     CACHE_NOT_FULL,
     OBJECT_LOCK,
     PRIMARY_REPAIR, // Last waiting list

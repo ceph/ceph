@@ -703,7 +703,8 @@ private:
                        const std::optional<int64_t> source_pool_id,
                        bool enable_ec_optimizations,
                        std::ostream *ss,
-                       const std::string& rule_defaults = {});
+                       const std::string& rule_defaults = {},
+                       bool inherit_params = false);
   int prepare_new_pool(MonOpRequestRef op);
 
   void set_pool_flags(int64_t pool_id, uint64_t flags);

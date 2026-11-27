@@ -1016,6 +1016,26 @@ protected:
     get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
   }
 
+  // Helper - defer a source's migration, as a preempted reservation does
+  void test_event_defer_pool_migration(float delay)
+  {
+    dout(0) << "= test_event_defer_pool_migration =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      DeferPoolMigration(delay));
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
+  // Helper - resume a deferred source migration
+  void test_event_do_pool_migration()
+  {
+    dout(0) << "= test_event_do_pool_migration =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      PeeringState::DoPoolMigration());
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
   // Helper - start pool migration on target
   void test_event_start_target_pool_migration(int64_t num_bytes, int64_t num_objects)
   {
@@ -2034,6 +2054,68 @@ TEST_F(PeeringStateTest, PoolMigration) {
   // Verify that we got to active+clean
   verify_all_active_clean(eversion_t(), eversion_t());
   EXPECT_TRUE(get_listener(acting[0])->pg_migrated_pool_sent);
+}
+
+// A deferral with no copies in flight resumes on the state machine's timer
+TEST_F(PeeringStateTest, PoolMigrationDefer) {
+  dout(0) << "== PoolMigrationDefer ==" << dendl;
+  migrate_to_ec_pool_source();
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_source_reserved);
+  get_ps(acting[0])->state_set(PG_STATE_MIGRATING);
+  get_ps(acting[0])->state_clear(PG_STATE_MIGRATION_TOOFULL);
+  get_ps(acting[0])->state_clear(PG_STATE_MIGRATION_WAIT);
+  verify_all_active_migrating(eversion_t(), eversion_t());
+
+  auto *l = get_listener(acting[0]);
+  int scheduled = l->events_scheduled;
+  test_event_defer_pool_migration(2.5);
+  EXPECT_TRUE(l->pool_migration_source_suspended);
+  EXPECT_EQ(2.5f, l->pool_migration_resume_delay);
+  EXPECT_EQ(scheduled + 1, l->events_scheduled);
+  EXPECT_STREQ("Started/Primary/Active/NotMigrating",
+               get_ps(acting[0])->get_current_state());
+}
+
+// A deferral while copies are still in flight must not resume before the
+// listener has drained them: the old suspension would otherwise complete
+// under the restarted migration and leave it idle for good
+// (https://tracker.ceph.com/issues/82962)
+TEST_F(PeeringStateTest, PoolMigrationDeferWhileDraining) {
+  dout(0) << "== PoolMigrationDeferWhileDraining ==" << dendl;
+  migrate_to_ec_pool_source();
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_source_reserved);
+  get_ps(acting[0])->state_set(PG_STATE_MIGRATING);
+  get_ps(acting[0])->state_clear(PG_STATE_MIGRATION_TOOFULL);
+  get_ps(acting[0])->state_clear(PG_STATE_MIGRATION_WAIT);
+  verify_all_active_migrating(eversion_t(), eversion_t());
+
+  // copies in flight: the listener drains them and resumes itself
+  auto *l = get_listener(acting[0]);
+  l->pool_migration_drain_pending = true;
+  int scheduled = l->events_scheduled;
+  test_event_defer_pool_migration(2.5);
+  EXPECT_TRUE(l->pool_migration_source_suspended);
+  EXPECT_EQ(2.5f, l->pool_migration_resume_delay);
+  EXPECT_EQ(scheduled, l->events_scheduled);
+  EXPECT_STREQ("Started/Primary/Active/NotMigrating",
+               get_ps(acting[0])->get_current_state());
+
+  // the drain is done and the listener resumes: the source migrates again
+  l->pool_migration_drain_pending = false;
+  l->pool_migration_source_reserved = false;
+  test_event_do_pool_migration();
+  dispatch_all();
+  EXPECT_TRUE(l->pool_migration_source_reserved);
+  EXPECT_STREQ("Started/Primary/Active/MigratingSource",
+               get_ps(acting[0])->get_current_state());
 }
 
 // Multi-OSD test of peering with pool migration too full

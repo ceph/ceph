@@ -658,7 +658,7 @@ void ReplicatedBackend::submit_transaction(
     }
   }
   std::optional<hobject_t> migration_watermark =
-    parent->consider_updating_migration_watermark(deleted);
+    parent->consider_updating_migration_watermark(deleted, at_version);
   generate_transaction(
     t,
     coll,
