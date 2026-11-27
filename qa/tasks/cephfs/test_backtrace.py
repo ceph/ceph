@@ -161,7 +161,7 @@ class TestBacktrace(CephFSTestCase):
         extra_data_pool_name = data_pool + '_extra'
         extra_pool_id = self.fs.add_data_pool(extra_data_pool_name)
 
-        self.mount_a.run_shell(["mkdir", "dir_x", "filler"])
+        self.mount_a.run_shell(["mkdir", "dir_x", "dir_y", "filler"])
         self.mount_a.setfattr("dir_x", "ceph.dir.layout.pool", extra_data_pool_name)
 
         # Replay starts at a major segment, so the MDS trims its journal
@@ -232,6 +232,19 @@ class TestBacktrace(CephFSTestCase):
                      f"(states {states}), trying again with a new file")
         self.fail(f"backtrace stored before the failover in all {attempts} attempts")
 
+    def _cold_lookup(self, path, data):
+        """
+        Read path with a cold MDS cache, so that the MDS finds the inode by
+        the backtrace in the first data pool, and check that nothing was
+        recorded as damaged.
+        """
+        self.mount_a.umount_wait()
+        self.fs.rank_fail()
+        self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+        self.assertEqual(self.mount_a.read_file(path), data)
+        self.assertEqual(self.fs.mds_asok(["damage", "ls"]), [])
+
     def test_backtrace_old_pool_after_rename_and_replay(self):
         """
         That a file created in a non-default data pool still gets its
@@ -258,3 +271,57 @@ class TestBacktrace(CephFSTestCase):
         backtrace = self.fs.read_backtrace(file_ino, pool=data_pool)
         self.assertEqual(backtrace['pool'], extra_pool_id)
         self.assertEqual([f'file_{i}', 'dir_x'], [a['dname'] for a in backtrace['ancestors']])
+
+    def test_backtrace_old_pool_after_rename_with_hardlink(self):
+        """
+        That a file in a non-default data pool, hard linked and renamed in a
+        later journal segment, can still be opened through the hard link
+        with a cold cache after the MDS replays that segment.
+        """
+        data_pool, extra_pool_id = self._setup_old_pool()
+
+        def create(i):
+            self.mount_a.write_file(f"dir_x/file_{i}.tmp", "data")
+            return f"dir_x/file_{i}.tmp"
+
+        def link_and_rename(i):
+            self.mount_a.run_shell(["ln", f"dir_x/file_{i}.tmp", f"dir_y/lnk_{i}"])
+            self.mount_a.run_shell(["mv", f"dir_x/file_{i}.tmp", f"dir_x/file_{i}"])
+
+        i, file_ino = self._old_pool_window(create, link_and_rename)
+
+        self.fs.rank_fail()
+        self.fs.wait_for_daemons()
+        self.fs.mds_asok(["flush", "journal"])
+
+        backtrace = self.fs.read_backtrace(file_ino, pool=data_pool)
+        self.assertEqual(backtrace['pool'], extra_pool_id)
+        self.assertEqual([f'file_{i}', 'dir_x'], [a['dname'] for a in backtrace['ancestors']])
+        self._cold_lookup(f"dir_y/lnk_{i}", "data")
+
+    def test_backtrace_old_pool_after_unlink_to_stray(self):
+        """
+        That a hard-linked file in a non-default data pool, whose primary
+        link is removed in a later journal segment, keeps its backtrace in
+        the default data pool after the MDS replays that segment, so that
+        the remaining hard link can be opened with a cold cache.
+        """
+        data_pool, extra_pool_id = self._setup_old_pool()
+
+        def create(i):
+            self.mount_a.write_file(f"dir_x/file_{i}", "data")
+            self.mount_a.run_shell(["ln", f"dir_x/file_{i}", f"dir_y/lnk_{i}"])
+            return f"dir_x/file_{i}"
+
+        def unlink_primary(i):
+            self.mount_a.run_shell(["rm", f"dir_x/file_{i}"])
+
+        i, file_ino = self._old_pool_window(create, unlink_primary)
+
+        self.fs.rank_fail()
+        self.fs.wait_for_daemons()
+        self.fs.mds_asok(["flush", "journal"])
+
+        backtrace = self.fs.read_backtrace(file_ino, pool=data_pool)
+        self.assertEqual(backtrace['pool'], extra_pool_id)
+        self._cold_lookup(f"dir_y/lnk_{i}", "data")
