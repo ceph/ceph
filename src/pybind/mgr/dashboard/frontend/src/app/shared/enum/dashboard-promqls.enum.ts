@@ -6,7 +6,8 @@ export enum UtilizationCardQueries {
   WRITELATENCY = 'avg_over_time(ceph_osd_commit_latency_ms[1m])',
   READCLIENTTHROUGHPUT = 'sum(rate(ceph_pool_rd_bytes[1m]))',
   WRITECLIENTTHROUGHPUT = 'sum(rate(ceph_pool_wr_bytes[1m]))',
-  RECOVERYBYTES = 'sum(rate(ceph_osd_recovery_bytes[1m]))'
+  // Pool recovery is already a bytes/s gauge and includes EC backfill.
+  RECOVERYBYTES = 'sum(ceph_pool_recovering_bytes_per_sec)'
 }
 
 export enum CapacityCardQueries {
