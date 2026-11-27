@@ -12,7 +12,7 @@ from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
-from .utils import available_clusters
+from .utils import available_clusters, cephfs_client_for_mgr
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             cmount_path: Optional[str] = "/"
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
-        earmark_resolver = CephFSEarmarkResolver(self)
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.create_export(
             fsal_type='cephfs',
             fs_name=fsname,
@@ -120,8 +121,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @CLICheckNonemptyFileInput(desc='Export JSON or Ganesha EXPORT specification')
     @object_format.Responder()
     def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> AppliedExportResults:
-        earmark_resolver = CephFSEarmarkResolver(self)
         """Create or update an export by `-i <json_or_ganesha_export_file>`"""
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
 
@@ -187,7 +189,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         """Create or update an export by `export_config` which can be json string or ganesha export specification"""
-        earmark_resolver = CephFSEarmarkResolver(self)
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.apply_export(cluster_id, export_config=export_config,
                                             earmark_resolver=earmark_resolver)
 
