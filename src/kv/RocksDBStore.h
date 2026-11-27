@@ -287,6 +287,9 @@ public:
 
   int64_t estimate_prefix_size(const std::string& prefix,
 			       const std::string& key_prefix) override;
+  int64_t estimate_range_size(const std::string& prefix,
+                              const std::string& key_from,
+                              const std::string& key_to) override;
   struct RocksWBHandler;
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
@@ -559,7 +562,15 @@ public:
   };
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
   bool get_sharding(std::string& sharding);
-
+  void util_divide_key_range(
+    const std::string& prefix,        // Table to operate on.
+    const std::string& starting_key,  // Included if exists.
+    const std::string& guardrail_key, // Excluded if exists; but "" means up until table end
+    uint64_t chunk_count,             // Desired chunk count, can produce fewer when not enough data.
+    uint64_t min_chunk_size,          // Do not produce chunk smaller than this bytes.
+    float accepted_variance,          // +/- fluctuation of produced chunk size,
+                                      // there is a limit to prediction quality, recommended 0.05.
+    std::vector<keyrange_t>& chunks) override;
 };
 
 #endif
