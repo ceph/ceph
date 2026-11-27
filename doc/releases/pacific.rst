@@ -2600,7 +2600,7 @@ RBD block storage
 RGW object storage
 ~~~~~~~~~~~~~~~~~~
 
-* Initial support for S3 Select. See :ref:`s3-select-feature-table` for supported queries.
+* Initial support for S3 Select.
 
 * Bucket notification topics can be configured as ``persistent``, where events
   are recorded in rados for reliable delivery.

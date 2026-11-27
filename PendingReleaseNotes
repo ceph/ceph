@@ -94,8 +94,6 @@
 
 * RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
   FIFO-backed bilogs can only be trimmed from the front.
-* RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
-  changed from ``false`` to ``true``.
 * RGW: CopyObject now applies the destination bucket's default encryption
   when the request carries no encryption headers. Like PutObject, it also
   rejects SSE-C combined with SSE-KMS or SSE-S3 headers, and SSE-KMS
@@ -106,6 +104,15 @@
   replacing its metadata. An object written with ``aes-256-cbc`` counts as
   changed once ``rgw_crypt_sse_algorithm`` is ``aes-256-gcm``, and the new
   encryption can come from the bucket's default encryption.
+
+* RGW: S3 Select (SelectObjectContent) has been removed. Such requests now
+  fail with ``NotImplemented`` (HTTP 501). The ``rgw_disable_s3select`` and
+  ``rgw_parquet_buffer_size`` options were removed and should be dropped from
+  ceph.conf and the config database. Usage reports no longer include the
+  ``s3select`` section or the ``bytes_processed``/``bytes_returned`` totals
+  (``radosgw-admin usage show``, ``/admin/usage``), nor ``BytesProcessed``/
+  ``BytesReturned`` in the S3 GetUsage response. The
+  ``WITH_RADOSGW_SELECT_PARQUET`` build option was removed.
 
 * RGW: Fixed a bug in same-account evaluation of bucket policy statements that
   allow the account principal. Users and roles in that account now require a
