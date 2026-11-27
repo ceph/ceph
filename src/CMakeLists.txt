@@ -1187,11 +1187,11 @@ endif(WITH_RBD)
 
 # RadosGW
 if(WITH_RADOSGW)
-  # s3select parquet, arrow flight and s3vectors (lancedb) use the Arrow C++ API
-  if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
+  # arrow flight and s3vectors (lancedb) use the Arrow C++ API
+  if(WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
     if(WITH_SYSTEM_ARROW)
       find_package(Arrow 9 REQUIRED QUIET)
-      if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+      if(WITH_RADOSGW_ARROW_FLIGHT)
         find_package(Parquet 9 REQUIRED QUIET)
       endif()
     else()
@@ -1207,7 +1207,7 @@ if(WITH_RADOSGW)
       include(BuildArrow)
       build_arrow()
     endif(WITH_SYSTEM_ARROW)
-  endif(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
+  endif(WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
 
   add_subdirectory(crypto)
   add_subdirectory(libkmip)
