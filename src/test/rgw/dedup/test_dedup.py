@@ -5476,7 +5476,8 @@ def test_dedup_many_buckets():
 
     orig_max_buckets = info['max_buckets']
     log.info("orig_max_buckets=%d, setting unlimited max-buckets", orig_max_buckets)
-    result = admin(['user', 'modify', '--uid', uid, '--max-buckets', '0'])
+    # max_buckets < 0 means unlimited; 0 means disabled (see #82622 / PR #73449)
+    result = admin(['user', 'modify', '--uid', uid, '--max-buckets', '-1'])
     assert result[1] == 0, "failed to set unlimited max-buckets"
     try:
         conn = get_single_connection()
