@@ -174,10 +174,15 @@ class OpenSSLKeys(Task):
                 # verify the remote certificate (requires ca to be in its trusted ca certificate store)
                 cert.remote.run(args=['openssl', 'verify', cert.certificate])
         else:
-            # otherwise, generate a private key and use it to self-sign a new certificate
+            # otherwise, generate a private key and use it to self-sign a new
+            # certificate. These self-signed certs are used as CAs, so add
+            # basicConstraints/keyUsage: OpenSSL 3.5 (Ubuntu 26.04) rejects a
+            # CA that lacks a key usage extension.
             cert.remote.run(args=['openssl', 'req', '-x509', '-nodes',
                 '-newkey', cert.key_type, '-keyout', cert.key,
-                '-days', '365', '-out', cert.certificate, '-subj', subject])
+                '-days', '365', '-out', cert.certificate, '-subj', subject,
+                '-addext', 'basicConstraints=critical,CA:TRUE',
+                '-addext', 'keyUsage=critical,digitalSignature,keyCertSign,cRLSign'])
 
         if config.get('embed-key', False):
             # append the private key to the certificate file
