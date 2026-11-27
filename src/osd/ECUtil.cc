@@ -749,11 +749,29 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
 void shard_extent_map_t::pad_and_rebuild_to_ec_align() {
   bool resized = false;
   for (auto &&[shard, emap] : extent_maps) {
-    extent_map aligned;
-
     // Inserting while iterating is not supported in extent maps, make the
     // iterated-over emap const to help defend against mistakes.
     const extent_map &cemap = emap;
+
+    /* Each extent is padded with zeros to whole pages below, so two extents
+     * that share a page would each be padded over the other. Fill the gap
+     * between them with zeros first, so that they merge into one extent.
+     */
+    extent_set gaps;
+    std::optional<uint64_t> prev_end;
+    for (auto i = cemap.begin(); i != cemap.end(); ++i) {
+      if (prev_end && align_prev(i.get_off()) < align_next(*prev_end)) {
+        gaps.insert(*prev_end, i.get_off() - *prev_end);
+      }
+      prev_end = i.get_off() + i.get_len();
+    }
+    for (auto &&[off, len] : gaps) {
+      bufferlist bl;
+      bl.append_zero(len);
+      emap.insert(off, len, bl);
+    }
+
+    extent_map aligned;
     for (auto i = cemap.begin(); i != cemap.end(); ++i) {
       bool resized_i = false;
       bufferlist bl = i.get_val();
