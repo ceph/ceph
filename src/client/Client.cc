@@ -4636,8 +4636,19 @@ void Client::check_caps(const InodeRef& in, unsigned flags)
     if (!revoking && is_unmounting() && (cap_used == 0))
       goto ack;
 
+    /*
+     * Does the MDS still think we want to read or write a file that is
+     * no longer open here?  It counts every client wanting Fr or a
+     * write cap as a user of the file, keeps the filelock in MIX and
+     * no other client gets Fb or Fc back, while all the caps we hold
+     * may be ones we retain.  This only fires for bits the MDS was
+     * told about, so reopening an inode whose caps are still issued
+     * sends no update.
+     */
     if ((cap.issued & ~retain) == 0 && // and we don't have anything we wouldn't like
-	!in->dirty_caps)               // and we have no dirty caps
+	!in->dirty_caps &&             // and we have no dirty caps
+	(in->is_dir() ||               // and the MDS knows what we want
+	 !(cap.wanted & ~wanted & (CEPH_CAP_ANY_WR | CEPH_CAP_FILE_RD))))
       continue;
 
     if (!(flags & CHECK_CAPS_NODELAY)) {
