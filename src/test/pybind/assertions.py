@@ -1,3 +1,6 @@
+def assert_lesser(a, b):
+    assert a < b
+
 def assert_equal(a, b):
     assert a == b
 
