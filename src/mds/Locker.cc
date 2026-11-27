@@ -1089,6 +1089,19 @@ void Locker::invalidate_lock_caches(SimpleLock *lock)
   }
 }
 
+/*
+ * The only callers are Server::handle_client_openc() and the primary
+ * dentry case of Server::handle_client_unlink(), both after
+ * check_access(), and only with mds_allow_async_dirops set and a request
+ * path of a single component.  MDLockCache::get_cap_bit_for_lock_cache()
+ * aborts on any other opcode.  The callers don't check whether this
+ * client could be given Dc/Du; the Fx check below does.
+ *
+ * A lock cache issues no caps itself, but it keeps the directory's locks
+ * and auth-pins its dirfrags until it is invalidated, and it makes Dc/Du
+ * allowable on this cap (CInode::get_caps_allowed_for_client(),
+ * Locker::get_allowed_caps()).
+ */
 void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout)
 {
   if (mdr->lock_cache)
@@ -1121,9 +1134,19 @@ void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layou
     }
   }
 
+  // Dc and Du are issued only once a lock cache exists, so a client that
+  // wants them cannot hold them yet.  Wanting them isn't enough: clients
+  // can want caps they will never be given, and Dc/Du share their bits
+  // with Fc/Fr.  Dc/Du go only to a client that may hold Fx on the
+  // directory, and the kernel client sends an async create or unlink only
+  // while it holds Fx along with Dc or Du, so require Fx.
   int cap_bit = MDLockCache::get_cap_bit_for_lock_cache(opcode);
-  if (!(cap->issued() & cap_bit)) {
-    dout(10) << " client cap lacks rights for lock cache: " << ccap_string(cap_bit) << dendl;
+  if (!(cap->issued() & CEPH_CAP_FILE_EXCL)) {
+    dout(10) << " client cap lacks Fx, noop" << dendl;
+    return;
+  }
+  if (!((cap->issued() | cap->wanted()) & cap_bit)) {
+    dout(10) << " client cap neither holds nor wants " << ccap_string(cap_bit) << dendl;
     return;
   }
 
