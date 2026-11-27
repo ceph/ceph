@@ -463,14 +463,14 @@
          ],
          "targets": [
             {
-               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
+               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "reads",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
+               "expr": "rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "writes",
