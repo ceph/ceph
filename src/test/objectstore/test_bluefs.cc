@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <bit>
 #include <chrono>
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +17,7 @@
 #include "common/debug.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "include/page.h"
 #include "include/stringify.h"
 #include "include/scope_guard.h"
 #include "common/errno.h"
@@ -1223,6 +1225,70 @@ TEST_F(BlueFS_wal, wal_v2_check_split_header_small_alloc)
   many_small_reads("db.wal", "wal1.log", read_content, 4076 + 4077, 4076, 4077);
   ASSERT_EQ(content, read_content);
   fs.umount();
+}
+
+// Simulates a host whose VM page size differs from the 4K BlueFS
+// block size, as on 16K (Apple Silicon) or 64K aarch64 kernels.
+struct PageSizeOverride {
+  unsigned old_size = ceph::_page_size;
+  unsigned long old_mask = ceph::_page_mask;
+  unsigned old_shift = ceph::_page_shift;
+  explicit PageSizeOverride(unsigned size) {
+    ceph_assert(std::has_single_bit(size));
+    ceph::_page_size = size;
+    ceph::_page_mask = ~(unsigned long)(size - 1);
+    ceph::_page_shift = std::countr_zero(size);
+  }
+  ~PageSizeOverride() {
+    ceph::_page_size = old_size;
+    ceph::_page_mask = old_mask;
+    ceph::_page_shift = old_shift;
+  }
+};
+
+// Run the envelope-mode small-writes workload under a simulated 16K
+// page size. 256K of content crosses several appender refill
+// boundaries and buffer.clear() events.
+static void wal_v2_16k_page_size_case(BlueFS_wal& t, const char* alloc_size)
+{
+  PageSizeOverride page_size_override(16384);
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_alloc_size", alloc_size);
+  conf.ApplyChanges();
+
+  t.Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, t.fs.mount());
+
+  bufferlist content;
+  t.many_small_writes("db.wal", "wal1.log", content, 256 * 1024, 4076, 4077);
+  t.fs.umount();
+  t.fs.mount();
+  bufferlist read_content;
+  t.many_small_reads("db.wal", "wal1.log", read_content, 256 * 1024, 4076, 4077);
+  ASSERT_EQ(content, read_content);
+  t.fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_16k_page_size)
+{
+  // Reproducer for https://tracker.ceph.com/issues/79141: on hosts
+  // whose page size exceeds the BlueFS block size, the envelope
+  // header alignment assert in append_try_flush() fired for write
+  // positions that are block-aligned but not page-aligned.
+  //
+  wal_v2_16k_page_size_case(*this, "65536");
+}
+
+TEST_F(BlueFS_wal, wal_v2_16k_page_size_small_alloc)
+{
+  // Same with bluefs_alloc_size below the simulated page size: the
+  // appender's min_pages computation must round up rather than
+  // truncate to 0 pages, or append_hole() falls back to an unaligned
+  // buffer and the alignment assert fires.
+  //
+  wal_v2_16k_page_size_case(*this, "4096");
 }
 
 TEST_F(BlueFS_wal, wal_v2_check_feature)
