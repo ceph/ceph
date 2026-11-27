@@ -267,7 +267,8 @@ void PerfCounters::set_max(int idx, uint64_t amt)
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (!(data.type & PERFCOUNTER_U64))
+  // A plain u64 gauge or a (non-avg) time gauge, as for set_min_nonzero().
+  if (!(data.type & (PERFCOUNTER_U64 | PERFCOUNTER_TIME)))
     return;
   ceph_assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
 
