@@ -244,6 +244,10 @@ class PrometheusService(CephadmService):
         if not mgmt_gw_enabled:
             # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
             deps += mgr.cache.get_daemons_by_types(['mgr'])
+            # The per-mgr SD URLs only work on the active mgr. After a failover,
+            # Prometheus keeps the last targets of the now-dead URL, so reconfigure
+            # (restart) it whenever the active mgr changes.
+            deps.append(f'active_mgr:{mgr.get_mgr_id()}')
 
         if spec:
             prometheus_spec = cast(PrometheusSpec, spec)

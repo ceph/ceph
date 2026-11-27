@@ -750,7 +750,6 @@ class TestMonitoring:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
 
 
-
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -1045,7 +1044,6 @@ class TestMonitoring:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
                         key_file: prometheus.key
-
 
 
                 """).lstrip()
@@ -2490,6 +2488,7 @@ def _dependency_test_mgr():
     mgr.cache = MagicMock()
     mgr.service_discovery_port = 8765
     mgr.secure_monitoring_stack = False
+    mgr.get_mgr_id.return_value = 'a'
     mgr._get_security_config.return_value = (False, False, False)
     mgr._get_prometheus_credentials.return_value = (None, None)
     mgr._get_alertmanager_credentials.return_value = (None, None)
@@ -2611,9 +2610,48 @@ def test_prometheus_get_dependencies():
         'mgmt-gateway_configured:False',
         'oauth2-proxy_configured:True',
         'mgr.a',
+        'active_mgr:a',
         'remote_write_url:https://remote.example/api/v1/write',
         "remote_write_metrics:['ceph_health_status']",
     ])
+
+
+def _prometheus_deps_for(mgmt_gw_enabled, active_mgr_id):
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, mgmt_gw_enabled, False)
+    mgr.get_mgr_id.return_value = active_mgr_id
+    mgr.cache.get_daemons_by_service.return_value = []
+    mgr.cache.get_daemons_by_type.return_value = []
+    mgr.cache.get_daemons_by_types.return_value = []
+
+    with patch.object(
+        service_registry,
+        'get_services_requiring_monitoring',
+        return_value=[],
+    ):
+        return PrometheusService.get_dependencies(mgr, None, 'prometheus')
+
+
+def test_prometheus_dependencies_track_active_mgr():
+    # a failover changes the active mgr, which must change the dependencies
+    # so that prometheus is reconfigured and drops the stale ceph target
+    deps_a = _prometheus_deps_for(mgmt_gw_enabled=False, active_mgr_id='a')
+    deps_b = _prometheus_deps_for(mgmt_gw_enabled=False, active_mgr_id='b')
+
+    assert 'active_mgr:a' in deps_a
+    assert 'active_mgr:b' in deps_b
+    assert deps_a != deps_b
+
+
+def test_prometheus_dependencies_ignore_active_mgr_with_mgmt_gateway():
+    # with mgmt-gateway a single endpoint is used, so a failover must not
+    # trigger a prometheus reconfig
+    deps_a = _prometheus_deps_for(mgmt_gw_enabled=True, active_mgr_id='a')
+    deps_b = _prometheus_deps_for(mgmt_gw_enabled=True, active_mgr_id='b')
+
+    assert not any(d.startswith('active_mgr:') for d in deps_a)
+    assert deps_a == deps_b
 
 
 def test_node_exporter_get_dependencies():
