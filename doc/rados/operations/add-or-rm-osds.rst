@@ -364,6 +364,21 @@ The PG states change from ``active+clean`` to states such as
 to ``active+clean`` when migration completes. When you are finished observing,
 press Ctrl-C to exit.
 
+To follow the drain of the OSD that you took ``out``, list the PGs that are
+still mapped to it by running a command of the following form:
+
+.. prompt:: bash $
+
+   ceph pg ls-by-osd osd.{osd-num}
+
+A PG drops off this list when its data has finished moving to other OSDs, and
+the drain is complete when the command lists no PGs. The ``PGS`` column of
+``ceph osd df`` counts the same PGs, but its usage columns, such as ``SIZE``,
+``RAW USE``, and ``%USE``, show zeros for an OSD that is ``out``, so they
+cannot show how much data remains. If you use ``ceph orch osd rm`` to remove
+OSDs, run ``ceph orch osd rm status`` instead, as described in
+:ref:`cephadm-osd-removal`.
+
 .. note:: Under certain conditions, the action of taking ``out`` an OSD
    might lead CRUSH to encounter a corner case in which some PGs remain stuck
    in the ``active+remapped`` state. This problem sometimes occurs in small
