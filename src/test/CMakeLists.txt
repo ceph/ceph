@@ -1,5 +1,15 @@
 include(AddCephTest)
 
+if(WITH_FUSE)
+  add_ceph_test(cmake_fusestore_dependencies ${CMAKE_COMMAND}
+    "-DCEPH_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
+    "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/fusestore_dependencies"
+    "-DTEST_GENERATOR=${CMAKE_GENERATOR}"
+    "-DTEST_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+    "-DTEST_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_fusestore_dependencies.cmake")
+endif()
+
 find_package(Git QUIET)
 if(GIT_FOUND)
   add_ceph_test(cmake_git_revision ${CMAKE_COMMAND}
