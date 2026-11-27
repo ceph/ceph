@@ -902,20 +902,24 @@ function TEST_rebuild_perf_ec_increments() {
     }
 
     # min/max: exactly one window recorded here, so the longest single
-    # window (pg_vulnerability_duration.max_inc, from tinc_with_max) and the
-    # shortest (the companion pg_vulnerability_duration_min gauge) both equal
-    # the sum, in fractional seconds, and neither is truncated to 0.
+    # window (pg_vulnerability_duration_max) and the shortest
+    # (pg_vulnerability_duration_min) both equal the sum, in fractional
+    # seconds, and neither is truncated to 0. The _max gauge must also
+    # match the dump-only max_inc.
     local rebuild_max rebuild_min
-    rebuild_max=$(jq '.recoverystate_perf.pg_vulnerability_duration.max_inc' <<< "$dump")
+    rebuild_max=$(jq '.recoverystate_perf.pg_vulnerability_duration_max' <<< "$dump")
     rebuild_min=$(jq '.recoverystate_perf.pg_vulnerability_duration_min' <<< "$dump")
-    echo "INFO: max_inc=${rebuild_max}s pg_vulnerability_duration_min=${rebuild_min}s"
+    echo "INFO: pg_vulnerability_duration_max=${rebuild_max}s" \
+         "pg_vulnerability_duration_min=${rebuild_min}s"
     echo "$dump" | jq -e \
-      ".recoverystate_perf.pg_vulnerability_duration.max_inc >= ${gap_secs} and \
+      ".recoverystate_perf.pg_vulnerability_duration_max >= ${gap_secs} and \
+       .recoverystate_perf.pg_vulnerability_duration_max == \
+       .recoverystate_perf.pg_vulnerability_duration.max_inc and \
        .recoverystate_perf.pg_vulnerability_duration_min > 0 and \
        .recoverystate_perf.pg_vulnerability_duration_min <= \
-       .recoverystate_perf.pg_vulnerability_duration.max_inc" > /dev/null || {
-      echo "FAIL: pg_vulnerability_duration max_inc / _min not sane" \
-           "(max_inc=${rebuild_max}s, min=${rebuild_min}s, gap=${gap_secs}s)"
+       .recoverystate_perf.pg_vulnerability_duration_max" > /dev/null || {
+      echo "FAIL: pg_vulnerability_duration _max / _min not sane" \
+           "(max=${rebuild_max}s, min=${rebuild_min}s, gap=${gap_secs}s)"
       return 1
     }
 
@@ -940,10 +944,10 @@ function TEST_rebuild_perf_ec_increments() {
     local pg_rebuild_avgcount pg_rebuild_sum pg_rebuild_max pg_rebuild_min
     pg_rebuild_avgcount=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' <<< "$dump")
     pg_rebuild_sum=$(jq '.recoverystate_perf.pg_rebuild_duration.sum' <<< "$dump")
-    pg_rebuild_max=$(jq '.recoverystate_perf.pg_rebuild_duration.max_inc' <<< "$dump")
+    pg_rebuild_max=$(jq '.recoverystate_perf.pg_rebuild_duration_max' <<< "$dump")
     pg_rebuild_min=$(jq '.recoverystate_perf.pg_rebuild_duration_min' <<< "$dump")
     echo "INFO: pg_rebuild_duration avgcount=${pg_rebuild_avgcount}" \
-         "sum=${pg_rebuild_sum}s max_inc=${pg_rebuild_max}s min=${pg_rebuild_min}s"
+         "sum=${pg_rebuild_sum}s max=${pg_rebuild_max}s min=${pg_rebuild_min}s"
     test "$pg_rebuild_avgcount" -ge 1 || {
       echo "FAIL: expected pg_rebuild_duration.avgcount>=1, got" \
            "$pg_rebuild_avgcount"
@@ -951,12 +955,14 @@ function TEST_rebuild_perf_ec_increments() {
     }
     echo "$dump" | jq -e \
       ".recoverystate_perf.pg_rebuild_duration.sum > 0 and \
-       .recoverystate_perf.pg_rebuild_duration.max_inc > 0 and \
+       .recoverystate_perf.pg_rebuild_duration_max > 0 and \
+       .recoverystate_perf.pg_rebuild_duration_max == \
+       .recoverystate_perf.pg_rebuild_duration.max_inc and \
        .recoverystate_perf.pg_rebuild_duration_min > 0 and \
        .recoverystate_perf.pg_rebuild_duration_min <= \
-       .recoverystate_perf.pg_rebuild_duration.max_inc" > /dev/null || {
-      echo "FAIL: pg_rebuild_duration sum/max_inc/_min not sane (sum=" \
-           "${pg_rebuild_sum}s, max_inc=${pg_rebuild_max}s, min=${pg_rebuild_min}s)"
+       .recoverystate_perf.pg_rebuild_duration_max" > /dev/null || {
+      echo "FAIL: pg_rebuild_duration sum/_max/_min not sane (sum=" \
+           "${pg_rebuild_sum}s, max=${pg_rebuild_max}s, min=${pg_rebuild_min}s)"
       return 1
     }
 

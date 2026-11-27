@@ -2682,7 +2682,7 @@ public:
    * Close the active-rebuild latch: fold any still-armed span into
    * info.history.rebuild_active_accum (via pause_rebuild_span()), then
    * record the whole accumulated total as one rs_pg_rebuild_duration/
-   * rs_pg_rebuild_duration_min sample and reset it. No-op if no active
+   * rs_pg_rebuild_duration_min/_max sample and reset it. No-op if no active
    * rebuild time was ever accrued. Called from NotBackfilling/
    * NotRecovering (pause only, via pause_rebuild_span() -- see above)
    * and Recovered (the true close).

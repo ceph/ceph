@@ -4982,15 +4982,12 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
         const utime_t dur = now - info.history.last_degraded;
         if (dur.to_msec() > 0) {
           PerfCounters &perf = pl->get_peering_perf();
-          // tinc_with_max() accumulates the sum/avgcount AND tracks the
-          // longest single window (exposed as pg_vulnerability_duration's
-          // max_inc) with an atomic compare-exchange -- recoverystate_perf
-          // is one OSD-wide object shared by every PG shard. There is no
-          // built-in running min, so a companion gauge is updated the same
-          // way via set_min_nonzero(). Both are nanosecond-precision, so a
-          // sub-second window is not lost.
+          // recoverystate_perf is one OSD-wide object shared by every PG
+          // shard, so the min/max gauges are updated atomically. They hold
+          // nanoseconds, so a sub-second window is not lost.
           perf.tinc_with_max(rs_pg_vulnerability_duration, dur);
           perf.set_min_nonzero(rs_pg_vulnerability_duration_min, dur.to_nsec());
+          perf.set_max(rs_pg_vulnerability_duration_max, dur.to_nsec());
           psdout(15) << "rebuild-stats: recorded vulnerability window for "
                      << info.pgid << " onset=" << info.history.last_degraded
                      << " duration=" << dur << dendl;
@@ -6273,6 +6270,7 @@ void PeeringState::close_rebuild_span()
       PerfCounters &perf = pl->get_peering_perf();
       perf.tinc_with_max(rs_pg_rebuild_duration, dur);
       perf.set_min_nonzero(rs_pg_rebuild_duration_min, dur.to_nsec());
+      perf.set_max(rs_pg_rebuild_duration_max, dur.to_nsec());
       ldout(cct, 15) << "rebuild-stats: recorded rebuild span for "
                      << info.pgid << " duration=" << dur << dendl;
     } else {
