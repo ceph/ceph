@@ -4615,9 +4615,14 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
     dout(20) << "issue_client_lease seq " << lstat.seq << " dur " << lstat.duration_ms << "ms "
 	     << " on " << *dn << dendl;
   } else {
-    // null lease
+    // null lease: still tell the client whether this is the primary link,
+    // which it needs for an async unlink while holding Fs/Fx on the dir.
+    // Don't assert as above: while the dentry is being changed, the
+    // linkage this client can read need not match 'in' yet.
     LeaseStat lstat;
     lstat.mask = 0;
+    if (dn->get_linkage(client, mdr)->is_primary())
+      lstat.mask = CEPH_LEASE_PRIMARY_LINK;
     lstat.alternate_name = std::string(dn->alternate_name);
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
