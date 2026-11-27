@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt require ssl: false
+        rgw s3 block sse c by default: true

@@ -3777,6 +3777,16 @@ static int select_bucket_placement(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+static void set_default_bucket_encryption(
+    CephContext* cct, rgw::sal::Attrs& attrs)
+{
+  if (cct->_conf->rgw_s3_block_sse_c_by_default) {
+    RGWBucketEncryptionConfig config(
+        std::vector<std::string>{"SSE-C"});
+    config.encode(attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY]);
+  }
+}
+
 void RGWCreateBucket::execute(optional_yield y)
 {
   op_ret = get_params(y);
@@ -3936,6 +3946,8 @@ void RGWCreateBucket::execute(optional_yield y)
     filter_out_website(createparams.attrs, rmattr_names, info.website_conf);
     info.has_website = !info.website_conf.is_empty();
   }
+
+  set_default_bucket_encryption(s->cct, createparams.attrs);
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
@@ -8517,6 +8529,8 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
     policy.encode(aclbl);
     createparams.attrs[RGW_ATTR_ACL] = std::move(aclbl);
   }
+
+  set_default_bucket_encryption(s->cct, createparams.attrs);
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
