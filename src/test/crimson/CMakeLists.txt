@@ -10,6 +10,12 @@ add_ceph_unittest(unittest-crimson-backfill
   --memory 256M --smp 1)
 target_link_libraries(unittest-crimson-backfill crimson GTest::Main Boost::MPL)
 
+add_executable(unittest-crimson-cyan-object
+  test_cyan_object.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/os/cyanstore/cyan_object.cc)
+add_ceph_unittest(unittest-crimson-cyan-object)
+target_link_libraries(unittest-crimson-cyan-object crimson GTest::Main)
+
 add_executable(unittest-seastar-buffer
   test_buffer.cc)
 add_ceph_unittest(unittest-seastar-buffer
