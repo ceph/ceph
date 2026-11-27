@@ -128,10 +128,26 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
     !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+
+  // A client resends an op rejected with EAGAIN at once, based on its own
+  // osdmap. If ours is newer, send it first: it may tell the client to hold
+  // the op instead, e.g. once the pool is marked full because the store
+  // here is (see OpsExecuter::do_execute_op()). Otherwise the client may
+  // never learn of it, and resend the op for ever.
+  auto share_map = seastar::now();
+  if (err == -EAGAIN && m->get_map_epoch() < pg->get_osdmap_epoch()) {
+    DEBUGDPP("{}: client osdmap e{} is older than e{}, sending it maps",
+             *pg, *this, m->get_map_epoch(), pg->get_osdmap_epoch());
+    share_map = shard_services->send_incremental_map(
+      std::ref(get_foreign_connection()), m->get_map_epoch());
+  }
   // TODO: gate the crosscore sending
   return interruptor::make_interruptible(
-    get_foreign_connection().send_with_throttling(std::move(reply))
-  );
+    std::move(share_map)
+  ).then_interruptible([this, reply = std::move(reply)]() mutable {
+    return interruptor::make_interruptible(
+      get_foreign_connection().send_with_throttling(std::move(reply)));
+  });
 }
 
 ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptible(
