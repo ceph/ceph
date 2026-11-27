@@ -197,6 +197,14 @@ Default Kerberos service name to be used for Kafka SASL/GSSAPI:
 
 .. confval:: rgw_kafka_sasl_kerberos_service_name
 
+The following options set how long RGW tries to deliver each message, when it
+closes an idle connection to a broker, and how long it waits for replies from
+brokers:
+
+.. confval:: rgw_kafka_message_timeout
+.. confval:: rgw_kafka_connection_idle
+.. confval:: rgw_kafka_sleep_timeout
+
 Bucket Notification REST API
 ----------------------------
 
@@ -300,6 +308,14 @@ Request parameters:
   - ``sns:SetTopicAttributes``:  To set attributes for the existing topic
   - ``sns:DeleteTopic``:         To delete the existing topic
   - ``sns:Publish``:             To be able to create/subscribe notification on existing topic
+  - ``sns:CreateTopic``:         To update the existing topic with CreateTopic
+
+  For backward compatibility, if a topic has no policy, then users other than
+  its owner can still create notifications that publish to it, unless they are
+  :ref:`account users <radosgw-account>`. To require that ``sns:Publish`` be
+  granted to them by a policy, enable:
+
+  .. confval:: rgw_topic_require_publish_policy
 
 - HTTP endpoint
 

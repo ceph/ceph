@@ -4951,12 +4951,13 @@ options:
   type: bool
   level: basic
   desc: Whether to validate user permissions to publish notifications to topics.
-  long_desc: If true, all users (other then the owner of the topic) will need
-    to have a policy to publish notifications to topics.
-    The topic policy can be set by owner via CreateTopic() or SetTopicAttribute().
-    Following permissions can be granted "sns:Publish", "sns:GetTopicAttributes",
-    "sns:SetTopicAttributes", "sns:DeleteTopic" and "sns:CreateTopic" via Policy.
-    NOTE that even if set to "false" topics will still follow the policies if set on them.
+  long_desc: If true, all users other than the owner of a topic need a policy
+    that grants them "sns:Publish" on the topic in order to create bucket
+    notifications that publish to it. The owner can set the topic's policy with
+    CreateTopic or SetTopicAttributes. A topic policy can grant "sns:Publish",
+    "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:DeleteTopic", and
+    "sns:CreateTopic". Even if this is false, a topic that has a policy is
+    governed by it.
   default: false
   services:
   - rgw
@@ -5020,10 +5021,10 @@ options:
   type: uint
   level: advanced
   desc: Time in seconds to delete idle Kafka connections
-  long_desc: A connection will be considered "idle" if no messages
-    are sent to it for more than the time defined.
-    Note that the connection will not be considered idle, even if it is down,
-    as long as there are attempts to send messages to it.
+  long_desc: The time in seconds after which an idle Kafka connection is
+    closed. A connection is considered idle if no messages are sent to it for
+    more than this time. A connection that is down is not considered idle as
+    long as there are attempts to send messages to it.
   default: 300
   services:
   - rgw
@@ -5032,10 +5033,11 @@ options:
   type: uint
   level: advanced
   desc: Time in milliseconds to sleep while polling for Kafka replies
-  long_desc: This will be used to prevent busy waiting for the Kafka replies
-    As well as for the cases where the broker is down and we try to reconnect.
-    The same values times 3 will be used to sleep if there were no messages
-    sent or received across all Kafka connections
+  long_desc: The maximum time in milliseconds to wait for replies from each
+    Kafka connection on each pass of the Kafka thread. This prevents busy
+    waiting for replies, including while a broker is down. If no messages were
+    sent or received across all Kafka connections in a pass, the thread then
+    sleeps for three times this value.
   default: 10
   services:
   - rgw
@@ -5044,8 +5046,11 @@ options:
   type: uint
   level: advanced
   desc: This is the maximum time in milliseconds to deliver a message (including retries)
-  long_desc: Delivery error occurs when the message timeout is exceeded.
-    Value must be greater than zero, if set to zero, a value of 1 millisecond will be used.
+  long_desc: The maximum time in milliseconds to deliver a message to Kafka,
+    including retries. A delivery error occurs when this time is exceeded. The
+    value must be greater than zero. If it is set to zero, a value of 1
+    millisecond is used. A change applies only to Kafka connections that are
+    made after it.
   default: 5000
   services:
   - rgw
