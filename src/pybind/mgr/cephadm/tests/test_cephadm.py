@@ -4042,6 +4042,7 @@ Traceback (most recent call last):
                         HandleCommandResult(0, '', ''),
                         ('testpool', 'testgroup'),
                         True,
+                        False,
                     ),
                 ) as mock_ok_to_redeploy, mock.patch.object(
                     nvmeof_service,
@@ -4055,11 +4056,11 @@ Traceback (most recent call last):
                     cephadm_module,
                     '_daemon_action',
                 ) as mock_daemon_action:
-                    CephadmServe(
-                        cephadm_module
-                    )._check_daemons()
+                    serve = CephadmServe(cephadm_module)
+                    serve._check_daemons()
 
                 mock_ok_to_redeploy.assert_called_once()
+                assert serve._daemon_retry_requested is False
 
                 assert (
                     mock_ok_to_redeploy.call_args.kwargs[
@@ -4127,6 +4128,7 @@ Traceback (most recent call last):
                         ),
                         ('testpool', 'testgroup'),
                         False,
+                        True,
                     ),
                 ) as mock_ok_to_redeploy, mock.patch.object(
                     nvmeof_service,
@@ -4135,13 +4137,13 @@ Traceback (most recent call last):
                     cephadm_module,
                     '_daemon_action',
                 ) as mock_daemon_action:
-                    CephadmServe(
-                        cephadm_module
-                    )._check_daemons()
+                    serve = CephadmServe(cephadm_module)
+                    serve._check_daemons()
 
                 mock_ok_to_redeploy.assert_called_once()
                 mock_daemon_action.assert_not_called()
                 mock_enable_gateway.assert_not_called()
+                assert serve._daemon_retry_requested is True
 
                 # The action was deferred, so it should remain
                 # scheduled for a later serve iteration.
@@ -4205,6 +4207,7 @@ Traceback (most recent call last):
                     return_value=(
                         HandleCommandResult(0, '', ''),
                         ('testpool', 'testgroup'),
+                        False,
                         False,
                     ),
                 ) as mock_ok_to_redeploy, mock.patch.object(
@@ -4306,12 +4309,14 @@ Traceback (most recent call last):
                                 ),
                                 group,
                                 False,
+                                True,   # retry soon
                             )
 
                         return (
                             HandleCommandResult(0, '', ''),
                             group,
                             True,
+                            False,
                         )
 
                     with mock.patch.object(
@@ -4330,11 +4335,11 @@ Traceback (most recent call last):
                         cephadm_module,
                         '_daemon_action',
                     ) as mock_daemon_action:
-                        CephadmServe(
-                            cephadm_module
-                        )._check_daemons()
+                        serve = CephadmServe(cephadm_module)
+                        serve._check_daemons()
 
                     assert mock_ok_to_redeploy.call_count == 2
+                    assert serve._daemon_retry_requested is True
 
                     # Both gateways were considered, but after the
                     # first gateway from this group is redeployed,
