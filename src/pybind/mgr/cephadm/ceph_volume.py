@@ -1,4 +1,5 @@
 from cephadm.serve import CephadmServe
+from cephadm.utils import build_ceph_volume_cmd
 from typing import List, TYPE_CHECKING, Any, Dict, Set, Tuple
 if TYPE_CHECKING:
     from cephadm import CephadmOrchestrator
@@ -74,8 +75,7 @@ class CephVolume:
                 - A list of strings representing the standard error output of the command.
                 - An integer representing the return code of the command execution.
         """
-        cmd: List[str] = ['--']
-        cmd.extend(command)
+        cmd = build_ceph_volume_cmd(self.mgr.ceph_volume_log_level, command)
         result = await CephadmServe(self.mgr)._run_cephadm(
             hostname, 'osd', 'ceph-volume',
             cmd,
@@ -99,8 +99,7 @@ class CephVolume:
             Dict[str, Any]: The result of the command execution as a dictionary parsed from
                             the JSON output.
         """
-        cmd: List[str] = ['--']
-        cmd.extend(command)
+        cmd = build_ceph_volume_cmd(self.mgr.ceph_volume_log_level, command)
         result = await CephadmServe(self.mgr)._run_cephadm_json(
             hostname, 'osd', 'ceph-volume',
             cmd)
