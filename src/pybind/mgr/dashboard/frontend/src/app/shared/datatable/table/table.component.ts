@@ -266,6 +266,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Output() columnFiltersChanged = new EventEmitter<CdTableColumnFiltersChange>();
 
   /**
+   * Emits the changed column whenever the user shows/hides a column through
+   * the column selector in the table toolbar.
+   */
+  @Output()
+  columnVisibilityChange = new EventEmitter<CdTableColumn>();
+
+  /**
    * Use this variable to access the selected row(s).
    */
   selection = new CdTableSelection();
@@ -907,6 +914,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         // to the correct state.
         this.useData();
       });
+      context.visibleColumns = (this.visibleColumns ?? []).map((c) => c.prop);
       context.pageInfo.offset = this.userConfig.offset;
       context.pageInfo.limit = this.userConfig.limit;
       if (this.serverSide) context.search = this.search;
@@ -1148,6 +1156,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     }
     _.find(this.localColumns, (c: CdTableColumn) => c.prop === prop).isHidden = hide;
     this.updateColumns();
+    this.columnVisibilityChange.emit(column);
   }
 
   updateColumns() {

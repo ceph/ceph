@@ -38,6 +38,17 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 
 const BASE_URL = 'hosts';
 
+// Props of columns that display host hardware facts. Used in transformHostsData to mark them unavailable
+const HOST_FACT_PROPS = new Set([
+  'cpu_count',
+  'cpu_cores',
+  'memory_total_bytes',
+  'raw_capacity',
+  'hdd_count',
+  'flash_count',
+  'nic_count'
+]);
+
 @Component({
   selector: 'cd-hosts',
   templateUrl: './hosts.component.html',
@@ -224,6 +235,13 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTemplate: this.hostNameTpl
       },
       {
+        name: $localize`Service instances`,
+        prop: 'service_instances',
+        flexGrow: 1.5,
+        isHidden: true,
+        cellTemplate: this.servicesTpl
+      },
+      {
         name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
@@ -262,13 +280,13 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         flexGrow: 0.3
       },
       {
-        name: $localize`Total Memory`,
+        name: $localize`Total memory`,
         prop: 'memory_total_bytes',
         cellTemplate: this.hostDimlessTmpl,
         flexGrow: 0.4
       },
       {
-        name: $localize`Raw Capacity`,
+        name: $localize`Raw capacity`,
         prop: 'raw_capacity',
         cellTemplate: this.hostDimlessTmpl,
         flexGrow: 0.5
@@ -297,6 +315,13 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     this.columns = this.columns.filter((col: any) => {
       return !this.hiddenColumns.includes(col.prop);
     });
+  }
+
+  onColumnVisibilityChange(column: CdTableColumn) {
+    // Service instances are only fetched while their column is visible.
+    if (column.prop === 'service_instances') {
+      this.table.refreshBtn();
+    }
   }
 
   ngOnDestroy() {
@@ -507,9 +532,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       });
     } else {
       // mark host facts columns unavailable
-      for (let column = 4; column < this.columns.length; column++) {
-        this.columns[column]['cellTemplate'] = this.orchTmpl;
-      }
+      this.columns
+        .filter((col) => HOST_FACT_PROPS.has(col.prop as string))
+        .forEach((col) => (col.cellTemplate = this.orchTmpl));
     }
   }
 
@@ -530,7 +555,13 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         mergeMap((orchStatus) => {
           this.orchStatus = orchStatus;
           const factsAvailable = this.checkHostsFactsAvailable();
-          return this.hostService.list(this.tableContext?.toParams(), factsAvailable.toString());
+          const includeServiceInstances =
+            !!this.tableContext?.visibleColumns?.includes('service_instances');
+          return this.hostService.list(
+            this.tableContext?.toParams(),
+            factsAvailable.toString(),
+            includeServiceInstances
+          );
         })
       )
       .subscribe(
