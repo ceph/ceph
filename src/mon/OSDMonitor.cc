@@ -4539,6 +4539,10 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
     }
     target_p.migration_src.reset();
     target_p.last_change = pending_inc.epoch;
+    // The source is empty, and nothing changes its pg counts from now on:
+    // finish a pgp_num change that the migration held back.
+    source_p.set_pgp_num(source_p.get_pg_num());
+    source_p.set_pgp_num_target(source_p.get_pg_num());
   } else if (source_p.lowest_migrated_pg == 0) {
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
@@ -9845,9 +9849,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     // while migrating.
     for (pg_pool_t *mp : {spi, pi}) {
       mp->set_pg_num_target(mp->get_pg_num());
-      mp->set_pgp_num_target(mp->get_pgp_num());
       mp->set_pg_num_pending(mp->get_pg_num());
     }
+    // The mgr does not step pgp_num of a pool with FLAG_NOPGCHANGE, so the
+    // source keeps its pgp_num_target until the migration completes.
+    pi->set_pgp_num_target(pi->get_pgp_num());
 
     auto migration_ratio = g_conf().get_val<double>("mon_pool_migration_max_pg_ratio");
     uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num(), migration_ratio);
