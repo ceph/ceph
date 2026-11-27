@@ -567,11 +567,14 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
             )
             with write_new(helper_script_path, perms=0o700) as f:
                 f.write(cryptsetup_action)
+            # run the helper with bash instead of executing it, since the
+            # host's /tmp may be mounted noexec
             cryptsetup_open_container = CephContainer(
                 ctx,
                 image=ctx.image,
                 privileged=True,
-                entrypoint='/tmp/cryptsetup_action.sh',
+                entrypoint='/bin/bash',
+                args=['/tmp/cryptsetup_action.sh'],
                 volume_mounts={
                     '/dev': '/dev',
                     helper_script_path: '/tmp/cryptsetup_action.sh',

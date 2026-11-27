@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import unittest
@@ -616,6 +617,63 @@ def test_deploy_ceph_osd_keyring_key_changed_triggers_bluestore_update(cephadm_f
         assert f.read() == NEW_KEYRING
     # rotate_osd_lv_keyring MUST have been called because the key itself changed
     _rotate.assert_called_once()
+
+
+def test_rotate_osd_lv_keyring_encrypted_noexec_tmp(cephadm_fs):
+    """The cryptsetup helper for an encrypted OSD is written to the host's
+    /tmp, which may be mounted noexec, so it must be run with bash rather
+    than used as the container entrypoint."""
+    from cephadmlib.daemon_identity import DaemonIdentity
+    from cephadmlib.daemons.ceph import OSD
+
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    image = 'quay.io/ceph/ceph:latest'
+    keyring_path = f'/var/lib/ceph/{fsid}/osd.4/keyring'
+    cephadm_fs.create_file(
+        keyring_path,
+        contents='[osd.4]\nkey = AQAf9J9q/JuvFhAAts2n0E559zSx9hu2K8v9Fg==\n',
+    )
+    os.makedirs('/tmp', exist_ok=True)
+    lvm_list = {
+        '4': [
+            {
+                'type': 'block',
+                'lv_path': '/dev/ceph-vg/osd-block-lv',
+                'tags': {'ceph.encrypted': '1'},
+            }
+        ]
+    }
+
+    def _call(ctx, cmd, *args, **kwargs):
+        if 'lvm' in cmd and 'list' in cmd:
+            return json.dumps(lvm_list), '', 0
+        return '', '', 0
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.image = image
+        osd = OSD(
+            ctx,
+            DaemonIdentity(fsid, 'osd', '4'),
+            osd_fsid='00000000-0000-0000-0000-000000000000',
+            osd_dm_crypt_key='dmcryptkey',
+        )
+        with mock.patch('cephadmlib.daemons.ceph.call') as _call_mock:
+            _call_mock.side_effect = _call
+            osd.rotate_osd_lv_keyring(ctx, keyring_path)
+
+    cmds = [c.args[1] for c in _call_mock.call_args_list]
+    luks_open = [
+        cmd
+        for cmd in cmds
+        if any(a.endswith(':/tmp/cryptsetup_action.sh') for a in cmd)
+    ]
+    assert len(luks_open) == 1
+    cmd = luks_open[0]
+    assert cmd[cmd.index('--entrypoint') + 1] == '/bin/bash'
+    assert cmd[-2:] == [image, '/tmp/cryptsetup_action.sh']
+    assert not os.path.exists('/tmp/cephadm-osd-4-rotate-helper.sh')
 
 
 def test_deploy_ceph_osd_container_crimson(cephadm_fs, funkypatch):
