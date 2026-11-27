@@ -235,6 +235,19 @@ A custom placement target can be added to the ``api_name`` following a colon:
 
   <LocationConstraint>default:new-placement</LocationConstraint>
 
+The ``api_name`` can be left out, in which case the bucket is created in the
+zonegroup that receives the request:
+
+::
+
+  <LocationConstraint>:new-placement</LocationConstraint>
+
+In either form, the placement target must exist in the bucket's zonegroup, and
+the zone that receives the request must have pools for it. Otherwise the
+request fails with ``InvalidLocationConstraint``. The gateway does not look for
+the placement target in other zonegroups and does not fall back to a default
+placement target.
+
 Swift Bucket Placement
 ----------------------
 
