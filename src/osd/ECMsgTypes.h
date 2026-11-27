@@ -119,14 +119,34 @@ struct ECSubWriteReply {
 };
 WRITE_CLASS_ENCODER(ECSubWriteReply)
 
+// Per-object portion of an ECSubRead.  See ECSubRead for why this is
+// factored out into its own structure.
+struct ECSubReadRequest {
+  std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
+  std::vector<std::pair<int, int>> subchunks;
+  bool want_attrs = false;
+  bool want_omap_header = false;
+  std::optional<std::pair<std::string, uint64_t>> omap_read_from;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static std::list<ECSubReadRequest> generate_test_instances();
+};
+WRITE_CLASS_ENCODER(ECSubReadRequest)
+
 struct ECSubRead {
   pg_shard_t from;
   ceph_tid_t tid;
-  std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
-  std::set<hobject_t> attrs_to_read;
-  std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
-  std::set<hobject_t> omap_headers_to_read;
-  std::map<hobject_t, std::pair<std::string, uint64_t>> omap_read_from;
+  /*
+   * The per-object read requests.  Historically this was expressed as
+   * several parallel std::map/std::set containers all keyed by hobject_t
+   * (to_read, attrs_to_read, subchunks, omap_headers_to_read,
+   * omap_read_from).  That encoded the (large) hobject_t key up to five
+   * times per object on the wire.  When the peer supports SERVER_VAMPIRE we
+   * encode a single map keyed once by hobject_t; otherwise we fall back to
+   * the legacy layout for backwards compatibility.
+   */
+  std::map<hobject_t, ECSubReadRequest> requests;
   /**
     * Calculate the cost of the SubOp read operation for mClock scheduler.
     *
@@ -142,15 +162,35 @@ struct ECSubRead {
 };
 WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 
+// Per-object portion of an ECSubReadReply.  See ECSubReadReply for why this
+// is factored out into its own structure.
+struct ECSubReadResponse {
+  std::list<std::pair<uint64_t, ceph::buffer::list> > buffers_read;
+  std::map<std::string, ceph::buffer::list, std::less<>> attrs_read;
+  std::optional<int> error;
+  std::optional<ceph::buffer::list> omap_header_read;
+  std::optional<std::map<std::string, ceph::buffer::list>> omap_entries_read;
+  bool omap_complete = false;
+  // The read data (buffers_read payloads) is encoded into a separate
+  // bufferlist (d_bl) to preserve page alignment, matching the legacy
+  // layout.  Everything else is encoded inline into p_bl.
+  void encode(ceph::buffer::list &p_bl, ceph::buffer::list &d_bl) const;
+  void decode(ceph::buffer::list::const_iterator &p_bl,
+	      ceph::buffer::list::const_iterator &d_bl);
+  void dump(ceph::Formatter *f) const;
+};
+
 struct ECSubReadReply {
   pg_shard_t from;
   ceph_tid_t tid;
-  std::map<hobject_t, std::list<std::pair<uint64_t, ceph::buffer::list> >> buffers_read;
-  std::map<hobject_t, std::map<std::string, ceph::buffer::list, std::less<>>> attrs_read;
-  std::map<hobject_t, int> errors;
-  std::map<hobject_t, ceph::buffer::list> omap_headers_read;
-  std::map<hobject_t, std::map<std::string, ceph::buffer::list>> omap_entries_read;
-  std::map<hobject_t, bool> omaps_complete;
+  /*
+   * The per-object read results.  As with ECSubRead::requests, this
+   * replaces several parallel containers keyed by hobject_t (buffers_read,
+   * attrs_read, errors, omap_headers_read, omap_entries_read,
+   * omaps_complete) with a single map keyed once by hobject_t when the peer
+   * supports SERVER_VAMPIRE, falling back to the legacy layout otherwise.
+   */
+  std::map<hobject_t, ECSubReadResponse> responses;
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_pl,

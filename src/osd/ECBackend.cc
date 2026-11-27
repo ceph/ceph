@@ -525,9 +525,12 @@ void ECBackend::handle_sub_read(
   const ZTracer::Trace &trace) {
   trace.event("handle sub read");
   shard_id_t shard = get_parent()->whoami_shard().shard;
-  for (auto &&[hoid, to_read]: op.to_read) {
+  for (auto &&[hoid, req]: op.requests) {
+    if (req.to_read.empty()) {
+      continue;
+    }
     int r = 0;
-    for (auto &&[offset, len, flags]: to_read) {
+    for (auto &&[offset, len, flags]: req.to_read) {
       bufferlist bl;
       r = switcher->store->read(
         switcher->ch,
@@ -552,37 +555,39 @@ void ECBackend::handle_sub_read(
       } else {
         dout(20) << __func__ << " read request=" << len << " r=" << r << " len="
           << bl.length() << dendl;
-        reply->buffers_read[hoid].push_back(make_pair(offset, bl));
+        reply->responses[hoid].buffers_read.push_back(make_pair(offset, bl));
       }
     }
     continue;
   error:
     // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
     // the state of our chunk in case other chunks could substitute.
-    reply->buffers_read.erase(hoid);
-    reply->errors[hoid] = r;
+    reply->responses[hoid].buffers_read.clear();
+    reply->responses[hoid].error = r;
   }
-  for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
-       i != op.attrs_to_read.end();
-       ++i) {
+  for (auto &&[hoid, req]: op.requests) {
+    if (!req.want_attrs) {
+      continue;
+    }
     dout(10) << __func__ << ": fulfilling attr request on "
-	     << *i << dendl;
-    if (reply->errors.contains(*i))
+	     << hoid << dendl;
+    auto &resp = reply->responses[hoid];
+    if (resp.error)
       continue;
     int r = switcher->store->getattrs(
       switcher->ch,
       ghobject_t(
-        *i, ghobject_t::NO_GEN, shard),
-      reply->attrs_read[*i]);
+        hoid, ghobject_t::NO_GEN, shard),
+      resp.attrs_read);
     if (r < 0) {
       // If we read error, we should not return the attrs too.
-      reply->attrs_read.erase(*i);
-      reply->buffers_read.erase(*i);
-      reply->errors[*i] = r;
+      resp.attrs_read.clear();
+      resp.buffers_read.clear();
+      resp.error = r;
       continue;
     }
 
-    if (!op.omap_headers_to_read.contains(*i)) {
+    if (!req.want_omap_header) {
       continue;
     }
 
@@ -594,8 +599,8 @@ void ECBackend::handle_sub_read(
     // say that we want to read omap data.
     // Now we have access to the OI attribute so we can determine if omap data
     // should be read or not.
-    auto oi_iter = reply->attrs_read[*i].find(OI_ATTR);
-    if (oi_iter == reply->attrs_read[*i].end()) {
+    auto oi_iter = resp.attrs_read.find(OI_ATTR);
+    if (oi_iter == resp.attrs_read.end()) {
       continue;
     }
 
@@ -604,69 +609,78 @@ void ECBackend::handle_sub_read(
       auto p = oi_iter->second.cbegin();
       decode(oi, p);
       if (!oi.is_omap()) {
-        reply->omaps_complete[*i] = true;
-        dout(20) << __func__ << ": object " << *i
+        resp.omap_complete = true;
+        dout(20) << __func__ << ": object " << hoid
                  << " has no omap flag, skipping omap read" << dendl;
       } else {
-        dout(20) << __func__ << ": object " << *i
+        dout(20) << __func__ << ": object " << hoid
                  << " has omap flag set" << dendl;
       }
     } catch (ceph::buffer::error& e) {
-      lgeneric_derr(cct) << __func__ << ": failed to decode OI for " << *i
+      lgeneric_derr(cct) << __func__ << ": failed to decode OI for " << hoid
               << ": " << e.what() << dendl;
-      get_parent()->clog_warn() << "corrupt object info attribute for " << *i;
-      reply->errors[*i] = -EIO;
+      get_parent()->clog_warn() << "corrupt object info attribute for " << hoid;
+      resp.error = -EIO;
       continue;
     }
   }
 
   if (get_parent()->get_pool().supports_omap()) {
-    for (set<hobject_t>::iterator i = op.omap_headers_to_read.begin();
-         i != op.omap_headers_to_read.end();
-         ++i) {
+    for (auto &&[hoid, req]: op.requests) {
+      if (!req.want_omap_header) {
+        continue;
+      }
       dout(20) << __func__ << ": fulfilling omap header request on "
-               << *i << dendl;
-      if (reply->errors.contains(*i)) {
+               << hoid << dendl;
+      auto &resp = reply->responses[hoid];
+      if (resp.error) {
         continue;
       }
 
       // Skip if attrs already proved omap processing is complete.
-      if (reply->omaps_complete.contains(*i) && reply->omaps_complete[*i]) {
-        dout(20) << __func__ << ": skipping omap header read for " << *i
+      if (resp.omap_complete) {
+        dout(20) << __func__ << ": skipping omap header read for " << hoid
                  << " (no omap flag)" << dendl;
         continue;
       }
 
+      bufferlist header;
       int r = omap_get_header(
         switcher->ch,
-        ghobject_t(*i, ghobject_t::NO_GEN, shard),
-        &reply->omap_headers_read[*i], false,
+        ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+        &header, false,
         switcher->store);
       if (r < 0) {
-        reply->attrs_read.erase(*i);
-        reply->omap_headers_read.erase(*i);
-        reply->buffers_read.erase(*i);
-        reply->errors[*i] = r;
+        resp.attrs_read.clear();
+        resp.omap_header_read.reset();
+        resp.buffers_read.clear();
+        resp.error = r;
+      } else {
+        resp.omap_header_read = std::move(header);
       }
     }
 
-    for (auto const& [hoid, read_from] : op.omap_read_from) {
-      auto const&[start_key, max_bytes] = read_from;
+    for (auto &&[hoid, req]: op.requests) {
+      if (!req.omap_read_from) {
+        continue;
+      }
+      auto const&[start_key, max_bytes] = *req.omap_read_from;
       dout(20) << __func__ << ": fulfilling omap read request on " << hoid
               << " from key " << start_key << dendl;
 
-      if (reply->errors.contains(hoid))
+      auto &resp = reply->responses[hoid];
+      if (resp.error)
         continue;
 
       // Skip if attrs already proved omap processing is complete.
-      if (reply->omaps_complete.contains(hoid) && reply->omaps_complete[hoid]) {
+      if (resp.omap_complete) {
         dout(20) << __func__ << ": skipping omap entries read for " << hoid
                  << " (no omap flag)" << dendl;
         continue;
       }
 
       std::map<std::string, ceph::buffer::list> current_batch;
-      reply->omaps_complete[hoid] = false;
+      resp.omap_complete = false;
 
       uint64_t available = max_bytes;
       const auto result = omap_iterate(
@@ -695,15 +709,15 @@ void ECBackend::handle_sub_read(
         }, switcher->store);
 
       if (result < 0) {
-        reply->attrs_read.erase(hoid);
-        reply->omap_headers_read.erase(hoid);
-        reply->buffers_read.erase(hoid);
-        reply->errors[hoid] = result;
+        resp.attrs_read.clear();
+        resp.omap_header_read.reset();
+        resp.buffers_read.clear();
+        resp.error = result;
         current_batch.clear();
       } else if (result == 0) {
-        reply->omaps_complete[hoid] = true;
+        resp.omap_complete = true;
       }
-      reply->omap_entries_read[hoid] = std::move(current_batch);
+      resp.omap_entries_read = std::move(current_batch);
     }
   }
 
@@ -774,62 +788,132 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
+  const bool supports_omap = get_parent()->get_pool().supports_omap();
   if (cct->_conf->bluestore_debug_inject_read_err) {
-    for (auto i = op.buffers_read.begin();
-         i != op.buffers_read.end();
-         ++i) {
+    for (auto &&[hoid, resp]: op.responses) {
+      if (resp.buffers_read.empty()) {
+        continue;
+      }
       if (ECInject::test_read_error0(
-        ghobject_t(i->first, ghobject_t::NO_GEN, op.from.shard))) {
+        ghobject_t(hoid, ghobject_t::NO_GEN, op.from.shard))) {
         dout(0) << __func__ << " Error inject - EIO error for shard "
                 << op.from.shard << dendl;
-        op.buffers_read.erase(i->first);
-        op.attrs_read.erase(i->first);
-        op.errors[i->first] = -EIO;
+        resp.buffers_read.clear();
+        resp.attrs_read.clear();
+        resp.error = -EIO;
         rop.debug_log.emplace_back(ECUtil::INJECT_EIO, op.from);
       }
     }
   }
-  for (auto &&[hoid, offset_buffer_map]: op.buffers_read) {
-    ceph_assert(!op.errors.contains(hoid));
-    // If attribute error we better not have sent a buffer
-    if (!rop.to_read.contains(hoid)) {
-      rop.debug_log.emplace_back(ECUtil::CANCELLED, op.from);
+  // Process each object's results.  Error handling runs before the
+  // processed_read_requests loop below so that errored shards are skipped
+  // there (via complete.errors).
+  uint64_t recv_bytes = 0;
+  for (auto &&[hoid, resp]: op.responses) {
+    if (!resp.buffers_read.empty()) {
+      ceph_assert(!resp.error);
+      // If attribute error we better not have sent a buffer
+      if (!rop.to_read.contains(hoid)) {
+        rop.debug_log.emplace_back(ECUtil::CANCELLED, op.from);
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+      } else {
+        if (!rop.complete.contains(hoid)) {
+          rop.complete.emplace(hoid, &sinfo);
+        }
+        auto &buffers_read = rop.complete.at(hoid).buffers_read;
+        for (auto &&[offset, buffer_list]: resp.buffers_read) {
+          recv_bytes += buffer_list.length();
+          buffers_read.insert_in_shard(sinfo.get_rel_shard(from_rel_shard), offset, buffer_list);
+        }
+        rop.debug_log.emplace_back(ECUtil::READ_DONE, op.from, buffers_read);
 
-      // We canceled this read! @see filter_read_op
-      dout(20) << __func__ << " to_read skipping" << dendl;
-      continue;
+        // zero length reads may need to be zero padded during recovery
+        if (!buffers_read.contains_shard(from_rel_shard)) {
+          rop.complete.at(hoid).zero_length_reads.insert(from_rel_shard);
+        }
+      }
     }
 
-    if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+    if (!resp.attrs_read.empty()) {
+      ceph_assert(!resp.error);
+      // if read error better not have sent an attribute
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+      } else {
+        if (!rop.complete.contains(hoid)) {
+          rop.complete.emplace(hoid, &sinfo);
+        }
+        rop.complete.at(hoid).attrs.emplace();
+        (*(rop.complete.at(hoid).attrs)).swap(resp.attrs_read);
+      }
     }
 
-    auto &buffers_read = rop.complete.at(hoid).buffers_read;
-    for (auto &&[offset, buffer_list]: offset_buffer_map) {
-      buffers_read.insert_in_shard(sinfo.get_rel_shard(from_rel_shard), offset, buffer_list);
+    if (supports_omap) {
+      if (resp.omap_header_read) {
+        ceph_assert(!resp.error);
+        if (!rop.to_read.contains(hoid)) {
+          dout(20) << __func__ << " to_read skipping" << dendl;
+        } else {
+          if (!rop.complete.contains(hoid)) {
+            rop.complete.emplace(hoid, &sinfo);
+          }
+          rop.complete.at(hoid).omap_header.emplace();
+          (*(rop.complete.at(hoid).omap_header)).swap(*resp.omap_header_read);
+        }
+      }
+      if (resp.omap_entries_read) {
+        ceph_assert(!resp.error);
+        if (!rop.to_read.contains(hoid)) {
+          dout(20) << __func__ << " to_read skipping" << dendl;
+        } else {
+          if (!rop.complete.contains(hoid)) {
+            rop.complete.emplace(hoid, &sinfo);
+          }
+          rop.complete.at(hoid).omap_entries.emplace();
+          (*(rop.complete.at(hoid).omap_entries)).swap(*resp.omap_entries_read);
+        }
+      }
+      // A false omap_complete is equivalent to the read_result_t default, so
+      // only objects marked complete need updating.
+      if (resp.omap_complete) {
+        ceph_assert(!resp.error);
+        if (!rop.to_read.contains(hoid)) {
+          dout(20) << __func__ << " to_read skipping" << dendl;
+        } else {
+          if (!rop.complete.contains(hoid)) {
+            rop.complete.emplace(hoid, &sinfo);
+          }
+          rop.complete.at(hoid).omap_complete = resp.omap_complete;
+        }
+      }
     }
-    rop.debug_log.emplace_back(ECUtil::READ_DONE, op.from, buffers_read);
 
-    // zero length reads may need to be zero padded during recovery
-    if (!buffers_read.contains_shard(from_rel_shard)) {
-      rop.complete.at(hoid).zero_length_reads.insert(from_rel_shard);
+    if (resp.error) {
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      auto &complete = rop.complete.at(hoid);
+      complete.errors.emplace(from, *resp.error);
+      rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
+      complete.buffers_read.erase_shard(from_rel_shard);
+      complete.processed_read_requests.erase(from_rel_shard);
+      // If there was an error for non-zero data on this shard, then we must also
+      // ignore all zeros, or minimum_to_decode may conclude that it has enough
+      // shards available.
+      rop.to_read.at(hoid).zeros_for_decode.erase(from_rel_shard);
+      dout(20) << __func__ << " shard=" << from << " error=" << *resp.error << dendl;
     }
   }
   // only cross zone reads in tracked
-  if (rop.cross_zone_read_dispatch_time.contains(from)) {
-    uint64_t recv_bytes = 0;
-    for (auto &[hoid, bufs] : op.buffers_read)
-      for (auto &[offset, bl] : bufs)
-        recv_bytes += bl.length();
-
-    if (recv_bytes > 0) {
-      utime_t lat = ceph_clock_now() - rop.cross_zone_read_dispatch_time.at(from);
-      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_recv_bytes,
-                                      recv_bytes);
-      get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_read_lat, lat);
-      get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_read_lat_hist,
-                                       lat.to_nsec(), recv_bytes);
-    }
+  if (rop.cross_zone_read_dispatch_time.contains(from) && recv_bytes > 0) {
+    utime_t lat = ceph_clock_now() - rop.cross_zone_read_dispatch_time.at(from);
+    get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_recv_bytes,
+                                    recv_bytes);
+    get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_read_lat, lat);
+    get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_read_lat_hist,
+                                     lat.to_nsec(), recv_bytes);
   }
   for (auto &&[hoid, req]: rop.to_read) {
     if (!rop.complete.contains(hoid)) {
@@ -844,78 +928,6 @@ void ECBackend::handle_sub_read_reply(
       dout(20) << __func__ <<" read:" << read << dendl;
       complete.processed_read_requests[from_rel_shard].union_of(read.extents);
     }
-  }
-  for (auto &&[hoid, attr]: op.attrs_read) {
-    ceph_assert(!op.errors.contains(hoid));
-    // if read error better not have sent an attribute
-    if (!rop.to_read.contains(hoid)) {
-      // We canceled this read! @see filter_read_op
-      dout(20) << __func__ << " to_read skipping" << dendl;
-      continue;
-    }
-    if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
-    }
-    rop.complete.at(hoid).attrs.emplace();
-    (*(rop.complete.at(hoid).attrs)).swap(attr);
-  }
-  if (get_parent()->get_pool().supports_omap()) {
-    for (auto &&[hoid, header]: op.omap_headers_read) {
-      ceph_assert(!op.errors.contains(hoid));
-      // if read error better not have sent an attribute
-      if (!rop.to_read.contains(hoid)) {
-        // We canceled this read! @see filter_read_op
-        dout(20) << __func__ << " to_read skipping" << dendl;
-        continue;
-      }
-      if (!rop.complete.contains(hoid)) {
-        rop.complete.emplace(hoid, &sinfo);
-      }
-      rop.complete.at(hoid).omap_header.emplace();
-      (*(rop.complete.at(hoid).omap_header)).swap(header);
-    }
-    for (auto &&[hoid, entries]: op.omap_entries_read) {
-      ceph_assert(!op.errors.contains(hoid));
-      // if read error better not have sent any entries
-      if (!rop.to_read.contains(hoid)) {
-        // We canceled this read! @see filter_read_op
-        dout(20) << __func__ << " to_read skipping" << dendl;
-        continue;
-      }
-      if (!rop.complete.contains(hoid)) {
-        rop.complete.emplace(hoid, &sinfo);
-      }
-      rop.complete.at(hoid).omap_entries.emplace();
-      (*(rop.complete.at(hoid).omap_entries)).swap(entries);
-    }
-    for (auto &&[hoid, omap_complete]: op.omaps_complete) {
-      ceph_assert(!op.errors.contains(hoid));
-      // if read error better not have sent any entries
-      if (!rop.to_read.contains(hoid)) {
-        // We canceled this read! @see filter_read_op
-        dout(20) << __func__ << " to_read skipping" << dendl;
-        continue;
-      }
-      if (!rop.complete.contains(hoid)) {
-        rop.complete.emplace(hoid, &sinfo);
-      }
-      rop.complete.at(hoid).omap_complete = omap_complete;
-    }
-  }
-  for (auto &&[hoid, err]: op.errors) {
-    if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
-    }
-    auto &complete = rop.complete.at(hoid);
-    complete.errors.emplace(from, err);
-    rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
-    complete.buffers_read.erase_shard(from_rel_shard);
-    complete.processed_read_requests.erase(from_rel_shard);
-    // If there was an error for non-zero data on this shard, then we must also
-    // ignore all zeros, or minimum_to_decode may conclude that it has enough
-    // shards available.
-    rop.to_read.at(hoid).zeros_for_decode.erase(from_rel_shard);
-    dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
   }
 
   map<pg_shard_t, set<ceph_tid_t>>::iterator siter =
