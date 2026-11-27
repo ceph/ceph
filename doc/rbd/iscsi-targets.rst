@@ -2,13 +2,17 @@
 iSCSI Targets
 =============
 
+.. include:: iscsi-deprecation.inc.rst
+
 Traditionally, block-level access to a Ceph storage cluster has been
 limited to QEMU and ``librbd``, which is a key enabler for adoption
 within OpenStack environments. Starting with the Ceph Luminous release,
 block-level access is expanding to offer standard iSCSI support allowing
 wider platform usage, and potentially opening new use cases.
 
--  Red Hat Enterprise Linux or CentOS Stream 7.5 (or newer); Rocky Linux 8 (or newer); Linux kernel v4.16 (or newer)
+-  Linux kernel v4.16 (or newer), or Enterprise Linux (EL) 7.5 (or
+   newer), such as CentOS Stream or Rocky Linux, in which the required
+   iSCSI support is backported
 
   .. note::
 

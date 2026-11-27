@@ -2,6 +2,8 @@
 iSCSI Initiator for VMware ESX
 ------------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Prerequisite:**
 
 -  VMware ESX 6.5 or later using Virtual Machine compatibility 6.5 with VMFS 6.
@@ -67,12 +69,12 @@ The following instructions will use the default vSphere web client and esxcli.
        > kernel: iSCSI Login negotiation failed.
 
    To workaround this set the CHAP settings with the esxcli command. Here
-   authname is the username and secret is the password used in previous
-   examples:
+   authname is the username and secret is the password that you set with
+   the gwcli ``auth`` command:
 
    ::
 
-       > esxcli iscsi adapter auth chap set --direction=uni --authname=myiscsiusername --secret=myiscsipassword --level=discouraged -A vmhba64
+       > esxcli iscsi adapter auth chap set --direction=uni --authname=<initiator-user> --secret=<initiator-secret> --level=discouraged -A vmhba64
 
 #. Configure iSCSI Settings
 

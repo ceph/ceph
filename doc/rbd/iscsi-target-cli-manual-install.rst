@@ -2,12 +2,14 @@
 Manual ceph-iscsi Installation
 ==============================
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Requirements**
 
 To complete the installation of ceph-iscsi, there are 4 steps:
 
 1. Install common packages from your Linux distribution's software repository
-2. Install Git to fetch the remaining packages directly from their Git repositories
+2. Install Git to fetch tcmu-runner and ceph-iscsi from their Git repositories
 3. Ensure a compatible kernel is used
 4. Install all the components of ceph-iscsi and start associated daemons:
 
@@ -28,6 +30,7 @@ on each machine that will be a iSCSI gateway:
 -  libnl3
 -  libkmod
 -  librbd1
+-  ceph-common
 -  pyparsing
 -  python kmod
 -  python pyudev
@@ -37,7 +40,8 @@ on each machine that will be a iSCSI gateway:
 -  python rados
 -  python rbd
 -  python netifaces
--  python crypto
+-  python cryptography
+-  python distro
 -  python requests
 -  python flask
 -  pyOpenSSL
@@ -46,7 +50,7 @@ on each machine that will be a iSCSI gateway:
 2. Install Git
 ==============
 
-In order to install all the packages needed to run iSCSI with Ceph, you need to download them directly from their repository by using Git.
+In order to install tcmu-runner and ceph-iscsi, you need to download them directly from their repository by using Git.
 On CentOS/RHEL execute:
 
 .. prompt:: bash >
@@ -87,7 +91,7 @@ enabled:
 4. Install ceph-iscsi
 ========================================================
 
-Finally, the remaining tools can be fetched directly from their Git repositories and their associated services started
+Finally, install the remaining components and start their services.
 
 
 tcmu-runner
@@ -130,9 +134,9 @@ rtslib-fb
 
    .. prompt:: bash >
 
-      git clone https://github.com/open-iscsi/rtslib-fb.git
-      cd rtslib-fb
-      python setup.py install
+      yum install python3-rtslib
+
+   On Debian and Ubuntu, install ``python3-rtslib-fb`` with ``apt``.
 
 configshell-fb
 --------------
@@ -141,9 +145,9 @@ configshell-fb
 
    .. prompt:: bash >
 
-      git clone https://github.com/open-iscsi/configshell-fb.git
-      cd configshell-fb
-      python setup.py install
+      yum install python3-configshell
+
+   On Debian and Ubuntu, install ``python3-configshell-fb`` with ``apt``.
 
 targetcli-fb
 ------------
@@ -152,11 +156,11 @@ targetcli-fb
 
    .. prompt:: bash >
 
-      git clone https://github.com/open-iscsi/targetcli-fb.git
-      cd targetcli-fb
-      python setup.py install
-      mkdir /etc/target
-      mkdir /var/target
+      yum install targetcli
+      mkdir -p /etc/target
+      mkdir -p /var/target
+
+   On Debian and Ubuntu, install ``targetcli-fb`` with ``apt``.
 
    .. warning:: The ceph-iscsi tools assume they are managing all targets
       on the system. If targets have been setup and are being managed by

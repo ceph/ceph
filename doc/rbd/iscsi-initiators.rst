@@ -4,6 +4,8 @@
 Configuring the iSCSI Initiators
 --------------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 - `iSCSI Initiator for Linux <../iscsi-initiator-linux>`_
 
 - `iSCSI Initiator for Microsoft Windows <../iscsi-initiator-win>`_
