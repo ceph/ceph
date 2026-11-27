@@ -229,12 +229,12 @@ def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
             set_quota_on_clone(fs_handle, (subvol0, subvol1, subvol2))
 
 def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve):
-    with open_clone_subvol_pair_in_vol(fs_client, volspec, volname, groupname,
-            subvolname, lockless=False) as (subvol0, subvol1, subvol2):
+    with open_at_volume(fs_client, volspec, volname, groupname, subvolname,
+                        SubvolumeOpType.CLONE_INTERNAL) as clone:
         if ve.errno == -errno.EINTR:
-            subvol0.add_clone_failure(-ve.errno, "user interrupted clone operation")
+            clone.add_clone_failure(-ve.errno, "user interrupted clone operation")
         else:
-            subvol0.add_clone_failure(-ve.errno, ve.error_str)
+            clone.add_clone_failure(-ve.errno, ve.error_str)
 
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
@@ -262,7 +262,7 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
     try:
         # detach source but leave the clone section intact for later inspection
         with open_clone_subvol_pair_in_vol(fs_client, volspec, volname, groupname,
-                subvolname) as (subvol0, subvol1, subvol2):
+                subvolname, failed=True) as (subvol0, subvol1, subvol2):
             subvol1.detach_snapshot(subvol2, index)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
