@@ -214,7 +214,7 @@ The "Partitioned" log objects key has the following format:
 
 ::
 
-  <prefix><source bucket owner>/<zone group>/[tenant:]<source bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
+  <prefix><[tenant$]source bucket owner>/<zone group>/[tenant:]<source bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
 
 For example:
 
