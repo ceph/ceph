@@ -1,0 +1,412 @@
+<style>
+#fdcalc-root{--fd-surface:#fcfcfb;--fd-ink:#0b0b0b;--fd-ink-2:#52514e;--fd-line:#e4e3df;--fd-ctl:#c9c8c2;--fd-used:#2a78d6;--fd-held:#1baf7a;--fd-strand:#eb6834;position:relative;margin:24px 0;padding:16px;border:1px solid var(--fd-line);border-radius:8px;background:var(--fd-surface);color:var(--fd-ink);font-size:15px;line-height:1.45}
+#fdcalc-root *{box-sizing:border-box}
+#fdcalc-root [hidden]{display:none!important}
+#fdcalc-root fieldset{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:flex-end;margin:0 0 14px;padding:0;border:0}
+#fdcalc-root legend{width:100%;margin:0 0 4px;padding:0;font-weight:600}
+#fdcalc-root .fd-foot{width:100%;margin:2px 0 0;font-size:12px;color:var(--fd-ink-2)}
+#fdcalc-root .fd-hint{font-weight:400;color:var(--fd-ink-2);font-size:13px}
+#fdcalc-root label{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--fd-ink-2)}
+#fdcalc-root input,#fdcalc-root select{width:7em;padding:4px 6px;border:1px solid var(--fd-ctl);border-radius:4px;background:#fff;color:var(--fd-ink);font:inherit;font-size:14px}
+#fdcalc-root input.fd-name{width:9em}
+#fdcalc-root select{width:auto;min-width:7em}
+#fdcalc-root button{padding:4px 10px;border:1px solid var(--fd-ctl);border-radius:4px;background:#fff;color:var(--fd-ink);font:inherit;font-size:13px;cursor:pointer}
+#fdcalc-root button:hover{background:#f0efec}
+#fdcalc-root .fd-list{display:flex;flex-direction:column;gap:6px;width:100%}
+#fdcalc-root .fd-row{display:flex;gap:6px;align-items:center}
+#fdcalc-root .fd-examples{display:flex;flex-direction:column;gap:4px;width:100%}
+#fdcalc-root label.fd-ex{flex-direction:row;align-items:center;gap:8px;font-size:14px;color:var(--fd-ink);cursor:pointer}
+#fdcalc-root label.fd-ex input{width:auto;margin:0;padding:0}
+#fdcalc-root label.fd-ex.fd-on{font-weight:700}
+#fdcalc-root .fd-out h4{margin:18px 0 4px;font-size:16px}
+#fdcalc-root .fd-key{display:flex;flex-wrap:wrap;gap:4px 16px;margin:4px 0 10px;font-size:13px;color:var(--fd-ink-2)}
+#fdcalc-root .fd-sw{display:inline-block;width:10px;height:10px;margin-right:6px;border-radius:2px;vertical-align:-1px}
+#fdcalc-root .fd-bars{display:grid;grid-template-columns:max-content 1fr;gap:6px 10px;align-items:center;font-size:13px}
+#fdcalc-root .fd-track{display:flex;align-items:center;gap:8px;min-width:0}
+#fdcalc-root .fd-bar{display:flex;flex:none;gap:2px;height:18px}
+#fdcalc-root .fd-seg{min-width:2px;height:100%}
+#fdcalc-root .fd-seg:last-child{border-radius:0 4px 4px 0}
+#fdcalc-root .fd-note{color:var(--fd-ink-2);white-space:nowrap}
+#fdcalc-root table{width:auto;margin:10px 0;border-collapse:collapse;font-size:13px}
+#fdcalc-root th,#fdcalc-root td{padding:3px 10px;border:0;border-bottom:1px solid var(--fd-line);text-align:right;font-variant-numeric:tabular-nums}
+#fdcalc-root th:first-child,#fdcalc-root td:first-child{text-align:left}
+#fdcalc-root p{margin:6px 0}
+#fdcalc-root .fd-err{color:#b3261e}
+#fdcalc-root .fd-status{margin:8px 0;padding:8px 12px;border-left:4px solid;border-radius:2px}
+#fdcalc-root .fd-status a{color:inherit;text-decoration:underline}
+#fdcalc-root .fd-critical{border-color:#d03b3b;background:#fbeaea}
+#fdcalc-root .fd-serious{border-color:#ec835a;background:#fdf0ea}
+#fdcalc-root .fd-warning{border-color:#fab219;background:#fff7e3}
+#fdcalc-root .fd-good{border-color:#0ca30c;background:#eaf6ea}
+#fdcalc-root .fd-tip{display:none;position:absolute;z-index:2;padding:4px 8px;border:1px solid var(--fd-line);border-radius:4px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.12);font-size:13px;white-space:nowrap;pointer-events:none}
+@media (max-width:560px){#fdcalc-root input{width:5.5em}#fdcalc-root input.fd-name{width:7em}}
+</style>
+<div id="fdcalc-root">
+<form onsubmit="return false">
+<fieldset><legend>Data protection</legend>
+<label>Type<select name="scheme"><option value="rep">Replicated</option><option value="ec">Erasure coded</option></select></label>
+<label data-rep>Size<input name="size" type="number" min="1" step="1" value="3"></label>
+<label data-ec hidden>k<input name="k" type="number" min="2" step="1" value="4"></label>
+<label data-ec hidden>m<input name="m" type="number" min="1" step="1" value="2"></label>
+<label>Shards per failure domain *<input name="perfd" type="number" min="1" step="1" value="1"></label>
+<label>full_ratio<input name="full" type="number" min="0.01" max="1" step="0.01" value="0.95"></label>
+<label>backfillfull_ratio<input name="bf" type="number" min="0.01" max="1" step="0.01" value="0.90"></label>
+<p class="fd-foot">* Leave this at 1 unless you <b>really</b> know what you&rsquo;re doing. Values above 1 model CRUSH rules that put several shards of a PG in one failure domain: MSR rules, or an EC profile&rsquo;s crush-osds-per-failure-domain.</p>
+</fieldset>
+<fieldset><legend>Failure domains <span class="fd-hint">(CRUSH weight of each)</span></legend>
+<div class="fd-list"></div>
+<button type="button" data-act="add">Add a failure domain</button>
+</fieldset>
+<fieldset><legend>What fails</legend>
+<label>Event<select name="event"><option value="none">Nothing</option><option value="osd">An OSD fails</option><option value="fd">A whole failure domain is lost</option></select></label>
+<label data-ev hidden>In<select name="evfd"></select></label>
+<label data-osd hidden>OSD weight<input name="osd" type="number" min="0" step="any" value="10"></label>
+</fieldset>
+<fieldset><legend>Examples</legend><div class="fd-examples"></div></fieldset>
+</form>
+<div class="fd-out" aria-live="polite"></div>
+<div class="fd-tip" role="tooltip"></div>
+</div>
+<script>
+(function () {
+  /* core:start */
+  // Largest X with shards*X <= sum(min(size, perFd*X)): the raw each shard of every PG
+  // can add up to when placement is perfectly balanced. 0 if PGs can't be placed at all.
+  function balancedX(sizes, shards, perFd) {
+    var live = sizes.filter(function (s) { return s > 0; }).sort(function (a, b) { return a - b; });
+    if (perFd * live.length < shards) return 0;
+    var capped = 0;
+    for (var j = 0; j < live.length; j++) {
+      var slope = perFd * (live.length - j) - shards;
+      if (slope < 0) {
+        var root = capped / -slope;
+        if (root <= live[j] / perFd) return root;
+      }
+      capped += live[j];
+    }
+    return capped / shards;
+  }
+  function seeded(seed) {
+    return function () {
+      seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  // Chance that each failure domain is picked for a PG when CRUSH (straw2) draws in
+  // proportion to weight and redraws on a repeat: exact up to 16, sampled above.
+  function crushInclusion(sizes, picks) {
+    var live = [], q = sizes.map(function () { return 0; });
+    sizes.forEach(function (s, i) { if (s > 0) live.push(i); });
+    if (live.length <= 16) {
+      var states = new Map([[0, 1]]);
+      for (var p = 0; p < picks; p++) {
+        var next = new Map();
+        states.forEach(function (prob, mask) {
+          var total = 0;
+          live.forEach(function (i, b) { if (!(mask & 1 << b)) total += sizes[i]; });
+          live.forEach(function (i, b) {
+            if (mask & 1 << b) return;
+            var pi = prob * sizes[i] / total, m = mask | 1 << b;
+            q[i] += pi;
+            next.set(m, (next.get(m) || 0) + pi);
+          });
+        });
+        states = next;
+      }
+      return q;
+    }
+    var rand = seeded(1), n = 20000;
+    for (var s = 0; s < n; s++) {
+      var rest = live.slice();
+      for (var r = 0; r < picks; r++) {
+        var tot = 0, k;
+        rest.forEach(function (i) { tot += sizes[i]; });
+        var u = rand() * tot;
+        for (k = 0; k < rest.length - 1; k++) { u -= sizes[rest[k]]; if (u < 0) break; }
+        q[rest[k]] += 1 / n;
+        rest.splice(k, 1);
+      }
+    }
+    return q;
+  }
+  function sum(a) { return a.reduce(function (t, v) { return t + v; }, 0); }
+  function analyze(sizes, shards, perFd, full) {
+    var raw = sum(sizes), live = sizes.filter(function (s) { return s > 0; }).length;
+    if (perFd * live < shards) return { short: true, raw: raw, live: live, need: Math.ceil(shards / perFd) };
+    var x = balancedX(sizes.map(function (s) { return s * full; }), shards, perFd), cap = perFd * x, held = 0;
+    var rows = sizes.map(function (s) {
+      var used = Math.min(s * full, cap), h = used >= s * full * (1 - 1e-9) ? s - used : 0;
+      held += h;
+      return { size: s, used: used, held: h, stranded: Math.max(0, s - used - h) };
+    });
+    var usedRaw = shards * x;
+    var res = { x: x, cap: cap, rows: rows, raw: raw, live: live, usedRaw: usedRaw, held: held,
+      stranded: Math.max(0, raw - usedRaw - held) };
+    if (shards % perFd === 0) {
+      var q = crushInclusion(sizes, shards / perFd), best = Infinity, first = -1;
+      sizes.forEach(function (s, i) {
+        if (q[i] > 0 && s * full / (perFd * q[i]) < best) { best = s * full / (perFd * q[i]); first = i; }
+      });
+      res.crushX = best;
+      res.crushFirst = first;
+    }
+    return res;
+  }
+  // How big failure domain i can be, the others unchanged, before anything is stranded;
+  // null if the others strand capacity on their own.
+  function growthLimit(sizes, i, shards, perFd) {
+    function strands(size) {
+      var t = sizes.slice();
+      t[i] = size;
+      return sum(t) - shards * balancedX(t, shards, perFd) > sum(t) * 1e-9;
+    }
+    var low = Math.max.apply(null, sizes.filter(function (s, j) { return j !== i; })), high = sizes[i];
+    if (strands(low)) return null;
+    for (var n = 0; n < 100; n++) {
+      var mid = (low + high) / 2;
+      if (strands(mid)) high = mid; else low = mid;
+    }
+    return low;
+  }
+  /* core:end */
+  var root = document.getElementById('fdcalc-root');
+  if (!root) return;
+  var form = root.querySelector('form'), list = root.querySelector('.fd-list');
+  var out = root.querySelector('.fd-out'), tip = root.querySelector('.fd-tip');
+  var COLORS = { used: 'var(--fd-used)', held: 'var(--fd-held)', stranded: 'var(--fd-strand)' };
+  var LABELS = { used: 'used', held: 'held back by full_ratio', stranded: 'stranded' };
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+  function fmt(v) { return v.toLocaleString('en-US', { maximumFractionDigits: 1 }); }
+  function pct(a, b) { return b ? Math.round(100 * a / b) + '%' : '-'; }
+  function addRow(name, size) {
+    var d = document.createElement('div');
+    d.className = 'fd-row';
+    d.innerHTML = '<input class="fd-name" aria-label="Failure domain name" value="' + esc(name) + '">' +
+      '<input class="fd-size" type="number" min="0" step="any" aria-label="CRUSH weight" value="' + esc(size) + '">' +
+      '<button type="button" data-act="del" aria-label="Remove this failure domain">&times;</button>';
+    list.appendChild(d);
+  }
+  function setFds(sizes) {
+    list.innerHTML = '';
+    sizes.forEach(function (s, i) { addRow('fd' + (i + 1), s); });
+  }
+  function read() {
+    var f = form.elements, ec = f.scheme.value === 'ec', names = [], sizes = [];
+    list.querySelectorAll('.fd-row').forEach(function (r, i) {
+      names.push(r.querySelector('.fd-name').value.trim() || 'fd' + (i + 1));
+      sizes.push(Math.max(0, parseFloat(r.querySelector('.fd-size').value) || 0));
+    });
+    var k = parseInt(f.k.value, 10), m = parseInt(f.m.value, 10), size = parseInt(f.size.value, 10);
+    return {
+      ec: ec, k: k, m: m, shards: ec ? k + m : size, dataPerX: ec ? k : 1, label: ec ? 'EC ' + k + '+' + m : 'Replica ' + size,
+      perFd: parseInt(f.perfd.value, 10), full: parseFloat(f.full.value), bf: parseFloat(f.bf.value),
+      names: names, sizes: sizes, event: f.event.value, evfd: parseInt(f.evfd.value, 10), osd: parseFloat(f.osd.value) || 0
+    };
+  }
+  function syncControls(st) {
+    root.querySelectorAll('[data-rep]').forEach(function (e) { e.hidden = st.ec; });
+    root.querySelectorAll('[data-ec]').forEach(function (e) { e.hidden = !st.ec; });
+    root.querySelector('[data-ev]').hidden = st.event === 'none';
+    root.querySelector('[data-osd]').hidden = st.event !== 'osd';
+    var sel = form.elements.evfd, keep = sel.value;
+    sel.innerHTML = st.names.map(function (n, i) { return '<option value="' + i + '">' + esc(n) + '</option>'; }).join('');
+    var idx = parseInt(keep, 10);
+    sel.value = idx >= 0 && idx < st.names.length ? String(idx) : '0';
+  }
+  function bars(names, a, scale) {
+    var h = '<div class="fd-bars">';
+    a.rows.forEach(function (r, i) {
+      var segs = ['used', 'held', 'stranded'].filter(function (k) { return r[k] > r.size * 1e-9; }).map(function (k) {
+        return '<div class="fd-seg" style="flex:' + r[k] + ' 1 0;background:' + COLORS[k] + '" data-tip="' +
+          esc(names[i] + ': ' + fmt(r[k]) + ' ' + LABELS[k]) + '"></div>';
+      }).join('');
+      var note = r.size === 0 ? 'lost' : r.stranded > r.size * 1e-9 ? fmt(r.stranded) + ' stranded' : '';
+      h += '<div>' + esc(names[i]) + '</div><div class="fd-track"><div class="fd-bar" style="width:' +
+        (75 * r.size / scale) + '%">' + segs + '</div><span class="fd-note">' + note + '</span></div>';
+    });
+    return h + '</div>';
+  }
+  function table(names, a) {
+    var h = '<table><thead><tr><th>Failure domain</th><th>Weight</th><th>Used</th><th>Held back</th><th>Stranded</th></tr></thead><tbody>';
+    a.rows.forEach(function (r, i) {
+      h += '<tr><td>' + esc(names[i]) + '</td><td>' + fmt(r.size) + '</td><td>' + fmt(r.used) + '</td><td>' +
+        fmt(r.held) + '</td><td>' + fmt(r.stranded) + '</td></tr>';
+    });
+    return h + '</tbody></table>';
+  }
+  var ICONS = { critical: '✖', serious: '▲', warning: '▲', good: '✔' };
+  function status(kind, label, text) {
+    return '<p class="fd-status fd-' + kind + '" role="status"><b>' + ICONS[kind] + ' ' + label + '</b> ' + text + '</p>';
+  }
+  function scenario(title, names, sizes, st, scale) {
+    var a = analyze(sizes, st.shards, st.perFd, st.full), h = '<h4>' + esc(title) + '</h4>';
+    if (a.short) {
+      return { a: a, html: h + status('critical', 'Not enough failure domains.', st.shards + ' shards at ' + st.perFd +
+        ' per failure domain need ' + a.need + ', and ' + a.live + ' are left. PGs stay degraded until one comes back.') };
+    }
+    var stranded = a.stranded > a.raw * 1e-9, exact = st.perFd * a.live === st.shards;
+    if (stranded) {
+      h += status('serious', 'Capacity is stranded.', fmt(a.stranded) + ' (' + pct(a.stranded, a.raw) +
+        ') of the raw capacity can never be used.');
+    }
+    if (exact) {
+      h += status('warning', 'No spare failure domain.', 'Every PG has ' + (st.perFd > 1 ? st.perFd + ' shards' : 'a shard') +
+        ' in every failure domain, so a failed OSD’s data can be rebuilt only within its own failure domain, which strands ' +
+        'capacity in the others, and a lost failure domain can’t be re-protected until it comes back. One more failure ' +
+        'domain than each PG needs avoids both.');
+    }
+    if (!stranded && !exact) {
+      h += status('good', 'OK.', 'Nothing is stranded, and there are more failure domains than each PG needs.');
+    }
+    h += '<div class="fd-key">' + ['used', 'held', 'stranded'].map(function (k) {
+      return '<span><span class="fd-sw" style="background:' + COLORS[k] + '"></span>' + LABELS[k].charAt(0).toUpperCase() + LABELS[k].slice(1) + '</span>';
+    }).join('') + '</div>';
+    h += bars(names, a, scale) + table(names, a);
+    h += '<p>Balanced: <b>' + fmt(st.dataPerX * a.x) + '</b> of data at full_ratio ' + st.full + '. Of ' + fmt(a.raw) +
+      ' raw, ' + fmt(a.usedRaw) + ' used, ' + fmt(a.held) + ' held back by full_ratio, <b>' + fmt(a.stranded) +
+      ' (' + pct(a.stranded, a.raw) + ') stranded</b>.</p>';
+    if (a.stranded > a.raw * 1e-9 && st.perFd * a.live === st.shards) {
+      var small = -1;
+      sizes.forEach(function (s, i) { if (s > 0 && (small < 0 || s < sizes[small])) small = i; });
+      h += '<p>Why: every PG puts ' + st.perFd + ' shard' + (st.perFd > 1 ? 's' : '') + ' in every failure domain, ' +
+        'so each can use only as much as the smallest, ' + esc(names[small]) + ' (' + fmt(sizes[small]) + ').</p>';
+    } else if (a.stranded > a.raw * 1e-9) {
+      var big = [];
+      sizes.forEach(function (s, i) { if (s * st.full > a.cap * (1 + 1e-9)) big.push(i); });
+      var one = big.length === 1, share = sum(big.map(function (i) { return sizes[i]; })) / a.raw;
+      h += '<p>Why: ' + big.map(function (i) { return esc(names[i]); }).join(' + ') + (one ? ' holds ' : ' hold ') +
+        pct(share, 1) + ' of the raw capacity, but with ' + st.shards + ' shards per PG and at most ' + st.perFd +
+        ' in a failure domain, ' + (one ? 'it' : 'they') + ' can hold at most ' + pct(big.length * st.perFd / st.shards, 1) +
+        ' of what is stored, so ' + (one ? 'it' : 'each') + ' can use only ' + fmt(a.cap) + '.</p>';
+      if (one) {
+        var g = growthLimit(sizes, big[0], st.shards, st.perFd);
+        h += '<p>' + (g === null ? 'Shrinking ' + esc(names[big[0]]) + ' alone won’t stop the stranding; the others are uneven too.' :
+          'With the others as they are, ' + esc(names[big[0]]) + ' could be up to ' + fmt(g) + ' with nothing stranded.') + '</p>';
+      }
+    }
+    if (a.crushFirst >= 0) {
+      h += '<p>CRUSH alone, with no balancer: ' + fmt(st.dataPerX * a.crushX) + ' of data before ' + esc(names[a.crushFirst]) +
+        ' reaches full_ratio (' + pct(st.shards * a.crushX, a.raw) + ' of raw used; balanced reaches ' + pct(a.usedRaw, a.raw) + ').</p>';
+    }
+    return { a: a, html: h };
+  }
+  function render() {
+    var st = read();
+    syncControls(st);
+    st.evfd = parseInt(form.elements.evfd.value, 10);
+    var err = !(st.shards >= 1) ? 'Set the size, or k and m.' :
+      st.ec && !(st.k >= 2 && st.m >= 1) ? 'k must be at least 2, and m at least 1.' :!(st.perFd >= 1) ? 'Shards per failure domain must be at least 1.' :
+      !(st.bf > 0 && st.bf <= st.full && st.full <= 1) ? 'Need 0 < backfillfull_ratio ≤ full_ratio ≤ 1.' :
+      !(sum(st.sizes) > 0) ? 'Add a failure domain with a size.' : '';
+    if (err) { out.innerHTML = '<p class="fd-err">' + err + '</p>'; return; }
+    var after = st.sizes.slice(), what = '', lost = 0;
+    if (st.event === 'osd') {
+      lost = Math.min(st.osd, after[st.evfd]);
+      after[st.evfd] -= lost;
+      what = 'After an OSD of weight ' + fmt(lost) + ' in ' + st.names[st.evfd] + ' fails';
+    } else if (st.event === 'fd') {
+      lost = after[st.evfd];
+      after[st.evfd] = 0;
+      what = 'After ' + st.names[st.evfd] + ' is lost';
+    }
+    var scale = Math.max.apply(null, st.sizes);
+    var title = st.label + (st.perFd > 1 ? ', up to ' + st.perFd + ' shards per failure domain' : '') + ' across ' + st.sizes.length + ' failure domains';
+    var s0 = scenario(title, st.names, st.sizes, st, scale), h = s0.html;
+    if (st.ec && st.m === 1) {
+      h = status('warning', 'm=1.', 'With one coding chunk, expect data unavailability during maintenance and data loss ' +
+        'when component failures overlap. Profiles with m=1 are strongly discouraged for data you care about. ' +
+        '<a href="https://docs.ceph.com/en/latest/rados/operations/erasure-code/#erasure-coded-pool-overhead" ' +
+        'target="_blank" rel="noopener">Why, in the Ceph docs</a>') + h;
+    }
+    if (what) {
+      var s1 = scenario(what, st.names, after, st, scale);
+      h += s1.html;
+      if (!s0.a.short && !s1.a.short) {
+        var drop = st.shards * (s0.a.x - s1.a.x), own = lost * st.full, newly = drop - own;
+        h += '<p>' + (newly > own * 1e-9 ? 'Raw used at full_ratio drops by <b>' + fmt(drop) + '</b>: ' + fmt(own) +
+          ' that the failed capacity held, and <b>' + fmt(newly) + ' more that is newly stranded</b>.' :
+          newly < -own * 1e-9 ? 'Raw used at full_ratio drops by ' + fmt(drop) + ', less than the ' + fmt(own) +
+          ' the failed capacity could hold: some of it was stranded already.' :
+          'Raw used at full_ratio drops by ' + fmt(drop) + ', just what the failed capacity held. Nothing else is stranded.') + '</p>';
+        var xb = balancedX(after.map(function (s) { return s * st.bf; }), st.shards, st.perFd);
+        h += '<p>Backfill stops at backfillfull_ratio ' + st.bf + ', so full re-protection needs the data under <b>' +
+          fmt(st.dataPerX * xb) + '</b> when this happens: ' + pct(xb, s0.a.x) + ' of what the pool holds at full_ratio.</p>';
+      }
+    }
+    out.innerHTML = h;
+  }
+  var EXAMPLES = [
+    ['Replica 3; three failure domains weighing 100 each', { fds: [100, 100, 100] }],
+    ['Replica 3; failure domains weighing 100, 100 and 1138', { fds: [100, 100, 1138] }],
+    ['Replica 3; failure domains weighing 100, 100, 100 and 1701', { fds: [100, 100, 100, 1701] }],
+    ['Replica 3; failure domains weighing 100, 100, 100 and 150', { fds: [100, 100, 100, 150] }],
+    ['Replica 3; three failure domains weighing 100 each; an OSD of weight 10 fails', { fds: [100, 100, 100], event: 'osd' }],
+    ['Replica 3; four failure domains weighing 100 each; an OSD of weight 10 fails', { fds: [100, 100, 100, 100], event: 'osd' }],
+    ['EC 4+2; six failure domains weighing 100 each; an OSD of weight 10 fails', { ec: true, fds: [100, 100, 100, 100, 100, 100], event: 'osd' }],
+    ['EC 4+2; seven failure domains weighing 100 each; an OSD of weight 10 fails', { ec: true, fds: [100, 100, 100, 100, 100, 100, 100], event: 'osd' }],
+    ['EC 8+3; eleven failure domains weighing 100 each; an OSD of weight 10 fails', { ec: true, k: 8, m: 3, fds: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100], event: 'osd' }]
+  ];
+  root.querySelector('.fd-examples').innerHTML = EXAMPLES.map(function (e, i) {
+    return '<label class="fd-ex"><input type="radio" name="fd-ex" value="' + i + '">' + esc(e[0]) + '</label>';
+  }).join('');
+  // The chosen example is bold; any other change to the inputs means the
+  // table no longer shows it.
+  function markExample() {
+    root.querySelectorAll('.fd-ex').forEach(function (l) { l.classList.toggle('fd-on', l.querySelector('input').checked); });
+  }
+  function clearExample() {
+    root.querySelectorAll('.fd-ex input').forEach(function (r) { r.checked = false; });
+    markExample();
+  }
+  function applyExample(i) {
+    var ex = EXAMPLES[i][1], f = form.elements;
+    f.scheme.value = ex.ec ? 'ec' : 'rep';
+    f.size.value = 3; f.k.value = ex.k || 4; f.m.value = ex.m || 2; f.perfd.value = 1; f.full.value = '0.95'; f.bf.value = '0.90';
+    f.event.value = ex.event || 'none'; f.osd.value = 10;
+    setFds(ex.fds);
+    syncControls(read());
+    f.evfd.value = '0';
+    markExample();
+  }
+  root.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.act === 'add') {
+      var rows = list.querySelectorAll('.fd-row'), last = rows.length ? rows[rows.length - 1].querySelector('.fd-size').value : 100;
+      addRow('fd' + (rows.length + 1), last);
+    } else if (b.dataset.act === 'del') {
+      b.closest('.fd-row').remove();
+    } else {
+      return;
+    }
+    clearExample();
+    render();
+  });
+  form.addEventListener('input', function (e) {
+    if (e.target.name === 'fd-ex') applyExample(+e.target.value);
+    else clearExample();
+    render();
+  });
+  out.addEventListener('mouseover', function (e) {
+    var s = e.target.closest('.fd-seg');
+    if (!s) return;
+    tip.textContent = s.dataset.tip;
+    tip.style.display = 'block';
+  });
+  out.addEventListener('mousemove', function (e) {
+    var r = root.getBoundingClientRect();
+    tip.style.left = Math.min(e.clientX - r.left + 12, r.width - tip.offsetWidth - 4) + 'px';
+    tip.style.top = (e.clientY - r.top + 14) + 'px';
+  });
+  out.addEventListener('mouseout', function (e) {
+    if (e.target.closest('.fd-seg')) tip.style.display = 'none';
+  });
+  root.querySelectorAll('.fd-ex input')[1].checked = true;
+  applyExample(1);
+  render();
+})();
+</script>
