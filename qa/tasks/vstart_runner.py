@@ -688,6 +688,8 @@ class LocalCephFSMount():
         log.info('Ready to start {}...'.format(type(self).__name__))
 
     def is_blocked(self):
+        if not hasattr(self, 'addr') or self.addr is None:
+            return False
         self.fs = LocalFilesystem(self.ctx, name=self.cephfs_name)
 
         output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
@@ -1196,7 +1198,10 @@ class LogStream(object):
         pass
 
     def __del__(self):
-        self._write()
+        try:
+            self._write()
+        except Exception:
+            pass
 
 
 class InteractiveFailureResult(unittest.TextTestResult):
