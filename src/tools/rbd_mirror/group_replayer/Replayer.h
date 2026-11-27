@@ -408,6 +408,7 @@ private:
   std::vector<std::pair<std::string, ImageReplayer<ImageCtxT> *>> m_replayers_by_image_id;
   std::set<std::pair<std::string, uint64_t>> m_prune_image_snapshots_in_progress;
   const cls::rbd::GroupSnapshot* m_last_local_snap = nullptr;
+  const cls::rbd::GroupSnapshot* m_last_complete_local_snap = nullptr;
   const cls::rbd::GroupSnapshot* m_prune_group_snap = nullptr;
   bool m_update_group_state = true;
 
