@@ -901,12 +901,16 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
     ceph_assert(op->pending_read.empty());
   }
 
+  // Construct each shard's transaction with the peer feature set so that
+  // Transaction::write() can route page-aligned data into the aligned
+  // bufferlist and ECSubWrite ships it first in the data segment; a
+  // default-constructed transaction never takes the aligned format.
   map<shard_id_t, ObjectStore::Transaction> trans;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
-    trans[i->shard];
+    trans.try_emplace(i->shard, get_parent()->min_peer_features());
   }
 
   op->trace.event("start ec write");

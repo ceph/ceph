@@ -34,18 +34,21 @@ void ClientRequest::Orderer::requeue(Ref<PG> pg)
   // dereference those dangling pointers.
   for (auto req: to_requeue) {
     DEBUGDPP("requeueing {}", *pg, *req);
+    req->get_instance_handle()->cancel_admission(
+      std::make_exception_ptr(crimson::common::actingset_changed(true)));
     req->reset_instance_handle();
     std::ignore = req->with_pg_process(pg);
   }
 }
 
-void ClientRequest::Orderer::clear_and_cancel(PG &pg)
+void ClientRequest::Orderer::clear_and_cancel(PG &pg, std::exception_ptr error)
 {
   LOG_PREFIX(ClientRequest::Orderer::clear_and_cancel);
   for (auto i = list.begin(); i != list.end(); ) {
     auto &req = *i;
     DEBUGDPP("{}", pg, req);
     ++i;
+    req.get_instance_handle()->cancel_admission(error);
     req.complete_request(pg);
   }
 }
@@ -125,10 +128,26 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
     !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+
+  // A client resends an op rejected with EAGAIN at once, based on its own
+  // osdmap. If ours is newer, send it first: it may tell the client to hold
+  // the op instead, e.g. once the pool is marked full because the store
+  // here is (see OpsExecuter::do_execute_op()). Otherwise the client may
+  // never learn of it, and resend the op for ever.
+  auto share_map = seastar::now();
+  if (err == -EAGAIN && m->get_map_epoch() < pg->get_osdmap_epoch()) {
+    DEBUGDPP("{}: client osdmap e{} is older than e{}, sending it maps",
+             *pg, *this, m->get_map_epoch(), pg->get_osdmap_epoch());
+    share_map = shard_services->send_incremental_map(
+      std::ref(get_foreign_connection()), m->get_map_epoch());
+  }
   // TODO: gate the crosscore sending
   return interruptor::make_interruptible(
-    get_foreign_connection().send_with_throttling(std::move(reply))
-  );
+    std::move(share_map)
+  ).then_interruptible([this, reply = std::move(reply)]() mutable {
+    return interruptor::make_interruptible(
+      get_foreign_connection().send_with_throttling(std::move(reply)));
+  });
 }
 
 ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptible(
@@ -142,13 +161,57 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
 
+  // The admission turn was registered before releasing the shard pipeline.
+  // Do not hold that pipeline while waiting for PG readiness or a slot.
+  co_await interruptor::make_interruptible(ihref.handle.complete());
+
+  // wait until the pg can serve the op before taking a slot, so ops on a pg
+  // that is still peering do not hold slots that other pgs need.  These
+  // waits are repeated in wait_pg_ready, in case the pg changes again
+  // before the op gets there.
+  co_await interruptor::make_interruptible(
+    ihref.enter_blocker(
+      *this, pg.osdmap_gate, &decltype(pg.osdmap_gate)::wait_for_map,
+      m->get_min_epoch(), nullptr));
+  if (pg.can_discard_op(*m)) {
+    co_await interruptor::make_interruptible(
+      shard_services->send_incremental_map(
+        std::ref(get_foreign_connection()), m->get_map_epoch()));
+    co_return;
+  }
+  co_await interruptor::make_interruptible(
+    ihref.enter_blocker(
+      *this,
+      pg.wait_for_active_blocker,
+      &decltype(pg.wait_for_active_blocker)::wait));
+
+  int cost  = std::max<int>(m->get_cost(), 1);
+  unsigned prio  = m->get_priority();
+  uint64_t owner = m->get_source().num();
+
+  // Same-object requests enter throttle admission in arrival order. A
+  // successor must not take a slot and then wait for its predecessor.
+  co_await interruptor::make_interruptible(ihref.admission_ready.get_future());
+  ihref.admission_abort.check();
+
+  // admit in QoS order, then HOLD the slot for the op's lifetime
+  // (its destructor releases concurrency capacity). Take it before entering
+  // wait_pg_ready: ops leave that phase in the order they entered it, so an
+  // op admitted inside it could wait for an earlier op still waiting for
+  // a slot.
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services->get_throttle(
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client},
+      scheduler::throttle_level_t::foreground, &ihref.admission_abort));
+
+  ihref.admission_abort.check();
+
   DEBUGDPP("{}.{}: entering wait_pg_ready stage",
 	   *pgref, *this, this_instance_id);
-  // The prior stage is OrderedExclusive (PerShardPipeline::create_or_wait_pg)
-  // and wait_pg_ready is OrderedConcurrent.  This transition, therefore, cannot
-  // block and using enter_stage_sync is legal and more efficient than
-  // enter_stage.
+  // The shard pipeline has been released, so there is no exit barrier
+  // to drain and entering OrderedConcurrent wait_pg_ready cannot block.
   ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
+  ihref.admission_turn.reset();
 
   if (pg.can_discard_op(*m)) {
     co_await interruptor::make_interruptible(
@@ -171,16 +234,6 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       *this,
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
-
-  int cost  = std::max<int>(m->get_cost(), 1);
-  unsigned prio  = m->get_priority();
-  uint64_t owner = m->get_source().num();
-
-  // admit in QoS order, then HOLD the slot for the op's lifetime
-  // (its destructor == mClock RequestCompletion).
-  auto throttle = co_await interruptor::make_interruptible(
-    shard_services->get_throttle(
-      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
 
   DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
            pg, *this, this_instance_id);
@@ -258,8 +311,20 @@ seastar::future<> ClientRequest::with_pg_process(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   shard_services->client_op_started();
+  // Register before any map/activation wait, including when requeuing.
+  // Keep the result shared until needed: an interruption in the map or
+  // activation wait may leave this result unobserved.
+  ihref.admission_ready = pgref->client_request_orderer.admission_orderer.get(
+    m->get_hobj().get_head(), &ihref.admission_abort).then(
+      [instance_handle](auto turn) {
+        // A granted turn may resume after its instance was cancelled.
+        // Never publish it into that instance again.
+        if (!instance_handle->admission_abort.abort_requested()) {
+          instance_handle->admission_turn.emplace(std::move(turn));
+        }
+      });
   return interruptor::with_interruption(
-    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
+    [FNAME, this, pgref, this_instance_id, &ihref]() {
       return with_pg_process_interruptible(
 	pgref, this_instance_id, ihref
       ).then_interruptible([FNAME, this, this_instance_id, pgref] {
@@ -276,8 +341,18 @@ seastar::future<> ClientRequest::with_pg_process(
        this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
 	shard_services->client_op_finished();
-	return ihref.handle.complete(
-	).finally([instance_handle=std::move(instance_handle)] {});
+	if (!ihref.admission_ready.available()) {
+	  ihref.admission_abort.request_abort();
+	}
+	ihref.admission_turn.reset();
+	// Cancellation wakes the semaphore waiter asynchronously. Drain its
+	// continuation before releasing the PG that owns the orderer.
+	return ihref.admission_ready.get_future().then_wrapped(
+	  [&ihref](auto ready) {
+	    ready.ignore_ready_future();
+	    return ihref.handle.complete();
+	  }).finally([instance_handle = std::move(instance_handle),
+	              pgref = std::move(pgref), opref = std::move(opref)] {});
     });
 }
 

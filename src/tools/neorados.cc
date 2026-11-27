@@ -150,7 +150,7 @@ ba::awaitable<void> create(R::RADOS& r, const std::vector<std::string>& p)
   co_return;
 }
 
-inline constexpr std::size_t io_size = 4 << 20;
+inline constexpr std::uint64_t io_size = 4 << 20;
 
 ba::awaitable<void> write(R::RADOS& r, const std::vector<std::string>& p)
 {
@@ -160,7 +160,7 @@ ba::awaitable<void> write(R::RADOS& r, const std::vector<std::string>& p)
 
   bs::error_code ec;
   std::unique_ptr<char[]> buf = std::make_unique<char[]>(io_size);
-  std::size_t off = 0;
+  std::uint64_t off = 0;
   boost::io::ios_exception_saver ies(std::cin);
 
   std::cin.exceptions(std::istream::badbit);
@@ -209,9 +209,9 @@ ba::awaitable<void> read(R::RADOS& r, const std::vector<std::string>& p)
 		    obj, pname));
   }
 
-  std::size_t off = 0;
+  std::uint64_t off = 0;
   ceph::buffer::list bl;
-  while (auto toread = std::min<std::size_t>(len - off, io_size)) {
+  while (auto toread = std::min(len - off, io_size)) {
     R::ReadOp op;
     op.read(off, toread, &bl);
     co_await r.execute(obj, pool, std::move(op), nullptr,

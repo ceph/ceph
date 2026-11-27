@@ -8,6 +8,7 @@ import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap'
 import _ from 'lodash';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
+import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -16,7 +17,7 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TablePaginationComponent } from '../table-pagination/table-pagination.component';
 import { TableComponent } from './table.component';
-import { TableModule } from 'carbon-components-angular';
+import { ButtonModule, TableModule } from 'carbon-components-angular';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('TableComponent', () => {
@@ -35,6 +36,19 @@ describe('TableComponent', () => {
     return data;
   };
 
+  // Minimal accessible name computation: aria-labelledby, then aria-label, then text content.
+  const getAccessibleName = (element: HTMLElement): string => {
+    const labelledBy = element.getAttribute('aria-labelledby');
+    if (labelledBy) {
+      return labelledBy
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent ?? '')
+        .join(' ')
+        .trim();
+    }
+    return (element.getAttribute('aria-label') ?? element.textContent ?? '').trim();
+  };
+
   const clearLocalStorage = () => {
     component.localStorage.clear();
   };
@@ -50,6 +64,7 @@ describe('TableComponent', () => {
       NgbDropdownModule,
       PipesModule,
       TableModule,
+      ButtonModule,
       NgbTooltipModule
     ],
     schemas: [NO_ERRORS_SCHEMA]
@@ -644,6 +659,20 @@ describe('TableComponent', () => {
       }
     });
 
+    it('should emit columnVisibilityChange when a column is toggled', () => {
+      const emitSpy = jest.spyOn(component.columnVisibilityChange, 'emit');
+      const column = component.columns[0];
+      component.toggleColumn(column);
+      expect(emitSpy).toHaveBeenCalledWith(column);
+    });
+
+    it('should pass the visible columns to the fetch data context', () => {
+      const fetchSpy = jest.spyOn(component.fetchData, 'emit');
+      component.reloadData();
+      const context = fetchSpy.mock.calls[0][0] as CdTableFetchDataContext;
+      expect(context.visibleColumns).toEqual(component.visibleColumns.map((c) => c.prop));
+    });
+
     afterEach(() => {
       clearLocalStorage();
     });
@@ -871,6 +900,35 @@ describe('TableComponent', () => {
       fixture.componentRef.setInput('showColumnToggle', false);
       fixture.detectChanges();
       expect(getColumnToggleButton()).toBeNull();
+    });
+
+    it('should have an accessible name', () => {
+      expect(getAccessibleName(getColumnToggleButton().nativeElement)).toBe('Show or hide columns');
+    });
+  });
+
+  describe('refresh button', () => {
+    const getRefreshButton = () =>
+      fixture.debugElement.query(By.css('[data-testid="refresh-button"]'));
+
+    beforeEach(() => {
+      component.fetchData.subscribe(() => {});
+    });
+
+    it('should be named "Refresh" when the status has no message', () => {
+      component.status = new TableStatus();
+      fixture.detectChanges();
+      expect(getAccessibleName(getRefreshButton().nativeElement.querySelector('button'))).toBe(
+        'Refresh'
+      );
+    });
+
+    it('should be named after the status message when there is one', () => {
+      component.status = new TableStatus('danger', 'Failed to load data.');
+      fixture.detectChanges();
+      expect(getAccessibleName(getRefreshButton().nativeElement.querySelector('button'))).toBe(
+        'Failed to load data.'
+      );
     });
   });
 

@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 CEPHADM_SVC_DISCOVERY_CERT_DURATION = (365 * 5)
+SD_USERNAME_KEY = 'service_discovery/root/username'
+SD_PASSWORD_KEY = 'service_discovery/root/password'
 
 
 class Route(NamedTuple):
@@ -37,13 +39,30 @@ class ServiceDiscovery:
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
-        self.username: Optional[str] = None
-        self.password: Optional[str] = None
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
+        self._ensure_credentials()
+
+    def _ensure_credentials(self) -> None:
+        # created once, before the http server and the serve loop run, so
+        # both always read the same credentials from the store
+        if (self.mgr.get_store(SD_USERNAME_KEY)
+                and self.mgr.get_store(SD_PASSWORD_KEY)):
+            return
+        self.mgr.set_store(SD_USERNAME_KEY, 'admin')
+        self.mgr.set_store(SD_PASSWORD_KEY, secrets.token_urlsafe(20))
+
+    def get_credentials(self) -> Tuple[str, str]:
+        """Credentials clients (prometheus) use to reach the service
+        discovery endpoint when security is enabled."""
+        username = self.mgr.get_store(SD_USERNAME_KEY)
+        password = self.mgr.get_store(SD_PASSWORD_KEY)
+        assert username and password
+        return username, password
 
     def validate_password(self, realm: str, username: str, password: str) -> bool:
-        return (password == self.password and username == self.username)
+        expected_username, expected_password = self.get_credentials()
+        return (password == expected_password and username == expected_username)
 
     def get_cherrypy_config(self, enable_auth: bool) -> Dict:
         config = {
@@ -72,15 +91,6 @@ class ServiceDiscovery:
             d.connect(**route._asdict())
         return d
 
-    def enable_auth(self) -> None:
-        self.username = self.mgr.get_store('service_discovery/root/username')
-        self.password = self.mgr.get_store('service_discovery/root/password')
-        if not self.password or not self.username:
-            self.username = 'admin'  # TODO(redo): what should be the default username
-            self.password = secrets.token_urlsafe(20)
-            self.mgr.set_store('service_discovery/root/password', self.password)
-            self.mgr.set_store('service_discovery/root/username', self.username)
-
     def configure_tls(self) -> Dict[str, str]:
         addr = self.mgr.get_mgr_ip()
         host = self.mgr.get_hostname()
@@ -102,10 +112,7 @@ class ServiceDiscovery:
     def configure(self, port: int, addr: str, enable_security: bool) -> Tuple[Dict, Optional[Dict[str, str]]]:
         # we create a new server to enforce TLS/SSL config refresh
         self.root_server = Root(self.mgr)
-        ssl_info = None
-        if enable_security:
-            self.enable_auth()
-            ssl_info = self.configure_tls()
+        ssl_info = self.configure_tls() if enable_security else None
         config = self.get_cherrypy_config(enable_security)
         dispatcher = self.configure_routes(self.root_server)
         config['/'].update({'request.dispatch': dispatcher})

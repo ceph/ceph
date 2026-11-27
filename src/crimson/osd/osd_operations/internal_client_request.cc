@@ -70,7 +70,8 @@ InternalClientRequest::with_interruption()
         1,
         0,
         0,
-        SchedulerClass::client}));
+        SchedulerClass::client},
+      scheduler::throttle_level_t::foreground));
 
   co_await enter_stage<interruptor>(obc_orderer->obc_pp().process);
 

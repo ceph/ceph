@@ -240,11 +240,9 @@ public:
         }
       }
       encode_trace(payload, features);
-      if (header.version == HEAD_VERSION) {
-        // optional (a presence flag, then the hint). Appended last: older
-        // decoders, including the kernel's, stop before it
-        encode(core_hint, payload);
-      }
+      // optional (a presence flag, then the hint). Appended last, whatever
+      // the version: older decoders, including the kernel's, stop before it
+      encode(core_hint, payload);
     }
   }
   void decode_payload() override {

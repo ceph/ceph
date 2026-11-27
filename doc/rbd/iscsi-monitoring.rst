@@ -2,6 +2,8 @@
 Monitoring Ceph iSCSI gateways
 ------------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 Ceph provides a tool for iSCSI gateway environments
 to monitor performance of exported RADOS Block Device (RBD) images.
 

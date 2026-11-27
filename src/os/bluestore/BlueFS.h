@@ -996,7 +996,7 @@ public:
   // has not been written to. To be called when the file is done growing.
   int truncate_unused(FileWriter *h);
 
-  size_t probe_alloc_avail(int dev, uint64_t alloc_size);
+  uint64_t probe_alloc_avail(int dev, uint64_t alloc_size);
 
   /// test purpose methods
   const PerfCounters* get_perf_counters() const {

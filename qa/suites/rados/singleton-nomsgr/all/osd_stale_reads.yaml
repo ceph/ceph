@@ -8,6 +8,8 @@ overrides:
   ceph:
     log-ignorelist:
       - \(OSD_DOWN\)
+      - \(OSD_HOST_DOWN\)
+      - \(OSD_ROOT_DOWN\)
       - \(POOL_APP_NOT_ENABLED\)
       - \(SLOW_OPS\)
       - \(PG_AVAILABILITY\)
@@ -29,3 +31,10 @@ tasks:
 - exec:
     client.0:
       - ceph_test_osd_stale_read
+# The test leaves the old primary fenced (blackholed from its peers and the
+# mons) and marked down. It cannot be unfenced remotely, so restart the OSDs
+# (the fence is not persistent) to let it rejoin before the final scrub checks.
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+    wait-for-osds-up: true

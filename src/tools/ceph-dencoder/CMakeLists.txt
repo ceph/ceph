@@ -8,10 +8,7 @@ if(HAS_VTA)
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
 
-set(dencoder_srcs
-  ceph_dencoder.cc
-  $<TARGET_OBJECTS:common_texttable_obj>)
-add_executable(ceph-dencoder ${dencoder_srcs})
+add_executable(ceph-dencoder ceph_dencoder.cc)
 set_target_properties(ceph-dencoder PROPERTIES
   JOB_POOL_COMPILE heavy_compile_job_pool
   JOB_POOL_LINK heavy_link_job_pool)
@@ -110,11 +107,6 @@ target_compile_definitions(ceph-dencoder PRIVATE
 
 target_link_libraries(ceph-dencoder
   global
-  ${DENCODER_EXTRALIBS}
-  cls_log_client
-  cls_version_client
-  cls_user_client
-  cls_cas_client
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   ${ALLOC_LIBS})

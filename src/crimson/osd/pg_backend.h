@@ -389,7 +389,14 @@ public:
     const ObjectState& os,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
-  interruptible_future<> omap_set_vals(
+  using omap_set_errorator = crimson::errorator<
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::enametoolong>;
+  using omap_set_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      omap_set_errorator>;
+  omap_set_ierrorator::future<> omap_set_vals(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -404,7 +411,7 @@ public:
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats,
     uint32_t op_flags = 0) const;
-  interruptible_future<> omap_set_header(
+  omap_set_ierrorator::future<> omap_set_header(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -470,6 +477,12 @@ protected:
   crimson::osd::ShardServices &shard_services;
   DoutPrefixProvider &dpp; ///< provides log prefix context
   crimson::os::BackendStore store;
+
+  /// Size limits of the store for one xattr or one omap entry. They do
+  /// not change, so get_store_kv_limits() asks the store only once.
+  using store_kv_limits_t = crimson::os::FuturizedStore::Shard::kv_limits_t;
+  std::optional<store_kv_limits_t> store_kv_limits;
+  seastar::future<store_kv_limits_t> get_store_kv_limits();
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;

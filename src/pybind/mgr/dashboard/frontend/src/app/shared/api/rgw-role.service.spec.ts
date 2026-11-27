@@ -29,6 +29,22 @@ describe('RgwRoleService', () => {
     expect(req.request.method).toBe('GET');
   });
 
+  it('should normalize policies_count in list response', () => {
+    let roles: any;
+    service.list('test-account').subscribe((res) => (roles = res));
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles');
+    req.flush([
+      { RoleName: 'with-count', policies_count: 2 },
+      { RoleName: 'with-policies', PermissionPolicies: ['p1', 'p2', 'p3'] },
+      { RoleName: 'empty' }
+    ]);
+    expect(roles).toEqual([
+      { RoleName: 'with-count', policies_count: 2 },
+      { RoleName: 'with-policies', PermissionPolicies: ['p1', 'p2', 'p3'], policies_count: 3 },
+      { RoleName: 'empty', policies_count: 0 }
+    ]);
+  });
+
   it('should call get with account_id', () => {
     service.get('test-role', 'test-account').subscribe();
     const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role');
@@ -86,6 +102,37 @@ describe('RgwRoleService', () => {
       policy_name: 'test-policy',
       policy_doc: '{"Statement":[]}'
     });
+  });
+
+  it('should call listPolicies', () => {
+    service.listPolicies('test-role', 'test-account').subscribe();
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role/policy');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getPolicy and return a formatted policy document', () => {
+    const policyDoc = '{"Version":"2012-10-17","Statement":[]}';
+    const formatted = JSON.stringify(JSON.parse(policyDoc), null, 2);
+    service.getPolicy('test-role', 'test-policy', 'test-account').subscribe((doc) => {
+      expect(doc).toBe(formatted);
+    });
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({ PolicyName: 'test-policy', PolicyDocument: policyDoc });
+  });
+
+  it('should format radosgw-admin Permission policy responses', () => {
+    const policyDoc = '{"Version":"2012-10-17","Statement":[{"Effect":"Allow"}]}';
+    service.getPolicy('test-role', 'test-policy', 'test-account').subscribe((doc) => {
+      expect(doc).toContain('"Version": "2012-10-17"');
+      expect(doc).toContain('"Effect": "Allow"');
+    });
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    req.flush({ 'Permission policy': policyDoc });
   });
 
   it('should call deletePolicy', () => {

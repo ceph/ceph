@@ -58,6 +58,7 @@ using mempool_xattr_map = xattr_map<mempool::mds_co::pool_allocator>; // FIXME b
 class Locker {
 public:
   Locker(MDSRank *m, MDCache *c);
+  ~Locker();
 
   SimpleLock *get_lock(int lock_type, const MDSCacheObjectInfo &info);
   
@@ -159,6 +160,11 @@ public:
   // frozen.  the condition must be consistent across handle_client_caps and
   // process_request_cap_release to preserve ordering.
   bool should_defer_client_cap_frozen(CInode *in);
+
+  // hold back a cap flush/flushsnap that follows a snap this rank has
+  // prepared but not yet committed (see handle_client_caps).
+  bool should_defer_client_caps_for_snap(const cref_t<MClientCaps> &m);
+  void retry_client_caps_for_snap(inodeno_t ino);
 
   void process_request_cap_release(const MDRequestRef& mdr, client_t client, const ceph_mds_request_release& r,
 				   std::string_view dname);
@@ -305,5 +311,9 @@ private:
   MDSRank *mds;
   MDCache *mdcache;
   xlist<ScatterLock*> updated_filelocks;
+
+  // cap messages held back by should_defer_client_caps_for_snap(), in
+  // arrival order
+  std::map<inodeno_t, std::vector<cref_t<MClientCaps>>> caps_waiting_for_snap;
 };
 #endif

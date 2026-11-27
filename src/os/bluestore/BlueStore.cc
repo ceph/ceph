@@ -69,6 +69,10 @@
 #include "BlueAdmin.h"
 #include "extblkdev/ExtBlkDevPlugin.h"
 
+#ifdef WITH_CPUTRACE
+#include "common/cputrace.h"
+#endif
+
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -900,8 +904,6 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
       BlueStore::Buffer *b = &*i;
       ceph_assert(b->is_clean());
       dout(20) << __func__ << " rm " << *b << dendl;
-      ceph_assert(*(b->cache_age_bin) >= b->length);
-      *(b->cache_age_bin) -= b->length;
       b->space->_rm_buffer(this, b);
     }
     num = lru.size();
@@ -2005,6 +2007,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_deferred_batch_ops_ssd"s,
     "bluestore_throttle_bytes"s,
     "bluestore_throttle_deferred_bytes"s,
+    "bluestore_throttle_trace_rate"s,
     "bluestore_throttle_cost_per_io_hdd"s,
     "bluestore_throttle_cost_per_io_ssd"s,
     "bluestore_throttle_cost_per_io"s,
@@ -5663,7 +5666,7 @@ void BlueStore::trim_free_space(const string& type, std::ostream& outss)
     ceph_assert(len > 0);
     interval_set<uint64_t> to_discard;
     to_discard.union_insert(off, len);
-    bdev->try_discard(to_discard, false);
+    bdev->try_discard(to_discard, false, true);
   };
   if (type == "bdev-block") {
     if (!bdev->is_discard_supported()) {

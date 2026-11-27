@@ -23,6 +23,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Connection.h"
+#include "crimson/os/futurized_store.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/pg.h"
@@ -193,6 +194,26 @@ bool ShardServices::is_mapping_primary(spg_t pgid) const
   return pgid.shard == shard_id_t::NO_SHARD ||
     (static_cast<size_t>(pgid.shard.id) < up.size() &&
      up[pgid.shard.id] == local_state.whoami);
+}
+
+std::optional<bool>
+ShardServices::resident_storage_full(store_index_t store_index) const
+{
+  auto backend = get_store(store_index);
+  // Alien reactors (crimson shards > seastore shards) forward IO to
+  // backend.shard_id. Their own SeaStore shard is inactive.
+  if (!crimson::os::is_store_local(backend)) {
+    return std::nullopt;
+  }
+  return backend.f_store.get_sharded_store(backend.store_index).is_storage_full();
+}
+
+seastar::future<bool>
+ShardServices::is_storage_full(store_index_t store_index) const
+{
+  return crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::is_storage_full>(
+    get_store(store_index));
 }
 
 seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {

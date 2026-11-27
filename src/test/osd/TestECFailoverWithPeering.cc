@@ -15,6 +15,7 @@
 
 #include <gtest/gtest.h>
 #include <gtest/gtest-spi.h>
+#include <cstring>
 #include "test/osd/ECPeeringTestFixture.h"
 #include "osd/osd_perf_counters.h"
 #include "osd/PrimaryLogPG.h"
@@ -46,6 +47,12 @@ struct ObjectScenario {
   uint64_t size;
   std::vector<std::vector<ObjOp>> committed;
   std::vector<std::vector<ObjOp>> ops;
+};
+
+/* The objects of a case; their names start with the case's name. */
+struct CaseObjects {
+  std::string name;
+  std::vector<ObjectScenario> objects;
 };
 
 }  // namespace
@@ -285,6 +292,10 @@ protected:
         }
         const uint64_t length = std::min(stripe_unit, stored.length() - offset);
         const char* actual = stored.c_str() + offset;
+        // Usually equal; the loop below only finds the offset for the message
+        if (std::memcmp(actual, expected.c_str(), length) == 0) {
+          continue;
+        }
         for (uint64_t i = 0; i < length; ++i) {
           if (actual[i] != expected.c_str()[i]) {
             ADD_FAILURE() << (in.contains(id) ? "data" : "parity")
@@ -304,15 +315,22 @@ protected:
     return name + "_" + std::to_string(index);
   }
 
-  /* Create each object and apply its committed ops, returning the models. */
+  /* Create each object and apply its committed ops, returning the models.
+   * Without verify, the caller checks the objects right after. */
   std::vector<std::string> create_objects(
       const std::string& name,
-      const std::vector<ObjectScenario>& objects) {
+      const std::vector<ObjectScenario>& objects,
+      bool verify = true) {
     std::vector<std::string> models;
     for (size_t i = 0; i < objects.size(); ++i) {
       bufferlist bl = create_random_buffer(objects[i].size);
       models.emplace_back(bl.c_str(), bl.length());
-      create_and_write_verify(object_name(name, i), models.back());
+      if (verify) {
+        create_and_write_verify(object_name(name, i), models.back());
+      } else {
+        EXPECT_EQ(0, create_and_write(object_name(name, i), models.back()))
+          << "write of " << object_name(name, i);
+      }
       for (const auto& ops : objects[i].committed) {
         EXPECT_EQ(0, submit_ops(object_name(name, i), ops, models.back()));
       }
@@ -363,18 +381,21 @@ protected:
 
   /* Apply the ops of each object, all in flight together, and check the
    * objects and their shards. Then take down the OSD holding the first data
-   * shard, so that reads must decode, and check again.
+   * shard, so that reads must decode, and check again. With several cases
+   * on this cluster, each case's ops run and are checked in turn, then the
+   * OSD goes down once for all of them.
    */
-  void run_forward(const std::string& name,
-                   const std::vector<ObjectScenario>& objects) {
+  void run_forward(const std::vector<CaseObjects>& cases) {
     ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
-    auto models = create_objects(name, objects);
-    const auto queued = queue_all_ops(name, objects, models);
-    event_loop->run_until_idle();
-    for (const auto& op : queued) {
-      EXPECT_EQ(0, *op.result);
-    }
-    {
+    std::vector<std::vector<std::string>> case_models;
+    for (const auto& [name, objects] : cases) {
+      SCOPED_TRACE(name);
+      auto& models = case_models.emplace_back(create_objects(name, objects));
+      const auto queued = queue_all_ops(name, objects, models);
+      event_loop->run_until_idle();
+      for (const auto& op : queued) {
+        EXPECT_EQ(0, *op.result);
+      }
       SCOPED_TRACE("after the ops");
       verify_objects(name, models, {});
     }
@@ -384,7 +405,26 @@ protected:
     event_loop->run_until_idle();
     ASSERT_TRUE(all_shards_active()) << "All shards should be active after peering";
     SCOPED_TRACE("with shard " + std::to_string(down) + " down");
-    verify_objects(name, models, {down});
+    for (size_t c = 0; c < cases.size(); ++c) {
+      SCOPED_TRACE(cases[c].name);
+      verify_objects(cases[c].name, case_models[c], {down});
+    }
+  }
+
+  /* Each shard of the object except failing_shard must be as recorded. */
+  void expect_shards_unchanged(const std::string& obj_name,
+                               const std::map<int, bufferlist>& original,
+                               int failing_shard) {
+    const auto shards = read_shards(obj_name);
+    for (int shard = 0; shard < k + m; ++shard) {
+      if (shard == failing_shard) {
+        continue;
+      }
+      EXPECT_EQ(original.at(shard).length(), shards.at(shard).length())
+        << "size of shard " << shard << " of " << obj_name;
+      EXPECT_TRUE(original.at(shard).contents_equal(shards.at(shard)))
+        << "contents of shard " << shard << " of " << obj_name;
+    }
   }
 
   /* Submit the ops of each object so that they reach every shard except
@@ -394,47 +434,65 @@ protected:
    * one op must be left to roll back. Each object must be left as it was
    * after its last completed op, and each surviving shard of an object with
    * no completed op must be restored exactly.
+   *
+   * With several cases on this cluster, the ops of all cases are in flight
+   * together and one failure rolls them back; see truncate_matrix_params().
    */
-  void run_rollback(const std::string& name,
-                    const std::vector<ObjectScenario>& objects,
+  void run_rollback(const std::vector<CaseObjects>& cases,
                     int blocked_shard,
                     int failing_shard) {
     ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
     ASSERT_NE(blocked_shard, failing_shard);
     ASSERT_GE(k + m - 1, k) << "Too few shards would remain up";
 
-    const auto originals = create_objects(name, objects);
-    std::vector<std::map<int, bufferlist>> original_shards;
-    for (size_t i = 0; i < objects.size(); ++i) {
-      original_shards.push_back(read_shards(object_name(name, i)));
-    }
-    {
+    struct CaseState {
+      const std::string& name;
+      const std::vector<ObjectScenario>& objects;
+      std::vector<std::string> originals;
+      std::vector<std::map<int, bufferlist>> original_shards;
+      std::vector<QueuedOp> queued;
+      std::vector<std::string> expected;
+      std::vector<bool> completed;
+    };
+    std::vector<CaseState> states;
+    for (const auto& c : cases) {
+      auto& s = states.emplace_back(CaseState{c.name, c.objects});
+      SCOPED_TRACE(c.name);
+      s.originals = create_objects(c.name, c.objects, false);
+      for (size_t i = 0; i < c.objects.size(); ++i) {
+        s.original_shards.push_back(read_shards(object_name(c.name, i)));
+      }
       SCOPED_TRACE("before the ops");
-      verify_objects(name, originals, {});
+      verify_objects(c.name, s.originals, {});
     }
 
     const int primary = get_primary_shard_from_osdmap();
     event_loop->suspend_from_to_osd(primary, blocked_shard);
-    auto models = originals;
-    const auto queued = queue_all_ops(name, objects, models);
+    for (auto& s : states) {
+      auto models = s.originals;
+      s.queued = queue_all_ops(s.name, s.objects, models);
+    }
     event_loop->run_until_idle();
 
-    auto expected = originals;
-    std::vector<bool> in_flight(objects.size(), false);
-    std::vector<bool> completed(objects.size(), false);
-    for (const auto& op : queued) {
-      if (*op.result == 0) {
-        EXPECT_FALSE(in_flight[op.object]) << "ops must complete in order";
-        expected[op.object] = op.model;
-        completed[op.object] = true;
-      } else {
-        EXPECT_EQ(-EINPROGRESS, *op.result);
-        in_flight[op.object] = true;
+    for (auto& s : states) {
+      SCOPED_TRACE(s.name);
+      s.expected = s.originals;
+      std::vector<bool> in_flight(s.objects.size(), false);
+      s.completed.assign(s.objects.size(), false);
+      for (const auto& op : s.queued) {
+        if (*op.result == 0) {
+          EXPECT_FALSE(in_flight[op.object]) << "ops must complete in order";
+          s.expected[op.object] = op.model;
+          s.completed[op.object] = true;
+        } else {
+          EXPECT_EQ(-EINPROGRESS, *op.result);
+          in_flight[op.object] = true;
+        }
       }
+      EXPECT_TRUE(std::ranges::any_of(in_flight, std::identity{}))
+        << "No op writes to shard " << blocked_shard
+        << ", so none is left to roll back";
     }
-    EXPECT_TRUE(std::ranges::any_of(in_flight, std::identity{}))
-      << "No op writes to shard " << blocked_shard
-      << ", so none is left to roll back";
 
     mark_osd_down(failing_shard);
     event_loop->unsuspend_from_to_osd(primary, blocked_shard);
@@ -444,20 +502,14 @@ protected:
     SCOPED_TRACE("after rollback with shard " + std::to_string(blocked_shard) +
                  " blocked and shard " + std::to_string(failing_shard) +
                  " failed");
-    verify_objects(name, expected, {failing_shard});
-    for (size_t i = 0; i < objects.size(); ++i) {
-      if (completed[i]) {
-        continue;
-      }
-      const auto shards = read_shards(object_name(name, i));
-      for (int shard = 0; shard < k + m; ++shard) {
-        if (shard == failing_shard) {
-          continue;
+    for (const auto& s : states) {
+      SCOPED_TRACE(s.name);
+      verify_objects(s.name, s.expected, {failing_shard});
+      for (size_t i = 0; i < s.objects.size(); ++i) {
+        if (!s.completed[i]) {
+          expect_shards_unchanged(object_name(s.name, i),
+                                  s.original_shards[i], failing_shard);
         }
-        EXPECT_EQ(original_shards[i].at(shard).length(), shards.at(shard).length())
-          << "size of shard " << shard << " of " << object_name(name, i);
-        EXPECT_TRUE(original_shards[i].at(shard).contents_equal(shards.at(shard)))
-          << "contents of shard " << shard << " of " << object_name(name, i);
       }
     }
   }
@@ -540,7 +592,7 @@ protected:
     for (auto [offset, length] : writes) {
       ops.push_back(Write(offset, length));
     }
-    run_rollback(obj_name, {{object_size, {}, {ops}}}, 1, get_shard(k + m - 1));
+    run_rollback({{obj_name, {{object_size, {}, {ops}}}}}, 1, get_shard(k + m - 1));
   }
 
   // Shard ids whose OSD is currently up (i.e. that have a TestPG).
@@ -978,8 +1030,7 @@ TEST_P(TestECFailoverWithPeering, AsyncRecoveryKeepsEachZoneAtMinSize) {
     GTEST_SKIP() << "requires num_zones == 2";
   }
   ScopedConfig cfg_async_recovery("osd_async_recovery_min_cost", "0");
-  const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
-  const int spare = k + m - pool->min_size;
+  const int spare = k + m - osdmap->get_pg_pool(pool_id)->min_size;
   ASSERT_GE(spare, 1);
   const std::vector<int> zone1 = zone_osds(1);
   const std::string data(stripe_unit * k, 'A');
@@ -1000,7 +1051,9 @@ TEST_P(TestECFailoverWithPeering, AsyncRecoveryKeepsEachZoneAtMinSize) {
     }
   }
   EXPECT_LE(async_in_zone1, spare);
-  EXPECT_EQ(0u, osdmap->num_acting_below_min_size(*pool, ps->get_acting()));
+  // mark_osd_down() freed the first map; take the pool from the current one
+  EXPECT_EQ(0u, osdmap->num_acting_below_min_size(
+                  *osdmap->get_pg_pool(pool_id), ps->get_acting()));
 }
 
 TEST_P(TestECFailoverWithPeering, OSDFailureWithPeering) {
@@ -3036,8 +3089,8 @@ TEST_P(TestECFailoverWithPeering, RollbackTruncateAndWriteInTruncatedRange) {
 TEST_P(TestECFailoverWithPeering, RollbackTruncateUp) {
   const uint64_t sw = k * stripe_unit;
   const uint64_t object_size = 5 * sw + stripe_unit + 123;
-  run_rollback("rollback_truncate_up",
-               {{object_size, {}, {{Truncate(object_size + sw + 77)}}}},
+  run_rollback({{"rollback_truncate_up",
+                 {{object_size, {}, {{Truncate(object_size + sw + 77)}}}}}},
                1, get_shard(k + m - 1));
 }
 
@@ -3051,16 +3104,16 @@ TEST_P(TestECFailoverWithPeering, RollbackTruncateUp) {
  */
 TEST_P(TestECFailoverWithPeering, TruncateAndWriteInPage) {
   const uint64_t sw = k * stripe_unit;
-  run_forward("truncate_and_write_in_page",
-              {{5 * sw + stripe_unit + 123, {}, {{Truncate(1), Write(8, 50)}}}});
+  run_forward({{"truncate_and_write_in_page",
+                {{5 * sw + stripe_unit + 123, {}, {{Truncate(1), Write(8, 50)}}}}}});
 }
 
 TEST_P(TestECFailoverWithPeering, WritesInPageAboveEnd) {
   const uint64_t sw = k * stripe_unit;
   const uint64_t object_size = 5 * sw + stripe_unit + 123;
   const uint64_t page = ECUtil::align_next(object_size);
-  run_forward("writes_in_page_above_end",
-              {{object_size, {}, {{Write(page + 10, 10), Write(page + 100, 10)}}}});
+  run_forward({{"writes_in_page_above_end",
+                {{object_size, {}, {{Write(page + 10, 10), Write(page + 100, 10)}}}}}});
 }
 
 /**
@@ -4837,6 +4890,21 @@ enum class TruncateMode {
   BlockParityRollbackPrimary,
 };
 
+const TruncateMode kTruncateModes[] = {
+  TruncateMode::Forward,
+  TruncateMode::RollbackParity,
+  TruncateMode::RollbackData,
+  TruncateMode::RollbackPrimary,
+  TruncateMode::BlockParityRollbackData,
+  TruncateMode::BlockParityRollbackPrimary,
+};
+
+bool blocks_shard_1(TruncateMode mode) {
+  return mode == TruncateMode::RollbackParity ||
+         mode == TruncateMode::RollbackData ||
+         mode == TruncateMode::RollbackPrimary;
+}
+
 struct TruncateCase {
   std::string name;
   /* The objects of the case for k and stripe unit su, or nullopt if the case
@@ -4844,6 +4912,11 @@ struct TruncateCase {
   std::function<std::optional<std::vector<ObjectScenario>>(uint64_t k,
                                                            uint64_t su)> make;
 };
+
+// gtest prints the parameters of each test; without this byte by byte
+void PrintTo(const TruncateCase& truncate_case, std::ostream* os) {
+  *os << truncate_case.name;
+}
 
 constexpr uint64_t PAGE = EC_ALIGN_SIZE;
 
@@ -5168,56 +5241,57 @@ const std::vector<TruncateCase> kTruncateCases = make_truncate_cases();
 
 }  // namespace
 
+/* A batch of cases of a config, run in one mode on one cluster. */
 class TestECTruncateMatrix
   : public ECTruncateTestBase,
     public ::testing::WithParamInterface<
-      std::tuple<BackendConfig, TruncateCase, TruncateMode>> {
+      std::tuple<BackendConfig, std::vector<TruncateCase>, TruncateMode>> {
 public:
   TestECTruncateMatrix() : ECTruncateTestBase(std::get<0>(GetParam())) {}
 };
 
 TEST_P(TestECTruncateMatrix, Run) {
-  const auto& [config, truncate_case, mode] = GetParam();
-  const auto objects = truncate_case.make(k, stripe_unit);
-  if (!objects) {
-    GTEST_SKIP() << truncate_case.name << " does not apply to this geometry";
+  const auto& [config, cases, mode] = GetParam();
+  std::vector<CaseObjects> batch;
+  for (const auto& truncate_case : cases) {
+    auto objects = truncate_case.make(k, stripe_unit);
+    ASSERT_TRUE(objects) << truncate_case.name
+                         << " generated for a geometry it does not apply to";
+    if (blocks_shard_1(mode) && !ops_write_shard(*objects, 1)) {
+      continue;  // nothing to roll back
+    }
+    batch.push_back({truncate_case.name, std::move(*objects)});
   }
-  const bool blocks_shard_1 = mode == TruncateMode::RollbackParity ||
-                              mode == TruncateMode::RollbackData ||
-                              mode == TruncateMode::RollbackPrimary;
-  if (blocks_shard_1 && !ops_write_shard(*objects, 1)) {
-    GTEST_SKIP() << truncate_case.name << " does not write shard 1";
+  if (batch.empty()) {
+    GTEST_SKIP() << "no case writes shard 1";
   }
-  SCOPED_TRACE(config.label + " " + truncate_case.name);
+  SCOPED_TRACE(config.label);
 
   switch (mode) {
   case TruncateMode::Forward:
-    run_forward(truncate_case.name, *objects);
+    run_forward(batch);
     break;
   case TruncateMode::RollbackParity:
-    run_rollback(truncate_case.name, *objects, 1, get_shard(k + m - 1));
+    run_rollback(batch, 1, get_shard(k + m - 1));
     break;
   case TruncateMode::RollbackData:
-    if (k <= 2) {
-      GTEST_SKIP() << "needs a data shard other than the first two";
-    }
-    run_rollback(truncate_case.name, *objects, 1, get_shard(2));
+    ASSERT_GT(k, 2) << "needs a data shard other than the first two";
+    run_rollback(batch, 1, get_shard(2));
     break;
   case TruncateMode::RollbackPrimary:
-    run_rollback(truncate_case.name, *objects, 1,
-                 get_primary_shard_from_osdmap());
+    run_rollback(batch, 1, get_primary_shard_from_osdmap());
     break;
   case TruncateMode::BlockParityRollbackData:
-    run_rollback(truncate_case.name, *objects, get_shard(k),
-                 get_shard(k > 2 ? 2 : 1));
+    run_rollback(batch, get_shard(k), get_shard(k > 2 ? 2 : 1));
     break;
   case TruncateMode::BlockParityRollbackPrimary:
-    run_rollback(truncate_case.name, *objects, get_shard(k),
-                 get_primary_shard_from_osdmap());
+    run_rollback(batch, get_shard(k), get_primary_shard_from_osdmap());
     break;
   }
 }
 
+/* A batch is named after its config, mode and first case, plus
+ * _and<N>more for its other cases. */
 std::string truncate_matrix_name(
     const ::testing::TestParamInfo<TestECTruncateMatrix::ParamType>& info) {
   static const std::map<TruncateMode, std::string> mode_names = {
@@ -5228,22 +5302,62 @@ std::string truncate_matrix_name(
     {TruncateMode::BlockParityRollbackData, "BlockParityRollbackData"},
     {TruncateMode::BlockParityRollbackPrimary, "BlockParityRollbackPrimary"},
   };
-  return std::get<0>(info.param).label + "_" + std::get<1>(info.param).name +
-         "_" + mode_names.at(std::get<2>(info.param));
+  const auto& [config, cases, mode] = info.param;
+  return config.label + "_" + mode_names.at(mode) + "_" + cases[0].name +
+         (cases.size() > 1 ? "_and" + std::to_string(cases.size() - 1) + "more"
+                           : "");
+}
+
+/* The cases that apply to each config: a test that skips itself still pays
+ * for the setup and teardown of its cluster. They come in batches. In the
+ * modes that block shard 1, a case with more than one op under test runs
+ * alone, as one of its ops may complete first, and would not behind an
+ * earlier case's op. In the other modes all ops complete, or none as every
+ * op writes the first parity shard. */
+std::vector<TestECTruncateMatrix::ParamType> truncate_matrix_params() {
+  /* Cases of a batch share a cluster; batches over 64 save no more time but
+   * take more memory. TEST_EC_TRUNCATE_BATCH_SIZE=1 runs each case alone. */
+  const char* env = std::getenv("TEST_EC_TRUNCATE_BATCH_SIZE");
+  const size_t batch_size = env ? std::max(1, std::atoi(env)) : 64;
+  std::vector<TestECTruncateMatrix::ParamType> params;
+  for (const auto& config : kECPeeringConfigs) {
+    for (const auto mode : kTruncateModes) {
+      if (mode == TruncateMode::RollbackData && config.k <= 2) {
+        continue;
+      }
+      std::vector<TruncateCase> batch;
+      for (const auto& truncate_case : kTruncateCases) {
+        const auto objects = truncate_case.make(config.k, config.stripe_unit);
+        if (!objects) {
+          continue;
+        }
+        size_t ops = 0;
+        for (const auto& object : *objects) {
+          ops += object.ops.size();
+        }
+        if (blocks_shard_1(mode) && ops > 1) {
+          params.emplace_back(config,
+                              std::vector<TruncateCase>{truncate_case}, mode);
+          continue;
+        }
+        batch.push_back(truncate_case);
+        if (batch.size() == batch_size) {
+          params.emplace_back(config, std::move(batch), mode);
+          batch.clear();
+        }
+      }
+      if (!batch.empty()) {
+        params.emplace_back(config, std::move(batch), mode);
+      }
+    }
+  }
+  return params;
 }
 
 INSTANTIATE_TEST_SUITE_P(
   ECConfigs,
   TestECTruncateMatrix,
-  ::testing::Combine(
-    ::testing::ValuesIn(kECPeeringConfigs),
-    ::testing::ValuesIn(kTruncateCases),
-    ::testing::Values(TruncateMode::Forward,
-                      TruncateMode::RollbackParity,
-                      TruncateMode::RollbackData,
-                      TruncateMode::RollbackPrimary,
-                      TruncateMode::BlockParityRollbackData,
-                      TruncateMode::BlockParityRollbackPrimary)),
+  ::testing::ValuesIn(truncate_matrix_params()),
   truncate_matrix_name
 );
 

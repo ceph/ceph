@@ -45,6 +45,8 @@
 #include "test/osd/TestCommon.h"
 #include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"
+#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 using namespace std;
 
@@ -320,20 +322,10 @@ TEST_P(TestBackendBasics, DirectRead) {
         PGBackend* backend = test_pg->backend.get();
         ASSERT_TRUE(backend != nullptr) << "Backend for shard " << shard_id << " should not be null";
 
-        ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backend);
-        ASSERT_TRUE(ec_switch != nullptr) << "Backend should be ECSwitch for EC pools";
-
         bufferlist shard_data;
 
-        // Perform sync read with EC_DIRECT_READ flag
         // Read the entire stripe - we expect only this shard's data back
-        int read_result = ec_switch->objects_read_local(
-          hoid,
-          0, // offset
-          stripe_width, // length (full stripe)
-          CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, // op_flags with direct read flag
-          &shard_data
-        );
+        int read_result = direct_read(backend, hoid, 0, stripe_width, shard_data);
 
         EXPECT_GE(read_result, 0)
           << param.label << " direct read to shard " << shard_id << " should complete successfully";
@@ -361,6 +353,159 @@ TEST_P(TestBackendBasics, DirectRead) {
   auto* primary_listener = get_primary_listener();
   if (primary_listener) {
     primary_listener->sent_messages.clear();
+  }
+}
+
+/**
+ * DirectReadOfOtherShardsChunk - a direct read sent to a data shard returns
+ * only that shard's data, so a read within another shard's chunk returns
+ * nothing.
+ */
+TEST_P(TestBackendBasics, DirectReadOfOtherShardsChunk) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Direct reads need optimized EC";
+  }
+
+  const std::string obj_name = "test_direct_read_other_" +
+    backend_config.label + "_" + GetParam().write_read.label;
+  const int num_chunks = 2 * k;
+  const uint64_t read_len = stripe_unit / 2;
+
+  std::string data;
+  for (int c = 0; c < num_chunks; c++) {
+    data.append(stripe_unit, 'A' + c);
+  }
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  hobject_t hoid = make_test_object(obj_name);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    if (shard_id >= k) {
+      continue;
+    }
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(test_pg->backend.get());
+      ASSERT_NE(nullptr, ec_switch);
+
+      for (int c = 0; c < num_chunks; c++) {
+        bufferlist bl;
+        ASSERT_GE(ec_switch->objects_read_local(
+                    hoid, c * stripe_unit, read_len, 0, &bl), 0);
+        if (c % k == shard_id) {
+          EXPECT_EQ(std::string(read_len, 'A' + c), bl.to_str())
+            << "shard " << shard_id << " chunk " << c;
+        } else {
+          EXPECT_EQ(0u, bl.length())
+            << "shard " << shard_id << " read chunk " << c << " and got "
+            << bl.length() << " bytes";
+        }
+      }
+    }
+  }
+}
+
+/**
+ * DirectReadRefusedForOtherShardsData - a direct read op with a read that
+ * holds none of the shard's data is refused with -EINVAL. Clients without the
+ * fix for https://tracker.ceph.com/issues/80836 send such ops.
+ */
+TEST_P(TestBackendBasics, DirectReadRefusedForOtherShardsData) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Direct reads need optimized EC";
+  }
+
+  const std::string obj_name = "test_direct_read_refused_" +
+    backend_config.label + "_" + GetParam().write_read.label;
+  const int num_chunks = 2 * k;
+  const uint64_t read_len = stripe_unit / 2;
+
+  std::string data;
+  for (int c = 0; c < num_chunks; c++) {
+    data.append(stripe_unit, 'A' + c);
+  }
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  hobject_t hoid = make_test_object(obj_name);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    // Each zone holds a copy of shards 0..k+m-1.
+    const int rel_shard = shard_id % (k + m);
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      PGBackend* backend = test_pg->backend.get();
+
+      for (int c = 0; c < num_chunks; c++) {
+        bufferlist bl;
+        int r = direct_read(backend, hoid, c * stripe_unit, read_len, bl);
+        if (rel_shard < k && c % k == rel_shard) {
+          EXPECT_EQ(int(read_len), r) << "shard " << shard_id << " chunk " << c;
+          EXPECT_EQ(std::string(read_len, 'A' + c), bl.to_str())
+            << "shard " << shard_id << " chunk " << c;
+        } else {
+          EXPECT_EQ(-EINVAL, r) << "shard " << shard_id << " chunk " << c;
+          EXPECT_EQ(0u, bl.length()) << "shard " << shard_id << " chunk " << c;
+        }
+      }
+
+      // Zero length reads the whole object, which no shard holds.
+      bufferlist bl;
+      EXPECT_EQ(-EINVAL, direct_read(backend, hoid, 0, 0, bl))
+        << "shard " << shard_id;
+
+      // The op of such a client: a read of this shard's chunk, then a read
+      // of the next shard's chunk.
+      if (rel_shard < k) {
+        std::vector<OSDOp> ops(2);
+        for (int i = 0; i < 2; i++) {
+          ops[i].op.op = CEPH_OSD_OP_READ;
+          ops[i].op.extent.offset = (rel_shard + i) * stripe_unit;
+          ops[i].op.extent.length = read_len;
+        }
+        EXPECT_EQ(-EINVAL, backend->check_direct_read(ops))
+          << "shard " << shard_id;
+      }
+    }
+  }
+}
+
+/*
+ * DirectReadRefusedOnLegacyEC - a direct read to a pool without EC
+ * optimizations is refused with -EOPNOTSUPP. A client only sends a direct read
+ * to an optimized EC pool, so reaching one here is a client bug; do_op refuses
+ * it rather than serve it from a shard that cannot, which is why the backend
+ * may then assume a direct read is optimized.
+ */
+TEST_P(TestBackendBasics, DirectReadRefusedOnLegacyEC) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      (backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Only legacy (non-optimized) EC refuses direct reads";
+  }
+
+  hobject_t hoid = make_test_object("test_direct_read_legacy_" +
+    backend_config.label);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      PGBackend* backend = test_pg->backend.get();
+      bufferlist bl;
+      EXPECT_EQ(-EOPNOTSUPP, direct_read(backend, hoid, 0, stripe_unit, bl))
+        << "shard " << shard_id;
+      EXPECT_EQ(0u, bl.length()) << "shard " << shard_id;
+    }
   }
 }
 
@@ -959,6 +1104,178 @@ TEST_P(TestBackendBasics, MultiZoneFailover) {
   if (new_primary_listener) {
     new_primary_listener->sent_messages.clear();
   }
+}
+
+// ---------------------------------------------------------------------------
+// TestBackendBasics: shrinking objects written before EC optimizations
+// ---------------------------------------------------------------------------
+
+namespace {
+
+uint64_t shard_size_on_disk(PGBackendTestFixture& f, TestPG* pg,
+                            const hobject_t& hoid, int shard)
+{
+  ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
+  struct stat st;
+  int r = f.get_osd_fixture(pg->pg_whoami.osd)->store->stat(pg->ch, ghoid, &st);
+  EXPECT_EQ(0, r) << "failed to stat shard " << shard;
+  return r == 0 ? st.st_size : 0;
+}
+
+}  // namespace
+
+// Without EC optimizations, every shard is padded to the stripe.
+TEST_P(TestBackendBasics, LegacyShardsArePadded) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+  if (backend_config.pool_type != EC ||
+      (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
+      param.label != "4k") {
+    GTEST_SKIP() << "only applies to legacy EC pools";
+  }
+
+  std::string obj_name = "test_legacy_padded_" + backend_config.label;
+  const uint64_t stripe_width = k * stripe_unit;
+  const uint64_t size = 4 * stripe_width + stripe_unit;
+  ASSERT_EQ(0, create_and_write(obj_name, std::string(size, 'X')));
+
+  hobject_t hoid = make_test_object(obj_name);
+  for (int shard = 0; shard < get_instance_count(); shard++) {
+    EXPECT_EQ(5 * stripe_unit,
+              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
+      << "shard " << shard;
+  }
+}
+
+// Lay out an object as a pool without EC optimizations would: every shard
+// zero-padded to the stripe, with a hinfo attr.
+static void make_legacy_layout(PGBackendTestFixture& f,
+                               const hobject_t& hoid,
+                               int k, int m,
+                               uint64_t legacy_shard_size)
+{
+  for (int shard = 0; shard < f.get_instance_count(); shard++) {
+    TestPG* pg = f.get_test_pg_by_shard(shard);
+    ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
+    uint64_t size = shard_size_on_disk(f, pg, hoid, shard);
+    ObjectStore::Transaction t;
+    if (size < legacy_shard_size) {
+      bufferlist zeros;
+      zeros.append_zero(legacy_shard_size - size);
+      t.write(pg->ch->cid, ghoid, size, zeros.length(), zeros);
+    }
+    ECLegacy::ECUtilL::HashInfo hinfo(k + m);
+    hinfo.set_total_chunk_size_clear_hash(legacy_shard_size);
+    bufferlist hbl;
+    encode(hinfo, hbl);
+    t.setattr(pg->ch->cid, ghoid, ECUtil::get_hinfo_key(), hbl);
+    ASSERT_EQ(0, f.get_osd_fixture(pg->pg_whoami.osd)->store->queue_transaction(
+      pg->ch, std::move(t)));
+  }
+}
+
+// Truncating a legacy object to a stripe boundary, like a discard at the end
+// of an RBD object, must trim the padding on every shard.
+TEST_P(TestBackendBasics, TruncateLegacyObject) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+  if (backend_config.pool_type != EC ||
+      !(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
+      param.label != "4k") {
+    GTEST_SKIP() << "only applies to optimized EC pools";
+  }
+
+  std::string obj_name = "test_truncate_legacy_" + backend_config.label;
+  const uint64_t stripe_width = k * stripe_unit;
+  const uint64_t old_size = 4 * stripe_width + stripe_unit;
+  const uint64_t new_size = 4 * stripe_width;
+  std::string data(old_size, 'X');
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+
+  hobject_t hoid = make_test_object(obj_name);
+  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(*this, hoid, k, m, 5 * stripe_unit));
+  ASSERT_FALSE(scrub_object(obj_name)) << "scrub should accept the legacy layout";
+
+  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, new_size, {}));
+
+  const ECUtil::stripe_info_t sinfo(k, m, stripe_width,
+                                    osdmap->get_pg_pool(pool_id));
+  for (int shard = 0; shard < get_instance_count(); shard++) {
+    EXPECT_EQ(sinfo.object_size_to_shard_size(new_size, shard_id_t(shard)),
+              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
+      << "shard " << shard;
+  }
+  EXPECT_FALSE(scrub_object(obj_name));
+  verify_object(obj_name, data.substr(0, new_size), 0, new_size);
+}
+
+// With chunks larger than a page, shard 0 and the parity shards are padded
+// too.
+TEST_P(TestBackendBasics, TruncateLegacyObjectPartialChunk) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+  if (backend_config.pool_type != EC ||
+      !(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
+      param.label != "4k" || stripe_unit == EC_ALIGN_SIZE) {
+    GTEST_SKIP() << "only applies to optimized EC pools with chunks larger than a page";
+  }
+
+  std::string obj_name = "test_truncate_legacy_partial_" + backend_config.label;
+  const uint64_t stripe_width = k * stripe_unit;
+  const uint64_t old_size = 4 * stripe_width + EC_ALIGN_SIZE;
+  const uint64_t new_size = 4 * stripe_width;
+  std::string data(old_size, 'X');
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+
+  hobject_t hoid = make_test_object(obj_name);
+  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(*this, hoid, k, m, 5 * stripe_unit));
+
+  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, new_size, {}));
+
+  const ECUtil::stripe_info_t sinfo(k, m, stripe_width,
+                                    osdmap->get_pg_pool(pool_id));
+  for (int shard = 0; shard < get_instance_count(); shard++) {
+    EXPECT_EQ(sinfo.object_size_to_shard_size(new_size, shard_id_t(shard)),
+              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
+      << "shard " << shard;
+  }
+  EXPECT_FALSE(scrub_object(obj_name));
+  verify_object(obj_name, data.substr(0, new_size), 0, new_size);
+}
+
+// Truncating into the middle of a stripe, like a write-zeroes at the end of
+// an RBD object, must also trim shards whose expected size does not shrink.
+TEST_P(TestBackendBasics, TruncateLegacyObjectUnaligned) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+  if (backend_config.pool_type != EC ||
+      !(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
+      param.label != "4k" || k < 4) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 4";
+  }
+
+  std::string obj_name = "test_truncate_legacy_unaligned_" + backend_config.label;
+  const uint64_t stripe_width = k * stripe_unit;
+  const uint64_t old_size = 5 * stripe_width + stripe_unit;
+  const uint64_t new_size = 4 * stripe_width + 3 * stripe_unit;
+  std::string data(old_size, 'X');
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+
+  hobject_t hoid = make_test_object(obj_name);
+  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(*this, hoid, k, m, 6 * stripe_unit));
+  ASSERT_FALSE(scrub_object(obj_name)) << "scrub should accept the legacy layout";
+
+  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, new_size, {}));
+
+  const ECUtil::stripe_info_t sinfo(k, m, stripe_width,
+                                    osdmap->get_pg_pool(pool_id));
+  for (int shard = 0; shard < get_instance_count(); shard++) {
+    EXPECT_EQ(sinfo.object_size_to_shard_size(new_size, shard_id_t(shard)),
+              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
+      << "shard " << shard;
+  }
+  EXPECT_FALSE(scrub_object(obj_name));
+  verify_object(obj_name, data.substr(0, new_size), 0, new_size);
 }
 
 // ---------------------------------------------------------------------------

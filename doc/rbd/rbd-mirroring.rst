@@ -154,6 +154,12 @@ on site-a::
         $ rbd --cluster site-a mirror pool peer bootstrap create --site-name site-a image-pool
         eyJmc2lkIjoiOWY1MjgyZGItYjg5OS00NTk2LTgwOTgtMzIwYzFmYzM5NmYzIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFBUnczOWQwdkhvQmhBQVlMM1I4RmR5dHNJQU50bkFTZ0lOTVE9PSIsIm1vbl9ob3N0IjoiW3YyOjE5Mi4xNjguMS4zOjY4MjAsdjE6MTkyLjE2OC4xLjM6NjgyMV0ifQ==
 
+.. warning:: The token holds the CephX key of the ``client.rbd-mirror-peer``
+   user, which can read and write every pool of the cluster that created the
+   token. Treat it as a secret: copy it to the peer cluster over a secure
+   channel, keep any file that holds it readable only by its owner, and
+   delete it after the import.
+
 To manually import the bootstrap token created by another cluster with ``rbd``,
 specify the ``mirror pool peer bootstrap import`` command, the pool name, a file
 path to the created token (or '-' to read from standard input), along with an
@@ -165,10 +171,12 @@ to rx-only for unidirectional mirroring)::
 
 For example, on site-b::
 
+        $ touch token && chmod 600 token
         $ cat <<EOF > token
         eyJmc2lkIjoiOWY1MjgyZGItYjg5OS00NTk2LTgwOTgtMzIwYzFmYzM5NmYzIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFBUnczOWQwdkhvQmhBQVlMM1I4RmR5dHNJQU50bkFTZ0lOTVE9PSIsIm1vbl9ob3N0IjoiW3YyOjE5Mi4xNjguMS4zOjY4MjAsdjE6MTkyLjE2OC4xLjM6NjgyMV0ifQ==
         EOF
         $ rbd --cluster site-b mirror pool peer bootstrap import --site-name site-b image-pool token
+        $ rm token
 
 Add Cluster Peer Manually
 -------------------------

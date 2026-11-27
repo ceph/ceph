@@ -5558,6 +5558,13 @@ void MDCache::rejoin_gather_finish()
   ceph_assert(mds->is_rejoin());
   ceph_assert(rejoin_ack_gather.count(mds->get_nodeid()));
 
+  // mds_debug_rejoin_ack_delay already deferred our acks; the queued
+  // event sends them.
+  if (rejoin_ack_delay_event) {
+    dout(10) << " rejoin acks already deferred" << dendl;
+    return;
+  }
+
   if (open_undef_inodes_dirfrags())
     return;
 
@@ -5567,8 +5574,30 @@ void MDCache::rejoin_gather_finish()
   choose_lock_states_and_reconnect_caps();
 
   identify_files_to_recover();
+
+  // Test-only hook (tracker 80407): defer sending our rejoin acks so a
+  // surviving peer has time to trim and send a cache expire while we are
+  // still processing expires.  We keep dispatching messages during the
+  // wait, so the race window is widened, not merely slept through.
+  auto ack_delay = g_conf().get_val<double>("mds_debug_rejoin_ack_delay");
+  if (ack_delay > 0) {
+    dout(1) << "rejoin_gather_finish: deferring rejoin_send_acks by "
+	    << ack_delay << "s (mds_debug_rejoin_ack_delay)" << dendl;
+    rejoin_ack_delay_event = mds->timer.add_event_after(ack_delay,
+      new LambdaContext([this](int) {
+        rejoin_ack_delay_event = nullptr;
+        rejoin_send_acks_and_finish();
+      }));
+    return;
+  }
+
+  rejoin_send_acks_and_finish();
+}
+
+void MDCache::rejoin_send_acks_and_finish()
+{
   rejoin_send_acks();
-  
+
   // signal completion of fetches, rejoin_gather_finish, etc.
   rejoin_ack_gather.erase(mds->get_nodeid());
 
@@ -6411,14 +6440,55 @@ void MDCache::rejoin_send_acks()
         mds->heartbeat_reset();
 
       // dir
-      for (auto &r : dir->get_replicas()) {
-	auto it = acks.find(r.first);
-	if (it == acks.end())
-	  continue;
-	it->second->add_strong_dirfrag(dir->dirfrag(), ++r.second, dir->dir_rep);
-	it->second->add_dirfrag_base(dir);
+      //
+      // A peer cannot hold a replica of a dirfrag without also holding a
+      // replica of the dirfrag's inode: the inode is what anchors the
+      // dirfrag in the peer's cache.  During rejoin we can transiently
+      // record a replica that violates this.  When we invent an undef
+      // dirfrag for a peer's strong rejoin and then learn the real
+      // fragtree, CDir::split() copies the invented dirfrag's replica map
+      // onto every leaf; if that peer then expires the inode (and only some
+      // of the leaves) before we send our ack, we drop it from the inode's
+      // replica map but keep it on the leaves it never actually had.
+      // Acking such a leaf makes the peer build an unconnected dirfrag that
+      // no inode in the ack can reconnect, tripping the isolated_inodes
+      // assert in handle_cache_rejoin_ack().  Drop those stale replicas
+      // instead of acking them.  We only do this for inodes we are
+      // authoritative for (so our replica map is the source of truth) and
+      // not for base inodes, whose replicas are tracked separately.
+      //
+      // Subtree roots are excluded.  Within one subtree's walk, the parent
+      // dir's dentries (and the "peer missed MDentryLink" fix-up below that
+      // can add the inode replica) are always processed before the child
+      // dirfrags, so the inode's replica map is final by the time we get
+      // here.  A subtree root whose inode is auth here but lives in another
+      // of our subtrees may be visited before that fix-up runs, so the check
+      // could drop a legitimate replica.  Subtree roots are known after
+      // replay from ESubtreeMap and are never invented and split, so the
+      // stale-replica case cannot arise for them.
+      {
+	CInode *diri = dir->get_inode();
+	std::vector<mds_rank_t> stale_replicas;
+	for (auto &r : dir->get_replicas()) {
+	  auto it = acks.find(r.first);
+	  if (it == acks.end())
+	    continue;
+	  if (!dir->is_subtree_root() && diri->is_auth() && !diri->is_base() &&
+	      !diri->is_replica(r.first)) {
+	    stale_replicas.push_back(r.first);
+	    continue;
+	  }
+	  it->second->add_strong_dirfrag(dir->dirfrag(), ++r.second, dir->dir_rep);
+	  it->second->add_dirfrag_base(dir);
+	}
+	for (const auto& r : stale_replicas) {
+	  dout(10) << " not acking " << *dir << " to mds." << r
+		   << ", its inode is not replicated there; dropping stale replica"
+		   << dendl;
+	  dir->remove_replica(r);
+	}
       }
-	   
+
       for (auto &p : dir->items) {
 	if (!(++count % mds->heartbeat_reset_grace()))
 	  mds->heartbeat_reset();
@@ -15231,35 +15301,66 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 
     if (snap_set->r == 0) {
       auto &clones = snap_set->snaps.clones;
-      auto it1 = std::find_if(clones.begin(), clones.end(),
-			      [snapid1](const librados::clone_info_t &clone)
-			      {
-				return snapid1 == clone.cloneid ||
-				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid1) != clone.snaps.end());
-			      });
-      // point to "head" if not found
-      if (it1 == clones.end()) {
-	it1 = std::prev(it1);
+      if (clones.empty()) {
+        dout(10) << __func__ << ": no clones for objectid=" << snap_set->objectid << dendl;
+        continue;
       }
-      auto it2 = std::find_if(clones.begin(), clones.end(),
-			      [snapid2](const librados::clone_info_t &clone)
-			      {
-				return snapid2 == clone.cloneid ||
-				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid2) != clone.snaps.end());
-			      });
-      // point to "head" if not found
-      if (it2 == clones.end()) {
-	it2 = std::prev(it2);
-      }
+
+      // Select the version for @snapid using the OSD's object lookup rules.
+      // snapset.seq is the latest SnapContext sequence processed by the object.
+      // Use head when @snapid > snapset.seq; otherwise use the first historical
+      // clone with cloneid >= @snapid and require @snapid in its snaps vector.
+      // A clone's snaps vector lists the snapshot IDs covered by that version.
+      // Return clones.end() when no version exists, including an absent head.
+      // This does not apply read-time truncate_seq/truncate_size trimming.
+      // Use the requested snapids: in->last can be a global COW boundary,
+      // including another realm's snapshot or a snapshot-removal sequence.
+      auto head = clones.back().cloneid == CEPH_NOSNAP ? std::prev(clones.end()) : clones.end();
+      auto find_clone = [&](snapid_t snapid) {
+        if (snapid > snap_set->snaps.seq) {
+          return head;
+        }
+        auto it = std::find_if(clones.begin(), head,
+                               [snapid](const librados::clone_info_t &clone) {
+                                 return clone.cloneid >= snapid;
+                               });
+        if (it == head ||
+            std::find(it->snaps.begin(), it->snaps.end(), snapid) == it->snaps.end()) {
+          return clones.end();
+        }
+        return it;
+      };
+
+      auto it1 = find_clone(snapid1);
+      auto it2 = find_clone(snapid2);
+
+      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+                                                 snap_set->objectid, 0);
 
       if (it1 == it2) {
-	dout(10) << __func__ << ": both snaps in same clone" << dendl;
-	continue;
+        dout(10) << __func__ << ": objectid=" << snap_set->objectid
+                 << (it1 == clones.end() ? " exists in neither snap" : " is the same version in both snaps")
+                 << " (seq=" << snap_set->snaps.seq << ")" << dendl;
+        continue;
       }
 
+      // If the object exists in only one snapshot, report that version's full
+      // data extent. CephFS reads a removed object as a hole in the newer
+      // snapshot.
+      if (it1 == clones.end() || it2 == clones.end()) {
+        bool created = it1 == clones.end();
+        auto sz = created ? it2->size : it1->size;
+        dout(10) << __func__ << ": objectid=" << snap_set->objectid << " exists only in snap "
+                 << (created ? snapid2 : snapid1) << " (seq=" << snap_set->snaps.seq << "): ["
+                 << offset << "~" << sz << "]" << dendl;
+        extents.union_insert(offset, sz);
+        dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
+        continue;
+      }
+
+      ceph_assert(snapid1 < snapid2);
+      ceph_assert(it1 < it2);
       interval_set<uint64_t> extent;
-      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
-						 snap_set->objectid, 0);
 
       for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
 	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps

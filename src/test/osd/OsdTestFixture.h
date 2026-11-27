@@ -17,7 +17,6 @@
 
 #include <memory>
 #include <map>
-#include <filesystem>
 #include "osd/PeeringState.h"
 #include "osd/ECExtentCache.h"
 #include "osd/PGBackend.h"
@@ -143,10 +142,6 @@ public:
   // OSD identity
   int osd_id;
 
-  // On-disk data directory backing this OSD's store, created by
-  // MockStore::create(). Removed in its entirety by ~OsdTestFixture().
-  std::string data_dir;
-
   // ObjectStore for this OSD. Each OSD owns its own independent MockStore
   // instance; shared_ptr is used only for lifetime convenience, not sharing.
   std::shared_ptr<MockStore> store;
@@ -165,10 +160,6 @@ public:
     if (store) {
       store->umount();
       store.reset();
-    }
-    if (!data_dir.empty()) {
-      std::error_code ec;
-      std::filesystem::remove_all(data_dir, ec);
     }
   }
 

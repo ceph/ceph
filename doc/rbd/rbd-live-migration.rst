@@ -67,7 +67,9 @@ The live-migration process is comprised of three steps:
    the migration can be committed or aborted. Committing the migration will
    remove the cross-links between the source and target images, and will
    remove the source image if not configured in the import-only mode. Aborting
-   the migration will remove the cross-links, and will remove the target image.
+   the migration will copy the target's data back to the source image (except
+   in the import-only mode), remove the cross-links, and remove the target
+   image.
 
 Prepare Migration
 =================
@@ -162,13 +164,13 @@ as follows::
                                           must be specified together with "mon_host",
                                           mutually exclusive with "cluster_name")
             ["cluster_name": "<cluster-name>",] (specify if image in another cluster,
-                                                 requires ``<cluster-name>.conf`` file,
+                                                 requires <cluster-name>.conf file,
                                                  mutually exclusive with "mon_host" and "key")
             ["client_name": "<client-name>",] (for connecting to another cluster,
-                                               default is ``client.admin``)
+                                               default is client.admin)
             "pool_name": "<pool-name>",
             ["pool_id": <pool-id>,] (optional alternative to "pool_name")
-            ["pool_namespace": "<pool-namespace",] (optional)
+            ["pool_namespace": "<pool-namespace>",] (optional)
             "image_name": "<image-name>",
             ["image_id": "<image-id>",] (specify if image in trash)
             "snap_name": "<snap-name>",
@@ -298,6 +300,14 @@ The ``s3`` stream can be used to import from a remote S3 bucket. Its
             }
         }
 
+.. warning:: The ``source-spec`` is stored with the target image until the
+   migration is committed or aborted, and ``rbd status`` prints it to anyone
+   who can read the image. Do not put keys in it. Store them in the Monitor
+   config-key store, and refer to them with the ``config://`` prefix, as in
+   the example below. Until the execute step finishes, every client that
+   opens the target image reads the keys, so it needs permission to run
+   ``config-key get`` on them.
+
 For example, to import a raw-format image from a file located at
 `https://s3.ceph.com/bucket/image.raw`, its ``source-spec`` JSON is encoded
 as follows::
@@ -307,8 +317,8 @@ as follows::
             "stream": {
                 "type": "s3",
                 "url": "https://s3.ceph.com/bucket/image.raw",
-                "access_key": "NX5QOQKC6BH2IDN8HC7A",
-                "secret_key": "LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn"
+                "access_key": "config://rbd/s3/my_access_key",
+                "secret_key": "config://rbd/s3/my_secret_key"
             }
         }
 
@@ -397,11 +407,21 @@ and target images, and will remove the source image::
 Abort Migration
 ===============
 
-If you wish to revert the prepare or execute step, run the `rbd migration abort`
-command to revert the migration process::
+.. warning:: In import-only mode, aborting deletes the target image with
+   every write made to it since the prepare step. Otherwise, the target's
+   current data is copied back to the source image first, but snapshots
+   taken of the target image since the prepare step are lost.
+
+If you wish to revert the prepare or execute step, stop the clients that use
+the target image, and then run the `rbd migration abort` command to revert the
+migration process::
 
         $ rbd migration abort migration_target
         Abort image migration: 100% complete...done.
+
+The command fails with
+``rbd: aborting migration failed: (16) Device or resource busy`` while a
+client has the target image open in read/write mode.
 
 Aborting the migration will result in the target image being deleted and access
 to the original source image being restored::

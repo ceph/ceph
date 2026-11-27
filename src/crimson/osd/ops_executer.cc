@@ -29,6 +29,20 @@ namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);
   }
+
+  bool op_may_allocate(uint16_t op) {
+    switch (op) {
+    case CEPH_OSD_OP_CREATE:
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
+    case CEPH_OSD_OP_WRITESAME:
+    case CEPH_OSD_OP_APPEND:
+    case CEPH_OSD_OP_COPY_FROM2:
+      return true;
+    default:
+      return false;
+    }
+  }
 }
 
 namespace crimson::osd {
@@ -604,6 +618,24 @@ OpsExecuter::execute_op(OSDOp& osd_op)
 }
 
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::do_execute_op_remote_full_checked(OSDOp& osd_op)
+{
+  // This reactor does not host the SeaStore shard. Asking it locally hits
+  // an inactive shard and aborts in get_sharded_store(). Query the reactor
+  // that owns the PG's data, then continue on this reactor.
+  if (co_await interruptor::make_interruptible(pg->is_store_full())) {
+    logger().debug(
+      "handling op {} on object {}: store full, returning EAGAIN",
+      ceph_osd_op_name(osd_op.op.op),
+      get_target());
+    co_await interruptible_errorated_future<osd_op_errorator>(
+      crimson::ct_error::eagain::make());
+    co_return;
+  }
+  co_await do_execute_op_body(osd_op);
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::do_execute_op(OSDOp& osd_op)
 {
   // TODO: dispatch via call table?
@@ -614,32 +646,29 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     ceph_osd_op_name(osd_op.op.op),
     get_target());
   // Best-effort capacity gate (failsafe): drop data-allocating ops before a
-  // transaction is created if the local store is full. This is Crimson's
-  // analog to classic's osd_failsafe_full_ratio check (PrimaryLogPG.cc:2162),
-  // preventing allocator exhaustion assert aborts when the local store fills
-  // before the monitor's pool FLAG_FULL has propagated. We reply -EAGAIN so
-  // the client resends, matching both classic's silent drop and Crimson's own
-  // mon-driven full path (PG::run_executer_fut, pg.cc), rather than returning
-  // a result that depends on whether full flags have reached the client yet.
-  switch (osd_op.op.op) {
-  case CEPH_OSD_OP_CREATE:
-  case CEPH_OSD_OP_WRITE:
-  case CEPH_OSD_OP_WRITEFULL:
-  case CEPH_OSD_OP_WRITESAME:
-  case CEPH_OSD_OP_APPEND:
-  case CEPH_OSD_OP_COPY_FROM2:
-    return interruptor::make_interruptible(
-      pg->is_local_store_full()
-    ).then_interruptible(
-      [this, &osd_op](bool is_full)
-      -> interruptible_errorated_future<osd_op_errorator> {
-        if (is_full && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-          return crimson::ct_error::eagain::make();
-        }
-        return do_execute_op_body(osd_op);
-      });
-  default:
-    break;
+  // transaction is created if the store that will receive the write is full.
+  // This is Crimson's analog to classic's osd_failsafe_full_ratio check
+  // (PrimaryLogPG::do_op()), preventing allocator exhaustion assert aborts
+  // when the store fills before the monitor's pool FLAG_FULL has propagated.
+  // We reply -EAGAIN so the client resends, matching both classic's silent
+  // drop and Crimson's own mon-driven full path (PG::run_executer, pg.cc).
+  //
+  // When crimson has more reactors than seastore shards, the PG runs on an
+  // alien reactor whose local store shard is inactive. Fullness lives on the
+  // owning reactor; resident_store_full() is nullopt in that case.
+  if (op_may_allocate(osd_op.op.op) &&
+      !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+    if (auto full = pg->resident_store_full()) {
+      if (*full) {
+        logger().debug(
+          "handling op {} on object {}: store full, returning EAGAIN",
+          ceph_osd_op_name(osd_op.op.op),
+          get_target());
+        return crimson::ct_error::eagain::make();
+      }
+    } else {
+      return do_execute_op_remote_full_checked(osd_op);
+    }
   }
   return do_execute_op_body(osd_op);
 }

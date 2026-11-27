@@ -1135,7 +1135,10 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     nvmeof/NVMeofGwMonitorGroupClient.cc
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})
-  add_dependencies(ceph-nvmeof-monitor-client ceph-common)
+  # Own target: Ninja runs protoc without waiting for the client's deps.
+  add_custom_target(nvmeof_protos
+    DEPENDS ${nvmeof_gateway_proto_srcs} ${nvmeof_monitor_proto_srcs})
+  add_dependencies(ceph-nvmeof-monitor-client nvmeof_protos)
   if(_HAVE_ABSEIL)
     target_compile_definitions(ceph-nvmeof-monitor-client PRIVATE HAVE_ABSEIL)
     target_compile_definitions(ceph-mon PRIVATE HAVE_ABSEIL)
@@ -1181,10 +1184,13 @@ endif(WITH_RBD)
 
 # RadosGW
 if(WITH_RADOSGW)
-  if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  # s3select parquet, arrow flight and s3vectors (lancedb) use the Arrow C++ API
+  if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
     if(WITH_SYSTEM_ARROW)
       find_package(Arrow 9 REQUIRED QUIET)
-      find_package(Parquet 9 REQUIRED QUIET)
+      if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+        find_package(Parquet 9 REQUIRED QUIET)
+      endif()
     else()
       # find arrow's dependencies
       if (WITH_SYSTEM_UTF8PROC)
@@ -1198,7 +1204,7 @@ if(WITH_RADOSGW)
       include(BuildArrow)
       build_arrow()
     endif(WITH_SYSTEM_ARROW)
-  endif(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  endif(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
 
   add_subdirectory(crypto)
   add_subdirectory(libkmip)

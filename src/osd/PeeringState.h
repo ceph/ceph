@@ -2690,17 +2690,21 @@ public:
   void close_rebuild_span();
 
   /**
-   * Set when either rebuild-stats counter -- pg_vulnerability_duration
-   * (prepare_stats_for_publish()) or pg_rebuild_duration
-   * (close_rebuild_span()) -- records a close; cleared by share_pg_info(),
-   * which sends info.history (and so both counters' "reported" markers)
-   * wholesale. Replicas only learn of a close through that share, and one
-   * left holding the pre-close history would, if promoted, treat the
-   * already-recorded episode as still open and record it again.
-   * Active::react(AdvMap) retries share_pg_info() while this is set, the
-   * same way it already does for dirty_big_info.
+   * Set when a rebuild-stats transition changes info.history (vulnerability
+   * window open/close in prepare_stats_for_publish(), or the rebuild span's
+   * arm/pause/close); cleared once info.history is sent to every peer
+   * (share_pg_info(), or activate() as part of peering). Left unshared
+   * across a primary handover, a peer can lose the true onset or
+   * double-record an already-closed episode.
+   *
+   * The Recovering/Backfilling/NotRecovering/NotBackfilling/Recovered
+   * constructors share this synchronously: they only run as Active
+   * substates, where acting_recovery_backfill is populated and
+   * share_pg_info() is safe. prepare_stats_for_publish() also runs from
+   * pre-Active contexts (e.g. GetInfo), so it only sets the flag. Either
+   * way, Active::react(AdvMap) retries share_pg_info() while this stays set.
    */
-  bool rebuild_stats_close_unshared = false;
+  bool rebuild_stats_unshared = false;
 
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }

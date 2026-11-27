@@ -2,6 +2,8 @@
 iSCSI Initiator for Microsoft Windows
 -------------------------------------
 
+.. include:: iscsi-deprecation.inc.rst
+
 **Prerequisite:**
 
 -  Microsoft Windows Server 2016 or later
@@ -23,8 +25,9 @@ iSCSI Initiator for Microsoft Windows
    click the “Advanced” button.
 
 #. Under the "Connect using" section, select a “Target portal IP” . Select the
-   “Enable CHAP login on” and enter the "Name" and "Target secret" values from the
-   Ceph iSCSI Ansible client credentials section, and click OK.
+   “Enable CHAP login on” and enter the "Name" and "Target secret" values, the
+   user name and password that you set for this client with the gwcli ``auth``
+   command, and click OK.
 
 #. Repeat steps 5 and 6 for each target portal defined when setting up
    the iSCSI gateway.
@@ -61,9 +64,8 @@ rest is done in the iSCSI Initiator tool.
    “MPIO...” button.
 
 #. On the "Device Details" window the paths to each target portal is
-   displayed. If using the ``ceph-ansible`` setup method, the
-   iSCSI gateway will use ALUA to tell the iSCSI initiator which path
-   and iSCSI gateway should be used as the primary path. The Load
+   displayed. The iSCSI gateway will use ALUA to tell the iSCSI initiator
+   which path and iSCSI gateway should be used as the primary path. The Load
    Balancing Policy “Fail Over Only” must be selected
 
 ::
@@ -71,10 +73,9 @@ rest is done in the iSCSI Initiator tool.
     mpclaim -s -d $MPIO_DISK_ID
 
 .. note::
-  For the ``ceph-ansible`` setup method, there will be one
-  Active/Optimized path which is the path to the iSCSI gateway node
-  that owns the LUN, and there will be an Active/Unoptimized path for
-  each other iSCSI gateway node.
+  There will be one Active/Optimized path which is the path to the iSCSI
+  gateway node that owns the LUN, and there will be an Active/Unoptimized
+  path for each other iSCSI gateway node.
 
 **Tuning:**
 
@@ -94,7 +95,7 @@ Consider using the following registry settings:
 
    ::
 
-       HKEY_LOCAL_MACHINE\\SYSTEM\CurrentControlSet\Control\Class\{4D36E97B-E325-11CE-BFC1-08002BE10318}\<Instance_Number>\Parameters
+       HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4D36E97B-E325-11CE-BFC1-08002BE10318}\<Instance_Number>\Parameters
 
    ::
    

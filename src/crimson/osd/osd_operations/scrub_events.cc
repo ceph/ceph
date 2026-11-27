@@ -87,6 +87,17 @@ template <typename T>
 ScrubAsyncOpT<T>::ScrubAsyncOpT(Ref<PG> pg, bool scheduled)
   : pg(pg), scheduled(scheduled) {}
 
+static auto get_scrub_throttle(PG& pg, scheduler::throttle_level_t level)
+{
+  const auto cost = static_cast<int>(
+    std::max<int64_t>(1, pg.get_average_object_size()));
+  return InterruptibleOperation::interruptor::make_interruptible(
+    pg.get_shard_services().get_throttle(
+      scheduler::params_t{cost, pg.get_scrub_priority(), 0,
+                          SchedulerClass::background_best_effort},
+      level));
+}
+
 template <typename T>
 typename ScrubAsyncOpT<T>::template ifut<> ScrubAsyncOpT<T>::start()
 {
@@ -96,17 +107,10 @@ typename ScrubAsyncOpT<T>::template ifut<> ScrubAsyncOpT<T>::start()
     return run(*pg);
   }
 
-  const auto cost = static_cast<int>(
-    std::max<int64_t>(1, pg->get_average_object_size()));
-  return interruptor::make_interruptible(
-    pg->get_shard_services().get_throttle(
-      crimson::osd::scheduler::params_t{
-      cost,
-      pg->get_scrub_priority(),
-      0,
-      SchedulerClass::background_best_effort
-    })
-  ).then_interruptible([this](auto releaser) {
+  // Digest updates submit a replicated transaction and wait for its leaf ops.
+  constexpr auto level = std::is_same_v<T, ScrubDigestUpdate>
+    ? scheduler::throttle_level_t::recovery : scheduler::throttle_level_t::leaf;
+  return get_scrub_throttle(*pg, level).then_interruptible([this](auto releaser) {
     return run(*pg).finally([releaser = std::move(releaser)] {});
   });
 }
@@ -139,50 +143,51 @@ ScrubReserveRange::ifut<> ScrubReserveRange::run(PG &pg)
   LOG_PREFIX(ScrubReserveRange::run);
   DEBUGDPP("", pg);
   DEBUGDPP("waiting for pg background_process_lock", pg);
-  return pg.background_process_lock.lock(
-  ).then_interruptible([FNAME, this, &pg] {
-    DEBUGDPP("pg_background_io_mutex locked", pg);
-    auto &scrubber = pg.scrubber;
-    ceph_assert(!scrubber.blocked);
-    scrubber.blocked = scrub::blocked_range_t{begin, end};
-    blocked_set = true;
-
-    // Search projected_log first (in-flight writes whose log entries have been
-    // assigned but whose transactions haven't yet committed), then fall back to
-    // the committed log.  This mirrors classic OSD's search_log_for_updates()
-    // and ensures we wait for any in-flight write in the scrub range before
-    // starting the scan, closing the race between wait_scrub() and log_operation().
-    auto& projected = pg.projected_log.log;
-    auto pi = find_if(
-      projected.crbegin(), projected.crend(),
-      [this](const auto& e) -> bool {
-	return e.soid >= begin && e.soid < end;
-      });
-    if (pi != projected.crend()) {
-      return scrubber.machine.process_event(
-	scrub::ScrubContext::reserve_range_complete_t{pi->version});
-    }
-
-    auto& log = pg.peering_state.get_pg_log().get_log().log;
-    auto p = find_if(
-      log.crbegin(), log.crend(),
-      [this](const auto& e) -> bool {
-	return e.soid >= begin && e.soid < end;
-      });
-
-    if (p == log.crend()) {
-      return scrubber.machine.process_event(
-	scrub::ScrubContext::reserve_range_complete_t{eversion_t{}});
-    } else {
-      return scrubber.machine.process_event(
-	scrub::ScrubContext::reserve_range_complete_t{p->version});
-    }
-  }).finally([FNAME, &pg, this] {
+  // Snaptrim can hold this lock while waiting for a throttled suboperation.
+  // Wait for the lock before taking a slot.
+  co_await pg.background_process_lock.lock();
+  auto unlock = seastar::defer([this, &pg] {
     if (!blocked_set) {
-      DEBUGDPP("releasing pg background_process_lock (reserve not set)", pg);
       pg.background_process_lock.unlock();
     }
   });
+  auto throttle = co_await get_scrub_throttle(pg, scheduler::throttle_level_t::leaf);
+  auto &scrubber = pg.scrubber;
+  ceph_assert(!scrubber.blocked);
+  scrubber.blocked = scrub::blocked_range_t{begin, end};
+  blocked_set = true;
+
+  // Search projected_log first (in-flight writes whose log entries have been
+  // assigned but whose transactions haven't yet committed), then fall back to
+  // the committed log.  This mirrors classic OSD's search_log_for_updates()
+  // and ensures we wait for any in-flight write in the scrub range before
+  // starting the scan, closing the race between wait_scrub() and log_operation().
+  auto& projected = pg.projected_log.log;
+  auto pi = find_if(
+    projected.crbegin(), projected.crend(),
+    [this](const auto& e) -> bool {
+	return e.soid >= begin && e.soid < end;
+    });
+  if (pi != projected.crend()) {
+    scrubber.machine.process_event(
+	scrub::ScrubContext::reserve_range_complete_t{pi->version});
+    co_return;
+  }
+
+  auto& log = pg.peering_state.get_pg_log().get_log().log;
+  auto p = find_if(
+    log.crbegin(), log.crend(),
+    [this](const auto& e) -> bool {
+	return e.soid >= begin && e.soid < end;
+    });
+
+  if (p == log.crend()) {
+    scrubber.machine.process_event(
+	scrub::ScrubContext::reserve_range_complete_t{eversion_t{}});
+  } else {
+    scrubber.machine.process_event(
+	scrub::ScrubContext::reserve_range_complete_t{p->version});
+  }
 }
 
 template class ScrubAsyncOpT<ScrubReserveRange>;

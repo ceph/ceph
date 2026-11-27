@@ -258,11 +258,11 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
         type: 'text'
       },
       {
-        label: $localize`Total Memory`,
+        label: $localize`Total memory`,
         value: totalMemory
       },
       {
-        label: $localize`Raw Capacity`,
+        label: $localize`Raw capacity`,
         value: rawCapacity
       },
       {

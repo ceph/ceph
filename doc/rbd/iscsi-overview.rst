@@ -4,6 +4,8 @@
 Ceph iSCSI Gateway
 ==================
 
+.. include:: iscsi-deprecation.inc.rst
+
 The iSCSI Gateway presents a Highly Available (HA) iSCSI target that exports
 RADOS Block Device (RBD) images as SCSI disks. The iSCSI protocol allows
 clients (initiators) to send SCSI commands to storage devices (targets) over a
@@ -41,16 +43,6 @@ Area Network (SAN).
           +--------------+   |   | Systems   |   |   +--------------+
                              |   +-----------+   |
                              +-------------------+
-
-.. warning::
-
-   The iSCSI gateway is in maintenance as of November 2022. This means that
-   it is no longer in active development and will not be updated to add
-   new features. It remains documented for existing deployments.
-
-   New deployments should prefer accessing RBD images directly from clients
-   (``librbd``, QEMU, Kubernetes CSI and similar) or the :doc:`NVMe-oF gateway
-   <nvmeof-overview>` for NVMe-based access.
 
 .. toctree::
   :maxdepth: 1

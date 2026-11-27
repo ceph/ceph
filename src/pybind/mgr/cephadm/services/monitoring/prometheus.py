@@ -119,6 +119,7 @@ class PrometheusService(CephadmService):
         # build service discovery end-point
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
+        sd_username, sd_password = self.mgr.http_server.service_discovery.get_credentials()
         federate_path = self.get_target_cluster_federate_path(targets)
         cluster_credentials: Dict[str, Any] = {}
         cluster_credentials_files: Dict[str, Any] = {'files': {}}
@@ -136,8 +137,8 @@ class PrometheusService(CephadmService):
             'security_enabled': security_enabled,
             'alertmanager_web_user': alertmanager_user,
             'alertmanager_web_password': alertmanager_password,
-            'service_discovery_username': self.mgr.http_server.service_discovery.username,
-            'service_discovery_password': self.mgr.http_server.service_discovery.password,
+            'service_discovery_username': sd_username,
+            'service_discovery_password': sd_password,
             'service_discovery_cfg': self.get_service_discovery_cfg(security_enabled, mgmt_gw_enabled),
             'external_prometheus_targets': targets,
             'remote_write_url': remote_write_url,

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=unused-argument
 import errno
-import json
+import logging
 import math
 from enum import IntEnum
 
@@ -13,7 +13,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..plugins.ttl_cache import ttl_cache, ttl_cache_invalidator
 from ._paginate import ListPaginator
-from .ceph_service import CephService
+from .ceph_service import CephService, SendCommandError
 
 try:
     from typing import Dict, List, Optional
@@ -33,6 +33,8 @@ RBD_FEATURES_NAME_MAPPING = {
     rbd.RBD_FEATURE_OPERATIONS: "operations",
 }
 
+logger = logging.getLogger(__name__)
+
 RBD_IMAGE_REFS_CACHE_REFERENCE = 'rbd_image_refs'
 GET_IOCTX_CACHE = 'get_ioctx'
 POOL_NAMESPACES_CACHE = 'pool_namespaces'
@@ -43,13 +45,16 @@ class MIRROR_IMAGE_MODE(IntEnum):
     snapshot = rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT
 
 
-def _rbd_support_remote(method_name: str, *args, **kwargs):
+def _rbd_support_command(prefix: str, **kwargs):
+    # Go through the rbd_support CLI commands rather than calling the
+    # module's methods with mgr.remote(): the commands are a stable
+    # interface across releases, and a non-zero return code (e.g. EAGAIN
+    # while rbd_support is still starting up) is raised here instead of
+    # being handed back in a tuple that the callers never checked.
     try:
-        return mgr.remote('rbd_support', method_name, *args, **kwargs)
-    except ImportError as ie:
-        raise DashboardException(f'rbd_support module not found {ie}')
-    except RuntimeError as ie:
-        raise DashboardException(f'rbd_support.{method_name} error: {ie}')
+        return CephService.send_command('mon', prefix, **kwargs)
+    except SendCommandError as e:
+        raise DashboardException(e, component='rbd_support')
 
 
 def format_bitmask(features):
@@ -818,20 +823,33 @@ class RbdMirroringService:
 
     @classmethod
     def snapshot_schedule_add(cls, image_spec: str, interval: str):
-        _rbd_support_remote('mirror_snapshot_schedule_add', image_spec,
-                            str(RBDSchedulerInterval(interval)))
+        _rbd_support_command('rbd mirror snapshot schedule add', to_json=False,
+                             level_spec=image_spec,
+                             interval=str(RBDSchedulerInterval(interval)))
 
     @classmethod
     def snapshot_schedule_remove(cls, image_spec: str):
-        _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)
+        _rbd_support_command('rbd mirror snapshot schedule remove', to_json=False,
+                             level_spec=image_spec)
 
     @classmethod
-    def snapshot_schedule_list(cls, image_spec: str = ''):
-        return _rbd_support_remote('mirror_snapshot_schedule_list', image_spec)
+    def _snapshot_schedule_query(cls, prefix: str, image_spec: str) -> dict:
+        # The schedule is only extra information on an image, so a failed
+        # query must not fail the request that shows the image.
+        try:
+            result = _rbd_support_command(prefix, level_spec=image_spec or None)
+        except DashboardException as e:
+            logger.warning('%s failed: %s', prefix, e)
+            return {}
+        return result if isinstance(result, dict) else {}
 
     @classmethod
-    def snapshot_schedule_status(cls, image_spec: str = ''):
-        return _rbd_support_remote('mirror_snapshot_schedule_status', image_spec)
+    def snapshot_schedule_list(cls, image_spec: str = '') -> dict:
+        return cls._snapshot_schedule_query('rbd mirror snapshot schedule list', image_spec)
+
+    @classmethod
+    def snapshot_schedule_status(cls, image_spec: str = '') -> dict:
+        return cls._snapshot_schedule_query('rbd mirror snapshot schedule status', image_spec)
 
     @classmethod
     def get_snapshot_schedule_info(cls, image_spec: str = ''):
@@ -851,16 +869,8 @@ class RbdMirroringService:
 
         # schedule list and status provide the schedule interval
         # and schedule timestamp respectively.
-        schedule_list_raw = cls.snapshot_schedule_list(image_spec)
-        schedule_status_raw = cls.snapshot_schedule_status(image_spec)
-
-        try:
-            schedule_list = json.loads(
-                schedule_list_raw[1]) if schedule_list_raw and schedule_list_raw[1] else {}
-            schedule_status = json.loads(
-                schedule_status_raw[1]) if schedule_status_raw and schedule_status_raw[1] else {}
-        except (json.JSONDecodeError, TypeError):
-            return None
+        schedule_list = cls.snapshot_schedule_list(image_spec)
+        schedule_status = cls.snapshot_schedule_status(image_spec)
 
         if not schedule_list or not schedule_status:
             return None
@@ -896,13 +906,7 @@ class RbdMirroringService:
     @classmethod
     def get_schedule_time_for_image(cls, image_spec: str):
         """Get the scheduled time for a specific image from schedule status."""
-        schedule_status_raw = cls.snapshot_schedule_status('')
-        try:
-            schedule_status = json.loads(
-                schedule_status_raw[1]) if schedule_status_raw and schedule_status_raw[1] else {}
-        except (json.JSONDecodeError, TypeError):
-            return None
-
+        schedule_status = cls.snapshot_schedule_status('')
         scheduled_images = schedule_status.get("scheduled_images", [])
         for img in scheduled_images:
             if img.get("image") == image_spec:
@@ -912,13 +916,7 @@ class RbdMirroringService:
     @classmethod
     def get_schedule_interval(cls, schedule_spec: str):
         """Get just the schedule interval for a given spec (pool or cluster)."""
-        schedule_list_raw = cls.snapshot_schedule_list('')
-        try:
-            schedule_list = json.loads(
-                schedule_list_raw[1]) if schedule_list_raw and schedule_list_raw[1] else {}
-        except (json.JSONDecodeError, TypeError):
-            return None
-
+        schedule_list = cls.snapshot_schedule_list('')
         if not schedule_list:
             return None
 

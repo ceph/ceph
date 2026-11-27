@@ -378,11 +378,11 @@ std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir);
  * that it may carry more (e.g. a per-core IP) later.
  */
 struct osd_core_hint_t {
-  uint32_t core = 0;
+  uint16_t core = 0;  // no more cores than ports
   uint16_t port = 0;
 
   osd_core_hint_t() = default;
-  osd_core_hint_t(uint32_t core, uint16_t port)
+  osd_core_hint_t(uint16_t core, uint16_t port)
     : core(core), port(port) {}
 
   bool operator==(const osd_core_hint_t&) const = default;

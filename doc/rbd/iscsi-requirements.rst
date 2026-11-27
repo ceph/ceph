@@ -2,6 +2,8 @@
 iSCSI Gateway Requirements
 ==========================
 
+.. include:: iscsi-deprecation.inc.rst
+
 It is recommended to provision two to four iSCSI gateway nodes to
 realize a highly available Ceph iSCSI gateway solution.
 
@@ -36,7 +38,7 @@ The following configuration options are suggested::
 
    ::
 
-       ceph daemon <daemon_type>.<id> config set osd_client_watch_timeout 15
+       ceph daemon <daemon_type>.<id> config set <parameter_name> <new_value>
 
    ::
 
@@ -44,8 +46,8 @@ The following configuration options are suggested::
        ceph daemon osd.0 config set osd_heartbeat_interval 5
 
 For more details on setting Ceph's configuration options, see
-:ref:`configuring-ceph`.  Be sure to persist these settings in
-``/etc/ceph.conf`` or, on Mimic and later releases, in the
-centralized config store.
+:ref:`configuring-ceph`.  Be sure to persist these settings in the
+centralized config store, for example with
+``ceph config set osd osd_heartbeat_interval 5``.
 
 

@@ -46,12 +46,17 @@ distributions, run the following command:
 
    sudo dnf install qemu-kvm qemu-kvm-block-rbd qemu-img libvirt
 
-To confirm that the installed QEMU supports RBD, check that ``rbd`` appears in
-the list of supported formats:
+To confirm that the installed QEMU supports RBD, list the options of the
+``rbd`` format:
 
 .. prompt:: bash $
 
-   qemu-img --help | grep -w rbd
+   qemu-img create -f rbd -o help
+
+The command prints ``Supported rbd options:`` followed by a list of options,
+and creates nothing. If it prints ``qemu-img: Unknown file format 'rbd'``, the
+driver is not installed: install ``qemu-block-extra`` on Debian and Ubuntu or
+``qemu-kvm-block-rbd`` on EL distributions.
 
 
 Next steps

@@ -158,7 +158,7 @@ private:
           f->dump_int("free", free);
           f->dump_int("bluefs_used", used);
           if (bluefs->is_shared_alloc(dev)) {
-            size_t avail = bluefs->probe_alloc_avail(dev, alloc_size);
+            uint64_t avail = bluefs->probe_alloc_avail(dev, alloc_size);
             f->dump_int("bluefs max available", avail);
           }
           f->close_section();
@@ -5511,13 +5511,13 @@ void BlueFS::_check_vselector_LNF() {
   delete vs;
 }
 
-size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
+uint64_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
 {
-  size_t total = 0;
-  auto iterated_allocation = [&](size_t off, size_t len) {
+  uint64_t total = 0;
+  auto iterated_allocation = [&](uint64_t off, uint64_t len) {
     //only count in size that is alloc_size aligned
-    size_t dist_to_alignment;
-    size_t offset_in_block = off & (alloc_size - 1);
+    uint64_t dist_to_alignment;
+    uint64_t offset_in_block = off & (alloc_size - 1);
     if (offset_in_block == 0)
       dist_to_alignment = 0;
     else
@@ -5548,7 +5548,7 @@ void BlueFS::trim_free_space(const string& type, std::ostream& outss)
     ceph_assert(len > 0);
     interval_set<uint64_t> to_discard;
     to_discard.union_insert(off, len);
-    bdev[bdev_id]->try_discard(to_discard, false);
+    bdev[bdev_id]->try_discard(to_discard, false, true);
   };
   if (!bdev[bdev_id]) {
     outss << "device " << type << " is not configured";

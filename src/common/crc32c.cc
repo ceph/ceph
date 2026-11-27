@@ -30,11 +30,9 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   if (ceph_arch_intel_avx512_vpclmul && ceph_crc32c_intel_fast_avx512_vpclmul_exists()) {
     return ceph_crc32c_intel_fast_avx512_vpclmul;
   }
-  if (ceph_arch_intel_sse42 && ceph_crc32c_intel_fast_exists()) {
-    if (ceph_arch_intel_pclmul) {
-      return ceph_crc32c_intel_fast_pclmul;
-    }
-    return ceph_crc32c_intel_fast;
+  // crc32_iscsi_01 uses PCLMULQDQ as well as SSE 4.2.
+  if (ceph_arch_intel_sse42 && ceph_arch_intel_pclmul && ceph_crc32c_intel_fast_exists()) {
+    return ceph_crc32c_intel_fast_pclmul;
   }
 #elif defined(__arm__) || defined(__aarch64__)
 # if defined(HAVE_ARMV8_CRC)

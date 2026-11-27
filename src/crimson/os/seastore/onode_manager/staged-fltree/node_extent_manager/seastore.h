@@ -43,7 +43,8 @@ class SeastoreSuper final: public Super {
     if (coll_node) {
       SUBDEBUGT(seastore_onode, "update coll {} onode root {} ...",
                 c.t, cid, addr);
-      coll_node = tm.get_mutable_extent(c.t, coll_node)
+      auto view = tm.get_etvr().peek_extent_viewable_by_trans(c.t, coll_node);
+      coll_node = tm.get_mutable_extent(c.t, view->cast<CollectionNode>())
         ->cast<CollectionNode>();
       coll_node->update_value(
         collection_manager::coll_context_t{tm, c.t}, cid,

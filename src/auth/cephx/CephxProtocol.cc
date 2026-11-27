@@ -174,7 +174,8 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
  */
 bool CephXTicketHandler::verify_service_ticket_reply(
   CryptoKey& secret,
-  bufferlist::const_iterator& indata)
+  bufferlist::const_iterator& indata,
+  const utime_t& now)
 {
   using ceph::decode;
   try {
@@ -216,7 +217,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(
 		   << " validity=" << msg_a.validity << dendl;
     session_key = msg_a.session_key;
     if (!msg_a.validity.is_zero()) {
-      expires = ceph_clock_now();
+      expires = now;
       expires += msg_a.validity;
       renew_after = expires;
       renew_after -= ((double)msg_a.validity.sec() / 4);
@@ -325,6 +326,9 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
   }
   ldout(cct, 10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
+  // tickets issued together share one issue time, so those with the same
+  // validity come due, and are renewed, together
+  const utime_t now = ceph_clock_now();
   for (int i=0; i<(int)num; i++) {
     uint32_t type = 0;
     try {
@@ -335,7 +339,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
     }
     ldout(cct, 10) << "got key for service_id " << ceph_entity_type_name(type) << dendl;
     CephXTicketHandler& handler = get_handler(type);
-    if (!handler.verify_service_ticket_reply(secret, indata)) {
+    if (!handler.verify_service_ticket_reply(secret, indata, now)) {
       return false;
     }
     handler.service_id = type;

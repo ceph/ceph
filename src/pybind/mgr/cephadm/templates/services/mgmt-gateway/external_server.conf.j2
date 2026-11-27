@@ -199,3 +199,23 @@ server {
     }
 {% endif %}
 }
+{%- if spec.ssl and spec.virtual_ip %}
+
+# Health check for keepalived on this host. The server above listens on the
+# virtual IP only, which this host may not hold; this one answers on the
+# loopback only, so it is not reachable from outside the host.
+server {
+    listen                    127.0.0.1:{{ spec.port or 443 }} ssl;
+    ssl_certificate            /etc/nginx/ssl/nginx.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx.key;
+
+    location = /health {
+         return 200 'OK';
+         add_header Content-Type text/plain;
+    }
+
+    location / {
+         return 404;
+    }
+}
+{% endif -%}

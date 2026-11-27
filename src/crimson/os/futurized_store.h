@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <map>
 #include <optional>
@@ -33,6 +34,13 @@ struct BackendStore {
   BackendStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
     : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
 };
+
+// True when the store shard can be used on this reactor. GLOBAL_STORE
+// (AlienStore) is not pinned to one core.
+inline bool is_store_local(const BackendStore& store) {
+  return store.shard_id == seastar::this_shard_id() ||
+         store.shard_id == GLOBAL_STORE;
+}
 
 class FuturizedStore {
 public:
@@ -215,6 +223,27 @@ public:
       uint32_t op_flags = 0) = 0;
 
     virtual unsigned get_max_attr_name_length() const = 0;
+
+    /// Size limits, in bytes, of the xattr and omap entries that the
+    /// store can keep. A store transaction cannot fail, so the OSD must
+    /// reject a larger entry before it builds the transaction.
+    struct kv_limits_t {
+      uint64_t max_attr_name_len;
+      /// key + value of one xattr or one omap entry
+      uint64_t max_kv_len = std::numeric_limits<uint64_t>::max();
+      uint64_t max_omap_key_len = std::numeric_limits<uint64_t>::max();
+      uint64_t max_omap_header_len = std::numeric_limits<uint64_t>::max();
+    };
+
+    /**
+     * get_kv_limits
+     *
+     * All the limits in one call. The default has only the attribute
+     * name limit, and no limit for the other sizes.
+     */
+    virtual kv_limits_t get_kv_limits() const {
+      return kv_limits_t{.max_attr_name_len = get_max_attr_name_length()};
+    }
   };
 
 public:
@@ -247,6 +276,13 @@ public:
   virtual seastar::future<store_statfs_t> stat() const = 0;
 
   virtual seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const = 0;
+
+  /// true if any store shard is past its local full limit
+  /// (Shard::is_storage_full()), the limit at which the OSD rejects writes.
+  /// One shard can reach it while stat() still shows space left overall.
+  virtual seastar::future<bool> is_any_shard_storage_full() const {
+    return seastar::make_ready_future<bool>(false);
+  }
 
   virtual seastar::future<> report_stats() { return seastar::now(); }
 
@@ -296,12 +332,12 @@ auto with_store(BackendStore store, Args&&... args)
   constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
   constexpr bool is_plain = !is_errorator && !is_seastar_future;
   const auto original_core = seastar::this_shard_id();
-  if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
-    if (store.shard_id != GLOBAL_STORE) {
-      ceph_assert(store.shard_id == seastar::this_shard_id());
-    }
+  if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count") &&
+     !is_store_local(store) &&
+     store.shard_id != GLOBAL_STORE) {
+    ceph_assert(store.shard_id == seastar::this_shard_id());
   }
-  if (store.shard_id == seastar::this_shard_id() || store.shard_id == GLOBAL_STORE) {
+  if (is_store_local(store)) {
     if constexpr (is_plain) {
       return seastar::make_ready_future<raw_return_type>(
         (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(std::forward<Args>(args)...));

@@ -10,6 +10,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "gtest/gtest.h"
+#include "messages/MOSDMap.h"
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonState.h"
@@ -133,11 +134,15 @@ public:
   {
     TestMgr::SetUp();
 
-    //Setup pools and notify osdmap
+    //Setup pools and the reporting OSD (osd.0, in), and notify osdmap
     pool.set_pg_num(2);
     osd_inc.new_pool_max = 1;
     osd_inc.new_pools[1] = pool;
+    osd_inc.new_max_osd = 1;
+    // a non-zero weight also marks osd.0 as existing
+    osd_inc.new_weight[0] = CEPH_OSD_IN;
     osd_map.apply_incremental(osd_inc);
+    publish_osdmap();
 
     cs->with_osdmap_and_pgmap([&](const OSDMap& old_map, const PGMap& pg_map) {
       cs->notify_osdmap(osd_map);
@@ -149,6 +154,19 @@ public:
     pgstat.state = PG_STATE_ACTIVE;
     pgstat.reported_epoch = 1;
     pgstat.reported_seq = 2;
+  }
+
+  // ClusterState::ingest_pgstats() checks the reporter against the
+  // Objecter's OSDMap, so hand it our osd_map
+  void
+  publish_osdmap()
+  {
+    auto m = ceph::make_message<MOSDMap>(
+        mc->get_fsid(), CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osd_map.encode(
+        m->maps[osd_map.get_epoch()],
+        CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
+    objecter->handle_osd_map(m.get());
   }
 
   void

@@ -1081,7 +1081,7 @@ void PeeringState::clear_primary_state()
   peer_last_complete_ondisk.clear();
   peer_activated.clear();
   // the next activation shares our full info (history included) anyway
-  rebuild_stats_close_unshared = false;
+  rebuild_stats_unshared = false;
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
@@ -3532,6 +3532,13 @@ void PeeringState::activate(
       }
     }
 
+    // Every peer above was just sent the current info.history wholesale
+    // (directly via ctx.send_info(), or embedded in the MOSDPGLog sent for
+    // the empty-log/backfill/catch-up cases), so any rebuild-stats
+    // transition latched before or during this peering round has already
+    // reached every peer; the AdvMap retry has nothing left to do for it.
+    rebuild_stats_unshared = false;
+
     // Set up missing_loc
     set<pg_shard_t> complete_shards;
     for (auto i = acting_recovery_backfill.begin();
@@ -3625,7 +3632,7 @@ void PeeringState::share_pg_info()
 
   info.history.refresh_prior_readable_until_ub(pl->get_mnow(),
 					       prior_readable_until_ub);
-  rebuild_stats_close_unshared = false;
+  rebuild_stats_unshared = false;
 
   // share new pg_info_t with replicas
   ceph_assert(!acting_recovery_backfill.empty());
@@ -4955,6 +4962,10 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
            // Mark info dirty here and let PG::publish_stats_to_osd() force an
            // immediate, standalone write if nothing else is already about to.
           dirty_info = true;
+          // Also flag that replicas don't know about this onset yet.
+          // Active::react(AdvMap) retries share_pg_info() on our behalf until
+          // one actually goes out, the same way it does for a recorded close.
+          rebuild_stats_unshared = true;
         }
       } else if (info.history.last_degraded > info.history.vuln_window_reported &&
                  (info.stats.state & PG_STATE_CLEAN) &&
@@ -4997,7 +5008,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
          // shares right after), so Active::react(AdvMap) retries
          // share_pg_info() on our behalf until one actually goes out.
         dirty_info = true;
-        rebuild_stats_close_unshared = true;
+        rebuild_stats_unshared = true;
       }
       // pg_history_t is the source of truth for last_degraded; mirror it into
       // pg_stat_t for external reporting (ceph pg query/pg dump), and resend
@@ -6214,6 +6225,10 @@ void PeeringState::arm_rebuild_span()
     // Mark info dirty and let PG::publish_stats_to_osd() force an immediate,
     // standalone write if nothing else is already about to.
     dirty_info = true;
+    // Also flag that replicas don't know about this onset yet.
+    // Active::react(AdvMap) retries share_pg_info() on our behalf until one
+    // actually goes out, the same way it does for a recorded close.
+    rebuild_stats_unshared = true;
   }
 }
 
@@ -6236,6 +6251,10 @@ void PeeringState::pause_rebuild_span()
     // Mark info dirty and let PG::publish_stats_to_osd() force an immediate,
     // standalone write if nothing else is already about to.
     dirty_info = true;
+    // Also flag that replicas don't know about this pause yet -- same
+    // reasoning as arm_rebuild_span()'s own flag set, for a handover landing
+    // between a pause and the next share.
+    rebuild_stats_unshared = true;
   }
 }
 
@@ -6263,7 +6282,7 @@ void PeeringState::close_rebuild_span()
     }
     info.history.rebuild_active_accum = utime_t();
     dirty_info = true;
-    rebuild_stats_close_unshared = true;
+    rebuild_stats_unshared = true;
   }
 }
 
@@ -6287,6 +6306,12 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
   pl->on_backfill_reserved();
   ps->arm_rebuild_span();
   pl->publish_stats_to_osd();
+  // Share the arm right away instead of waiting on the AdvMap retry -- we're
+  // a substate of Active, so acting_recovery_backfill is already populated
+  // and share_pg_info() is safe to call directly here.
+  if (ps->rebuild_stats_unshared) {
+    ps->share_pg_info();
+  }
 }
 
 void PeeringState::Backfilling::backfill_release_reservations()
@@ -6576,6 +6601,12 @@ PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   // Pause the active-rebuild latch: backfill is paused, not finished.
   ps->pause_rebuild_span();
   pl->publish_stats_to_osd();
+  // Share the pause right away instead of waiting on the AdvMap retry -- we're
+  // a substate of Active, so acting_recovery_backfill is already populated
+  // and share_pg_info() is safe to call directly here.
+  if (ps->rebuild_stats_unshared) {
+    ps->share_pg_info();
+  }
 }
 
 boost::statechart::result PeeringState::NotBackfilling::react(const QueryUnfound& q)
@@ -6619,6 +6650,12 @@ PeeringState::NotRecovering::NotRecovering(my_context ctx)
   // Pause the active-rebuild latch: recovery is paused, not finished.
   ps->pause_rebuild_span();
   pl->publish_stats_to_osd();
+  // Share the pause right away instead of waiting on the AdvMap retry -- we're
+  // a substate of Active, so acting_recovery_backfill is already populated
+  // and share_pg_info() is safe to call directly here.
+  if (ps->rebuild_stats_unshared) {
+    ps->share_pg_info();
+  }
 }
 
 boost::statechart::result PeeringState::NotRecovering::react(const QueryUnfound& q)
@@ -7599,6 +7636,12 @@ PeeringState::Recovering::Recovering(my_context ctx)
   ceph_assert(!ps->state_test(PG_STATE_ACTIVATING));
   ps->arm_rebuild_span();
   pl->publish_stats_to_osd();
+  // Share the arm right away instead of waiting on the AdvMap retry -- we're
+  // a substate of Active, so acting_recovery_backfill is already populated
+  // and share_pg_info() is safe to call directly here.
+  if (ps->rebuild_stats_unshared) {
+    ps->share_pg_info();
+  }
 }
 
 void PeeringState::Recovering::release_reservations(bool cancel)
@@ -7740,6 +7783,16 @@ PeeringState::Recovered::Recovered(my_context ctx)
   // Backfilled (from Backfilling) both transition straight here.
   // A no-op if nothing ever needed recovering (e.g. Activating -> Recovered).
   ps->close_rebuild_span();
+  // Share the close right away instead of waiting on the AdvMap retry --
+  // we're a substate of Active, so acting_recovery_backfill is already
+  // populated and share_pg_info() is safe to call directly here. GoClean()
+  // may fire below and have try_mark_clean() share again right after this;
+  // that's one harmless extra message, not a correctness issue, and it's
+  // only when GoClean() does *not* fire immediately (not every replica is
+  // activated yet) that this share is the only thing closing the gap.
+  if (ps->rebuild_stats_unshared) {
+    ps->share_pg_info();
+  }
 
   ceph_assert(!ps->needs_recovery());
 
@@ -7911,12 +7964,14 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
   psdout(10) << "Active advmap" << dendl;
 
   pl->on_active_advmap(advmap.osdmap);
-  if (ps->dirty_big_info || ps->rebuild_stats_close_unshared) {
+  if (ps->dirty_big_info || ps->rebuild_stats_unshared) {
     // share updated purged_snaps to mgr/mon so that we (a) stop reporting
     // purged snaps and (b) perhaps share more snaps that we have purged
-    // but didn't fit in pg_stat_t. Also share a rebuild-stats episode
-    // (vulnerability window or active-rebuild) recorded with no share
-    // followed yet (see rebuild_stats_close_unshared).
+    // but didn't fit in pg_stat_t. Also share any rebuild-stats transition
+    // not yet shared (see rebuild_stats_unshared): the vulnerability-window
+    // branches in prepare_stats_for_publish() rely on this, while the
+    // rebuild span's arm/pause/close already share at their own state
+    // transitions and only need it as a fallback.
     ps->share_pg_info();
   }
 

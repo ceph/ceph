@@ -279,10 +279,11 @@
             [kind]="status.type"
             [disabled]="!fetchData?.observers?.length"
             (click)="refreshBtn()"
-            [title]="status.msg"
-            [description]="status.msg"
+            [title]="status.msg || refreshLabel"
+            [description]="status.msg || refreshLabel"
             i18n-title
             i18n-description
+            data-testid="refresh-button"
             class="toolbar-action"
             placement="bottom"
           >
@@ -301,6 +302,8 @@
             class="toolbar-action"
             type="button"
             data-testid="column-toggle-button"
+            aria-label="Show or hide columns"
+            i18n-aria-label
             [cdsOverflowMenu]="showHideColumnsRef"
             placement="bottom"
             [flip]="true"
