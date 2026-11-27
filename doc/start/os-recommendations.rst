@@ -113,7 +113,7 @@ Kernel Version for Clients
      - Minimum kernel
      - Note
    * - RBD
-     - 5.3, or Enterprise Linux 8.2 (4.19 long-term at the very least).
+     - 5.3, or Enterprise Linux 9 (4.19 long-term at the very least).
        From Tentacle, 5.11, or a distribution kernel that accepts the
        ``ms_mode`` map option.
      - Older kernels need :ref:`CRUSH tunables <crush-map-tunables>` and
