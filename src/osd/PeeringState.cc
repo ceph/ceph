@@ -1093,6 +1093,7 @@ void PeeringState::clear_primary_state()
   peer_missing_requested.clear();
   peer_info.clear();
   peer_bytes.clear();
+  peer_objects.clear();
   peer_osd_space_usage.clear();
   peer_missing.clear();
   peer_last_complete_ondisk.clear();
@@ -3554,8 +3555,10 @@ void PeeringState::activate(
 
       bool needs_past_intervals = pi.dne();
 
-      // Save num_bytes for backfill reservation request, can't be negative
+      // Save num_bytes and num_objects for backfill reservation request,
+      // can't be negative
       peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
+      peer_objects[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_objects);
 
       if (pi.last_update == info.last_update) {
         // empty log
@@ -3621,6 +3624,7 @@ void PeeringState::activate(
 	pi.hit_set = info.hit_set;
         pi.stats.stats.clear();
         pi.stats.stats.sum.num_bytes = peer_bytes[peer];
+        pi.stats.stats.sum.num_objects = peer_objects[peer];
 
 	// initialize peer with our purged_snaps.
 	pi.purged_snaps = info.purged_snaps;
@@ -6633,6 +6637,7 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
     ++backfill_osd_it;
   } else {
     ps->peer_bytes.clear();
+    ps->peer_objects.clear();
     post_event(AllBackfillsReserved());
   }
   return discard_event();

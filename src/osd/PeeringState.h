@@ -1812,6 +1812,7 @@ public:
   std::set<pg_shard_t>    stray_set; ///< non-acting osds that have PG data.
   std::map<pg_shard_t, pg_info_t>    peer_info; ///< info from peers (stray or prior)
   std::map<pg_shard_t, int64_t>    peer_bytes; ///< Peer's num_bytes from peer_info
+  std::map<pg_shard_t, int64_t>    peer_objects; ///< Peer's num_objects from peer_info
   std::map<pg_shard_t, backfill_osd_space_usage_t> peer_osd_space_usage;
   std::set<pg_shard_t> peer_purged; ///< peers purged
   std::map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
