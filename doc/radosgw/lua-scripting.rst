@@ -393,6 +393,20 @@ to atomically increment and decrement numeric values in it. For that the followi
 - if we try to increment or decrement by non-numeric values, the execution of the script would fail
 
 
+Performance Counters
+--------------------
+
+The RGW counter set (``ceph daemon <rgw> counter dump``, section ``rgw``)
+includes:
+
+- ``lua_script_ok``: successful executions of Lua scripts
+- ``lua_script_fail``: failed executions of Lua scripts
+- ``lua_current_vms``: Lua VMs currently being executed
+
+Scripts in the data context (``getdata`` and ``putdata``) are not counted in
+``lua_script_ok`` or ``lua_script_fail``.
+
+
 Lua Code Samples
 ----------------
 - Print information on source and destination objects in case of copy:
