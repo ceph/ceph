@@ -66,6 +66,13 @@ else:
                     self.daemon_name = matched_gateway.get('daemon_name')
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
+                else:
+                    raise DashboardException(
+                        msg=f"No gateway found matching server address: {server_address}",
+                        code='server_address_not_found',
+                        component='nvmeof',
+                        http_status_code=400
+                    )
             enable_auth = is_mtls_enabled(service_name)
             if enable_auth:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
@@ -117,6 +124,13 @@ else:
             status = getattr(response, "status", None)
             error_message = getattr(response, "error_message", None)
 
+            # Normalize the response so callers do not see a non-zero status in
+            # a successful HTTP response.
+            if status == errno.EREMOTE:
+                response.status = 0
+                if hasattr(response, "error_message"):
+                    response.error_message = ""
+                return response
             if status not in (None, 0):
                 raise DashboardException(
                     msg=error_message or "NVMeoF operation failed",

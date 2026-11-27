@@ -15,7 +15,7 @@ from prettytable import PrettyTable
 
 from ..cli import DBCLICommand
 from ..exceptions import DashboardException
-from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
+from ..model.nvmeof import CliEmptyMessage, CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
@@ -114,6 +114,11 @@ def convert_to_bytes(size: Union[int, str], default_unit=None):
     if not unit_str:
         if not default_unit:
             raise ValueError("default unit was not provided")
+        logger.warning(
+            "No unit specified for size '%s', assuming %s. "
+            "Use a unit suffix (e.g. 10GB) to avoid ambiguity.",
+            number, default_unit
+        )
         unit_str = default_unit
 
     if unit_str in UNITS:
@@ -171,7 +176,7 @@ def resolve_nvmeof_server_address(
 
 class OutputFormatter(ABC):
     @abstractmethod
-    def format_output(self, data, model):
+    def format_output(self, data, model, template_context: Optional[Dict] = None):
         """Format the given data for output."""
         raise NotImplementedError()
 
@@ -249,7 +254,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
     # pylint: disable=too-many-branches, too-many-nested-blocks
     def process_dict(self, input_dict: dict,
                      nt_class: Type[NamedTuple],
-                     is_top_level: bool) -> Union[Dict, str, List]:
+                     is_top_level: bool,
+                     template_context: Optional[Dict] = None) -> Union[Dict, str, List]:
         result: Dict = {}
         if not input_dict:
             return result
@@ -266,6 +272,7 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             annotations = []
             output_name = field
             skip = False
+            empty_message_template = None
 
             if origin is Annotated:
                 actual_type, *annotations = get_args(type_hint)
@@ -275,20 +282,38 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
                         break
                     if isinstance(annotation, CliHeader):
                         output_name = annotation.label
+                    if isinstance(annotation, CliEmptyMessage):
+                        empty_message_template = annotation.template
+
+                for annotation in annotations:
                     if isinstance(annotation, CliFieldTransformer):
                         value = annotation.transform(value)
                     if is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
                         assert get_origin(actual_type) == list
                         assert len(get_args(actual_type)) == 1
+                        if not value and empty_message_template:
+                            format_dict = {**input_dict}
+                            if template_context:
+                                format_dict.update(template_context)
+                            try:
+                                return empty_message_template.format(**format_dict)
+                            except KeyError as e:
+                                logger.warning(
+                                    "Missing template variable %s in empty message template: %s",
+                                    e, empty_message_template
+                                )
+                                # Fall back to returning the template as-is if formatting fails
+                                return empty_message_template
                         return [self.process_dict(item, get_args(actual_type)[0],
-                                                  False) for item in value]
+                                                  False, template_context) for item in value]
                     if is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
                         return f"Failure: {input_dict.get('error_message')}" if bool(
                             input_dict[field]) else "Success"
                     if annotation == CliFlags.SIZE:
                         value = convert_from_bytes(int(input_dict[field]))
                     elif annotation == CliFlags.PROMOTE_INTERNAL_FIELDS:
-                        object_to_promote = self.process_dict(value, actual_type, False)
+                        object_to_promote = self.process_dict(
+                            value, actual_type, False, template_context)
                         if isinstance(object_to_promote, dict):
                             for field_name, value in object_to_promote.items():
                                 result[field_name] = value
@@ -308,14 +333,14 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
         return result
 
-    def _convert_to_text_output(self, data, model):
-        data = self.process_dict(data, model, True)
+    def _convert_to_text_output(self, data, model, template_context: Optional[Dict] = None):
+        data = self.process_dict(data, model, True, template_context)
         if isinstance(data, str):
             return data
         return self._get_text_output(data)
 
-    def format_output(self, data, model):
-        return self._convert_to_text_output(data, model)
+    def format_output(self, data, model, template_context: Optional[Dict] = None):
+        return self._convert_to_text_output(data, model, template_context)
 
 
 class NvmeofCLICommand(DBCLICommand):
@@ -329,7 +354,8 @@ class NvmeofCLICommand(DBCLICommand):
                  poll: bool = False,
                  success_message_template: Optional[str] = None,
                  success_message_map: Optional[Dict[str, Any]] = None,
-                 success_message_fn: Optional[Callable[[Dict[str, Any]], str]] = None):
+                 success_message_fn: Optional[Callable[[Dict[str, Any]], str]] = None,
+                 deprecated_params: Optional[Dict[str, str]] = None):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
@@ -340,6 +366,7 @@ class NvmeofCLICommand(DBCLICommand):
         self._success_message_map = success_message_map or {}
         self._success_message_fn = success_message_fn
         self._func_defaults: Dict[str, Any] = {}
+        self._deprecated_params: Dict[str, str] = deprecated_params or {}
 
     def __call__(self, func):
         resp = super().__call__(func)
@@ -352,6 +379,7 @@ class NvmeofCLICommand(DBCLICommand):
                 success_message_template=self._success_message_template,
                 success_message_map=self._success_message_map,
                 success_message_fn=self._success_message_fn,
+                deprecated_params=self._deprecated_params,
             )
             self._alias_cmd(func)
             self._alias_cmd._func_defaults = self._alias_cmd._compute_func_defaults()
@@ -471,13 +499,33 @@ class NvmeofCLICommand(DBCLICommand):
             logger.warning("Success message template failed for %s", self.prefix, exc_info=True)
             return None
 
+    def _check_required_params(self, cmd_dict: Dict[str, Any]) -> Optional[str]:
+        for index, name in enumerate(self.arg_spec):
+            if name in self.KNOWN_ARGS:
+                continue
+            if index >= self.first_default:
+                break
+            if cmd_dict.get(name) is None:
+                return f"missing required parameter: --{name}"
+        return None
+
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
              inbuf: Optional[str] = None) -> HandleCommandResult:
+        deprecated_warnings = ''
         try:
+            missing = self._check_required_params(cmd_dict)
+            if missing:
+                return HandleCommandResult(-errno.EINVAL, '', missing)
             out_format = cmd_dict.get('format')
             args_map = self._args_map_from_argspec(cmd_dict, inbuf)
+
+            if out_format == 'plain' or not out_format:
+                for param, msg in self._deprecated_params.items():
+                    if args_map.get(param) is not None:
+                        deprecated_warnings += f"\nWarning: {msg}"
+
             ret = super().call(mgr, cmd_dict, inbuf)
             if ret is None:
                 ret = {}
@@ -491,10 +539,15 @@ class NvmeofCLICommand(DBCLICommand):
                     logger.warning("Formatting of success message failed for %s",
                                    self.prefix, exc_info=True)
 
-                out = message if message else self._output_formatter.format_output(ret, self._model)
-                wrn_msg = ret.get('error_message', '')
+                # Pass args_map as template_context for variable substitution in empty messages
+                # This ensures parameters like 'nqn' are available without polluting the data
+                out = message if message else self._output_formatter.format_output(
+                    ret, self._model, template_context=args_map
+                )
+                wrn_msg = ret.get('error_message', '') if isinstance(ret, dict) else ''
                 if wrn_msg:
                     out += f"\nWarning: {wrn_msg}"
+                out += deprecated_warnings
 
             elif out_format == 'json':
                 out = json.dumps(ret, indent=4)
@@ -508,4 +561,4 @@ class NvmeofCLICommand(DBCLICommand):
 
         # pylint: disable=broad-except
         except Exception as e:
-            return HandleCommandResult(-errno.EINVAL, '', str(e))
+            return HandleCommandResult(-errno.EINVAL, '', str(e) + deprecated_warnings)
