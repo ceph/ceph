@@ -698,6 +698,137 @@ ln dir_1/original dir_2/linkto
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
 
+    def test_migration_on_shutdown_target_fails(self):
+        """
+        That when mds.0 fails before replying to a stray migration from a
+        stopping rank, the stopping rank migrates the stray again once
+        mds.0 is back, and finishes stopping.
+
+        Tracker: https://tracker.ceph.com/issues/82065
+        """
+
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        # Create a non-purgeable stray in a ~mds1 stray directory
+        # by doing a hard link and deleting the original file
+        self.mount_a.run_shell_payload("""
+mkdir dir_1 dir_2
+touch dir_1/original
+ln dir_1/original dir_2/linkto
+""")
+
+        self._force_migrate("dir_1")
+        self._force_migrate("dir_2", rank=0)
+
+        # empty mds cache. otherwise mds reintegrates stray when unlink finishes
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(['flush', 'journal'], mds_id=rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], mds_id=rank_1_id)
+
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
+        self.mount_a.umount_wait()
+
+        self._wait_for_counter("mds_cache", "strays_created", 1,
+                               mds_id=rank_1_id)
+
+        # mds.0 dies handling the rename that migrates the stray, before it
+        # replies. Set at runtime only, so the restarted daemon boots normally.
+        self.fs.mds_asok(['config', 'set', 'mds_kill_rename_at', "1"],
+                         mds_id=rank_0_id)
+
+        # Shut down rank 1
+        self.fs.set_max_mds(1)
+        # There is no standby, so the mon keeps the dead mds.0 in the map as
+        # laggy rather than failing the rank.
+        self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=0),
+                             timeout=self.fs.beacon_timeout)
+        self.delete_mds_coredump(rank_0_id)
+
+        # Rank 1 must drop the request mds.0 never answered and migrate the
+        # stray again, or it stays in up:stopping
+        self.fs.mds_restart(rank_0_id)
+        self.fs.wait_for_daemons(timeout=120)
+
+        # See that the stray reached rank 0
+        self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
+
+    def test_migration_target_stops_and_restarts(self):
+        """
+        That when the rank a stray is migrated to stops and starts again
+        without replying, and mds.0 only sees it come back, mds.0 drops the
+        lost request and can reintegrate the stray.
+
+        Tracker: https://tracker.ceph.com/issues/82065
+        """
+
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        # Make both links on rank 0, then move dir_2 to rank 1. Rank 1 gets
+        # the remote link but never needs rank 0's inode.
+        self.mount_a.run_shell_payload("""
+mkdir dir_1 dir_2
+touch dir_1/original
+ln dir_1/original dir_2/linkto
+""")
+        self._force_migrate("dir_2")
+
+        # Scrubbing the remote link gives rank 0 a replica of it, so
+        # unlinking the primary migrates the stray to rank 1
+        out_json = self.fs.run_scrub(["start", "/dir_2/linkto"])
+        self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"], sleep=5,
+                                          timeout=60)
+
+        # Rank 1 drops every message from other ranks for a moment, so the
+        # rename that migrates the stray never gets a reply
+        self.fs.mds_asok(['config', 'set', 'ms_blackhole_mds', 'true'],
+                         mds_id=rank_1_id)
+        self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
+        self._wait_for_counter("mds_cache", "strays_migrated", 1,
+                               mds_id=rank_0_id)
+        time.sleep(5)
+        self.fs.mds_asok(['config', 'set', 'ms_blackhole_mds', 'false'],
+                         mds_id=rank_1_id)
+        self.assertEqual(self.get_mdc_stat("strays_created", rank_1_id), 0)
+        self.assertEqual(self.get_mdc_stat("num_strays", rank_0_id), 1)
+
+        # Keep dir_2 on rank 0 once rank 1 exports it on stopping
+        self.mount_a.setfattr("dir_2", "ceph.dir.pin", "-1")
+
+        # mds.0 hears nothing from the mons while rank 1 stops and starts
+        # again, so it never sees rank 1 stopped, only its new incarnation.
+        # A longer beacon grace keeps the mons from marking mds.0 laggy.
+        self.config_set('global', 'mds_beacon_grace', '300')
+        self.wait_until_true(
+            lambda: float(self.fs.mds_asok(['config', 'get', 'mds_beacon_grace'],
+                                           mds_id=rank_0_id)['mds_beacon_grace']) == 300,
+            timeout=30)
+        self.fs.mds_asok(['config', 'set', 'ms_blackhole_mon', 'true'],
+                         mds_id=rank_0_id)
+        self.fs.set_max_mds(1)
+        self.wait_until_true(lambda: self._is_stopped(1), timeout=120)
+        self.fs.set_max_mds(2)
+        self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 120,
+                              reject_fn=lambda v: v > 2 or v < 1)
+        self.fs.mds_asok(['config', 'set', 'ms_blackhole_mon', 'false'],
+                         mds_id=rank_0_id)
+
+        # Any new map; see that mds.0 has it
+        self.fs.set_session_timeout(61)
+        epoch = self.fs.get_mds_map()['epoch']
+        self.wait_until_true(
+            lambda: self.fs.mds_asok(['status'], mds_id=rank_0_id)['mdsmap_epoch'] >= epoch,
+            timeout=60)
+
+        # A metadata operation on the remaining link reintegrates the stray,
+        # unless the lost request still holds it
+        self.mount_a.run_shell(["mv", "dir_2/linkto", "dir_2/linkto2"])
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays", rank_0_id),
+            expect_val=0,
+            timeout=60
+        )
+
     def test_migrate_unlinked_dir(self):
         """
         Reproduce https://tracker.ceph.com/issues/53597
