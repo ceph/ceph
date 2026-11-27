@@ -555,6 +555,8 @@ private:
       const std::vector<cls::rbd::GroupImageStatus>& local_images,
       const std::vector<cls::rbd::GroupSnapshot>& prune_creating_snaps);
 
+  bool has_completed_pending_detach() const;
+  int prepare_pending_detach_sync_points(std::unique_lock<ceph::mutex>* locker);
   int prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   int prune_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   int prune_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker);

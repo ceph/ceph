@@ -150,6 +150,26 @@ void BootstrapRequest<I>::handle_prepare_local_image(int r) {
     m_local_image_name = m_prepare_local_image_name;
   }
 
+  if (m_local_group_ctx == nullptr && *m_state_builder != nullptr &&
+      !(*m_state_builder)->local_image_id.empty()) {
+    // Watcher discovery order can differ after a restart. Do not start a
+    // standalone worker for an image whose saved local type is still GROUP.
+    m_threads->work_queue->queue(new LambdaContext([this](int) {
+      cls::rbd::MirrorImage mirror_image;
+      int r = librbd::cls_client::mirror_image_get(
+        &m_local_io_ctx, (*m_state_builder)->local_image_id, &mirror_image);
+      if (r < 0) {
+        finish(r == -ENOENT ? -EAGAIN : r);
+        return;
+      }
+      if (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
+        finish(-EAGAIN);
+        return;
+      }
+      prepare_remote_image();
+    }), 0);
+    return;
+  }
   prepare_remote_image();
 }
 

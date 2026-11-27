@@ -315,6 +315,11 @@ public:
 
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
+    ASSERT_EQ(0, librbd::cls_client::mirror_image_set(
+      &m_local_io_ctx, m_local_image_ctx->id,
+      {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global-" + m_local_image_ctx->id,
+       cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE,
+       cls::rbd::MIRROR_IMAGE_STATE_ENABLED}));
   }
 
   void expect_send(MockPrepareLocalImageRequest &mock_request,

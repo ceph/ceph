@@ -225,6 +225,7 @@ private:
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
   std::map<std::string, std::pair<int64_t, std::string>> m_target_remote_images;
+  std::map<std::string, std::pair<int64_t, std::string>> m_owned_remote_images;
   const cls::rbd::GroupSnapshot *m_target_remote_snap = nullptr;
   const cls::rbd::GroupSnapshot *m_last_complete_local_snap = nullptr;
   GroupStateBuilder<ImageCtxT> **m_state_builder = nullptr;
@@ -262,6 +263,7 @@ private:
   void handle_load_remote_group_snapshots(int r, bool validate_for_resync);
   int validate_user_snapshot_dependencies();
   int select_target_group_membership();
+  int retain_pending_detaches();
 
   void reconcile_local_group_members();
   void remove_next_group_member();
