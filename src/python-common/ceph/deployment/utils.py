@@ -157,3 +157,13 @@ def verify_enum(field: Any, field_name: str, allowed: list) -> None:
         if field.lower() not in allowed_lower:
             raise SpecValidationError(
                            f'Invalid {field_name}. Valid values are: {", ".join(allowed)}')
+
+def validate_ip(ip_addr: Optional[str]) -> None:
+    if ip_addr is None:
+        return
+    try:
+        ipaddress.ip_address(unwrap_ipv6(ip_addr))
+    except ValueError:
+        raise SpecValidationError(
+            f"Invalid virtual_ip: {ip_addr}. Must be a valid IP address."
+        )
