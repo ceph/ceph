@@ -3322,6 +3322,251 @@ function TEST_rebuild_perf_replica_history_survives_handover_after_close() {
     kill_daemons $dir || return 1
 }
 
+# Test stale-onset fix, open side: Recovering shares the rebuild-span onset
+# armed by arm_rebuild_span() synchronously (rebuild_stats_unshared in
+# PeeringState.h) instead of relying on a later, unrelated share before a
+# handover -- otherwise a promoted peer latches a fresh onset of its own.
+#
+# Only the last_rebuild_active_start check exercises that share. The
+# vulnerability-window onset latches before the degraded replica rejoins,
+# and the re-peering on its return sends it to every peer via activate(),
+# with or without the fix. The pause side is covered by the
+# RebuildSpanPauseSharesWithReplicasImmediately unit test.
+#
+# Handover uses `ceph osd down` under noup (not primary-affinity): that's
+# a genuine interval change excluding osd.${primary_a} from up/acting, the
+# same technique that caught this bug. A primary-affinity handover would
+# leave osd.${primary_a} up and acting, so the new primary could learn the
+# onset via the ordinary notify/merge() path regardless of whether this
+# fix's share ran, passing even on unfixed code. osd.${primary_a} gets its
+# own noup flag before the degraded replica returns, so the handover is a
+# single, interval-changing epoch. Active::react(AdvMap) doesn't retry the
+# share on such an epoch, so only the synchronous share can reach the
+# replicas in time.
+#
+# Recovery must stay open long enough for the query-then-handover sequence
+# to land first. With mClock's default capacity, 60 tiny objects recover in
+# well under a second. The custom profile below (same values as
+# TEST_rebuild_perf_backfill_toofull_revoke_case) charges every
+# background_recovery item at least 4096 bytes against a 15360 bytes/s
+# per-shard limit. Each object costs the primary two such items (the
+# recovery op and its push reply), i.e. ~0.53s per object, so the 60-object
+# recovery takes ~30s. Set osd_recovery_max_chunk to 4096 to cap the pull's
+# cost so that after the handover, when the new primary (which switches to
+# being a replica) has fallen behind pulls what it's missing, avoids being
+# charged the full 8MB default chunk which can result in minutes per pull at
+# this limit.
+function TEST_rebuild_perf_replica_history_shares_handover_after_open() {
+    local dir=$1
+    local OSDS=3
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 \
+        --osd_op_num_shards=8 --osd_op_num_threads_per_shard=2 \
+        --osd_mclock_profile=custom \
+        --osd_mclock_max_capacity_iops_hdd=1000 \
+        --osd_mclock_max_capacity_iops_ssd=1000 \
+        --osd_mclock_max_sequential_bandwidth_hdd=4096000 \
+        --osd_mclock_max_sequential_bandwidth_ssd=4096000 \
+        --osd_mclock_scheduler_background_recovery_res=0.015 \
+        --osd_mclock_scheduler_background_recovery_lim=0.03 \
+        --osd_recovery_max_chunk=4096 || return 1
+    done
+
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 5)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local PG
+    PG=$(get_pg $poolname obj1)
+    local pg_re
+    pg_re=$(echo "$PG" | sed 's/\./\\./')
+    local primary_a
+    primary_a=$(get_primary $poolname obj1)
+    local otherosd
+    otherosd=$(get_not_primary $poolname obj1)
+    local log_a=$dir/osd.${primary_a}.log
+
+    # Degrade: hold a replica down with a growing backlog, then let it
+    # back up -- the primary drives a genuine, multi-object recovery to
+    # catch it up, arming both counters. Deliberately do NOT wait for
+    # clean below: the handover must land while both counters are still
+    # open.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    for i in $(seq 6 65)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+
+    # Keep osd.${primary_a} from coming back up after the handover below,
+    # without a global flag change between the arm and the handover.
+    ceph osd add-noup osd.${primary_a} || return 1
+    ceph osd unset noup || return 1
+
+    local armed=0
+    for i in $(seq 1 60)
+    do
+      test -f "$log_a" && \
+        grep -q "pg\[${pg_re}(.*enter Started/Primary/Active/Recovering" \
+          "$log_a" && {
+        armed=1
+        break
+      }
+      sleep 1
+    done
+    test "$armed" = 1 || {
+      echo "FAIL: ${PG} never entered Recovering -- test setup assumption" \
+           "broken, this isn't testing the open/arm path"
+      return 1
+    }
+
+    # Capture both onsets before the handover, to compare against what the
+    # new primary ends up with.
+    local q
+    q=$(ceph pg $PG query) || return 1
+    local original_vuln_onset original_rebuild_onset
+    local vuln_window_reported rebuild_span_reported
+    original_vuln_onset=$(jq -r '.info.history.last_degraded' <<< "$q")
+    original_rebuild_onset=$(jq -r '.info.history.last_rebuild_active_start' <<< "$q")
+    vuln_window_reported=$(jq -r '.info.history.vuln_window_reported' <<< "$q")
+    rebuild_span_reported=$(jq -r '.info.history.rebuild_span_reported' \
+      <<< "$q")
+    test -n "$original_vuln_onset" -a "$original_vuln_onset" != "null" || {
+      echo "FAIL: couldn't read info.history.last_degraded from" \
+           "osd.${primary_a}"
+      return 1
+    }
+    test -n "$original_rebuild_onset" -a "$original_rebuild_onset" != "null" || {
+      echo "FAIL: couldn't read info.history.last_rebuild_active_start from" \
+           "osd.${primary_a}"
+      return 1
+    }
+
+    # Both episodes must still be genuinely open right now -- otherwise the
+    # handover below would prove nothing about the open/arm path this test
+    # exists to cover.
+    local vuln_still_open
+    vuln_still_open=$(awk -v a="$original_vuln_onset" \
+      -v b="$vuln_window_reported" 'BEGIN { print (a > b) }')
+    test "$vuln_still_open" = 1 || {
+      echo "FAIL: the vulnerability window already closed" \
+           "(last_degraded=${original_vuln_onset}," \
+           "vuln_window_reported=${vuln_window_reported}) before the" \
+           "handover -- recovery finished too fast for this test to catch" \
+           "it still open"
+      return 1
+    }
+    local rebuild_still_open
+    rebuild_still_open=$(awk -v a="$original_rebuild_onset" \
+      -v b="$rebuild_span_reported" 'BEGIN { print (a > b) }')
+    test "$rebuild_still_open" = 1 || {
+      echo "FAIL: the active-rebuild span already closed" \
+           "(last_rebuild_active_start=${original_rebuild_onset}," \
+           "rebuild_span_reported=${rebuild_span_reported}) before the" \
+           "handover -- recovery finished too fast for this test to catch" \
+           "it still open"
+      return 1
+    }
+
+    # --- Handover: exclude osd.${primary_a} from up/acting (not a process
+    # kill -- see header comment) while the episode is still open.
+    ceph osd down osd.${primary_a} || return 1
+
+    local primary_b=""
+    for i in $(seq 1 30)
+    do
+      primary_b=$(get_primary $poolname obj1)
+      test -n "$primary_b" -a "$primary_b" != "$primary_a" && break
+      sleep 1
+    done
+    test -n "$primary_b" -a "$primary_b" != "$primary_a" || {
+      echo "FAIL: primary never changed after osd.${primary_a} went down"
+      return 1
+    }
+
+    # The new primary must show the exact same onsets, not fresh ones of
+    # its own.
+    local vuln_onset="" rebuild_onset=""
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      q=$(ceph pg $PG query 2>/dev/null) || { sleep 1; continue; }
+      vuln_onset=$(jq -r '.info.history.last_degraded' <<< "$q")
+      rebuild_onset=$(jq -r '.info.history.last_rebuild_active_start' <<< "$q")
+      test "$vuln_onset" = "$original_vuln_onset" \
+        -a "$rebuild_onset" = "$original_rebuild_onset" && break
+      sleep 1
+    done
+    test "$vuln_onset" = "$original_vuln_onset" || {
+      echo "FAIL: osd.${primary_b}'s info.history.last_degraded" \
+           "(${vuln_onset}) does not match the original onset" \
+           "(${original_vuln_onset}) -- the vulnerability-window onset did" \
+           "not survive the handover"
+      return 1
+    }
+    test "$rebuild_onset" = "$original_rebuild_onset" || {
+      echo "FAIL: osd.${primary_b}'s info.history.last_rebuild_active_start" \
+           "(${rebuild_onset}) does not match the original onset" \
+           "(${original_rebuild_onset}) -- the active-rebuild onset did not" \
+           "survive the handover"
+      return 1
+    }
+
+    # --- Bring osd.${primary_a} back (it never stopped running) and let
+    # the episode resolve, ending this test in its default state.
+    ceph osd rm-noup osd.${primary_a} || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    # Both episodes must still be recorded exactly ONCE, spanning the full
+    # handover-inclusive window, not fragmented or double-counted.
+    local vuln_avgcount=0 rebuild_avgcount=0
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      test -S $(get_asok_path osd.${osd}) || continue
+      local d
+      d=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${osd}) perf dump 2>/dev/null) || continue
+      local vc rc
+      vc=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' <<< "$d")
+      rc=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' <<< "$d")
+      vuln_avgcount=$(expr $vuln_avgcount + ${vc:-0})
+      rebuild_avgcount=$(expr $rebuild_avgcount + ${rc:-0})
+    done
+
+    echo "INFO: summed pg_vulnerability_duration.avgcount=${vuln_avgcount}," \
+         "pg_rebuild_duration.avgcount=${rebuild_avgcount}"
+    test "$vuln_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_vulnerability_duration.avgcount=1 for" \
+           "${PG}'s single handover-spanning episode, got $vuln_avgcount"
+      return 1
+    }
+    test "$rebuild_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_rebuild_duration.avgcount=1 for" \
+           "${PG}'s single handover-spanning episode, got $rebuild_avgcount"
+      return 1
+    }
+
+    ceph osd unset noscrub || return 1
+    ceph osd unset nodeep-scrub || return 1
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 
 main osd-recovery-stats "$@"
 

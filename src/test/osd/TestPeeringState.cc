@@ -374,6 +374,22 @@ protected:
   // state or inject changes after each step
   // ============================================================================
 
+  // Deliver a peering event the way PG::do_peering_event() does: an event
+  // sent before the PG's last peering reset is discarded, not handled.
+  // This matters when a test queues a message (e.g. a share_pg_info())
+  // and calls new_epoch() before dispatching it.
+  void deliver_peering_event(int osd, PGPeeringEventRef evt)
+  {
+    PeeringState *ps = get_ps(osd);
+    if (ps->pg_has_reset_since(evt->get_epoch_sent()) ||
+        ps->pg_has_reset_since(evt->get_epoch_requested())) {
+      dout(0) << __func__ << " discard old " << evt->get_desc()
+              << " to osd." << osd << dendl;
+      return;
+    }
+    ps->handle_event(evt, get_ctx(osd));
+  }
+
   // Dispatcher - send peering messages to other OSDs from a given OSD. Peering
   // messages are queued in message_map in PeeringCtx
   // toosd - if specified only send messages to the specified OSD
@@ -404,7 +420,7 @@ protected:
         ConnectionRef c = ceph::make_ref<MockConnection>();
         pm->set_connection(c);
 #endif
-        get_ps(osd)->handle_event(PGPeeringEventRef(pm->get_event()), get_ctx(osd));
+        deliver_peering_event(osd, PGPeeringEventRef(pm->get_event()));
         // MessageRef m goes out of scope here, automatically releasing the reference
         did_work = true;
         if (num_messages > 0 && --num_messages == 0) {
@@ -449,12 +465,8 @@ protected:
         MessageRef m = *it;
         it = ls.erase(it);
         // NOTE: This dispatcher only handles MOSDPeeringOp-derived messages (MOSDPGLog,
-        // MOSDPGNotify2, MOSDPGInfo2, MOSDPGLease, MOSDPGLeaseAck, MOSDPGQuery2, MOSDPGTrim).
-        // Non-peering messages like MOSDPGRemove and MRecoveryReserve are sent via
-        // send_cluster_message() but are not dispatched through this function - they are
-        // handled by other test mechanisms or are not relevant to peering state transitions.
-        // This is sufficient for testing PeeringState behavior as all peering-related
-        // messages derive from MOSDPeeringOp and provide get_event() for state machine events.
+        // MOSDPGNotify2, MOSDPGInfo2, MOSDPGLease, MOSDPGLeaseAck, MOSDPGQuery2, MOSDPGTrim,
+        // MRecoveryReserve). Non-peering messages like MOSDPGRemove are not expected here.
         // Future enhancement: If testing non-peering cluster messages becomes necessary,
         // add type checking and appropriate handling for Message-derived (non-MOSDPeeringOp) types.
         dout(0) << __func__ << " message type = " << m->get_type() << dendl;
@@ -469,7 +481,7 @@ protected:
         ConnectionRef c = ceph::make_ref<MockConnection>();
         pm->set_connection(c);
 #endif
-        get_ps(osd)->handle_event(PGPeeringEventRef(pm->get_event()), get_ctx(osd));
+        deliver_peering_event(osd, PGPeeringEventRef(pm->get_event()));
         // MessageRef m goes out of scope here, automatically releasing the reference
         did_work = true;
         if (num_messages > 0 && --num_messages == 0) {
@@ -509,7 +521,7 @@ protected:
       auto evt = *it;
       it = ls.erase(it);
       dout(0) << __func__ << " event to osd." << fromosd << " " << evt->get_desc() << dendl;
-      get_ps(fromosd)->handle_event(evt, get_ctx(fromosd));
+      deliver_peering_event(fromosd, evt);
       did_work = true;
       if (num_events > 0 && --num_events == 0) {
         return did_work;
@@ -2999,13 +3011,13 @@ TEST_F(PeeringStateTest, ActiveRebuildLatchMarksInfoDirty) {
 }
 
 // ============================================================================
-// Test 12: Recording a window marks it for sharing
-// (rebuild_stats_close_unshared), and the replicas receive the post-close
-// history (vuln_window_reported) on the next Active AdvMap. try_mark_clean()
-// itself always shares right after publishing, but prepare_stats_for_publish()
-// is reachable from other contexts (e.g. an op's on-commit callback) that don't
-// -- a replica left holding the pre-close history would, if promoted, see the
-// already-recorded window as still open and record it again.
+// Test 12: Recording a window marks it for sharing (rebuild_stats_unshared),
+// and the replicas receive the post-close history (vuln_window_reported) on
+// the next Active AdvMap. try_mark_clean() itself always shares right after
+// publishing, but prepare_stats_for_publish() is reachable from other
+// contexts (e.g. an op's on-commit callback) that don't -- a replica left
+// holding the pre-close history would, if promoted, see the already-recorded
+// window as still open and record it again.
 // ============================================================================
 TEST_F(PeeringStateTest, VulnerabilityWindowCloseSharesWithReplicasOnAdvMap) {
   dout(0) << "== VulnerabilityWindowCloseSharesWithReplicasOnAdvMap ==" << dendl;
@@ -3038,7 +3050,7 @@ TEST_F(PeeringStateTest, VulnerabilityWindowCloseSharesWithReplicasOnAdvMap) {
   auto *primary = get_ps(acting_primary);
   const utime_t reported = primary->get_info().history.vuln_window_reported;
   ASSERT_GT(reported, primary->get_info().history.last_degraded);
-  EXPECT_TRUE(primary->rebuild_stats_close_unshared);
+  EXPECT_TRUE(primary->rebuild_stats_unshared);
 
   for (auto osd : acting) {
     if (osd == acting_primary) continue;
@@ -3047,8 +3059,8 @@ TEST_F(PeeringStateTest, VulnerabilityWindowCloseSharesWithReplicasOnAdvMap) {
   }
 
   // Drain whatever unrelated dirty state (e.g. dirty_big_info from
-  // activation) is still set, so only rebuild_stats_close_unshared can
-  // trigger the retry-share below.
+  // activation) is still set, so only rebuild_stats_unshared can trigger
+  // the retry-share below.
   {
     ObjectStore::Transaction t;
     primary->write_if_dirty(t);
@@ -3056,7 +3068,7 @@ TEST_F(PeeringStateTest, VulnerabilityWindowCloseSharesWithReplicasOnAdvMap) {
   test_event_advance_map(acting_primary);  // same map: Active AdvMap
   dispatch_all();
 
-  EXPECT_FALSE(primary->rebuild_stats_close_unshared);
+  EXPECT_FALSE(primary->rebuild_stats_unshared);
   for (auto osd : acting) {
     if (osd == acting_primary) continue;
     const auto &h = get_ps(osd)->get_info().history;
@@ -3104,7 +3116,7 @@ TEST_F(PeeringStateTest, RebuildSpanCloseSharesWithReplicasOnAdvMap) {
   primary->close_rebuild_span();  // span closes and is recorded
   const utime_t reported = primary->get_info().history.rebuild_span_reported;
   ASSERT_GT(reported, onset);
-  EXPECT_TRUE(primary->rebuild_stats_close_unshared);
+  EXPECT_TRUE(primary->rebuild_stats_unshared);
 
   for (auto osd : acting) {
     if (osd == acting_primary) continue;
@@ -3113,8 +3125,8 @@ TEST_F(PeeringStateTest, RebuildSpanCloseSharesWithReplicasOnAdvMap) {
   }
 
   // Drain whatever unrelated dirty state (e.g. dirty_big_info from
-  // activation) is still set, so only rebuild_stats_close_unshared can
-  // trigger the retry-share below.
+  // activation) is still set, so only rebuild_stats_unshared can trigger
+  // the retry-share below.
   {
     ObjectStore::Transaction t;
     primary->write_if_dirty(t);
@@ -3122,7 +3134,7 @@ TEST_F(PeeringStateTest, RebuildSpanCloseSharesWithReplicasOnAdvMap) {
   test_event_advance_map(acting_primary);  // same map: Active AdvMap
   dispatch_all();
 
-  EXPECT_FALSE(primary->rebuild_stats_close_unshared);
+  EXPECT_FALSE(primary->rebuild_stats_unshared);
   for (auto osd : acting) {
     if (osd == acting_primary) continue;
     const auto &h = get_ps(osd)->get_info().history;
@@ -3204,6 +3216,160 @@ TEST_F(PeeringStateTest, VulnerabilityWindowCleanPublishKeepsHistory) {
   EXPECT_EQ(h.last_clean, h.vuln_window_reported);
 
   check_clean_publishes_keep_history("after a recorded close");
+}
+
+// ============================================================================
+// Test 15: The open/arm side of the same gap Test 12 covers for close: an
+// onset latched by prepare_stats_for_publish() marks itself for sharing
+// (rebuild_stats_unshared), and a peer left holding the pre-arm view would,
+// if promoted before any share goes out, latch a fresh onset of its own
+// instead of inheriting the true one.
+// ============================================================================
+TEST_F(PeeringStateTest, VulnerabilityWindowOpenSharesWithReplicasOnAdvMap) {
+  dout(0) << "== VulnerabilityWindowOpenSharesWithReplicasOnAdvMap ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  call_prepare_stats(acting_primary);  // window opens on the primary
+  auto *primary = get_ps(acting_primary);
+  const utime_t onset = primary->get_info().history.last_degraded;
+  ASSERT_GT(onset, primary->get_info().history.vuln_window_reported);
+  EXPECT_TRUE(primary->rebuild_stats_unshared);
+
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    EXPECT_LE(get_ps(osd)->get_info().history.last_degraded,
+              get_ps(osd)->get_info().history.vuln_window_reported)
+        << "osd." << osd << " has not been told about the open yet";
+  }
+
+  // Drain whatever unrelated dirty state (e.g. dirty_big_info from
+  // activation) is still set, so only rebuild_stats_unshared can trigger
+  // the retry-share below.
+  {
+    ObjectStore::Transaction t;
+    primary->write_if_dirty(t);
+  }
+  test_event_advance_map(acting_primary);  // same map: Active AdvMap
+  dispatch_all();
+
+  EXPECT_FALSE(primary->rebuild_stats_unshared);
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    const auto &h = get_ps(osd)->get_info().history;
+    EXPECT_EQ(h.last_degraded, onset)
+        << "osd." << osd << " must inherit the true onset, not a fresh one";
+  }
+}
+
+// ============================================================================
+// Test 16: Same as Test 15, for the other rebuild-stats counter's own
+// open/arm transition: arm_rebuild_span() (reached when test_peering()
+// drives the PG into Recovering here). Unlike the vulnerability window's
+// own open branch (Test 15), arm_rebuild_span() is shared synchronously
+// from Recovering::Recovering() itself the moment it arms, not deferred to
+// a later AdvMap retry -- see rebuild_stats_unshared's own comment in
+// PeeringState.h for why the two differ.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildSpanOpenSharesWithReplicasImmediately) {
+  dout(0) << "== RebuildSpanOpenSharesWithReplicasImmediately ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Introduce a missing replica: swap acting[1] from OSD 1 to OSD 9.
+  // test_peering() drives the PG straight into Recovering, arming the
+  // active-rebuild latch and sharing it synchronously right there.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  auto *primary = get_ps(acting_primary);
+  const utime_t onset = primary->get_info().history.last_rebuild_active_start;
+  ASSERT_GT(onset, primary->get_info().history.rebuild_span_reported);
+
+  // Already shared, synchronously, by Recovering::Recovering() itself --
+  // no AdvMap needed.
+  EXPECT_FALSE(primary->rebuild_stats_unshared);
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    const auto &h = get_ps(osd)->get_info().history;
+    EXPECT_EQ(h.last_rebuild_active_start, onset)
+        << "osd." << osd << " must inherit the true onset, not a fresh one";
+  }
+}
+
+// ============================================================================
+// Test 17: Same as Test 16, for the pause side: pause_rebuild_span()
+// (reached from NotRecovering/NotBackfilling) advances rebuild_span_reported
+// without closing the episode, so a peer left behind would see a pre-pause,
+// still-fully-open view. An UnfoundRecovery event moves the primary from
+// Recovering to NotRecovering, which shares the pause synchronously -- no
+// AdvMap needed.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildSpanPauseSharesWithReplicasImmediately) {
+  dout(0) << "== RebuildSpanPauseSharesWithReplicasImmediately ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  ASSERT_EQ(get_listener(acting_primary)->last_state_entered,
+            "Started/Primary/Active/Recovering");
+  auto *primary = get_ps(acting_primary);
+  const utime_t onset = primary->get_info().history.last_rebuild_active_start;
+  ASSERT_GT(onset, primary->get_info().history.rebuild_span_reported);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // Recovering -> NotRecovering: the span pauses, onset stays pinned.
+  auto evt = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::UnfoundRecovery());
+  primary->handle_event(evt, get_ctx(acting_primary));
+  ASSERT_EQ(get_listener(acting_primary)->last_state_entered,
+            "Started/Primary/Active/NotRecovering");
+
+  const utime_t reported = primary->get_info().history.rebuild_span_reported;
+  ASSERT_GT(reported, onset);
+  EXPECT_EQ(primary->get_info().history.last_rebuild_active_start, onset)
+      << "a pause must not change the pinned onset";
+  // Already shared, synchronously, by NotRecovering::NotRecovering().
+  EXPECT_FALSE(primary->rebuild_stats_unshared);
+
+  dispatch_all();
+
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    const auto &h = get_ps(osd)->get_info().history;
+    EXPECT_EQ(h.rebuild_span_reported, reported)
+        << "osd." << osd << " must learn the pause happened";
+    EXPECT_EQ(h.last_rebuild_active_start, onset)
+        << "osd." << osd << " must inherit the true onset, not a fresh one";
+  }
 }
 
 // ============================================================================
