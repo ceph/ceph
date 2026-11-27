@@ -21,7 +21,7 @@ datasources:
     basicAuthUser: {{ prometheus_user }}
     jsonData:
        graphiteVersion: "1.1"
-       tlsAuth: false
+       tlsAuth: {{ 'true' if mgmt_gw_enabled else 'false' }}
        tlsAuthWithCACert: true
        tlsSkipVerify: false
     secureJsonData:
