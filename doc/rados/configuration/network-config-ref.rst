@@ -57,12 +57,22 @@ one network interface or VLAN. See `Hardware Recommendations - Networks`_ for ad
  | Ceph Monitor |    | Ceph MDS |     | Ceph OSD |    | Ceph OSD |    | Ceph OSD |
  +--------------+    +----------+     +---*--*---+    +---*--*---+    +---*--*---+
                                           ^  ^            ^  ^            ^  ^
-     The cluster network offloads         |  |            |  |            |  |
-     OSD replication and heartbeat        |  :            |  :            |  :
-     traffic from the public network      v  v            v  v            v  v
+     The optional cluster network         |  |            |  |            |  |
+     carries OSD replication and          |  :            |  :            |  :
+     recovery traffic                     v  v            v  v            v  v
  /----------------------------------------*--*------------*--*------------*--*----\
  |   cCCC                      Cluster Network                                    |
  \--------------------------------------------------------------------------------/
+
+A cluster network is optional. Without one, all traffic, including OSD
+replication, recovery, and heartbeats, uses the public network. When a cluster
+network is configured, only OSDs use it: Monitors, MDSes, Managers, and clients
+reach OSDs over the public network. OSDs then send heartbeats to each other over
+both networks, and both must work: an OSD reports a peer down to the Monitors if
+the peer's heartbeats stop on either network. If the cluster network fails
+while the public network still works, OSDs report one another down and can
+flap, which disrupts client I/O. This is one reason not to configure a cluster
+network unless it is needed for bandwidth.
 
 
 IP Tables
