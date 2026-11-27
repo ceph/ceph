@@ -2410,6 +2410,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   ret = sync.read_sync_status(dpp(), &sync_status);
   if (ret < 0 && ret != -ENOENT) {
     push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
     return;
   }
 
@@ -2417,6 +2418,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   ret = sync.read_recovering_shards(dpp(), sync_status.sync_info.num_shards, recovering_shards);
   if (ret < 0 && ret != ENOENT) {
     push_ss(ss, status, tab) << string("failed read recovering shards: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
     return;
   }
 
@@ -2474,6 +2476,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   ret = sync.read_source_log_shards_info(dpp(), &source_shards_info);
   if (ret < 0) {
     push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
     return;
   }
 
