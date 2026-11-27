@@ -653,6 +653,11 @@ public:
   }
 
   SchedulerClass get_scheduler_class() const final {
+    // A remove has no reply, so the primary sends repops of the same
+    // objects straight after it: keep it in order with them.
+    if (op->get_req()->get_type() == MSG_OSD_PG_BACKFILL_REMOVE) {
+      return SchedulerClass::immediate;
+    }
     return priority_to_scheduler_class(op->get_req()->get_priority());
   }
 
