@@ -471,6 +471,13 @@ private:
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
+    // Journaling a backtrace update moves the inode onto the current
+    // segment's dirty_parent list, so the earlier segment that recorded
+    // DIRTYPOOL can expire without storing the old-pool backtraces. Carry
+    // DIRTYPOOL forward until they are stored, or replay loses them.
+    if ((state & fullbit::STATE_DIRTYPARENT) && in->is_dirty_pool())
+      state |= fullbit::STATE_DIRTYPOOL;
+
     bufferlist snapbl;
     const sr_t *sr = in->get_projected_srnode();
     if (sr)
