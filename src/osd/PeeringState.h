@@ -1061,6 +1061,7 @@ public:
       boost::statechart::custom_reaction< RemoteBackfillPreempted >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
       boost::statechart::custom_reaction< RecoveryDone >,
+      boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::transition<DeleteStart, ToDelete>,
       boost::statechart::custom_reaction< MLease >
       > reactions;
@@ -1095,6 +1096,9 @@ public:
     boost::statechart::result react(const RemoteRecoveryPreempted& evt) {
       return discard_event();
     }
+    boost::statechart::result react(const BackfillTooFull& evt) {
+      return discard_event();
+    }
   };
 
   struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
@@ -1116,6 +1120,7 @@ public:
 
   struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RejectTooFullRemoteReservation >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
@@ -1123,6 +1128,7 @@ public:
       > reactions;
     explicit RepWaitBackfillReserved(my_context ctx);
     void exit();
+    boost::statechart::result react(const BackfillTooFull &evt);
     boost::statechart::result react(const RemoteBackfillReserved &evt);
     boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull &evt);
