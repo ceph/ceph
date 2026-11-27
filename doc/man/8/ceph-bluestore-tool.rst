@@ -30,7 +30,8 @@ Synopsis
 | **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-new-db --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-migrate --path *osd path* --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
-| **ceph-bluestore-tool** free-dump|free-score --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+| **ceph-bluestore-tool** free-dump|free-score|free-fragmentation
+  --path *osd path* [ --allocator block/bluefs-wal/bluefs-db ]
 | **ceph-bluestore-tool** bluefs-stats --path *osd path*
 | **ceph-bluestore-tool** bluefs-files --path *osd path*
 | **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
@@ -151,14 +152,33 @@ Commands
    listed under *set-label-key* are always present.
    The OSD must be stopped before modifying its label.
 
-:command:`free-dump` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+:command:`free-dump` --path *osd path*
+[ --allocator block/bluefs-wal/bluefs-db ]
 
    Dump all free regions in allocator.
 
-:command:`free-score` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+:command:`free-score` --path *osd path*
+[ --allocator block/bluefs-wal/bluefs-db ]
 
    Give a [0-1] number that represents quality of fragmentation in allocator.
    0 represents case when all free space is in one chunk. 1 represents worst possible fragmentation.
+
+:command:`free-fragmentation` --path *osd path*
+[ --allocator block/bluefs-wal/bluefs-db ]
+
+   Give the allocator's own [0-1] rating of free space fragmentation, printed
+   as *fragmentation_rating*. 0 means that all free space is in one extent.
+   For the avl, btree, and stupid allocators, the rating is the number of
+   free extents less one, divided by the number of free allocation units less
+   one, so 1 means that every free extent is a single allocation unit. The
+   bitmap allocator gives the fraction of its 512-unit regions with free
+   space that are only partly free. The hybrid allocators, hybrid (the
+   default) and hybrid_btree2, give the avl or btree2 rating; once some free
+   space has spilled over to their bitmap allocator, they give the average of
+   the two ratings, weighted by the free space that each holds. Unlike
+   *free-score*, which weights free extents by size and is computed the same
+   way for every allocator, the rating depends on the allocator type.
+   The OSD must be stopped.
 
 :command:`bluefs-stats` --path *osd path*
 
@@ -260,7 +280,8 @@ Options
 
 .. option:: --allocator *name*
 
-   Useful for *free-dump* and *free-score* actions. Selects allocator(s).
+   Useful for *free-dump*, *free-score*, and *free-fragmentation* actions.
+   Selects allocator(s).
 
 .. option:: --resharding-ctrl *control string*
 
