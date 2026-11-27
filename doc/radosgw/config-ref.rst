@@ -303,11 +303,8 @@ QoS Settings
 
 .. versionadded:: Nautilus
 
-The older and now non-default ``civetweb`` frontend has a threading model that uses a thread per
-connection and hence is automatically throttled by :confval:`rgw_thread_pool_size`
-when accepting connections. The newer and default ``beast`` frontend is
-not limited by the thread pool size when it comes to accepting new
-connections, so a scheduler abstraction was introduced in the Nautilus release
+The ``beast`` frontend is not limited by :confval:`rgw_thread_pool_size`
+when it comes to accepting new connections, so a scheduler abstraction was introduced in the Nautilus release
 to support additional methods of scheduling requests.
 
 Currently the scheduler defaults to a throttler that limits active

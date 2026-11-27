@@ -298,7 +298,7 @@ RGW vs RGW NFS
 ==============
 
 Exporting an NFS namespace and other RGW namespaces (e.g., S3 or Swift
-via the Civetweb HTTP frontend) from the same program instance is
+via the Beast HTTP frontend) from the same program instance is
 currently not supported.
 
 When adding objects and buckets outside of NFS, those objects will
