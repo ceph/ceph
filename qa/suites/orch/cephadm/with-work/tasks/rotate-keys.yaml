@@ -3,14 +3,104 @@ tasks:
     mon.a:
     - |
       set -ex
-      for f in osd.0 osd.1 osd.2 osd.3 osd.4 osd.5 osd.6 osd.7 mgr.y mgr.x
-      do
-          echo "rotating key for $f"
-          K=$(ceph auth get-key $f)
-          NK="$K"
-          ceph orch daemon rotate-key $f
-          while [ "$K" == "$NK" ]; do
+
+      wait_for_entity_running() {
+        local type=$1
+        local id=$2
+        echo "Waiting for $id to be in running state"
+
+        timeout 300 bash -c '
+          daemon_type="$1"
+          daemon_id="$2"
+          until ceph orch ps --refresh \
+            --daemon_type "$daemon_type" \
+            --daemon_id "$daemon_id" \
+            --format json \
+            | jq -e "length > 0 and .[0].status_desc == \"running\""; do
               sleep 5
-              NK=$(ceph auth get-key $f)
+            done
+        ' _ "$type" "$id"
+      }
+
+      rotate_and_redeploy() {
+        local entity=$1
+        local type="${entity%%.*}"
+        local id="${entity#*.}"
+        local old_key
+        local new_key
+        local daemon_started_timestamp
+        
+        echo "rotating key for $entity"
+        old_key=$(ceph auth get-key $entity)
+        new_key="$old_key"
+
+        ceph auth rotate --entity=$entity --key-type=aes256k
+        daemon_started_timestamp=$(ceph orch ps --refresh --daemon_type $type --daemon_id $id --format json | jq -r .[].started)
+        ceph orch daemon redeploy $entity
+
+        # Make sure the daemon was redeployed
+        # Since redeploy is scheduled it might take time to reflect in the orch ps output.
+        timeout 300 bash -c '
+          daemon_type="$1"
+          daemon_id="$2"
+          old_started_timestamp="$3"
+          
+          until
+            current_started_timestamp=$(
+              ceph orch ps --refresh \
+                --daemon_type "$daemon_type" \
+                --daemon_id "$daemon_id" \
+                --format json | jq -r .[].started
+            )
+            [ "$current_started_timestamp" != "$old_started_timestamp" ]; do
+            sleep 5
           done
+        ' _ "$type" "$id" "$daemon_started_timestamp"
+
+        # Wait for the redeployed entity to be running
+        wait_for_entity_running $type $id
+
+        # Make sure the key was actually rotated.
+        timeout 300 bash -c '
+          old_key="$1"
+          entity="$2"
+          new_key="$old_key"
+
+          until [ "$old_key" != "$new_key" ]; do
+            sleep 10
+            new_key=$(ceph auth get-key "$entity")
+          done
+        ' _ "$old_key" "$entity"
+      }
+
+      # Rotate all OSD keys and redeploy them.
+      for f in osd.0 osd.1 osd.2 osd.3 osd.4 osd.5 osd.6 osd.7
+      do
+        rotate_and_redeploy $f
       done
+      
+      # Rotate the standby mgr
+      standby_mgr=$(ceph mgr dump -f json | jq -r '.standbys[0].name')
+      active_mgr=$(ceph mgr dump -f json | jq -r '.active_name')
+      rotate_and_redeploy "mgr.$standby_mgr"
+      
+      # Fail over active mgr to the standby mgr
+      ceph mgr fail $active_mgr
+      sleep 60
+      
+      # Wait until the standby mgr becomes active and the formerly active mgr becomes standby
+      timeout 300 bash -c '
+        standby_mgr="$1"
+        old_active_mgr="$2"
+
+        until [ "$(ceph mgr dump -f json | jq -r .active_name)" = "$standby_mgr" ] &&
+              [ "$(ceph mgr dump -f json | jq -r ".standbys[0].name")" = "$old_active_mgr" ]; do
+          sleep 5
+        done
+      ' _ "$standby_mgr" "$active_mgr"
+
+      # Rotate the formerly active mgr after it comes back as standby.
+      rotate_and_redeploy "mgr.$active_mgr"
+      
+      # Final check to ensure all daemons are running
+      ceph orch ps --refresh
