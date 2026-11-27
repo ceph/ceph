@@ -1063,7 +1063,7 @@ int RGWRadosList::pop_and_handle_stat_op(
   int ret = front_op.wait(dpp);
   // note: even if we get an error, front_op.result.obj will still be
   // populated with correct data
-  const std::string bucket_name = front_op.result.obj.bucket.name;
+  const std::string bucket_name = front_op.result.obj.bucket.get_namespaced_name();
   const rgw_obj_key obj_key = front_op.result.obj.key;
 
   if (ret == -ENOENT) {
