@@ -47,6 +47,9 @@
           <span *ngIf="userForm.showError('username', formDir, 'maxlength')">
             <ng-container i18n> Username must not exceed 256 characters. </ng-container>
           </span>
+          <span *ngIf="userForm.showError('username', formDir, 'maxlength')">
+            <ng-container i18n> Username must not exceed 256 characters. </ng-container>
+          </span>
           <span *ngIf="userForm.showError('username', formDir, 'notUnique')">
             <ng-container i18n> The username already exists. </ng-container>
           </span>
