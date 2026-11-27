@@ -155,11 +155,19 @@ Entering Stretch Mode
 To enable stretch mode, you must set the location of each monitor, correlating
 with the CRUSH topology.
 
-#. Place ``mon.a`` in your first data center:
+#. Place ``mon.a`` and ``mon.b`` in your first data center, and ``mon.c`` and
+   ``mon.d`` in your second:
 
    .. prompt:: bash $
 
       ceph mon set_location a datacenter=site1
+      ceph mon set_location b datacenter=site1
+      ceph mon set_location c datacenter=site2
+      ceph mon set_location d datacenter=site2
+
+   Before you enable stretch mode, the CRUSH map must have the ``datacenter``
+   buckets ``site1`` and ``site2``, with the hosts of each site under them. The
+   tiebreaker Monitor gets its location in a later step.
 
 #. Generate a CRUSH rule that places two copies in each data center.
    This requires editing the CRUSH map directly:
@@ -186,11 +194,10 @@ with the CRUSH topology.
              step emit
      }
 
-   .. warning:: If a CRUSH rule is defined in stretch mode cluster and the
-      rule has multiple ``take`` steps, then ``MAX AVAIL`` for the pools
-      associated with the CRUSH rule will report that the available size is all
-      of the available space from the datacenter, not the available space for
-      the pools associated with the CRUSH rule.
+   .. warning:: In Squid, ``ceph df`` reports a wrong ``MAX AVAIL`` for pools
+      whose CRUSH rule has more than one ``take`` step: it counts the
+      available space of a single ``datacenter`` only. Tentacle and later
+      releases combine all ``take`` steps and report the correct value.
    
       For example, consider a cluster with two CRUSH rules, ``stretch_rule`` and
       ``stretch_replicated_rule``::
@@ -215,7 +222,7 @@ with the CRUSH topology.
                  step emit
          }
 
-      In the above example, ``stretch_rule`` will report an incorrect value for
+      In Squid, ``stretch_rule`` will report an incorrect value for
       ``MAX AVAIL``. ``stretch_replicated_rule`` will report the correct value.
       This is because ``stretch_rule`` is defined in such a way that
       ``PGMap::get_rule_avail`` considers only the available capacity of a single
@@ -254,8 +261,10 @@ with the CRUSH topology.
 #. Direct the cluster to enter stretch mode. In this example, ``mon.e`` is the
    tiebreaker Monitor and we are splitting across CRUSH ``datacenters``. The tiebreaker
    monitor must be assigned a CRUSH ``datacenter`` that is neither ``site1`` nor
-   ``site2``. This data center **should not** be predefined in your CRUSH map. Here 
-   we are placing ``mon.e`` in a virtual data center named ``site3``:
+   ``site2``. This data center **must not** exist in your CRUSH map:
+   ``ceph mon enable_stretch_mode`` fails unless the CRUSH map has exactly two
+   ``datacenter`` buckets. Here we are placing ``mon.e`` in a virtual data
+   center named ``site3``:
 
    .. prompt:: bash $
 
@@ -323,8 +332,9 @@ Limitations of Stretch Mode
 ===========================
 When using stretch mode, OSDs must be located at exactly two sites. 
 
-Two Monitors must be run in each data center, plus a tiebreaker in a third
-(possibly in the cloud) for a total of five Monitors. While in stretch mode, OSDs
+Run two Monitors in each data center, plus a tiebreaker in a third (possibly in
+the cloud), for a total of five Monitors. Ceph requires at least one Monitor in
+each data center. While in stretch mode, OSDs
 will connect only to Monitors within the data center in which they are located.
 OSDs *DO NOT* connect to the tiebreaker monitor.
 
@@ -370,7 +380,10 @@ Deploy a new Monitor and run the following command:
 
 .. prompt:: bash $
 
-   ceph mon set_new_tiebreaker mon.<new_mon_name>
+   ceph mon set_new_tiebreaker <new_mon_name>
+
+Give the Monitor name without the ``mon.`` prefix, as with
+``ceph mon set_location``.
 
 This command protests if the new Monitor is in the same CRUSH location as the
 existing, non-tiebreaker monitors. This command will not remove the previous
@@ -392,6 +405,9 @@ Forcing recovery stretch mode
 When in stretch degraded mode, the cluster will go into recovery mode
 automatically when the disconnected data center comes back. If that does not
 happen or you want to enable recovery mode early, run the following command:
+
+.. warning:: Run this command only after at least one Monitor of the
+   disconnected data center, and the tiebreaker Monitor, are in the quorum.
 
 .. prompt:: bash $
 
