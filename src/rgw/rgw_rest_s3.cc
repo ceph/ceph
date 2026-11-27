@@ -1917,13 +1917,6 @@ void RGWGetUsage_ObjStore_S3::send_response()
 
       dump_usage_categories_info(formatter, entry, &categories);
 
-      formatter->open_object_section("s3select");
-      if (categories.empty() || categories.count("s3select")) {
-        encode_json("BytesProcessed", entry.s3select_usage.bytes_processed, formatter);
-        encode_json("BytesReturned", entry.s3select_usage.bytes_returned, formatter);
-      }
-      formatter->close_section(); // s3select
-
       formatter->close_section(); // bucket
     }
 
@@ -1953,8 +1946,6 @@ void RGWGetUsage_ObjStore_S3::send_response()
        encode_json("BytesReceived", total_usage.bytes_received, formatter);
        encode_json("Ops", total_usage.ops, formatter);
        encode_json("SuccessfulOps", total_usage.successful_ops, formatter);
-       encode_json("BytesProcessed", entry.s3select_usage.bytes_processed, formatter);
-       encode_json("BytesReturned", entry.s3select_usage.bytes_returned, formatter);
        formatter->close_section(); // total
        formatter->close_section(); // user
      }

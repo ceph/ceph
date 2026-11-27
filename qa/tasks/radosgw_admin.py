@@ -61,8 +61,7 @@ def usage_acc_findsum2(summaries, user, add=True):
         return None
     e = {'user': user, 'categories': [],
         'total': {'bytes_received': 0,
-            'bytes_sent': 0, 'ops': 0, 'successful_ops': 0,
-            'bytes_processed': 0, 'bytes_returned': 0}}
+            'bytes_sent': 0, 'ops': 0, 'successful_ops': 0}}
     summaries.append(e)
     return e
 def usage_acc_update2(x, out, b_in, err):
@@ -74,17 +73,6 @@ def usage_acc_update2(x, out, b_in, err):
 def usage_acc_validate_fields(r, x, x2, what):
     q=[]
     for field in ['bytes_sent', 'bytes_received', 'ops', 'successful_ops']:
-        try:
-            if x2[field] < x[field]:
-                q.append("field %s: %d < %d" % (field, x2[field], x[field]))
-        except Exception as ex:
-            r.append( "missing/bad field " + field + " in " + what + " " + str(ex))
-            return
-    if len(q) > 0:
-        r.append("incomplete counts in " + what + ": " + ", ".join(q))
-def usage_acc_validate_s3select_fields(r, x, x2, what):
-    q=[]
-    for field in ['bytes_processed', 'bytes_returned']:
         try:
             if x2[field] < x[field]:
                 q.append("field %s: %d < %d" % (field, x2[field], x[field]))
@@ -106,9 +94,7 @@ class usage_acc:
                 return b
         if not add:
                 return None
-        b = {'bucket': bucket, 'categories': [], 's3select': {
-            'bytes_processed': 0, 'bytes_returned': 0,
-        }}
+        b = {'bucket': bucket, 'categories': []}
         e['buckets'].append(b)
         return b
     def c2x(self, c, cat, add=True):
@@ -182,14 +168,6 @@ class usage_acc:
                     usage_acc_validate_fields(r, x, x2, "entry: category "
                         + x['category'] + " bucket " + b['bucket']
                         + " in user " + e['user'])
-
-                if 's3select' not in b2:
-                    r.append("missing s3select in bucket "
-                        + b['bucket'] + " in user " + e['user'])
-                    continue
-                usage_acc_validate_s3select_fields(r,
-                    b['s3select'], b2['s3select'],
-                    "entry: s3select in bucket " + b['bucket'] + " in user " + e['user'])
         for s in self.results['summary']:
             c = s['categories']
             try:
@@ -224,7 +202,6 @@ class usage_acc:
                     + s['user'] + " " + str(ex))
                 break
             usage_acc_validate_fields(r, x, x2, "summary: totals for user" + s['user'])
-            usage_acc_validate_s3select_fields(r, x, x2, "summary: s3select totals for user" + s['user'])
         return r
 
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):

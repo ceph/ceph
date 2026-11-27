@@ -498,13 +498,7 @@
         "BucketName":{
             "type":"string"
         },
-        "BytesProcessed":{
-            "type":"integer"
-        },
         "BytesReceived":{
-            "type":"integer"
-        },
-        "BytesReturned":{
             "type":"integer"
         },
         "BytesSent":{
@@ -574,10 +568,6 @@
                 "Categories":{
                     "shape": "UsageStatsCategories",
                     "locationName": "categories"
-                },
-                "S3Select":{
-                    "shape": "UsageStatsS3Select",
-                    "locationName": "s3select"
                 },
                 "Bucket":{
                     "shape": "UsageBucketName",
@@ -677,13 +667,6 @@
             "member":{"shape": "UsageStatsEntryUser"},
             "flattened":true
         },
-        "UsageStatsS3Select":{
-            "type":"structure",
-            "members": {
-                "BytesProcessed":{"shape": "BytesProcessed"},
-                "BytesReturned":{"shape": "BytesReturned"}
-            }
-        },
         "UsageStatsSummaryUser":{
             "type":"structure",
             "members": {
@@ -712,9 +695,7 @@
                 "BytesSent":{"shape": "BytesSent"},
                 "BytesReceived":{"shape": "BytesReceived"},
                 "Ops":{"shape": "Ops"},
-                "SuccessfulOps":{"shape": "SuccessfulOps"},
-                "BytesProcessed":{"shape": "BytesProcessed"},
-                "BytesReturned":{"shape": "BytesReturned"}
+                "SuccessfulOps":{"shape": "SuccessfulOps"}
             }
         },
         "UsageTime":{
