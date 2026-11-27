@@ -496,12 +496,32 @@ tracks two per-OSD performance counters:
   *repairing*, for example waiting for a downed OSD with no spare
   capacity to take its place.
 
-Both counters are recorded once per PG episode, on whichever OSD is
-primary when the PG returns to ``active+clean``. Both persist their onset
-in ``pg_history_t`` (``pg_vulnerability_duration`` in
-``last_degraded``/``last_clean``, ``pg_rebuild_duration`` in
-``last_rebuild_active_start``), so both survive OSD restarts and primary
-handovers mid-episode or mid-rebuild.
+Both counters are recorded once per PG episode, each closing on its own
+condition:
+
+- ``pg_vulnerability_duration`` closes when the PG actually reaches
+  ``active+clean`` (full redundancy restored), and is recorded on whichever
+  OSD is primary at that moment.
+- ``pg_rebuild_duration`` closes as soon as active data movement
+  (``Recovering``/``Backfilling``) stops, which can happen before the PG
+  reaches ``active+clean`` -- for example, while a downed OSD is still
+  catching up and has not yet rejoined the Acting Set. It is recorded on
+  whichever OSD is primary at *that* moment, which is not always the same
+  OSD that is primary when the PG later reaches ``active+clean``.
+
+A common case where these diverge: the OSD that caused the episode by
+going down is also the one that must recover and rejoin the Acting Set
+before it can resume as primary. Here ``pg_rebuild_duration`` is recorded
+on the OSD that was primary *while that OSD was recovering* (an earlier,
+different primary), while ``pg_vulnerability_duration`` is recorded on the
+original OSD once it rejoins and the PG reaches ``active+clean`` --
+correctly reflecting the full episode, including the time spent waiting
+for that OSD to catch up, not just the active data-movement portion.
+
+Both counters persist their onset in ``pg_history_t``
+(``pg_vulnerability_duration`` in ``last_degraded``/``last_clean``,
+``pg_rebuild_duration`` in ``last_rebuild_active_start``), so both survive
+OSD restarts and primary handovers mid-episode or mid-rebuild.
 
 .. note:: These counters are available in Umbrella and later releases. Some
    Tentacle releases have an earlier counter under one of these names that
@@ -528,20 +548,24 @@ performance dump:
                 "max_inc": 350.123456789
             },
             "pg_vulnerability_duration_min": 45.678901234,
+            "pg_vulnerability_duration_max": 350.123456789,
             "pg_rebuild_duration": {
                 "avgcount": 3,
                 "sum": 90.123456789,
                 "avgtime": 30.041152263,
                 "max_inc": 40.987654321
             },
-            "pg_rebuild_duration_min": 12.345678901
+            "pg_rebuild_duration_min": 12.345678901,
+            "pg_rebuild_duration_max": 40.987654321
         }
     }
 
 ``sum``/``avgcount``/``avgtime`` behave like any other Ceph time-average
-counter. ``_min`` and ``max_inc`` additionally give the shortest and
-longest single episode recorded since the daemon started, so a single
-bad outlier is not hidden inside an average.
+counter. ``_min`` and ``_max`` additionally give the shortest and longest
+single episode recorded since the daemon started, so a single bad outlier
+is not hidden inside an average. ``max_inc`` holds the same value as
+``_max`` but appears only in ``perf dump`` and is not exported to
+Prometheus, so use ``_max`` for monitoring.
 
 Deriving metrics with Prometheus
 --------------------------------
@@ -592,6 +616,13 @@ to your own reporting needs.
 
       topk(5, rate(ceph_recoverystate_perf_pg_vulnerability_duration_count[24h]))
 
+* Worst single episode, showing which OSDs recorded the longest single
+  vulnerability window since they last restarted:
+
+  .. code-block:: promql
+
+      topk(5, ceph_recoverystate_perf_pg_vulnerability_duration_max)
+
 Spot-checking a single PG
 -------------------------
 
@@ -634,15 +665,19 @@ Known limitations
 - A PG that is *inactive* (stuck below the ``Activating`` state) is
   **not** counted: these counters measure redundancy loss, not
   availability loss.
-- These are ordinary perf counters: in-memory only, reset to zero on
-  that OSD's own restart. An episode's onset/duration bookkeeping in
-  ``pg_history_t`` survives restarts and primary handovers correctly,
-  but the one-time *record* of an already-closed episode is lost if
-  the OSD that recorded it restarts before anything scrapes it. This
-  risk does not compound with handovers. It is bounded to the episodes
+- These are ordinary perf counters: like every Ceph perf counter, they
+  are in-memory only and reset to zero on that OSD's own restart. An
+  episode's onset/duration bookkeeping in ``pg_history_t`` survives
+  restarts and primary handovers correctly, but the one-time *record*
+  of an already-closed episode is lost if the OSD that recorded it
+  restarts before ``ceph-exporter`` next retrieves it. The risk window
+  is at most one ``exporter_stats_period`` (default 5 seconds) after
+  the episode closes: lowering it narrows the window, raising it widens
+  it. Values already retrieved and scraped by Prometheus survive the
+  restart, and ``rate()``/``increase()`` handle the counter reset. This
+  risk does not compound with handovers: it is bounded to the episodes
   that this OSD closed just before going down, not the counter's whole
-  history, and scraping by Prometheus or ``ceph-exporter`` only
-  mitigates it probabilistically, bounded by the scrape interval.
+  history.
 
 
 Identifying Troubled PGs
