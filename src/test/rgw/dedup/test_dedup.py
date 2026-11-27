@@ -25,6 +25,7 @@ from botocore.awsrequest import AWSRequest
 
 from . import(
     configfile,
+    setup as _load_config,
     get_config_zonegroup,
     get_config_zone,
     get_config_cluster,
@@ -1011,6 +1012,8 @@ def _s3_credentials(conn):
 #---------------------------------------------------------------------------
 def proc_upload(proc_id, num_procs, files, access_key, secret_key,
                 bucket_name, indices, config):
+    # Reload config: spawned workers (py3.14 default) don't inherit it.
+    _load_config()
     conn = _make_s3_client(access_key, secret_key)
     count=0
     for (f, idx) in zip(files, indices):
@@ -3936,6 +3939,8 @@ def test_cleanup():
 #---------------------------------------------------------------------------
 def proc_upload_identical(proc_id, num_procs, filename, access_key, secret_key,
                           bucket_name, num_copies, config):
+    # See proc_upload(): reload config in case we were spawned, not forked.
+    _load_config()
     conn = _make_s3_client(access_key, secret_key)
     log.debug("Proc_ID=%d/%d::num_copies=%d", proc_id, num_procs, num_copies)
     for idx in range(num_copies):
