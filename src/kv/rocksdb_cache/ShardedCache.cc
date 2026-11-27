@@ -43,15 +43,23 @@ void ShardedCache::SetStrictCapacityLimit(bool strict_capacity_limit) {
   strict_capacity_limit_ = strict_capacity_limit;
 }
 
-rocksdb::Status ShardedCache::Insert(const rocksdb::Slice& key, void* value, size_t charge,
-                            DeleterFn deleter,
+rocksdb::Status ShardedCache::Insert(const rocksdb::Slice& key,
+                            rocksdb::Cache::ObjectPtr value,
+                            const rocksdb::Cache::CacheItemHelper* helper,
+                            size_t charge,
                             rocksdb::Cache::Handle** handle, Priority priority) {
   uint32_t hash = HashSlice(key);
   return GetShard(Shard(hash))
-      ->Insert(key, hash, value, charge, deleter, handle, priority);
+      ->Insert(key, hash, value, helper, charge, handle, priority);
 }
 
-rocksdb::Cache::Handle* ShardedCache::Lookup(const rocksdb::Slice& key, rocksdb::Statistics* /*stats*/) {
+rocksdb::Cache::Handle* ShardedCache::Lookup(const rocksdb::Slice& key,
+                            const rocksdb::Cache::CacheItemHelper* /*helper*/,
+                            rocksdb::Cache::CreateContext* /*create_context*/,
+                            Priority /*priority*/, bool /*wait*/,
+                            rocksdb::Statistics* /*stats*/) {
+  // Secondary cache is not supported by BinnedLRUCache, so the helper,
+  // create_context, priority, wait, and stats arguments are ignored here.
   uint32_t hash = HashSlice(key);
   return GetShard(Shard(hash))->Lookup(key, hash);
 }
@@ -109,36 +117,25 @@ size_t ShardedCache::GetPinnedUsage() const {
   return usage;
 }
 
-#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
-DeleterFn ShardedCache::GetDeleter(Handle* handle) const
+const rocksdb::Cache::CacheItemHelper* ShardedCache::GetCacheItemHelper(
+    Handle* handle) const
 {
   uint32_t hash = GetHash(handle);
-  return GetShard(Shard(hash))->GetDeleter(handle);
+  return GetShard(Shard(hash))->GetCacheItemHelper(handle);
 }
 
 void ShardedCache::ApplyToAllEntries(
-    const std::function<void(const rocksdb::Slice& key, void* value, size_t charge,
-                             DeleterFn deleter)>& callback,
-    const ApplyToAllEntriesOptions& opts)
+    const std::function<void(const rocksdb::Slice& key,
+                             rocksdb::Cache::ObjectPtr value,
+                             size_t charge,
+                             const rocksdb::Cache::CacheItemHelper* helper)>& callback,
+    const ApplyToAllEntriesOptions& /*opts*/)
 {
   int num_shards = 1 << num_shard_bits_;
   for (int s = 0; s < num_shards; s++) {
     GetShard(s)->ApplyToAllCacheEntries(callback, true /* thread_safe */);
   }
 }
-#else
-void ShardedCache::ApplyToAllCacheEntries(void (*callback)(void*, size_t),
-                                          bool thread_safe) {
-  int num_shards = 1 << num_shard_bits_;
-  for (int s = 0; s < num_shards; s++) {
-    GetShard(s)->ApplyToAllCacheEntries(
-      [callback](const rocksdb::Slice&, void* value, size_t charge, DeleterFn) {
-        callback(value, charge);
-      },
-      thread_safe);
-  }
-}
-#endif
 
 void ShardedCache::EraseUnRefEntries() {
   int num_shards = 1 << num_shard_bits_;
