@@ -39,6 +39,10 @@ static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
   return pglog->gen_prefix(*_dout);
 }
 
+// Multiple of osd_pg_log_dups_tracked used for the dup-detection horizon while
+// a PG is a pool-migration source (see IndexedLog::trim).
+static constexpr uint64_t PG_LOG_DUPS_MIGRATION_SRC_FACTOR = 10;
+
 //////////////////// PGLog::IndexedLog ////////////////////
 
 void PGLog::IndexedLog::split_out_child(
@@ -58,17 +62,32 @@ void PGLog::IndexedLog::trim(
   eversion_t s,
   set<eversion_t> *trimmed,
   set<string>* trimmed_dups,
-  eversion_t *write_from_dups)
+  eversion_t *write_from_dups,
+  bool migration_src)
 {
-  lgeneric_subdout(cct, osd, 10) << "IndexedLog::trim s=" << s << dendl;
+  lgeneric_subdout(cct, osd, 10) << "IndexedLog::trim s=" << s
+                                 << " migration_src=" << migration_src << dendl;
   ceph_assert(s <= can_rollback_to);
   if (complete_to != log.end())
     lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
 
+  // osd_pg_log_dups_tracked is the dup-detection horizon (in versions) over
+  // which a resent op is still answered idempotently. While this PG is a
+  // pool-migration source that horizon must be longer: an op dropped by the
+  // last_force_op_resend bump is not resent until the client refreshes its
+  // OSDMap and the PG has finished migrating, so the resend can lag normal
+  // latency by roughly an order of magnitude. Scale the same quantity up rather
+  // than introduce an independent window, so operator tuning of
+  // osd_pg_log_dups_tracked carries over; still bounded (~10x) to avoid the
+  // unbounded dup growth of https://tracker.ceph.com/issues/53729.
+  const uint64_t dups_tracked =
+    migration_src ? cct->_conf->osd_pg_log_dups_tracked * PG_LOG_DUPS_MIGRATION_SRC_FACTOR
+                  : cct->_conf->osd_pg_log_dups_tracked;
+
   auto earliest_dup_version =
-    log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
+    log.rbegin()->version.version < dups_tracked
     ? 0u
-    : log.rbegin()->version.version - cct->_conf->osd_pg_log_dups_tracked + 1;
+    : log.rbegin()->version.version - dups_tracked + 1;
 
   lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
   while (!log.empty()) {
@@ -139,7 +158,7 @@ void PGLog::IndexedLog::trim(
   // large amount of tombstones in BlueStore's RocksDB.
   // if trimming immediately is a must, then the ceph-objectstore-tool is
   // the way to go.
-  const size_t max_dups = cct->_conf->osd_pg_log_dups_tracked;
+  const size_t max_dups = dups_tracked;
   for (size_t max_dups_to_trim = cct->_conf->osd_pg_log_trim_max;
        max_dups_to_trim > 0 && dups.size() > max_dups;
        max_dups_to_trim--) {
@@ -202,9 +221,11 @@ void PGLog::trim(
   eversion_t trim_to,
   pg_info_t &info,
   bool transaction_applied,
-  bool async)
+  bool async,
+  bool migration_src)
 {
-  dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
+  dout(10) << __func__ << " proposed trim_to = " << trim_to
+           << " migration_src = " << migration_src << dendl;
   // trim?
   if (trim_to > log.tail) {
     dout(10) << __func__ << " missing = " << missing.num_missing() << dendl;
@@ -214,7 +235,7 @@ void PGLog::trim(
       ceph_assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups);
+    log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups, migration_src);
     info.log_tail = log.tail;
     if (log.complete_to != log.log.end())
       dout(10) << " after trim complete_to " << log.complete_to->version << dendl;

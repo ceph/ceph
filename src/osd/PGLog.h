@@ -710,7 +710,8 @@ public:
       eversion_t s,
       std::set<eversion_t> *trimmed,
       std::set<std::string>* trimmed_dups,
-      eversion_t *write_from_dups);
+      eversion_t *write_from_dups,
+      bool migration_src = false);
 
     std::ostream& print(std::ostream& out) const;
   }; // IndexedLog
@@ -891,7 +892,8 @@ public:
     eversion_t trim_to,
     pg_info_t &info,
     bool transaction_applied = true,
-    bool async = false);
+    bool async = false,
+    bool migration_src = false);
 
   void roll_forward_to(
     eversion_t roll_forward_to,

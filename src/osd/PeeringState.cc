@@ -4277,7 +4277,8 @@ void PeeringState::merge_from(
 
   info.last_complete = info.last_update;  // to fake out trim()
   pg_log.reset_recovery_pointers();
-  pg_log.trim(info.last_update, info);
+  const bool migration_src = pool.info.is_migration_src();
+  pg_log.trim(info.last_update, info, true, false, migration_src);
 
   vector<PGLog*> log_from;
   for (auto& i : sources) {
@@ -4315,7 +4316,7 @@ void PeeringState::merge_from(
     source->pg_log.roll_forward(&info, handler.get());
     source->info.last_complete = source->info.last_update;  // to fake out trim()
     source->pg_log.reset_recovery_pointers();
-    source->pg_log.trim(source->info.last_update, source->info);
+    source->pg_log.trim(source->info.last_update, source->info, true, false, migration_src);
     log_from.push_back(&source->pg_log);
 
     // combine stats
@@ -5181,7 +5182,7 @@ bool PeeringState::append_log_entries_update_missing(
       // write can result in trim_to being ahead of crt
       trim = pg_log.get_can_rollback_to();
     }
-    pg_log.trim(trim, info);
+    pg_log.trim(trim, info, true, false, pool.info.is_migration_src());
   }
   dirty_info = true;
   write_if_dirty(t);
@@ -5371,7 +5372,7 @@ void PeeringState::append_log(
     // write can result in trim_to being ahead of crt
     trim_to = pg_log.get_can_rollback_to();
   }
-  pg_log.trim(trim_to, info, transaction_applied, async);
+  pg_log.trim(trim_to, info, transaction_applied, async, pool.info.is_migration_src());
 
   // update the local pg, pg log
   dirty_info = true;
@@ -8456,7 +8457,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MTrim& trim)
     // write can result in trim_to being ahead of crt
     trim_to = ps->pg_log.get_can_rollback_to();
   }
-  ps->pg_log.trim(trim.trim_to, ps->info);
+  ps->pg_log.trim(trim.trim_to, ps->info, true, false, ps->pool.info.is_migration_src());
   ps->dirty_info = true;
   return discard_event();
 }
