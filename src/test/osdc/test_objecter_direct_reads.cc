@@ -409,6 +409,7 @@ TEST_F(TestSplitOpMapChange, ECBalancedShardWithOneZoneInActingSet)
 
   Objecter::op_target_t target(object_t("obj"),
                                object_locator_t(two_zone_pool_id), 0);
+  target.target_oloc = target.base_oloc;
   target.acting = acting;
   std::optional<int> local_zone;
   for (int i = 0; i < 20; i++) {
