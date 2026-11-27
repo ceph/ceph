@@ -24,6 +24,12 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+* RGW: Lifecycle transition to a cloud-s3 storage class now skips current
+  object versions that have an unexpired object lock retention period or a
+  legal hold, as it already did for non-current versions. Previously such a
+  version was copied to the cloud endpoint and hidden behind a new delete
+  marker.
+
 >=20.2.3
 
 * RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
