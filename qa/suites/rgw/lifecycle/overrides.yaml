@@ -11,6 +11,7 @@ overrides:
         rgw sts key: AQA/3Fxpz2k2AxAAYWJjZGVmZ2hpamtsbW5vcA==
         rgw s3 auth use sts: true
         rgw lc debug interval: 10
+        rgw lc list cnt: 100
   rgw:
     storage classes:
       LUKEWARM:

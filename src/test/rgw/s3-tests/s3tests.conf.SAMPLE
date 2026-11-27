@@ -54,6 +54,8 @@ secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
 
 ## Lifecycle debug interval (default: 10)
 #lc_debug_interval = 20
+## Lifecycle listing page size, must match rgw_lc_list_cnt (default: 1000)
+#lc_list_cnt = 100
 ## Restore debug interval (default: 100)
 #rgw_restore_debug_interval = 60
 #rgw_restore_processor_period = 60
