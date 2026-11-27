@@ -157,7 +157,8 @@ void RGWBILogUpdateBatch::add_maybe_flush(uint64_t olh_epoch,
 
 void RGWBILogUpdateBatch::add_maybe_flush(RGWModifyOp op,
                                           const rgw_bucket_dir_entry& list_state,
-                                          rgw_zone_set zones_trace)
+                                          rgw_zone_set zones_trace,
+                                          uint16_t bilog_flags)
 {
   ldpp_dout(dpp, 20) << __func__ << ": key=" << list_state.key
                      << " op=" << (int)op << dendl;
@@ -169,6 +170,7 @@ void RGWBILogUpdateBatch::add_maybe_flush(RGWModifyOp op,
   entry.op = op;
   entry.state = CLS_RGW_STATE_COMPLETE;
   entry.tag = list_state.tag;
+  entry.bilog_flags = bilog_flags;
   entry.zones_trace = std::move(zones_trace);
   stage(shard_of(list_state.key), std::move(entry));
 }

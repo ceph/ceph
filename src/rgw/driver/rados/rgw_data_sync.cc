@@ -4372,6 +4372,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   rgw_bucket_shard& bs;
 
   rgw_obj_key key;
+  rgw_obj_key fetch_key; // explicit HTTP identity; keep marker tracking key unchanged
   bool versioned;
   bool null_verid;
   std::optional<uint64_t> versioned_epoch;
@@ -4442,7 +4443,7 @@ public:
                              RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sc->cct),
 						      sc(_sc), sync_env(_sc->env),
                                                       sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
-                                                      key(_key), versioned(_versioned),
+                                                      key(_key), fetch_key(_key), versioned(_versioned),
                                                       null_verid(_null_verid),versioned_epoch(_versioned_epoch),
                                                       owner(_owner),
                                                       timestamp(_timestamp), op(_op),
@@ -4450,6 +4451,10 @@ public:
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
                                                       sync_status(0){
+    if (null_verid && fetch_key.instance.empty()) {
+      fetch_key.instance = "null";
+    }
+
     stringstream ss;
     ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch.value_or(0) << "]";
     set_description() << "bucket sync single entry (source_zone=" << sc->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
@@ -4504,7 +4509,7 @@ public:
 	      pretty_print(sc->env, "Syncing object s3://{}/{} in sync from zone {}\n",
 			   bs.bucket.name, key, zone_name);
 	    }
-            call(data_sync_module->sync_object(dpp, sc, sync_pipe, key, versioned_epoch,
+            call(data_sync_module->sync_object(dpp, sc, sync_pipe, fetch_key, versioned_epoch,
                                                source_trace_entry, &zones_trace));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
