@@ -491,7 +491,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     op(op),
     plan(plan),
     read_sem(&sinfo),
-    to_write(&sinfo) {
+    to_write(&sinfo),
+    truncate_clonerange_start(sinfo.get_k_plus_m()) {
 
   vector<unsigned> old_transaction_counts(sinfo.get_k_plus_m());
 
@@ -697,6 +698,7 @@ void ECTransaction::Generate::truncate() {
         clone_start,
         end - clone_start,
         clone_start);
+      truncate_clonerange_start.emplace(shard, clone_start);
 
       // First truncate to exactly the right size.
       t.truncate(
@@ -818,8 +820,14 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
       // If no clonable range here, then ignore.
       if (!cloneable_range.contains(shard)) continue;
 
-      // Do not clone off the end of the old range
+      // Do not clone off the end of the old range, or over what truncate()
+      // already cloned from the head before truncating it.
       uint64_t shard_clone_max = cloneable_range.at(shard).range_end();
+      if (truncate_clonerange_start.contains(shard) &&
+          shard_clone_max > truncate_clonerange_start.at(shard)) {
+        shard_clone_max = truncate_clonerange_start.at(shard);
+      }
+
       uint64_t shard_end = start + len;
       if (shard_end > shard_clone_max) shard_end = shard_clone_max;
 
