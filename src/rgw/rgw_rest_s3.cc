@@ -78,7 +78,6 @@
 #include "rgw_rest_bucket_logging.h"
 #include "rgw_sts.h"
 #include "rgw_cksum_pipe.h"
-#include "rgw_s3select.h"
 #include "rgw_cuobj.h"
 
 #define dout_context g_ceph_context
@@ -5836,7 +5835,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
     return new RGWRestoreObj_ObjStore_S3;
   
   if (is_select_op())
-    return rgw::s3select::create_s3select_op();
+    return new RGWSelectObjNotImplemented_ObjStore_S3;
 
   return new RGWPostObj_ObjStore_S3;
 }
@@ -7017,7 +7016,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
-	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
+	case RGW_OP_GET_OBJ:
         case RGW_OP_PUT_BUCKET_LOGGING:
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 

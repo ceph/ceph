@@ -65,6 +65,15 @@ public:
                          bufferlist* manifest_bl) override;
 };
 
+// S3 Select (SelectObjectContent) was removed; reject it explicitly.
+class RGWSelectObjNotImplemented_ObjStore_S3 : public RGWDefaultResponseOp {
+public:
+  int verify_permission(optional_yield) override { return 0; }
+  void execute(optional_yield) override { op_ret = -ERR_NOT_IMPLEMENTED; }
+  const char* name() const override { return "select_obj_content"; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
 class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
 {
 public:
@@ -816,7 +825,7 @@ protected:
   }
 
   bool is_obj_update_op() const override {
-    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op() || is_select_op();
+    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op();
   }
   RGWOp *get_obj_op(bool get_data);
 
