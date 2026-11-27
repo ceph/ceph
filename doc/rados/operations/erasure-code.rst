@@ -178,6 +178,7 @@ no two *chunks* are stored in the same rack.
 More information can be found in the :ref:`erasure-code-profiles`
 documentation.
 
+.. _rados_ops_erasure_coding_overwrites:
 
 Erasure Coding with Overwrites
 ------------------------------
@@ -244,7 +245,13 @@ to default for new pools using the central configuration option
 enabled for a pool it cannot be disabled because it changes how new data is
 stored.
 
-The flag cannot be set unless all the Monitors and OSDs have been
+Neither ``allow_ec_optimizations`` nor
+:confval:`osd_pool_default_flag_ec_optimizations` enables
+``allow_ec_overwrites``. Enable ``allow_ec_overwrites`` on each erasure-coded
+pool that RBD or CephFS will use, or to which librados clients will write
+parts of objects, as described in :ref:`rados_ops_erasure_coding_overwrites`.
+
+Optimizations cannot be enabled unless all the Monitors and OSDs have been
 upgraded to Tentacle or later. Optimizations can be enabled and used without
 upgrading gateways and clients.
 
