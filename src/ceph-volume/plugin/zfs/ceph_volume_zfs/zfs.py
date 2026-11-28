@@ -21,6 +21,7 @@ from ceph_volume_zfs.devices import zfs
 from ceph_volume_zfs.devices.zfs import inventory
 from ceph_volume_zfs.devices.zfs import prepare
 from ceph_volume_zfs.devices.zfs import zap
+from ceph_volume_zfs.devices.zfs import list as list_
 
 
 if __name__ == '__main__':
@@ -44,6 +45,7 @@ class ZFS(object):
     def __init__(self, argv=None, parse=True):
         self.zfs_mapper = {
             'inventory': inventory.Inventory,
+            'list': list_.List,
             'prepare': prepare.Prepare,
             'zap': zap.Zap,
         }
