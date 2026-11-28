@@ -409,7 +409,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   params.list_versions = true;
   params.allow_unordered = true;
 
-  const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
+  const bool own_bucket = store->get_zone()->get_zonegroup().equals(info.zonegroup);
 
   ListResults results;
   results.is_truncated = own_bucket; // if we don't have the index, we're done
