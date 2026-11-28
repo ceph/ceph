@@ -780,8 +780,10 @@ A Command to Stretch a Pool or the Cluster Is Refused
      - Individual stretch pools and stretched pools cannot be combined
      - Revert them with ``ceph osd pool stretch unset`` first
    * - The number of zones
-     - The CRUSH map does not have exactly two zones that hold OSDs
-     - Give OSDs to two zones only; the tiebreaker's site holds none
+     - The CRUSH map does not have exactly two buckets of the zone type,
+       counting empty ones
+     - Give OSDs to two zones only, and remove any other bucket of that type,
+       such as one for the tiebreaker's site
 
 PGs Stop Serving I/O
 --------------------
