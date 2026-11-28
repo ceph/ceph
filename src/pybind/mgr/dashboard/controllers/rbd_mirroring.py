@@ -138,7 +138,10 @@ def get_daemon_health(daemon):
 def _is_rbd_capable_pool(pool):
     if pool.get('type', 1) == 1:
         return True
-    return 'supports_omap' in pool.get('flags_names', '')
+    # EC pools need both flags: supports_omap to store RBD metadata, and
+    # ec_overwrites to allow in-place writes required by block devices.
+    flags = pool.get('flags_names', '')
+    return 'supports_omap' in flags and 'ec_overwrites' in flags
 
 
 def get_pools(daemons):  # pylint: disable=R0912, R0915

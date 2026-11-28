@@ -244,6 +244,24 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
         values: mapPoolApplications(poolData.application_metadata || []),
         type: 'tags'
       },
+      ...(poolData.type === PoolType.ERASURE
+        ? [
+            {
+              label: $localize`EC overwrites`,
+              helperText: $localize`Allows applications to modify existing data in this pool.`,
+              value: (poolData.flags_names || '').includes('ec_overwrites')
+                ? $localize`Enabled`
+                : $localize`Disabled`
+            },
+            {
+              label: $localize`EC optimizations`,
+              helperText: $localize`Enables performance and capacity optimizations for this erasure-coded pool. Cannot be disabled once set.`,
+              value: (poolData.flags_names || '').includes('ec_optimizations')
+                ? $localize`Enabled`
+                : $localize`Disabled`
+            }
+          ]
+        : []),
       {
         label: $localize`PG Status`,
         value: transformPgStatus(poolData.pg_status)

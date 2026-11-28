@@ -301,10 +301,22 @@
                 <cds-checkbox
                   id="ec-overwrites"
                   formControlName="ecOverwrites"
-                >
-                  <ng-container i18n> Flags </ng-container>
-                  <cd-help-text i18n> EC Overwrites </cd-help-text>
-                </cds-checkbox>
+                  helperText="Allows applications to modify existing data in this pool."
+                  i18n-helperText
+                  i18n>Enable overwrites</cds-checkbox>
+              </div>
+            </div>
+            <div
+              class="form-item"
+              cdsRow
+            >
+              <div cdsCol>
+                <cds-checkbox
+                  id="ec-optimizations"
+                  formControlName="ecOptimizations"
+                  helperText="Enables performance and capacity optimizations for this erasure-coded pool. Cannot be disabled once set."
+                  i18n-helperText
+                  i18n>EC optimizations</cds-checkbox>
               </div>
             </div>
           }
