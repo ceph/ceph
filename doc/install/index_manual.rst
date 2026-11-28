@@ -78,6 +78,15 @@ required upgrade sequence and any release-specific steps.
   which an online, rolling upgrade is supported and tested.
 - :doc:`/cephadm/upgrade`: upgrade a cluster that cephadm manages.
 
+Upgrading the Ceph packages on a host that cephadm does not manage does not
+restart any daemons: restart them yourself, in the order that the release
+notes give. On RPM-based systems, ``CEPH_AUTO_RESTART_ON_UPGRADE=yes`` in
+``/etc/sysconfig/ceph`` makes a package upgrade restart the Ceph daemons that
+are running on the host. With that setting, an upgrade of ``ceph-selinux``
+that changes the SELinux file contexts also stops ``ceph.target`` while it
+relabels the files, and then starts it again, which restarts every Ceph
+daemon on the host.
+
 .. rubric:: Next Steps
 
 - :ref:`rados-operations`: check the cluster's health, monitor it, manage
