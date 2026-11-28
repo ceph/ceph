@@ -236,6 +236,8 @@ public:
   virtual void dump(Formatter *f) override;
 
 private:
+  bool try_stop(bool only_if_idle);
+
   // Client Protocol
   CONTINUATION_DECL(ProtocolV2, start_client_banner_exchange);
   CONTINUATION_DECL(ProtocolV2, post_client_banner_exchange);
