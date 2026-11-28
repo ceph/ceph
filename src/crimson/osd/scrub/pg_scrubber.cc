@@ -2202,7 +2202,16 @@ void PGScrubber::emit_scrub_result(
     [this, FNAME, deep, &in_stats](auto &history, auto &pg_stats) {
       // Handle invalid stats, in case of split/merge
       if (pg_stats.stats_invalid) {
-        pg_stats.stats.sum = in_stats;
+        // Only replace the scrub-checked group, for the same reasons as
+        // explained at adopt_checked_stats below: assigning the whole
+        // pg_stats.stats.sum = in_stats would reset counters such as
+        // num_rd/num_wr (making the pool sums go backwards) and, on a
+        // shallow scrub, drop the deep scrub errors and omap stats.
+        foreach_scrub_checked_stat(
+          [&pg_stats, &in_stats](
+            const auto& /*name*/, auto statptr, const auto& /*invalid*/) {
+            pg_stats.stats.sum.*statptr = in_stats.*statptr;
+          });
         pg_stats.stats_invalid = false;
         DEBUGDPP(" repaired invalid stats! ", pg);
         // Deliberately fall through.  Classic OSD performs this replacement in

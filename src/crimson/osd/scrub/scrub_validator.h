@@ -222,8 +222,8 @@ void foreach_scrub_maintained_stat(Func &&op) {
 }
 
 struct scrub_stats_update_t {
-  /// pg_stats were flagged invalid (e.g. after split/merge) and have been
-  /// replaced by the scrubbed values
+  /// pg_stats were flagged invalid (e.g. after split/merge) and their
+  /// scrub_checked_stats have been replaced by the scrubbed values
   bool repaired_invalid_stats = false;
 
   /// one entry per scrub_checked_stat not matching the stored pg value

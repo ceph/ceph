@@ -2321,16 +2321,36 @@ TEST(TestScrubStats, InvalidStatMismatchIgnored) {
 TEST(TestScrubStats, InvalidStatsAreReplaced) {
   auto pg_stats = make_stored_pg_stats();
   pg_stats.stats_invalid = true;
+  pg_stats.stats.sum.num_rd = 1000;
+  pg_stats.stats.sum.num_wr = 2000;
+  pg_stats.stats.sum.num_objects_recovered = 7;
   pg_history_t history;
   auto scrubbed = make_scrubbed_stats();
   scrubbed.num_objects = 3;
+  scrubbed.num_bytes = 300;
+  // partial I/O counts of writes to already-scrubbed objects
+  scrubbed.num_wr = 5;
 
   const auto ret = update_stats_from_scrub(
     false, scrubbed, TEST_LAST_UPDATE, TEST_NOW, history, pg_stats);
   EXPECT_TRUE(ret.repaired_invalid_stats);
   EXPECT_TRUE(ret.stat_mismatches.empty());
   EXPECT_FALSE(pg_stats.stats_invalid);
-  EXPECT_EQ(pg_stats.stats.sum.num_objects, 3);
+
+  const auto &sum = pg_stats.stats.sum;
+  EXPECT_EQ(sum.num_objects, 3);
+  EXPECT_EQ(sum.num_bytes, 300);
+  // counters not tracked by scrub are kept
+  EXPECT_EQ(sum.num_rd, 1000);
+  EXPECT_EQ(sum.num_wr, 2000);
+  EXPECT_EQ(sum.num_objects_recovered, 7);
+  // a shallow scrub keeps the deep-only stats
+  EXPECT_EQ(sum.num_shallow_scrub_errors, 0);
+  EXPECT_EQ(sum.num_deep_scrub_errors, 2);
+  EXPECT_EQ(sum.num_scrub_errors, 2);
+  EXPECT_EQ(sum.num_omap_keys, 10);
+  EXPECT_EQ(sum.num_omap_bytes, 100);
+  EXPECT_EQ(sum.num_large_omap_objects, 1);
 }
 
 namespace {
