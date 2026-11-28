@@ -197,6 +197,7 @@ class SMBCluster(RESTController):
         except RuntimeError as e:
             raise DashboardException(e, component='smb')
 
+    @raise_on_failure
     @DeletePermission
     @EndpointDoc("Remove an smb cluster",
                  parameters={
