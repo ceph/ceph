@@ -153,6 +153,17 @@ class Enclosure:
         return self._dump()
 
 
+def get_interface_mtu(iface: str) -> int:
+    """Read the MTU of a network interface from /sys/class/net/<iface>/mtu."""
+    try:
+        mtu = int(read_file([os.path.join('/sys/class/net', iface, 'mtu')]))
+    except (TypeError, ValueError):
+        mtu = 0
+    if mtu <= 0:
+        raise ValueError(f'Unable to determine MTU for interface {iface}')
+    return mtu
+
+
 class HostFacts:
     _dmi_path_list = ['/sys/class/dmi/id']
     _nic_path_list = ['/sys/class/net']
@@ -576,9 +587,7 @@ class HostFacts:
                 ]
 
                 try:
-                    mtu = int(
-                        read_file([os.path.join(nic_path, iface, 'mtu')])
-                    )
+                    mtu = get_interface_mtu(iface)
                 except ValueError:
                     mtu = 0
 
