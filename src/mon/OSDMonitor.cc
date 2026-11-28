@@ -3375,7 +3375,12 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     return true;
   }
 
-  set<string> reporters_by_subtree;
+  // For each reporting subtree (e.g. host), the oldest `failed_since` among
+  // its reporters, i.e. since when that subtree has observed the failure.
+  // A reporter that was assigned to `target_osd` as heartbeat peer only
+  // recently reports a recent `failed_since`; that must not hide that other
+  // subtrees have observed the failure for much longer.
+  map<string, utime_t> oldest_failed_since_by_subtree;
   auto reporter_subtree_level = g_conf().get_val<string>("mon_osd_reporter_subtree_level");
   ceph_assert(fi.reporters.size());
   for (auto p = fi.reporters.begin(); p != fi.reporters.end();) {
@@ -3383,11 +3388,17 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     // fall back to OSD if the level doesn't exist.
     if (osdmap.exists(p->first)) {
       auto reporter_loc = osdmap.crush->get_full_location(p->first);
+      string subtree;
       if (auto iter = reporter_loc.find(reporter_subtree_level);
           iter == reporter_loc.end()) {
-        reporters_by_subtree.insert("osd." + to_string(p->first));
+        subtree = "osd." + to_string(p->first);
       } else {
-        reporters_by_subtree.insert(iter->second);
+        subtree = iter->second;
+      }
+      const utime_t reporter_failed_since = p->second.failed_since;
+      auto [it, inserted] = oldest_failed_since_by_subtree.emplace(subtree, reporter_failed_since);
+      if (!inserted && reporter_failed_since < it->second) {
+        it->second = reporter_failed_since;
       }
       ++p;
     } else {
@@ -3395,10 +3406,21 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
       p = fi.reporters.erase(p);
     }
   }
-  if (reporters_by_subtree.size() < g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
+  const uint64_t min_down_reporters = std::max<uint64_t>(1, g_conf().get_val<uint64_t>("mon_osd_min_down_reporters"));
+  if (oldest_failed_since_by_subtree.size() < min_down_reporters) {
     return false;
   }
-  const utime_t failed_for = now - fi.get_failed_since();
+  // The OSD is considered failed since the time at which `min_down_reporters`
+  // different subtrees had all observed the failure:
+  // The `min_down_reporters`-th oldest of the per-subtree times.
+  vector<utime_t> subtree_failed_since;
+  subtree_failed_since.reserve(oldest_failed_since_by_subtree.size());
+  for (const auto& [subtree, since] : oldest_failed_since_by_subtree) {
+    subtree_failed_since.push_back(since);
+  }
+  const vector<utime_t>::iterator kth_oldest = subtree_failed_since.begin() + (min_down_reporters - 1);
+  std::nth_element(subtree_failed_since.begin(), kth_oldest, subtree_failed_since.end());
+  const utime_t failed_for = now - *kth_oldest;
   const utime_t grace = get_grace_time(now, target_osd, fi);
   if (failed_for >= grace) {
     dout(1) << " we have enough reporters to mark osd." << target_osd
@@ -3409,7 +3431,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 		      << osdmap.crush->get_full_location_ordered_string(
 			target_osd)
 		      << ") ("
-		      << (int)reporters_by_subtree.size()
+		      << (int)oldest_failed_since_by_subtree.size()
 		      << " reporters from different "
 		      << reporter_subtree_level << " after "
 		      << failed_for << " >= grace " << grace << ")";
