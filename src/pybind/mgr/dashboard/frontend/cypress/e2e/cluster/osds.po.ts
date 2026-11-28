@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/osd', id: 'cd-osd-list' },
-  create: { url: '#/osd/create', id: 'cd-osd-form' }
+  create: { url: '#/osd/(modal:create)', id: 'cd-osd-form' }
 };
 
 export class OSDsPageHelper extends PageHelper {
@@ -12,6 +12,36 @@ export class OSDsPageHelper extends PageHelper {
     id: 3,
     status: 5
   };
+
+  getCreateButton() {
+    return cy.get('#osd-actions [data-testid="primary-action"][aria-label="Create"]');
+  }
+
+  /**
+   * Opens the Create OSDs form tearsheet.
+   * Prefers the Create button; falls back to the modal route when Create is
+   * disabled because earlier workflow steps already consumed eligible devices.
+   */
+  @PageHelper.restrictTo(pages.index.url)
+  openCreateTearsheet() {
+    this.getCreateButton().then(($btn) => {
+      if ($btn.is(':disabled')) {
+        cy.visit(pages.create.url);
+      } else {
+        cy.wrap($btn).click();
+      }
+    });
+    cy.get(pages.create.id).should('exist');
+    cy.get('[data-testid="osd-create-tearsheet-header"]').should('be.visible');
+    cy.location('hash').should('eq', '#/osd/(modal:create)');
+  }
+
+  closeCreateTearsheet() {
+    cy.get('cd-osd-form cd-tearsheet').contains('button', 'Cancel').click();
+    cy.get(pages.create.id).should('not.exist');
+    cy.get('cd-osd-list').should('exist');
+    cy.location('hash').should('eq', '#/osd');
+  }
 
   create(deviceType: 'hdd' | 'ssd', hostname?: string, expandCluster = false) {
     cy.get('[aria-label="toggle advanced mode"]').click();
