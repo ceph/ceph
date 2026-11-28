@@ -41,6 +41,7 @@ except ImportError:
     from collections import Iterable
 from datetime import datetime, timezone
 import errno
+from functools import wraps
 from itertools import chain
 import time
 
@@ -2965,6 +2966,7 @@ cdef class Group(object):
             raise make_ex(ret, 'error rolling back group to snapshot', group_errno_to_exception)
 
 def requires_not_closed(f):
+    @wraps(f)
     def wrapper(self, *args, **kwargs):
         self.require_not_closed()
         return f(self, *args, **kwargs)
