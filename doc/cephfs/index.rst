@@ -94,6 +94,7 @@ Administration
     Upgrading old file systems <upgrading>
     CephFS Top Utility <cephfs-top>
     cephfs-tool <cephfs-tool>
+    cephfs-mdsbench <cephfs-mdsbench>
     Scheduled Snapshots <snap-schedule>
     CephFS Snapshot Mirroring <cephfs-mirroring>
     CephFS Snapshot Mirroring Checkpoints <cephfs-mirroring-checkpoints>
