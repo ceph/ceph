@@ -19,9 +19,10 @@ class NfsListStubComponent {
   }
 }
 
-import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page.component';
+import { PlacementPipe } from '~/app/ceph/cluster/services/placement.pipe';
 import { NfsClusterResourceStateService } from '~/app/shared/services/nfs-cluster-resource-state.service';
 import { NFSCluster } from '../models/nfs-cluster-config';
+import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page.component';
 
 describe('NfsClusterResourcePageComponent', () => {
   let component: NfsClusterResourcePageComponent;
@@ -45,6 +46,7 @@ describe('NfsClusterResourcePageComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [NfsClusterResourcePageComponent, NfsListStubComponent],
       providers: [
+        PlacementPipe,
         {
           provide: NfsClusterResourceStateService,
           useValue: { cluster$: clusterSubject.asObservable() }
@@ -82,6 +84,32 @@ describe('NfsClusterResourcePageComponent', () => {
     expect(component.overviewFields.find((f) => f.label === 'Status')?.value).toBe('Active');
     expect(component.overviewFields.find((f) => f.label === 'Service port')?.value).toBe(2049);
     expect(component.overviewFields.find((f) => f.label === 'Protocol')?.value).toBe('NFSv4');
+    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe('count:10');
+    expect(component.overviewFields.find((f) => f.label === 'Service instances')?.value).toBe(
+      '1 / 10'
+    );
+    const haField = component.overviewFields.find((f) => f.label === 'High availability');
+    expect(haField?.value).toBe('Disabled');
+    expect(haField?.type).toBe('status');
+    expect(haField?.status).toBe('danger');
+  });
+
+  it('should format hosts and label placement like the cluster table', () => {
+    clusterSubject.next({
+      ...activeCluster,
+      placement: { count: 2, hosts: ['host1', 'host2'] }
+    });
+    fixture.detectChanges();
+    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe(
+      'host1;host2;count:2'
+    );
+
+    clusterSubject.next({
+      ...activeCluster,
+      placement: { label: 'nfs' }
+    });
+    fixture.detectChanges();
+    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe('label:nfs');
   });
 
   it('should show NFSv3 and NFSv4 when enable_nfsv3 is set', () => {
@@ -106,6 +134,18 @@ describe('NfsClusterResourcePageComponent', () => {
     expect(component.overviewFields.find((f) => f.label === 'Service port')?.value).toBe(12049);
   });
 
+  it('should show RDMA port only when RDMA is enabled', () => {
+    expect(component.overviewFields.find((f) => f.label === 'RDMA port')).toBeUndefined();
+
+    clusterSubject.next({
+      ...activeCluster,
+      enable_rdma: true,
+      rdma_port: 20049
+    });
+    fixture.detectChanges();
+    expect(component.overviewFields.find((f) => f.label === 'RDMA port')?.value).toBe(20049);
+  });
+
   it('should show dash when no service port is available', () => {
     clusterSubject.next({
       name: 'standalone-nfs',
@@ -123,7 +163,9 @@ describe('NfsClusterResourcePageComponent', () => {
       placement: { host_pattern: 'nfs-*' }
     });
     fixture.detectChanges();
-    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe('nfs-*');
+    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe(
+      'host_pattern:nfs-*'
+    );
   });
 
   it('should show host_pattern placement from pattern object', () => {
@@ -132,7 +174,9 @@ describe('NfsClusterResourcePageComponent', () => {
       placement: { host_pattern: { pattern: 'nfs-.*', pattern_type: 'regex' } }
     });
     fixture.detectChanges();
-    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe('nfs-.*');
+    expect(component.overviewFields.find((f) => f.label === 'Placement')?.value).toBe(
+      'host_pattern:nfs-.*'
+    );
   });
 
   it('should recreate the shares list when the cluster name changes', () => {

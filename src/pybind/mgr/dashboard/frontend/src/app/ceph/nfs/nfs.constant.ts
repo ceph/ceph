@@ -11,7 +11,7 @@ export interface BindAddrValue {
 export interface NfsClusterFormValue {
   cluster_id: string;
   placement: string;
-  count: number;
+  count: number | null;
   custom_placement_type: string;
   label: ComboBoxContent | string | null;
   host_pattern: string;
@@ -45,3 +45,5 @@ export enum IngressMode {
   HaproxyStandard = 'haproxy-standard',
   KeepaliveOnly = 'keepalive-only'
 }
+
+export const DEFAULT_NFS_MONITORING_PORT = 9587;

@@ -24,7 +24,7 @@ export class PlacementPipe implements PipeTransform {
     const hosts: Array<string> = _.get(serviceSpec, 'placement.hosts');
     const count: number = _.get(serviceSpec, 'placement.count');
     const label: string = _.get(serviceSpec, 'placement.label');
-    const hostPattern: string = _.get(serviceSpec, 'placement.host_pattern');
+    const hostPattern = _.get(serviceSpec, 'placement.host_pattern');
     if (_.isArray(hosts)) {
       kv.push(...hosts);
     }
@@ -35,7 +35,9 @@ export class PlacementPipe implements PipeTransform {
       kv.push($localize`label:${label}`);
     }
     if (_.isString(hostPattern)) {
-      kv.push(hostPattern);
+      kv.push($localize`host_pattern:${hostPattern}`);
+    } else if (_.isPlainObject(hostPattern) && _.isString(hostPattern.pattern)) {
+      kv.push($localize`host_pattern:${hostPattern.pattern}`);
     }
     return kv.join(';');
   }

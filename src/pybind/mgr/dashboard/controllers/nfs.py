@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 import cephfs
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 from object_format import ErrorResponse
+from orchestrator import OrchestratorError
 
 from .. import mgr
 from ..security import Scope
@@ -17,7 +18,7 @@ from ..services.exception import DashboardException, handle_cephfs_error, \
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
-    Task, UIRouter
+    Task, UIRouter, UpdatePermission
 from ._version import APIVersion
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,18 @@ def raise_on_failure(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
+        try:
+            result = func(*args, **kwargs)
+        except (OrchestratorError, RuntimeError) as e:
+            msg = str(e)
+            if 'Remote method threw exception:' in msg:
+                last_line = msg.strip().splitlines()[-1].strip()
+                if ': ' in last_line:
+                    prefix, _, error_msg = last_line.partition(': ')
+                    if 'Error' in prefix or 'Exception' in prefix:
+                        last_line = error_msg
+                msg = last_line
+            raise NFSException(msg)
         if isinstance(result, dict) and result.get('success') is False:
             msg = result.get('msg', 'Operation failed')
             raise NFSException(msg)
@@ -84,7 +96,9 @@ CLUSTER_SCHEMA = {
     'backend': ([{
         'hostname': (str, 'Backend hostname'),
         'ip': (str, 'Backend IP address'),
-        'port': (int, 'Backend port', True),
+        'port': (int, 'NFS daemon data port', True),
+        'monitoring_port': (int, 'NFS daemon monitoring port', True),
+        'rdma_port': (int, 'NFS daemon RDMA port', True),
         'status': (str, 'Backend daemon status', True)
     }], 'List of NFS backend daemons'),
     'placement': ({
@@ -92,12 +106,21 @@ CLUSTER_SCHEMA = {
         'count': (int, 'Number of daemons', True),
         'label': (str, 'Host label', True)
     }, 'Orchestrator placement specification'),
-    'enable_nfsv3': (bool, 'Whether NFSv3 is enabled for the cluster', True),
+    'networks': ([str], 'Public networks the NFS service listens on', True),
+    'bind_addrs': ([{
+        'hostname': (str, 'Hostname'),
+        'ip': (str, 'IP address')
+    }], 'Per-host bind address mappings', True),
     'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster', True),
+    'enable_nfsv3': (bool, 'Whether NFSv3 protocol is enabled', True),
     'error': (str, 'Error encountered while fetching the cluster info', True),
     'ingress_mode': (str, 'Ingress mode', True),
-    'port': (int, 'Ingress port', True),
-    'monitor_port': (int, 'Monitor port', True),
+    'ingress_placement': ({
+        'hosts': ([str], 'List of ingress hosts', True),
+        'count': (int, 'Number of ingress daemons', True),
+    }, 'Ingress placement specification', True),
+    'port': (int, 'Ingress frontend port', True),
+    'monitor_port': (int, 'Ingress monitor port', True),
 }
 
 
@@ -137,12 +160,16 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
 class NFSGaneshaCluster(RESTController):
     RESOURCE_ID = "cluster_id"
 
+    @staticmethod
+    def _format_cluster(cluster_id: str, info: Dict[str, Any]) -> Dict[str, Any]:
+        return {"name": cluster_id, **info}
+
     @ReadPermission
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     @EndpointDoc("List NFS-Ganesha clusters",
                  parameters={
                      'info': (bool, 'If true, return detailed cluster info including '
-                              'backends, placement, enable_nfsv3, and enable_rdma')
+                              'backends, placement, and enable_rdma')
                  },
                  responses={200: [CLUSTER_SCHEMA]})
     def list(self, info: Optional[bool] = False):
@@ -152,7 +179,8 @@ class NFSGaneshaCluster(RESTController):
                 logger.error("Unexpected nfs.cluster_info response: %s", type(cluster_info))
                 return []
             return [
-                {"name": key, **value} for key, value in cluster_info.items()
+                self._format_cluster(key, value)
+                for key, value in cluster_info.items()
             ]
         return mgr.remote('nfs', 'cluster_ls')
 
@@ -170,9 +198,12 @@ class NFSGaneshaCluster(RESTController):
             if exc.errno != errno.ENOENT:
                 raise
             return None
-        if not info or cluster_id not in info:
+        if not isinstance(info, dict):
+            logger.error("Unexpected nfs.cluster_info response: %s", type(info))
             return None
-        return {"name": cluster_id, **info[cluster_id]}
+        if cluster_id not in info:
+            return None
+        return self._format_cluster(cluster_id, info[cluster_id])
 
     @raise_on_failure
     @CreatePermission
@@ -199,7 +230,7 @@ class NFSGaneshaCluster(RESTController):
             'networks': ([str], 'Public networks', {'optional': True}),
         }
     )
-    @RESTController.MethodMap(version=APIVersion(1, 0))  # type: ignore
+    @RESTController.MethodMap()
     def create(self, cluster_id: str, placement: Optional[Union[str, Dict]] = None,
                ingress: Optional[bool] = None, virtual_ip: Optional[str] = None,
                ingress_mode: Optional[str] = None, port: Optional[int] = None,
@@ -240,13 +271,72 @@ class NFSGaneshaCluster(RESTController):
             raise NFSException(str(e)) from e
 
     @raise_on_failure
+    @UpdatePermission
+    @NfsTask('cluster/edit', {'cluster_id': '{cluster_id}'}, 2.0)
+    @EndpointDoc(
+        "Update an NFS cluster",
+        parameters={
+            'cluster_id': (str, 'Cluster identifier'),
+            'placement': (str, 'Placement spec as string (e.g. "2 host1 host2") or '
+                          'object with hosts/label/count properties', {'optional': True}),
+            'ingress': (bool, 'Enable ingress', {'optional': True}),
+            'virtual_ip': (str, 'Virtual IP for ingress', {'optional': True}),
+            'ingress_mode': (str, 'Ingress mode', {'optional': True}),
+            'port': (int, 'Port to use', {'optional': True}),
+            'enable_rdma': (bool, 'Enable NFS over RDMA', {'optional': True}),
+            'rdma_port': (int, 'RDMA port', {'optional': True}),
+            'enable_nfsv3': (bool, 'Enable NFSv3 protocol', {'optional': True}),
+            'ingress_placement': (str, 'Ingress placement spec', {'optional': True}),
+            'bind_addrs': ([dict], 'Host to IP bind address mappings', {'optional': True}),
+            'monitoring_port': (int, 'Monitoring port', {'optional': True}),
+            'networks': ([str], 'Public networks', {'optional': True}),
+        }
+    )
+    @RESTController.MethodMap()
+    def set(self, cluster_id: str, placement: Optional[Union[str, Dict]] = None,
+            ingress: Optional[bool] = None, virtual_ip: Optional[str] = None,
+            ingress_mode: Optional[str] = None, port: Optional[int] = None,
+            enable_rdma: Optional[bool] = None,
+            rdma_port: Optional[int] = None,
+            enable_nfsv3: Optional[bool] = None,
+            ingress_placement: Optional[Union[str, Dict]] = None,
+            bind_addrs: Optional[List[Dict[str, str]]] = None,
+            monitoring_port: Optional[int] = None,
+            networks: Optional[Union[str, List[str]]] = None) -> Any:
+        """Update an NFS-Ganesha cluster by re-applying the spec."""
+        logger.debug(
+            "Updating NFS cluster: cluster_id=%s, placement=%s",
+            cluster_id, placement
+        )
+        try:
+            return mgr.remote(
+                'nfs',
+                'cluster_update',
+                cluster_id=str(cluster_id),
+                placement=placement,
+                ingress=ingress,
+                virtual_ip=virtual_ip,
+                ingress_mode=ingress_mode,
+                port=port,
+                enable_rdma=enable_rdma,
+                rdma_port=rdma_port,
+                enable_nfsv3=enable_nfsv3,
+                ingress_placement=ingress_placement,
+                bind_addrs=bind_addrs,
+                monitoring_port=monitoring_port,
+                networks=networks,
+            )
+        except Exception as e:
+            raise NFSException(str(e)) from e
+
+    @raise_on_failure
     @DeletePermission
     @NfsTask('cluster/delete', {'cluster_id': '{cluster_id}'}, 2.0)
     @EndpointDoc("Delete an NFS cluster",
                  parameters={
                      'cluster_id': (str, 'Cluster identifier')
                  })
-    @RESTController.MethodMap(version=APIVersion(1, 0))  # type: ignore
+    @RESTController.MethodMap()
     def delete(self, cluster_id: str) -> Any:
         """Delete an NFS-Ganesha cluster."""
         logger.debug("Deleting NFS cluster: cluster_id=%s", cluster_id)

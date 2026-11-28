@@ -1,9 +1,10 @@
-import { Component, DestroyRef, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { Observable, Subject, forkJoin, of } from 'rxjs';
 import { catchError, map, startWith, switchMap } from 'rxjs/operators';
 
+import { PlacementPipe } from '~/app/ceph/cluster/services/placement.pipe';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -21,17 +22,28 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
-import { NFSBackend, NFSCluster, NFSShare } from '../models/nfs.model';
+import {
+  getClusterStatus,
+  NFS_CLUSTER_STATUS_MAP,
+  NFSClusterStatus
+} from '../models/nfs-cluster-config';
+import { NFSCluster, NFSClusterPlacement, NFSShare } from '../models/nfs.model';
+import { IngressMode } from '../nfs.constant';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 
 interface NFSClusterRow extends NFSCluster {
-  status: string;
-  eventsLink: string[];
+  status: NFSClusterStatus;
   shares: number;
   protocol: string;
+  placementDisplay: string;
+  ingressModeDisplay: string;
 }
 
-const BASE_URL = 'cephfs/nfs/cluster';
+const INGRESS_MODE_LABELS: Record<string, string> = {
+  [IngressMode.HaproxyProtocol]: $localize`HAProxy protocol`,
+  [IngressMode.HaproxyStandard]: $localize`HAProxy standard`,
+  [IngressMode.KeepaliveOnly]: $localize`Keepalive only`
+};
 
 const toEmptyCluster = (name: string): NFSCluster => ({
   name,
@@ -44,13 +56,9 @@ const toEmptyCluster = (name: string): NFSCluster => ({
   selector: 'cd-nfs-cluster',
   templateUrl: './nfs-cluster.component.html',
   styleUrls: ['./nfs-cluster.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
   standalone: false
 })
 export class NfsClusterComponent implements OnInit {
-  @ViewChild('statusTpl', { static: true })
-  statusTpl: TemplateRef<any>;
-
   columns: CdTableColumn[] = [];
   tableActions: CdTableAction[] = [];
   selection: CdTableSelection = new CdTableSelection();
@@ -63,10 +71,10 @@ export class NfsClusterComponent implements OnInit {
   private authStorageService = inject(AuthStorageService);
   private nfsService = inject(NfsService);
   private orchService = inject(OrchestratorService);
-  private urlBuilder = inject(URLBuilderService);
   private router = inject(Router);
   private modalService = inject(ModalCdsService);
   private taskWrapper = inject(TaskWrapperService);
+  private placementPipe = inject(PlacementPipe);
 
   readonly CLUSTER_PATH = 'nfs/cluster';
 
@@ -87,6 +95,7 @@ export class NfsClusterComponent implements OnInit {
       map(({ clusters, exports }) => this.mapClusterRows(clusters, exports))
     );
     const nfsBasePath = `/${getPathfromFsal(getFsalFromRoute(this.router.url))}/nfs/cluster`;
+    const urlBuilder = new URLBuilderService(nfsBasePath);
     this.columns = [
       {
         name: $localize`Name`,
@@ -101,15 +110,21 @@ export class NfsClusterComponent implements OnInit {
         name: $localize`Status`,
         prop: 'status',
         flexGrow: 1,
-        cellTemplate: this.statusTpl,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          map: {
-            Running: { class: 'tag-success' },
-            Degraded: { class: 'tag-warning' },
-            Stopped: { class: 'tag-danger' },
-            Unknown: { class: 'tag-default' }
-          }
+          class: 'tag-dark',
+          map: NFS_CLUSTER_STATUS_MAP
         }
+      },
+      {
+        name: $localize`Placement`,
+        prop: 'placementDisplay',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Ingress mode`,
+        prop: 'ingressModeDisplay',
+        flexGrow: 1
       },
       {
         name: $localize`Shares`,
@@ -127,15 +142,27 @@ export class NfsClusterComponent implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () => this.router.navigateByUrl(this.urlBuilder.getCreate()),
+        click: () => this.router.navigateByUrl(urlBuilder.getCreate()),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => {
+          const clusterId = this.selection.first()?.name;
+          this.router.navigateByUrl(urlBuilder.getEdit(clusterId));
+        },
+        canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.removeNFSClusterModal(),
-        canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
+        canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
       }
     ];
   }
@@ -188,26 +215,27 @@ export class NfsClusterComponent implements OnInit {
 
     return (clusters || []).map((cluster) => ({
       ...cluster,
-      status: this.getClusterStatus(cluster.backend),
-      eventsLink: ['/services', `nfs.${cluster.name}`, 'events'],
+      status: getClusterStatus(cluster.backend),
       shares: shareCounts[cluster.name] || 0,
-      protocol: cluster.enable_nfsv3 ? $localize`NFSv3, NFSv4` : $localize`NFSv4`
+      protocol: cluster.enable_nfsv3 ? $localize`NFSv3, NFSv4` : $localize`NFSv4`,
+      placementDisplay: this.formatPlacement(cluster.placement),
+      ingressModeDisplay: this.formatIngressMode(cluster)
     }));
   }
 
-  private getClusterStatus(backends: NFSBackend[] = []): string {
-    if (!backends?.length) {
+  private formatPlacement(placement?: NFSClusterPlacement): string {
+    if (!placement || !Object.keys(placement).length) {
       return '-';
     }
-    const statuses = backends.map((backend) => (backend.status || '').toLowerCase());
-    const running = statuses.filter((status) => status === 'running').length;
-    if (running === statuses.length) {
-      return 'Running';
+    const display = this.placementPipe.transform({ placement });
+    return display || '-';
+  }
+
+  private formatIngressMode(cluster: NFSCluster): string {
+    if (!cluster.ingress_mode) {
+      return '-';
     }
-    if (running > 0) {
-      return 'Degraded';
-    }
-    return '-';
+    return INGRESS_MODE_LABELS[cluster.ingress_mode] || String(cluster.ingress_mode);
   }
 
   loadData() {
