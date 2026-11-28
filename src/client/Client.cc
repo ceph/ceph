@@ -1337,8 +1337,12 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->quota = st->quota;
       in->dir_pin = st->dir_pin;
     }
-    // move me if/when version reflects fragtree changes.
-    if (in->dirfragtree != st->dirfragtree) {
+    // The fragtree has no version. Take it only from the auth of the inode:
+    // a rank that holds other dirfrags of this directory can have a coarser
+    // tree, and replacing ours with it drops the fragmap entries of the
+    // finer dirfrags. update_dir_dist() corrects the leaf a reply is about.
+    if ((new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) &&
+        in->dirfragtree != st->dirfragtree) {
       in->dirfragtree = st->dirfragtree;
       _fragmap_remove_non_leaves(in);
     }
@@ -1662,8 +1666,13 @@ void Client::update_dir_dist(Inode *in, DirStat *dst, mds_rank_t from)
 {
   // auth
   ldout(cct, 20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
-  if (dst->auth >= 0) {
-    in->fragmap[dst->frag] = dst->auth;
+  // CDIR_AUTH_PARENT: the dirfrag is not a subtree root, so its auth is
+  // the auth of the inode
+  mds_rank_t auth = dst->auth;
+  if (auth < 0 && in->auth_cap)
+    auth = in->auth_cap->session->mds_num;
+  if (auth >= 0) {
+    in->fragmap[dst->frag] = auth;
   } else {
     in->fragmap.erase(dst->frag);
   }
