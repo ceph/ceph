@@ -26,6 +26,7 @@
               id="selectedRealm"
               formControlName="selectedRealm"
               name="selectedRealm"
+              (change)="onRealmChange($event.target.value)"
             >
               <option
                 ngValue=""
@@ -80,7 +81,11 @@
                 id="default_zonegroup"
                 name="default_zonegroup"
                 formControlName="default_zonegroup"
-                [attr.disabled]="action === actionLabels.EDIT ? true : null"
+                [attr.disabled]="
+                  action === actionLabels.EDIT && (info.data.is_default || !isDefaultRealm)
+                    ? true
+                    : null
+                "
                 type="checkbox"
               />
               <label
@@ -90,20 +95,20 @@
                 >Default</label
               >
               @if (disableDefault && action === actionLabels.CREATE) {
-                <span>
-                  <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
-                </span>
-              }
-              @if (action === actionLabels.EDIT && !info.data.is_default) {
                 <cd-helper>
-                  <span i18n
-                    >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to
-                    follow the failover mechanism</span
-                  >
+                  <span i18n>Default zonegroup can only exist in the default realm.</span>
                 </cd-helper>
               }
               @if (action === actionLabels.EDIT && info.data.is_default) {
                 <cd-helper> <span i18n>You cannot unset the default flag.</span> </cd-helper>
+              }
+              @if (action === actionLabels.EDIT && !info.data.is_default && !isDefaultRealm) {
+                <cd-helper>
+                  <span i18n
+                    >A zonegroup can only be set as default if it belongs to the default
+                    realm.</span
+                  >
+                </cd-helper>
               }
               <br />
               <input
@@ -129,17 +134,14 @@
                   >
                 </span>
               }
-              @if (action === actionLabels.EDIT && !info.data.is_master) {
-                <cd-helper>
-                  <span i18n
-                    >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to
-                    follow the failover mechanism</span
-                  >
-                </cd-helper>
-              }
               @if (action === actionLabels.EDIT && info.data.is_master) {
                 <cd-helper>
                   <span i18n>You cannot unset the master flag.</span>
+                </cd-helper>
+              }
+              @if (action === actionLabels.EDIT && !info.data.is_master) {
+                <cd-helper>
+                  <span i18n>Master cannot be changed on edit.</span>
                 </cd-helper>
               }
             </div>

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=C0302
 # pylint: disable=too-many-public-methods
 import errno
 from unittest import TestCase
@@ -808,3 +809,316 @@ class RgwMultisiteTest(TestCase):
         result = multisite.get_realm_from_daemon('non_existent_daemon')
 
         self.assertIsNone(result)
+
+
+class RgwMultisiteRealmPropagationTest(TestCase):
+    """The realm must be forwarded to radosgw-admin for non-default entities."""
+
+    @staticmethod
+    def _cmds(mock_send):
+        return [c[0][0] for c in mock_send.call_args_list]
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_delete_zone_passes_realm(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().delete_zone('z1', 'false', [], 'zg1', 'realm1')
+        cmds = self._cmds(mock_send)
+        rm_cmd = next(c for c in cmds if c[:2] == ['zonegroup', 'remove'])
+        del_cmd = next(c for c in cmds if c[:2] == ['zone', 'delete'])
+        for cmd in (rm_cmd, del_cmd):
+            self.assertEqual(cmd[cmd.index('--rgw-realm') + 1], 'realm1')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_delete_zone_without_realm_unchanged(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().delete_zone('z1', 'false', [], 'zg1')
+        for cmd in self._cmds(mock_send):
+            self.assertNotIn('--rgw-realm', cmd)
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_delete_zonegroup_with_pools_passes_realm_to_zone_delete(self, mock_send):
+        mock_send.return_value = (0, {'zones': [{'name': 'z1'}]}, '')
+        RgwMultisite().delete_zonegroup('zg1', 'true', [], 'realm1')
+        cmds = self._cmds(mock_send)
+        zone_delete = next(c for c in cmds if c[:2] == ['zone', 'delete'])
+        self.assertEqual(zone_delete[zone_delete.index('--rgw-realm') + 1], 'realm1')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_add_or_remove_zone_passes_realm(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        multisite = RgwMultisite()
+        multisite.add_or_remove_zone('zg1', 'z1', 'add', 'realm1')
+        multisite.add_or_remove_zone('zg1', 'z1', 'remove', 'realm1')
+        cmds = self._cmds(mock_send)
+        for sub in ('add', 'remove'):
+            cmd = next(c for c in cmds if c[:2] == ['zonegroup', sub])
+            self.assertEqual(cmd[cmd.index('--rgw-realm') + 1], 'realm1')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_get_placement_targets_by_zonegroup_passes_realm(self, mock_send):
+        mock_send.return_value = (0, [], '')
+        RgwMultisite().get_placement_targets_by_zonegroup('zg1', 'realm1')
+        cmd = self._cmds(mock_send)[0]
+        self.assertEqual(cmd[cmd.index('--rgw-realm') + 1], 'realm1')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_get_placement_by_placement_id_targets_given_zonegroup(self, mock_send):
+        mock_send.return_value = (0, {}, '')
+        multisite = RgwMultisite()
+        multisite.get_placement_by_placement_id('p1', 'zg2')
+        cmd = self._cmds(mock_send)[0]
+        self.assertEqual(cmd[cmd.index('--rgw-zonegroup') + 1], 'zg2')
+        mock_send.reset_mock()
+        multisite.get_placement_by_placement_id('p1')
+        self.assertNotIn('--rgw-zonegroup', self._cmds(mock_send)[0])
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_delete_placement_targets_targets_given_zonegroup(self, mock_send):
+        mock_send.return_value = (0, {'realms': []}, '')
+        with patch.object(RgwMultisite, 'ensure_realm_and_sync_period'):
+            RgwMultisite().delete_placement_targets('p1', 'sc', '', 'realm1', 'zg2')
+        cmd = next(c for c in self._cmds(mock_send) if c[:3] == ['zonegroup', 'placement', 'rm'])
+        self.assertEqual(cmd[cmd.index('--rgw-zonegroup') + 1], 'zg2')
+        self.assertEqual(cmd[cmd.index('--rgw-realm') + 1], 'realm1')
+
+    @patch.object(RgwMultisite, 'update_period')
+    @patch.object(RgwMultisite, 'list_realms', return_value={'realms': ['realm1']})
+    @patch.object(RgwMultisite, 'get_realm_from_zonegroup', return_value='realm1')
+    def test_ensure_realm_and_sync_period_resolves_realm_from_zonegroup(
+            self, _mock_resolve, _mock_list, mock_update):
+        RgwMultisite().ensure_realm_and_sync_period(zonegroup_name='zg1')
+        mock_update.assert_called_once_with(realm_name='realm1')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'get_placement_targets_by_zonegroup', return_value=[])
+    @patch.object(RgwMultisite, 'modify_zonegroup')
+    @patch.object(RgwMultisite, 'get_realm_from_zonegroup', return_value='realm1')
+    def test_edit_zonegroup_resolves_realm_when_omitted(
+            self, mock_resolve, mock_modify, _mock_pts, mock_send):
+        mock_send.return_value = (0, '', '')
+        with patch.object(RgwMultisite, 'update_period') as mock_update:
+            RgwMultisite().edit_zonegroup(None, 'zg1', 'zg1_renamed')
+            mock_resolve.assert_called_once_with('zg1')
+            mock_update.assert_called_with(realm_name='realm1')
+            mock_modify.assert_called_once_with('realm1', 'zg1_renamed', '', '', '')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'list_zones', return_value={'zones': ['z1']})
+    @patch.object(RgwMultisite, 'list_zonegroups', return_value={'default_info': 'other-id'})
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={
+        'id': 'zg-id', 'master_zone': 'z-id', 'zones': [{'id': 'z-id', 'name': 'z1'}]})
+    @patch.object(RgwMultisite, 'get_placement_targets_by_zonegroup', return_value=[])
+    @patch.object(RgwMultisite, 'modify_zonegroup')
+    def test_edit_zonegroup_default_sets_master_zone_default(
+            self, _mock_modify, _mock_pts, _mock_zg, _mock_zgs, _mock_zones, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().edit_zonegroup('realm1', 'zg1', 'zg1', default='true')
+        self.assertEqual(mock_send.call_args[0][0], ['zone', 'default', '--zone-id', 'z-id'])
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'list_zones', return_value={'zones': ['z1']})
+    @patch.object(RgwMultisite, 'list_zonegroups', return_value={'default_info': 'zg-id'})
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={
+        'id': 'zg-id', 'master_zone': 'z-id', 'zones': [{'id': 'z-id', 'name': 'z1'}]})
+    @patch.object(RgwMultisite, 'get_placement_targets_by_zonegroup', return_value=[])
+    @patch.object(RgwMultisite, 'modify_zonegroup')
+    def test_edit_zonegroup_already_default_leaves_default_zone(
+            self, _mock_modify, _mock_pts, _mock_zg, _mock_zgs, _mock_zones, mock_send):
+        RgwMultisite().edit_zonegroup('realm1', 'zg1', 'zg1', default='true')
+        mock_send.assert_not_called()
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'list_zones', return_value={'zones': ['z1']})
+    @patch.object(RgwMultisite, 'list_zonegroups', return_value={'default_info': 'other-id'})
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={
+        'id': 'zg-id', 'master_zone': 'remote-id', 'zones': [{'id': 'remote-id', 'name': 'z2'}]})
+    @patch.object(RgwMultisite, 'get_placement_targets_by_zonegroup', return_value=[])
+    @patch.object(RgwMultisite, 'modify_zonegroup')
+    def test_edit_zonegroup_default_rejected_without_local_zone(
+            self, mock_modify, _mock_pts, _mock_zg, _mock_zgs, _mock_zones, mock_send):
+        with self.assertRaises(DashboardException) as ctx:
+            RgwMultisite().edit_zonegroup('realm1', 'zg1', 'zg1', default='true')
+        self.assertEqual(ctx.exception.status, 400)
+        # nothing may be changed, otherwise the cluster is left half-applied
+        mock_modify.assert_not_called()
+        mock_send.assert_not_called()
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'list_zones', return_value={'zones': ['z2']})
+    @patch.object(RgwMultisite, 'list_zonegroups', return_value={'default_info': 'other-id'})
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={
+        'id': 'zg-id', 'master_zone': 'remote-id',
+        'zones': [{'id': 'remote-id', 'name': 'z1'}, {'id': 'local-id', 'name': 'z2'}]})
+    @patch.object(RgwMultisite, 'get_placement_targets_by_zonegroup', return_value=[])
+    @patch.object(RgwMultisite, 'modify_zonegroup')
+    def test_edit_zonegroup_default_uses_local_zone_when_master_not_local(
+            self, _mock_modify, _mock_pts, _mock_zg, _mock_zgs, _mock_zones, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().edit_zonegroup('realm1', 'zg1', 'zg1', default='true')
+        self.assertEqual(mock_send.call_args[0][0], ['zone', 'default', '--zone-id', 'local-id'])
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'get_placement_targets_by_zonegroup', return_value=[])
+    @patch.object(RgwMultisite, 'modify_zonegroup')
+    def test_edit_zonegroup_not_default_leaves_default_zone(
+            self, _mock_modify, _mock_pts, mock_send):
+        RgwMultisite().edit_zonegroup('realm1', 'zg1', 'zg1', default='false')
+        mock_send.assert_not_called()
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={'realm_id': 'r-id'})
+    def test_get_realm_from_zonegroup(self, _mock_zg, mock_send):
+        mock_send.return_value = (0, {'id': 'r-id', 'name': 'realm1'}, '')
+        self.assertEqual(RgwMultisite().get_realm_from_zonegroup('zg1'), 'realm1')
+        mock_send.assert_called_once_with(['realm', 'get', '--realm-id', 'r-id'])
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={'realm_id': 'r-id'})
+    def test_get_realm_from_zonegroup_realm_get_fails(self, _mock_zg, mock_send):
+        mock_send.return_value = (2, '', 'not found')
+        self.assertIsNone(RgwMultisite().get_realm_from_zonegroup('zg1'))
+
+    @patch.object(RgwMultisite, 'get_zonegroup', return_value={'realm_id': ''})
+    def test_get_realm_from_zonegroup_standalone(self, _mock_zg):
+        self.assertIsNone(RgwMultisite().get_realm_from_zonegroup('zg1'))
+
+    @patch.object(RgwMultisite, 'get_zonegroup',
+                  side_effect=DashboardException(msg='boom', component='rgw'))
+    def test_get_realm_from_zonegroup_error_is_logged_not_raised(self, _mock_zg):
+        self.assertIsNone(RgwMultisite().get_realm_from_zonegroup('zg1'))
+
+    @patch('dashboard.services.rgw_client._get_daemons')
+    def test_get_realm_from_zone_via_daemon(self, mock_get_daemons):
+        daemon = Mock()
+        daemon.zone_name = 'z1'
+        daemon.realm_name = 'realm1'
+        mock_get_daemons.return_value = {'d': daemon}
+        self.assertEqual(RgwMultisite().get_realm_from_zone('z1'), 'realm1')
+
+    @patch.object(RgwMultisite, 'get_realm_period', return_value={
+        'period_map': {'zonegroups': [{'zones': [{'name': 'z1', 'id': 'z-id'}]}]}})
+    @patch.object(RgwMultisite, 'get_all_realms_info',
+                  return_value={'realms': [{'name': 'realm1'}]})
+    @patch('dashboard.services.rgw_client._get_daemons', return_value={})
+    def test_get_realm_from_zone_via_period(self, _daemons, _realms, _period):
+        self.assertEqual(RgwMultisite().get_realm_from_zone('z1'), 'realm1')
+
+    @patch.object(RgwMultisite, 'get_all_realms_info',
+                  side_effect=DashboardException(msg='boom', component='rgw'))
+    @patch('dashboard.services.rgw_client._get_daemons', return_value={})
+    def test_get_realm_from_zone_error_is_logged_not_raised(self, _daemons, _realms):
+        self.assertIsNone(RgwMultisite().get_realm_from_zone('z1'))
+
+    def test_get_realm_from_zone_without_name(self):
+        self.assertIsNone(RgwMultisite().get_realm_from_zone())
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'list_zonegroups', return_value={'zonegroups': ['zg1']})
+    @patch.object(RgwMultisite, 'list_zones', return_value={'zones': ['default_zone1']})
+    @patch.object(RgwMultisite, 'get_realm_period', return_value={
+        'master_zone': 'z-id',
+        'period_map': {'zonegroups': [{'name': 'zg1', 'zones': [
+            {'name': 'default_zone1', 'id': 'z-id'}, {'name': 'zone1', 'id': 'other'}]}]}})
+    def test_update_period_pins_local_master_zone(self, _period, _zones, _zgs, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().update_period(realm_name='realm1')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--rgw-zone') + 1], 'default_zone1')
+        self.assertEqual(cmd[cmd.index('--rgw-zonegroup') + 1], 'zg1')
+        self.assertEqual(cmd[cmd.index('--rgw-realm') + 1], 'realm1')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch.object(RgwMultisite, 'list_zonegroups', return_value={'zonegroups': ['zg1']})
+    @patch.object(RgwMultisite, 'list_zones', return_value={'zones': ['zone1']})
+    @patch.object(RgwMultisite, 'get_realm_period', return_value={
+        'master_zone': 'remote-id',
+        'period_map': {'zonegroups': [{'name': 'zg1', 'zones': [
+            {'name': 'remote_zone', 'id': 'remote-id'}]}]}})
+    def test_update_period_master_zone_not_local_keeps_default(
+            self, _period, _zones, _zgs, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().update_period(realm_name='realm1')
+        cmd = mock_send.call_args[0][0]
+        self.assertNotIn('--rgw-zone', cmd)
+        self.assertNotIn('--rgw-zonegroup', cmd)
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_update_period_without_realm_unchanged(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().update_period()
+        self.assertEqual(mock_send.call_args[0][0], ['period', 'update', '--commit'])
+
+
+class RgwStorageClassZoneTest(TestCase):
+    """zone placement add/modify validate against a zonegroup; it must be the right one."""
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_add_storage_class_zone_targets_given_zonegroup(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().add_storage_class_zone('z1', 'default-placement', 'SC', 'pool', '', 'zg2')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--rgw-zonegroup') + 1], 'zg2')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_edit_storage_class_zone_targets_given_zonegroup(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().edit_storage_class_zone('z1', 'default-placement', 'SC', 'pool', '', 'zg2')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--rgw-zonegroup') + 1], 'zg2')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_storage_class_zone_without_zonegroup_unchanged(self, mock_send):
+        mock_send.return_value = (0, '', '')
+        multisite = RgwMultisite()
+        multisite.add_storage_class_zone('z1', 'default-placement', 'SC', 'pool', '')
+        multisite.edit_storage_class_zone('z1', 'default-placement', 'SC', 'pool', '')
+        for call in mock_send.call_args_list:
+            self.assertNotIn('--rgw-zonegroup', call[0][0])
+
+    @patch.object(RgwMultisite, 'update_period')
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_edit_zone_placement_targets_given_zonegroup(self, mock_send, _mock_update):
+        mock_send.return_value = (0, '', '')
+        RgwMultisite().edit_zone('z1', 'z1', 'zg2', placement_target='default-placement',
+                                 data_pool='dp', index_pool='ip', data_extra_pool='ep',
+                                 storage_class='SC', data_pool_class='dpc')
+        cmd = next(c[0][0] for c in mock_send.call_args_list
+                   if c[0][0][:3] == ['zone', 'placement', 'add'])
+        self.assertEqual(cmd[cmd.index('--rgw-zonegroup') + 1], 'zg2')
+
+    @patch.object(RgwMultisite, 'update_period')
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_modify_zone_tier_type(self, mock_send, _mock_update):
+        mock_send.return_value = (0, '', '')
+        multisite = RgwMultisite()
+
+        # None means no change: --tier-type must be omitted
+        multisite.modify_zone('z1', 'zg1', '', '', '', None, None, tier_type=None)
+        self.assertNotIn('--tier-type', mock_send.call_args[0][0])
+
+        # empty string resets to the default sync module
+        multisite.modify_zone('z1', 'zg1', '', '', '', None, None, tier_type='')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--tier-type') + 1], '')
+
+        multisite.modify_zone('z1', 'zg1', '', '', '', None, None, tier_type='archive')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--tier-type') + 1], 'archive')
+
+    @patch.object(RgwMultisite, 'update_period')
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_modify_zone_sync_from_empty_string(self, mock_send, _mock_update):
+        mock_send.return_value = (0, '', '')
+        multisite = RgwMultisite()
+        multisite.modify_zone('z1', 'zg1', '', '', '', None, None, sync_from='')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--sync-from') + 1], '')
+
+    @patch.object(RgwMultisite, 'update_period')
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_create_zone_sync_from_empty_string(self, mock_send, _mock_update):
+        mock_send.return_value = (0, '', '')
+        multisite = RgwMultisite()
+        multisite.create_zone('z1', 'zg1', False, False, '', None, None, sync_from='')
+        cmd = mock_send.call_args[0][0]
+        self.assertEqual(cmd[cmd.index('--sync-from') + 1], '')
