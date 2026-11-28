@@ -11,7 +11,7 @@ add_library(extblkdev STATIC ExtBlkDevPlugin.cc)
 
 if(LINUX)
   find_package(cap REQUIRED)
-  target_link_libraries(extblkdev cap)
+  target_link_libraries(extblkdev cap::cap)
 endif()
 
 if(HAVE_BLKID)
