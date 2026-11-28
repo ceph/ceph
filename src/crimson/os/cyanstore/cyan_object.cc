@@ -27,7 +27,8 @@ ceph::bufferptr& Object::get_writable_page(uint64_t idx)
 void Object::zero_tail(uint64_t from)
 {
   if (auto off = from % DATA_PAGE_SIZE; off && pages.contains(from / DATA_PAGE_SIZE)) {
-    get_writable_page(from / DATA_PAGE_SIZE).zero(off, DATA_PAGE_SIZE - off, false);
+    // (resetting the page's cached crc: see write())
+    get_writable_page(from / DATA_PAGE_SIZE).zero(off, DATA_PAGE_SIZE - off);
   }
 }
 
@@ -54,7 +55,16 @@ int Object::write(uint64_t offset, const bufferlist &src)
   for (uint64_t pos = offset; pos < end;) {
     uint64_t off = pos % DATA_PAGE_SIZE;
     uint64_t n = std::min(DATA_PAGE_SIZE - off, end - pos);
-    it.copy(n, get_writable_page(pos / DATA_PAGE_SIZE).c_str() + off);
+    auto& page = get_writable_page(pos / DATA_PAGE_SIZE);
+    // through copy_in(), which resets the crc32c cached in the page's
+    // buffer: a read result's crc32c() (e.g. the OSD's data digest check)
+    // caches it there, and it would no longer match the page's data
+    for (uint64_t done = 0; done < n;) {
+      const char* data;
+      const auto len = it.get_ptr_and_advance(n - done, &data);
+      page.copy_in(off + done, len, data);
+      done += len;
+    }
     pos += n;
   }
   size = std::max(size, end);
