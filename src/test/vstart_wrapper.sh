@@ -18,6 +18,8 @@
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+export CEPH_PORT=${CEPH_PORT:-$(get_unused_port)}
+export CEPH_RGW_PORT=${CEPH_RGW_PORT:-$(get_unused_port)}
 export CEPH_VSTART_WRAPPER=1
 export CEPH_DIR="${TMPDIR:-$PWD}/td/t-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
