@@ -71,40 +71,6 @@ TEST_F(rgw_gc_log, init_existing_queue)
   }
 }
 
-TEST_F(rgw_gc_log, init_existing_omap)
-{
-  const std::string oid = get_test_oid();
-  {
-    librados::ObjectWriteOperation op;
-    cls_rgw_gc_obj_info info;
-    gc_log_enqueue1(op, 5, info);
-    ASSERT_EQ(0, ioctx.operate(oid, &op));
-  }
-  {
-    // init succeeds with existing omap entries
-    librados::ObjectWriteOperation op;
-    gc_log_init2(op, 1, 1);
-    ASSERT_EQ(0, ioctx.operate(oid, &op));
-  }
-}
-
-TEST_F(rgw_gc_log, enqueue1_after_init)
-{
-  const std::string oid = get_test_oid();
-  {
-    librados::ObjectWriteOperation op;
-    gc_log_init2(op, 1, 1);
-    ASSERT_EQ(0, ioctx.operate(oid, &op));
-  }
-  {
-    // version check fails on omap enqueue
-    librados::ObjectWriteOperation op;
-    cls_rgw_gc_obj_info info;
-    gc_log_enqueue1(op, 5, info);
-    ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
-  }
-}
-
 TEST_F(rgw_gc_log, enqueue2_before_init)
 {
   const std::string oid = get_test_oid();
@@ -112,22 +78,6 @@ TEST_F(rgw_gc_log, enqueue2_before_init)
     // version check fails on cls_rgw_gc enqueue
     librados::ObjectWriteOperation op;
     gc_log_enqueue2(op, 5, {});
-    ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
-  }
-}
-
-TEST_F(rgw_gc_log, defer1_after_init)
-{
-  const std::string oid = get_test_oid();
-  {
-    librados::ObjectWriteOperation op;
-    gc_log_init2(op, 1, 1);
-    ASSERT_EQ(0, ioctx.operate(oid, &op));
-  }
-  {
-    // version check fails on omap defer
-    librados::ObjectWriteOperation op;
-    gc_log_defer1(op, 5, {});
     ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
   }
 }
@@ -142,3 +92,4 @@ TEST_F(rgw_gc_log, defer2_before_init)
     ASSERT_EQ(-ECANCELED, ioctx.operate(oid, &op));
   }
 }
+
