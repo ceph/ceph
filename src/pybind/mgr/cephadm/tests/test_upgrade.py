@@ -1056,6 +1056,56 @@ def test_wait_for_ok_to_upgrade_osd_batch_other_enoent_still_pauses(
     assert 'UPGRADE_INVALID_CRUSH_BUCKET' in cephadm_module.health_checks
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_incompatible_bucket_type(
+        cephadm_module: CephadmOrchestrator):
+    # Incompatible bucket type (e.g., "root") returns ENOTSUP
+    # after mon-side fix in PR #74085
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='22.0.0',
+        crush_bucket_type='root',
+        crush_bucket_name='default',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            f'osd ok-to-upgrade failed: crush bucket "default" of type "root" is '
+            f'incompatible for upgradability check; valid types are: \'rack\', '
+            f'\'chassis\', \'host\' and \'osd\' retval: {-errno.ENOTSUP}'),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_INCOMPATIBLE_BUCKET_TYPE' in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_invalid_version_format(
+        cephadm_module: CephadmOrchestrator):
+    # Invalid version format returns EINVAL
+    # Covers malformed ceph_version or negative max parameter
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='22.0.0',
+        crush_bucket_type='host',
+        crush_bucket_name='host1',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            f'osd ok-to-upgrade failed: Invalid Ceph version (short) format. '
+            f'The format to use is the same as \'ceph_version_short\' found in OSD metadata. '
+            f'Examples: "20.3.0-3803-g63ca1ffb5a2", "20.1.0-144.el9cp". retval: {-errno.EINVAL}'),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_BAD_ARGUMENTS' in cephadm_module.health_checks
+
+
 def test_validate_bucket_upgrade_options_ok(cephadm_module: CephadmOrchestrator):
     cephadm_module.upgrade._validate_bucket_upgrade_options(
         'rack', 'rack-a', ['osd'])

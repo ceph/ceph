@@ -389,6 +389,8 @@ class CephadmUpgrade:
         'UPGRADE_EXCEPTION',
         'UPGRADE_OFFLINE_HOST',
         'UPGRADE_INVALID_CRUSH_BUCKET',
+        'UPGRADE_INCOMPATIBLE_BUCKET_TYPE',
+        'UPGRADE_BAD_ARGUMENTS',
         'UPGRADE_OSD_NO_VERSION',
         'UPGRADE_KEY_ROTATION',
         'UPGRADE_INCOMPATIBLE_HOST_CPU'
@@ -805,7 +807,8 @@ class CephadmUpgrade:
         has no OSDs under it.
         """
         msg = str(err)
-        if f'retval: {-errno.ENOENT}' not in msg:
+        # Check retval with word boundaries to avoid substring matches
+        if not (f'retval: {-errno.ENOENT}\n' in msg or msg.endswith(f'retval: {-errno.ENOENT}')):
             return False
         return 'no osds found in crush bucket' in msg or 'has no children' in msg
 
@@ -1433,7 +1436,10 @@ class CephadmUpgrade:
                     self._ok_to_upgrade_all_osds_upgraded = True
                     self._ok_to_upgrade_osds_in_crush_bucket = set()
                     return True
-                if f'retval: {-errno.ENOENT}' in str(err):
+                # Check retval with word boundaries to avoid substring matches
+                # (e.g., "retval: -2" matching "retval: -22")
+                err_str = str(err)
+                if f'retval: {-errno.ENOENT}\n' in err_str or err_str.endswith(f'retval: {-errno.ENOENT}'):
                     # Check for unknown bucket name or any other CRUSH
                     # bucket ENOENT. Pause the upgrade.
                     st = self.upgrade_state
@@ -1447,6 +1453,39 @@ class CephadmUpgrade:
                             str(err),
                             f'Invalid failure domain for OSD upgrade: --crush_bucket_type={btype!r} '
                             f'--crush_bucket_name={bucket_name!r}',
+                        ],
+                    })
+                    return False
+                if f'retval: {-errno.ENOTSUP}\n' in err_str or err_str.endswith(f'retval: {-errno.ENOTSUP}'):
+                    # Incompatible bucket type (not rack/chassis/host).
+                    # This is a user configuration error, not transient.
+                    st = self.upgrade_state
+                    btype = st.crush_bucket_type if st else None
+                    logger.error('Upgrade: osd ok-to-upgrade failed (incompatible bucket type): %s', err)
+                    allowed = ', '.join(sorted(CEPH_ORCH_VALID_OSD_UPGRADE_CRUSH_BUCKETS))
+                    self._fail_upgrade('UPGRADE_INCOMPATIBLE_BUCKET_TYPE', {
+                        'severity': 'error',
+                        'summary': 'Upgrade: incompatible CRUSH bucket type for OSD upgrade',
+                        'count': 1,
+                        'detail': [
+                            str(err),
+                            f'Incompatible bucket type for OSD upgrade: --crush_bucket_type={btype!r} '
+                            f'--crush_bucket_name={bucket_name!r}. '
+                            f'Valid bucket types are: {allowed}.',
+                        ],
+                    })
+                    return False
+                if f'retval: {-errno.EINVAL}\n' in err_str or err_str.endswith(f'retval: {-errno.EINVAL}'):
+                    # Invalid argument: either malformed ceph_version format or negative max.
+                    # The mon command validates that ceph_version matches expected pattern
+                    # (e.g., "20.3.0-3803-g63ca1ffb5a2" or "20.1.0-144.el9cp") and max >= 0.
+                    logger.error('Upgrade: osd ok-to-upgrade failed (invalid arguments): %s', err)
+                    self._fail_upgrade('UPGRADE_BAD_ARGUMENTS', {
+                        'severity': 'error',
+                        'summary': 'Upgrade: invalid arguments to ok-to-upgrade command',
+                        'count': 1,
+                        'detail': [
+                            str(err),
                         ],
                     })
                     return False
