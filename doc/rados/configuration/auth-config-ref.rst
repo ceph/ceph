@@ -369,7 +369,8 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. note:: If you have updated ``auth_preferred_cipher`` then you can omit ``--key-type``.
 
-   Copy the ``keyring`` file to the machine running the daemon, then execute:
+   Copy the ``keyring`` file to the machine running the daemon. In the commands
+   below, ``$COPIED_KEYRING`` is the path of that copy. Then execute:
 
    .. code:: bash
 
@@ -377,26 +378,45 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    Adjust the above script based on where the data directory for your daemons are located.
 
-   If the daemon is an OSD created using ceph-volume the ``osd_key`` bluestore label may also
-   need to be updated. To find the device that must be passed to the bluestore tool:
+   If the daemon is an OSD created by ``ceph-volume``, you must also update the
+   ``osd_key`` BlueStore label. ``ceph-volume`` activates the OSD each time its
+   host boots, and activation rewrites the OSD's keyring file from this label.
+   If the label is wrong, the restart below still works, because the keyring
+   file has the new key, but the OSD fails to authenticate after its host next
+   boots. To find the device that must be passed to ``ceph-bluestore-tool``,
+   run:
 
    .. code:: bash
 
-       ceph-volume lvm list $OSD_ID --format json
+       ceph-volume lvm list $ID --format json
 
-   and find the ``lv_path`` field. Or, for a raw OSD:
+   and find the ``lv_path`` field of the entry whose ``type`` is ``block``.
+   Or, for a raw OSD:
 
    .. code:: bash
 
        ceph-volume raw list --format json
 
-   and find the ``device`` field for the OSD who's key you wish to rotate.
+   and find the ``device`` field for the OSD whose key you are rotating.
 
-   Once the device path is acquired the bluestore label can be rotated by executing:
+   Once you have the device path, write the new key to the BlueStore label. The
+   label must hold the key itself, not the path of a keyring file, so extract
+   the key from the keyring with ``ceph-authtool``:
 
    .. code:: bash
 
-       ceph-bluestore-tool --dev $DEV_PATH set-label-key --key osd_key -v $COPIED_KEYRING
+       ceph-bluestore-tool --dev $DEV_PATH set-label-key --key osd_key \
+           -v "$(ceph-authtool $COPIED_KEYRING -n osd.$ID --print-key)"
+
+   Check the label before you restart the OSD:
+
+   .. code:: bash
+
+       ceph-bluestore-tool --dev $DEV_PATH show-label | grep osd_key
+
+   The value of ``osd_key`` must be the same string as the ``key =`` line in
+   ``$COPIED_KEYRING``. If it shows anything else, such as a file path, run the
+   ``set-label-key`` command again before you go on.
 
    Finally, restart the daemon:
 
