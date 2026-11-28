@@ -604,17 +604,21 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
     "interval restarts, and it survives OSD restarts. This is exposure time, not "
     "data-movement time -- empty/dataless windows are counted, and "
     "misplacement-only episodes (e.g. benign CRUSH rebalancing) are "
-    "counted indistinguishably from genuine failures. Recorded via "
-    "tinc_with_max(), so the LONGRUNAVG's max_inc field is the longest "
-    "single window seen; see pg_vulnerability_duration_min for the "
-    "shortest.",
+    "counted indistinguishably from genuine failures. See "
+    "pg_vulnerability_duration_min/_max for the shortest/longest single "
+    "window.",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
   rs_perf.add_time(rs_pg_vulnerability_duration_min, "pg_vulnerability_duration_min",
     "Shortest single PG vulnerability-window duration recorded on this OSD "
     "(primary role only), in seconds; 0 until the first window is recorded. "
     "Updated atomically so concurrently-recording PGs on the shared OSD-wide "
-    "counter cannot lose a lower value (the companion max is "
-    "pg_vulnerability_duration's max_inc).",
+    "counter cannot lose a lower value.",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time(rs_pg_vulnerability_duration_max, "pg_vulnerability_duration_max",
+    "Longest single PG vulnerability-window duration recorded on this OSD "
+    "(primary role only), in seconds; 0 until the first window is recorded. "
+    "Updated atomically so concurrently-recording PGs on the shared OSD-wide "
+    "counter cannot lose a higher value.",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
   rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_rebuild_duration",
     "Average PG active-rebuild duration on this OSD (primary role only): "
@@ -623,17 +627,21 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
     "(pg_vulnerability_duration). A purely silent window (e.g. an empty "
     "PG) records nothing here even though pg_vulnerability_duration "
     "does -- their difference, summed over a window, is the silent "
-    "exposure time (degraded with no observed recovery progress). "
-    "Recorded via tinc_with_max(), so the LONGRUNAVG's max_inc field is "
-    "the longest single rebuild span seen; see pg_rebuild_duration_min "
-    "for the shortest.",
+    "exposure time (degraded with no observed recovery progress). See "
+    "pg_rebuild_duration_min/_max for the shortest/longest single rebuild "
+    "span.",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
   rs_perf.add_time(rs_pg_rebuild_duration_min, "pg_rebuild_duration_min",
     "Shortest single PG active-rebuild span recorded on this OSD (primary "
     "role only), in seconds; 0 until the first span is recorded. Updated "
     "with an atomic compare-exchange so concurrently-recording PGs on the "
-    "shared OSD-wide counter cannot lose a lower value (the companion max "
-    "is pg_rebuild_duration's max_inc).",
+    "shared OSD-wide counter cannot lose a lower value.",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time(rs_pg_rebuild_duration_max, "pg_rebuild_duration_max",
+    "Longest single PG active-rebuild span recorded on this OSD (primary "
+    "role only), in seconds; 0 until the first span is recorded. Updated "
+    "with an atomic compare-exchange so concurrently-recording PGs on the "
+    "shared OSD-wide counter cannot lose a higher value.",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
   rs_perf.add_u64_counter(rs_stats_invalidated, "stats_invalidated", "Number of times pg stats received invalidations");
   rs_perf.add_time_avg(rs_waitlocalpoolmigrationreserved_latency, "waitlocalpoolmigrationreserved_latency", "Wait local pool migration reserved recovery state latency");

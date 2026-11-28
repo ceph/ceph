@@ -2797,13 +2797,13 @@ TEST_F(PeeringStateTest, VulnerabilityWindowRecordedOnce) {
   EXPECT_EQ(count, 1u);
   EXPECT_GT(sum_ns, 0u);
 
-  // pg_vulnerability_duration_min: one episode, so it equals the sum, and
-  // is non-zero even though this window is well under a second. The max is
-  // pg_vulnerability_duration's own max_inc (tinc_with_max).
+  // One episode, so min and max both equal the sum, and are non-zero even
+  // though this window is well under a second.
   const uint64_t min_ns =
     perf->tget(rs_pg_vulnerability_duration_min).to_nsec();
   EXPECT_GT(min_ns, 0u);
   EXPECT_EQ(min_ns, sum_ns);
+  EXPECT_EQ(perf->tget(rs_pg_vulnerability_duration_max).to_nsec(), sum_ns);
 
   const auto &st = get_ps(acting_primary)->get_info().stats;
   EXPECT_EQ(st.last_degraded, onset)
@@ -2858,6 +2858,8 @@ TEST_F(PeeringStateTest, VulnerabilityWindowReplicaSkips) {
   EXPECT_EQ(count, 0u);
   EXPECT_EQ(sum_ns, 0u);
   EXPECT_EQ(replica_perf->tget(rs_pg_vulnerability_duration_min).to_nsec(),
+            0u);
+  EXPECT_EQ(replica_perf->tget(rs_pg_vulnerability_duration_max).to_nsec(),
             0u);
 
   auto [primary_sum_ns, primary_count] =
@@ -2992,12 +2994,15 @@ TEST_F(PeeringStateTest, VulnerabilityWindowTwoEpisodesAccumulate) {
   EXPECT_EQ(count, 2u);
   EXPECT_GT(sum_ns, 0u);
 
-  // Two episodes recorded: the min is set and bounded by the total.
-  // (Both windows are ~10 ms here, so it may equal either.)
+  // Two episodes recorded: one is the min, the other the max. (Both
+  // windows are ~10 ms here, so either may be the shorter.)
   const uint64_t min_ns =
     perf->tget(rs_pg_vulnerability_duration_min).to_nsec();
+  const uint64_t max_ns =
+    perf->tget(rs_pg_vulnerability_duration_max).to_nsec();
   EXPECT_GT(min_ns, 0u);
-  EXPECT_LE(min_ns, sum_ns);
+  EXPECT_LE(min_ns, max_ns);
+  EXPECT_EQ(min_ns + max_ns, sum_ns);
 }
 
 // ============================================================================

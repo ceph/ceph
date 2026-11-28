@@ -350,6 +350,71 @@ TEST(PerfCounters, SetMinNonzeroTimeGauge) {
   ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MIN_ELEMENT_TIME).to_nsec(), ns_10ms);
 }
 
+enum {
+  TEST_PERFCOUNTERS_MAX_ELEMENT_FIRST = 700,
+  TEST_PERFCOUNTERS_MAX_ELEMENT_U64,
+  TEST_PERFCOUNTERS_MAX_ELEMENT_TIME,
+  TEST_PERFCOUNTERS_MAX_ELEMENT_LAST,
+};
+
+static std::shared_ptr<PerfCounters> setup_test_perfcounter_max(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_perfcounter_max",
+      TEST_PERFCOUNTERS_MAX_ELEMENT_FIRST, TEST_PERFCOUNTERS_MAX_ELEMENT_LAST);
+  bld.add_u64(TEST_PERFCOUNTERS_MAX_ELEMENT_U64, "max_u64");
+  bld.add_time(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME, "max_time");
+  std::shared_ptr<PerfCounters> p(bld.create_perf_counters());
+  return p;
+}
+
+TEST(PerfCounters, SetMax) {
+  std::shared_ptr<PerfCounters> pf = setup_test_perfcounter_max(g_ceph_context);
+
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_U64, 5);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MAX_ELEMENT_U64), 5u);
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_U64, 2);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MAX_ELEMENT_U64), 5u);
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_U64, 10);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MAX_ELEMENT_U64), 10u);
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_U64, 0);
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MAX_ELEMENT_U64), 10u);
+}
+
+static void max_racer(std::shared_ptr<PerfCounters> pf, uint64_t value) {
+  for (int i = 0; i < 1000; ++i) {
+    pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_U64, value);
+  }
+}
+
+TEST(PerfCounters, SetMaxConcurrent) {
+  std::shared_ptr<PerfCounters> pf = setup_test_perfcounter_max(g_ceph_context);
+
+  const std::vector<uint64_t> values = {3, 30, 2, 5, 6, 7, 8, 9};
+  std::vector<std::thread> threads;
+  for (auto v : values) {
+    threads.emplace_back(max_racer, pf, v);
+  }
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  ASSERT_EQ(pf->get(TEST_PERFCOUNTERS_MAX_ELEMENT_U64), 30u);
+}
+
+// A time gauge's value is nanoseconds, so a sub-second sample is kept.
+TEST(PerfCounters, SetMaxTimeGauge) {
+  std::shared_ptr<PerfCounters> pf = setup_test_perfcounter_max(g_ceph_context);
+
+  const uint64_t ns_250ms = 250'000'000ull;
+  const uint64_t ns_10ms  =  10'000'000ull;
+
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME, ns_10ms);
+  ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME).to_nsec(), ns_10ms);
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME, ns_250ms);
+  ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME).to_nsec(), ns_250ms);
+  pf->set_max(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME, ns_10ms);
+  ASSERT_EQ(pf->tget(TEST_PERFCOUNTERS_MAX_ELEMENT_TIME).to_nsec(), ns_250ms);
+}
+
 static PerfCounters* setup_test_perfcounter4(std::string name, CephContext *cct)
 {
   PerfCountersBuilder bld(cct, name,

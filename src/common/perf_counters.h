@@ -258,7 +258,9 @@ public:
   void inc_with_max(int idx, uint64_t v = 1);
   void dec(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
-  /// Atomically raise a U64 counter to at least v (lock-free high-water mark).
+  /// Atomically raise a gauge to at least v (lock-free high-water mark).
+  /// Accepts a plain u64 gauge or a (non-avg) time gauge, whose value is
+  /// nanoseconds (see tset()); not valid on LONGRUNAVG counters.
   void set_max(int idx, uint64_t v);
   uint64_t get(int idx) const;
   /// Atomically lower a gauge to v if v is less than its current value, or
