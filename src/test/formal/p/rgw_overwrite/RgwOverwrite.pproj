@@ -1,0 +1,10 @@
+<Project>
+<ProjectName>RgwOverwrite</ProjectName>
+<InputFiles>
+	<PFile>../common/Common.p</PFile>
+	<PFile>./PSrc/</PFile>
+	<PFile>./PSpec/</PFile>
+	<PFile>./PTst/</PFile>
+</InputFiles>
+<OutputDir>./PGenerated/</OutputDir>
+</Project>

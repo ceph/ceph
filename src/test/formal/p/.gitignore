@@ -1,0 +1,4 @@
+# P compiler and checker output
+PGenerated/
+PGenerated.compile.log
+PCheckerOutput/
