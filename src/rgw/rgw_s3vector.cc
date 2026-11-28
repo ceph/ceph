@@ -876,26 +876,17 @@ namespace rgw::s3vector {
     return get_vector_dimension(index_name, schema, dpp, dimension);
   }
 
-  struct CreateIndexCtx {
-    const VectorBucketConfig<create_index_t>* configuration;
-    rgw::sal::Driver* driver;
-    const bucket_namespace_t* ns;
-    DoutPrefixProvider* dpp;
-    std::vector<validation_error_t>* errors;
-    int result;
-  };
 
-  static void create_index_impl(void* user_data) {
-    auto* ctx = static_cast<CreateIndexCtx*>(user_data);
-    auto* dpp = ctx->dpp;
-    auto* driver = ctx->driver;
-    const auto& ns = *ctx->ns;
-    const auto& configuration = ctx->configuration->rest_config;
-    auto& errors = *ctx->errors;
-
-    LanceDBConnection* conn = connect(dpp, driver, ns, configuration.vector_bucket_name, ctx->configuration->backend_config, ctx->result);
+  int create_index(const VectorBucketConfig<create_index_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
+    if (!operation.backend_config.storage_mode) {
+      return -EINVAL;
+    }
+    const auto& configuration = operation.rest_config;
+    log_configuration(dpp, "CreateIndex", configuration);
+    int connect_result = 0;
+    LanceDBConnection* conn = connect(dpp, driver, ns, configuration.vector_bucket_name, operation.backend_config, connect_result);
     if (!conn) {
-      return;
+      return connect_result;
     }
 
     // validate the number of non/filterable metadata keys
@@ -911,8 +902,7 @@ namespace rgw::s3vector {
     }
     if (!errors.empty()) {
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
 
     // validate metadata key names
@@ -933,8 +923,7 @@ namespace rgw::s3vector {
     }
     if (!errors.empty()) {
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
     std::set<std::string> nonfilterable_names;
     for (unsigned int i = 0; i < configuration.non_filterable_metadata_keys.size(); ++i) {
@@ -952,8 +941,7 @@ namespace rgw::s3vector {
     }
     if (!errors.empty()) {
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
 
     // verify no overlap between filterable and non-filterable metadata keys.
@@ -968,15 +956,13 @@ namespace rgw::s3vector {
     }
     if (!errors.empty()) {
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
 
     struct ArrowSchema c_schema;
     if (int ret = create_table_schema(configuration.dimension, configuration.filterable_metadata_keys, dpp, &c_schema); ret < 0) {
       lancedb_connection_free(conn);
-      ctx->result = ret;
-      return;
+      return ret;
     }
     char* error_message = nullptr;
     LanceDBTable* table = nullptr;
@@ -988,13 +974,11 @@ namespace rgw::s3vector {
         errors.push_back({"metadataConfiguration.filterableMetadataKeys", error_message});
         lancedb_free_string(error_message);
         lancedb_connection_free(conn);
-        ctx->result = -EINVAL;
-        return;
+        return -EINVAL;
       }
       lancedb_free_string(error_message);
       lancedb_connection_free(conn);
-      ctx->result = lancedb_error_to_errno(result);
-      return;
+      return lancedb_error_to_errno(result);
     }
     // create the main index on the table (vector index will be created only after vectors are added)
     const LanceDBScalarIndexConfig scalar_config = {
@@ -1006,36 +990,21 @@ namespace rgw::s3vector {
       lancedb_table_free(table);
       lancedb_free_string(error_message);
       lancedb_connection_free(conn);
-      ctx->result = lancedb_error_to_errno(result);
-      return;
+      return lancedb_error_to_errno(result);
     }
     if (int ret = set_table_distance_metric(table, configuration.distance_metric, dpp); ret < 0) {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = ret;
-      return;
+      return ret;
     }
     if (int ret = set_nonfilterable_metadata(table, configuration.non_filterable_metadata_keys, dpp); ret < 0) {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = ret;
-      return;
+      return ret;
     }
     lancedb_table_free(table);
     lancedb_connection_free(conn);
-    ctx->result = 0;
-    return;
-  }
-
-  int create_index(const VectorBucketConfig<create_index_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
-    if (!operation.backend_config.storage_mode) {
-      return -EINVAL;
-    }
-    const auto& configuration = operation.rest_config;
-    log_configuration(dpp, "CreateIndex", configuration);
-    CreateIndexCtx ctx{&operation, driver, &ns, dpp, &errors, 0};
-    lancedb_run_on_stack(create_index_impl, &ctx, 256*1024, 1024*1024);
-    return ctx.result;
+    return 0;
   }
 
   // delete index
@@ -1439,80 +1408,10 @@ namespace rgw::s3vector {
     decode_vector_bucket_name(vector_bucket_name, vector_bucket_arn, obj);
   }
 
-  struct RemoveIndexesCtx {
-    const std::string* vector_bucket_name;
-    rgw::sal::Driver* driver;
-    const bucket_namespace_t* ns;
-    const DoutPrefixProvider* dpp;
-    bool delete_indexes;
-    BackendConfig backend_config;
-    int result;
-  };
-
-  static void remove_indexes_impl(void* user_data) {
-    auto* ctx = static_cast<RemoveIndexesCtx*>(user_data);
-    const auto* dpp = ctx->dpp;
-    const auto& bucket_name = *ctx->vector_bucket_name;
-
-    LanceDBConnection* conn = connect(dpp, ctx->driver, *ctx->ns, bucket_name, ctx->backend_config, ctx->result);
-    if (!conn) {
-      return;
-    }
-    char** table_names;
-    size_t name_count;
-    char* error_message;
-    if (const LanceDBError err = lancedb_connection_table_names(conn, &table_names, &name_count, &error_message); err != LANCEDB_SUCCESS) {
-      const int result = lancedb_error_to_errno(err);
-      if (result == -ENOENT) {
-        // the backend of the bucket does not exist, so there are no indexes to check for.
-        // the caller is expected to delete the metadata of the bucket regardless
-        ldpp_dout(dpp, 5) << "WARNING: the backend of s3vector bucket: " << bucket_name <<
-          " does not exist. error: " << error_message << dendl;
-      } else {
-        ldpp_dout(dpp, 1) << "ERROR: failed to list indexes of s3vector bucket: " << bucket_name << ". error: " << error_message << dendl;
-      }
-      lancedb_free_string(error_message);
-      lancedb_connection_free(conn);
-      ctx->result = result;
-      return;
-    }
-    if (name_count > 0 && !ctx->delete_indexes) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector bucket: " << bucket_name << " cannot be deleted, it still has " <<
-        name_count << " indexes" << dendl;
-      lancedb_free_table_names(table_names, name_count);
-      lancedb_connection_free(conn);
-      ctx->result = -ENOTEMPTY;
-      return;
-    }
-    for (size_t i = 0; i < name_count; ++i) {
-      if (const LanceDBError err = lancedb_connection_drop_table(conn, table_names[i], nullptr, &error_message);
-          err == LANCEDB_TABLE_NOT_FOUND) {
-        ldpp_dout(dpp, 10) << "INFO: s3vector index: " << table_names[i] << " does not exist" << dendl;
-        lancedb_free_string(error_message);
-      } else if (err != LANCEDB_SUCCESS) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to delete index: " << table_names[i] << " of s3vector bucket: " <<
-          bucket_name << ". error: " << error_message << dendl;
-        lancedb_free_string(error_message);
-        lancedb_free_table_names(table_names, name_count);
-        lancedb_connection_free(conn);
-        ctx->result = lancedb_error_to_errno(err);
-        return;
-      } else { // successfully deleted the index
-        // we are not failing the operation if we cannot notify the background process on index removal
-        notify_index_remove(dpp, *ctx->ns, bucket_name, table_names[i]);
-      }
-    }
-    lancedb_free_table_names(table_names, name_count);
-    ldpp_dout(dpp, 20) << "INFO: deleting in-memory session (if it exists) for bucket: " << bucket_name << dendl;
-    rgw::s3vector::notify_session_delete(dpp, *ctx->ns, bucket_name);
-    lancedb_connection_free(conn);
-    ctx->result = 0;
-  }
 
   int remove_indexes(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
       const bucket_namespace_t& ns, const std::string& vector_bucket_name, bool delete_indexes, optional_yield y) {
-    // Administrative cleanup has no REST configuration. Resolve on the caller's
-    // stack before passing the backend into LanceDB's alternate stack.
+    // Administrative cleanup has no REST configuration, so the backend is resolved here.
     BackendType backend_type;
     const auto backend_name = dpp->get_cct()->_conf.get_val<std::string>("rgw_s3vector_backend");
     if (get_backend_type(backend_name, backend_type) < 0) {
@@ -1525,9 +1424,57 @@ namespace rgw::s3vector {
         return ret;
       }
     }
-    RemoveIndexesCtx ctx{&vector_bucket_name, driver, &ns, dpp, delete_indexes, BackendConfig{backend_type, storage_mode}, 0};
-    lancedb_run_on_stack(remove_indexes_impl, &ctx, 256*1024, 1024*1024);
-    return ctx.result;
+    int connect_result = 0;
+    LanceDBConnection* conn = connect(dpp, driver, ns, vector_bucket_name, BackendConfig{backend_type, storage_mode}, connect_result);
+    if (!conn) {
+      return connect_result;
+    }
+    char** table_names;
+    size_t name_count;
+    char* error_message;
+    if (const LanceDBError err = lancedb_connection_table_names(conn, &table_names, &name_count, &error_message); err != LANCEDB_SUCCESS) {
+      const int result = lancedb_error_to_errno(err);
+      if (result == -ENOENT) {
+        // the backend of the bucket does not exist, so there are no indexes to check for.
+        // the caller is expected to delete the metadata of the bucket regardless
+        ldpp_dout(dpp, 5) << "WARNING: the backend of s3vector bucket: " << vector_bucket_name <<
+          " does not exist. error: " << error_message << dendl;
+      } else {
+        ldpp_dout(dpp, 1) << "ERROR: failed to list indexes of s3vector bucket: " << vector_bucket_name << ". error: " << error_message << dendl;
+      }
+      lancedb_free_string(error_message);
+      lancedb_connection_free(conn);
+      return result;
+    }
+    if (name_count > 0 && !delete_indexes) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector bucket: " << vector_bucket_name << " cannot be deleted, it still has " <<
+        name_count << " indexes" << dendl;
+      lancedb_free_table_names(table_names, name_count);
+      lancedb_connection_free(conn);
+      return -ENOTEMPTY;
+    }
+    for (size_t i = 0; i < name_count; ++i) {
+      if (const LanceDBError err = lancedb_connection_drop_table(conn, table_names[i], nullptr, &error_message);
+          err == LANCEDB_TABLE_NOT_FOUND) {
+        ldpp_dout(dpp, 10) << "INFO: s3vector index: " << table_names[i] << " does not exist" << dendl;
+        lancedb_free_string(error_message);
+      } else if (err != LANCEDB_SUCCESS) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to delete index: " << table_names[i] << " of s3vector bucket: " <<
+          vector_bucket_name << ". error: " << error_message << dendl;
+        lancedb_free_string(error_message);
+        lancedb_free_table_names(table_names, name_count);
+        lancedb_connection_free(conn);
+        return lancedb_error_to_errno(err);
+      } else { // successfully deleted the index
+        // we are not failing the operation if we cannot notify the background process on index removal
+        notify_index_remove(dpp, ns, vector_bucket_name, table_names[i]);
+      }
+    }
+    lancedb_free_table_names(table_names, name_count);
+    ldpp_dout(dpp, 20) << "INFO: deleting in-memory session (if it exists) for bucket: " << vector_bucket_name << dendl;
+    rgw::s3vector::notify_session_delete(dpp, ns, vector_bucket_name);
+    lancedb_connection_free(conn);
+    return 0;
   }
 
   // delete vector bucket policy
@@ -1571,26 +1518,20 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  struct CreateVectorBucketCtx {
-    const VectorBucketConfig<create_vector_bucket_t>* configuration;
-    rgw::sal::Driver* driver;
-    const bucket_namespace_t* ns;
-    DoutPrefixProvider* dpp;
-    int result;
-  };
 
-  static void create_vector_bucket_impl(void* user_data) {
-    auto* ctx = static_cast<CreateVectorBucketCtx*>(user_data);
-    auto* dpp = ctx->dpp;
-    auto* driver = ctx->driver;
-    const auto& ns = *ctx->ns;
-    const auto& bucket_name = ctx->configuration->rest_config.vector_bucket_name;
-
+  int create_vector_bucket(const VectorBucketConfig<create_vector_bucket_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y) {
+    if (!operation.backend_config.storage_mode) {
+      return -EINVAL;
+    }
+    const auto& configuration = operation.rest_config;
+    log_configuration(dpp, "CreateVectorBucket", configuration);
+    const auto& bucket_name = configuration.vector_bucket_name;
     // The metadata may not exist yet. Do not cache a session based on a
     // creation default that could change before the bucket is created.
-    LanceDBConnection* conn = connect(dpp, driver, ns, bucket_name, ctx->configuration->backend_config, ctx->result);
+    int connect_result = 0;
+    LanceDBConnection* conn = connect(dpp, driver, ns, bucket_name, operation.backend_config, connect_result);
     if (!conn) {
-      return;
+      return connect_result;
     }
     char** table_names;
     size_t name_count;
@@ -1599,23 +1540,11 @@ namespace rgw::s3vector {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to verify connectivity for: " << bucket_name << ", error: " << error_message << dendl;
       lancedb_free_string(error_message);
       lancedb_connection_free(conn);
-      ctx->result = lancedb_error_to_errno(result);
-      return;
+      return lancedb_error_to_errno(result);
     }
     lancedb_free_table_names(table_names, name_count);
     lancedb_connection_free(conn);
-    ctx->result = 0;
-  }
-
-  int create_vector_bucket(const VectorBucketConfig<create_vector_bucket_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y) {
-    if (!operation.backend_config.storage_mode) {
-      return -EINVAL;
-    }
-    const auto& configuration = operation.rest_config;
-    log_configuration(dpp, "CreateVectorBucket", configuration);
-    CreateVectorBucketCtx ctx{&operation, driver, &ns, dpp, 0};
-    lancedb_run_on_stack(create_vector_bucket_impl, &ctx, 256*1024, 1024*1024);
-    return ctx.result;
+    return 0;
   }
 
   // get vector bucket
@@ -1766,26 +1695,25 @@ namespace rgw::s3vector {
     }
   }
 
-  struct PutVectorsCtx {
-    const VectorBucketConfig<put_vectors_t>* configuration;
-    rgw::sal::Driver* driver;
-    const bucket_namespace_t* ns;
-    DoutPrefixProvider* dpp;
-    std::vector<validation_error_t>* errors;
-    int result;
-  };
 
-  static void put_vectors_impl(void* user_data) {
-    auto* ctx = static_cast<PutVectorsCtx*>(user_data);
-    auto* dpp = ctx->dpp;
-    auto* driver = ctx->driver;
-    const auto& ns = *ctx->ns;
-    const auto& configuration = ctx->configuration->rest_config;
-    auto& errors = *ctx->errors;
-
-    auto table_handle = open_table_with_session_handle(dpp, driver, ns, configuration.vector_bucket_name, configuration.index_name, ctx->configuration->backend_config, ctx->result);
+  int put_vectors(const VectorBucketConfig<put_vectors_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
+    if (!operation.backend_config.storage_mode) {
+      return -EINVAL;
+    }
+    const auto& configuration = operation.rest_config;
+    log_configuration(dpp, "PutVectors", configuration);
+    const auto max_vectors = dpp->get_cct()->_conf->rgw_s3vector_max_put_vectors;
+    if (configuration.vectors.size() > max_vectors) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector too many vectors in request, got "
+        << configuration.vectors.size() << " maximum is " << max_vectors << dendl;
+      errors.push_back({"vectors",
+        fmt::format("must contain 1-{} items, got {}", max_vectors, configuration.vectors.size())});
+      return -EINVAL;
+    }
+    int open_result = 0;
+    auto table_handle = open_table_with_session_handle(dpp, driver, ns, configuration.vector_bucket_name, configuration.index_name, operation.backend_config, open_result);
     if (!table_handle) {
-      return;
+      return open_result;
     }
     LanceDBTable* table = table_handle.table;
     LanceDBConnection* conn = table_handle.conn_handle.conn;
@@ -1793,8 +1721,7 @@ namespace rgw::s3vector {
       ldpp_dout(dpp, 10) << "WARNING: s3vector no vectors provided" << dendl;
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = 0;
-      return;
+      return 0;
     }
 
     // get the schema, dimension, and filterable keys from the table
@@ -1802,15 +1729,13 @@ namespace rgw::s3vector {
     if (int ret = import_table_schema(configuration.index_name, table, dpp, schema); ret < 0) {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = ret;
-      return;
+      return ret;
     }
     unsigned int dimension = 0;
     if (int ret = get_vector_dimension(configuration.index_name, schema, dpp, dimension); ret < 0) {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = ret;
-      return;
+      return ret;
     }
     const auto filterable_keys = get_filterable_keys_from_schema(schema);
 
@@ -2088,8 +2013,7 @@ namespace rgw::s3vector {
     if (!errors.empty()) {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
 
     std::shared_ptr<arrow::Array> key_array, data_array, metadata_array;
@@ -2113,8 +2037,7 @@ namespace rgw::s3vector {
       if (c_schema.release) c_schema.release(&c_schema);
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
 
     LanceDBRecordBatchReader* batch_reader = nullptr;
@@ -2131,8 +2054,7 @@ namespace rgw::s3vector {
       if (c_schema.release) c_schema.release(&c_schema);
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = -EINVAL;
-      return;
+      return -EINVAL;
     }
 
     // upsert data into table: update existing keys, insert new ones
@@ -2155,33 +2077,13 @@ namespace rgw::s3vector {
       lancedb_free_string(error_message);
       lancedb_table_free(table);
       lancedb_connection_free(conn);
-      ctx->result = lancedb_error_to_errno(result);
-      return;
+      return lancedb_error_to_errno(result);
     }
     // we are not failing the operation if we cannot notify the background process on index update
     notify_index_update(dpp, ns, configuration.vector_bucket_name, configuration.index_name, num_rows);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
-    ctx->result = 0;
-  }
-
-  int put_vectors(const VectorBucketConfig<put_vectors_t>& operation, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
-    if (!operation.backend_config.storage_mode) {
-      return -EINVAL;
-    }
-    const auto& configuration = operation.rest_config;
-    log_configuration(dpp, "PutVectors", configuration);
-    const auto max_vectors = dpp->get_cct()->_conf->rgw_s3vector_max_put_vectors;
-    if (configuration.vectors.size() > max_vectors) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector too many vectors in request, got "
-        << configuration.vectors.size() << " maximum is " << max_vectors << dendl;
-      errors.push_back({"vectors",
-        fmt::format("must contain 1-{} items, got {}", max_vectors, configuration.vectors.size())});
-      return -EINVAL;
-    }
-    PutVectorsCtx ctx{&operation, driver, &ns, dpp, &errors, 0};
-    lancedb_run_on_stack(put_vectors_impl, &ctx, 256*1024, 1024*1024);
-    return ctx.result;
+    return 0;
   }
 
   // get vectors
