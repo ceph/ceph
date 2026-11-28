@@ -211,6 +211,43 @@ Recovery from missing metadata objects
 Depending on which objects are missing or corrupt, you may need to run
 additional commands to regenerate default versions of the objects.
 
+Data pools
+~~~~~~~~~~
+
+A file system can have more than one data pool. ``ceph fs new`` sets the file
+system's first data pool, also called its default data pool, and ``ceph fs
+add_data_pool`` adds more. File layouts then direct a directory's files to
+another data pool, for example to keep bulk data in an erasure-coded pool while
+the default data pool is replicated. See :ref:`create-fs` and
+:ref:`file-layouts`.
+
+To see a file system's data pools, run the following command. The first data
+pool listed is the default data pool:
+
+.. prompt:: bash #
+
+   ceph fs ls
+
+The default data pool can't be changed or removed, and it holds the backtrace
+of every file in the file system, including files whose data is in another
+data pool. ``cephfs-data-scan`` calls it the *main* data pool:
+
+- ``scan_extents`` reads every data pool, because each file's data objects are
+  in the pool that its layout names. If you name the pools yourself, name all
+  of them, the main data pool first. A file whose data is in a pool that you
+  leave out doesn't get its size and modification time recovered correctly.
+- ``scan_inodes`` and ``cleanup`` read only the main data pool, where the
+  backtraces are. If you name a different pool, the tool stops with a warning
+  unless you pass ``--force-pool``.
+
+When you don't name any pools, the tool uses the file system's own pools, so
+there is rarely a reason to name them. Scanning only some of a file system's
+data pools isn't useful: ``scan_extents`` needs all of them, and the other
+commands need only the main data pool.
+
+If the cluster has more than one file system, pass ``--filesystem <fs_name>``
+to every ``cephfs-data-scan`` command.
+
 Note the data scan tool can be time consuming. To enable progress updates
 during its operation, enable the cli_api tool.
 
@@ -344,12 +381,9 @@ The cleanup phase can be run with multiple instances to speed up execution::
 
 .. note::
 
-   The data pool parameters for ``scan_extents``, ``scan_inodes`` and
-   ``cleanup`` commands are optional, and usually the tool will be able to
-   detect the pools automatically. Still, you may override this. The
-   ``scan_extents`` command requires that all data pools be specified, but the
-   ``scan_inodes`` and ``cleanup`` commands require only that you specify the
-   main data pool.
+   The data pool parameters for ``scan_extents``, ``scan_inodes``, and
+   ``cleanup`` are optional. See `Data pools`_ for which pools each command
+   reads.
 
 Known Limitations And Pitfalls
 ------------------------------
