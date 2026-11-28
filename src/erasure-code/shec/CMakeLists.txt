@@ -10,8 +10,6 @@ set(shec_utils_srcs
   determinant.c)
 
 add_library(shec_utils OBJECT ${shec_utils_srcs})
-target_link_libraries(shec_utils
-  PRIVATE legacy-option-headers)
 
 set(ec_shec_objs
   $<TARGET_OBJECTS:jerasure_init_objs>

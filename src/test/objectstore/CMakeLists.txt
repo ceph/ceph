@@ -6,8 +6,7 @@ install(TARGETS ceph_perf_objectstore
 
 add_library(store_test_fixture OBJECT store_test_fixture.cc)
 target_include_directories(store_test_fixture PRIVATE
-  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>
-  legacy-option-headers)
+  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
 
 add_executable(ceph_test_objectstore
   store_test.cc
