@@ -467,9 +467,10 @@ int remove(const DoutPrefixProvider* dpp,
     ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", oidc.provider_url);
   }
 
+  // account topics are keyed by the account id, not by its tenant
   rgw::sal::TopicList topics;
   do {
-    ret = driver->list_account_topics(dpp, y, info.tenant,
+    ret = driver->list_account_topics(dpp, y, info.id,
                                       topics.next_marker, max_items, topics);
     if (ret < 0) {
       err_msg = "Unable to list account topics";
@@ -482,7 +483,7 @@ int remove(const DoutPrefixProvider* dpp,
 
     for (const auto& topic_name : topics.topics) {
       RGWObjVersionTracker objv;
-      ret = driver->remove_topic_v2(topic_name, info.tenant, objv, y, dpp);
+      ret = driver->remove_topic_v2(topic_name, info.id, objv, y, dpp);
       if (ret < 0) {
         err_msg = fmt::format("unable to delete topic {}", topic_name);
         return ret;
