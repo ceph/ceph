@@ -78,7 +78,7 @@ To make use of the debugging option in the module:
      [mgr]
         debug_mgr = 20  
 
-- Use this command ``ceph influx self-test``.
+- Run ``ceph mgr self-test module influx`` (requires the ``selftest`` module).
 - Check the log files. Users may find it easier to filter the log files using
   ``mgr[influx]``.
 
