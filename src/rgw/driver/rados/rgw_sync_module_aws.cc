@@ -612,16 +612,41 @@ struct AWSSyncConfig {
     }
   }
 
-  string get_path(std::shared_ptr<AWSSyncConfig_Profile>& profile,
-                  const RGWBucketInfo& bucket_info,
-                  const rgw_obj_key& obj) {
+  /* Return true if target_path starts with ${bucket}. */
+  static bool target_starts_with_bucket(const string& target_path) {
+    size_t bucket_pos = target_path.find("${bucket}");
+    if (bucket_pos == string::npos) {
+      return false;
+    }
+
+    size_t slash_pos = target_path.find('/');
+    if (slash_pos == string::npos) {
+      return true;
+    }
+
+    return bucket_pos < slash_pos;
+  }
+
+  int get_path(const DoutPrefixProvider *dpp,
+               std::shared_ptr<AWSSyncConfig_Profile>& profile,
+               const RGWBucketInfo& bucket_info,
+               const rgw_obj_key& obj,
+               string *ppath) {
     string bucket_str;
     string owner;
-    if (!bucket_info.bucket.tenant.empty()) {
-      bucket_str = owner = bucket_info.bucket.tenant + "-";
-      owner += to_string(bucket_info.owner);
+
+    bucket_str = bucket_info.bucket.get_namespaced_name();
+    if (!bucket_info.bucket.tenant.empty()){
+      if (target_starts_with_bucket(profile->target_path)) {
+        ldpp_dout(dpp, 0) << "ERROR: cannot sync tenanted bucket " << bucket_str
+          << ": target_path is \"" << profile->target_path << "\", and because it "
+          << "starts with ${bucket} the tenant would end up as the destination "
+          << "bucket name. Please put a destination bucket in front of it, "
+          << "for example \"my-dest/${bucket}\"." << dendl;
+        return -EINVAL;
+      }
+      owner = bucket_info.bucket.tenant +  "-" + to_string(bucket_info.owner);
     }
-    bucket_str += bucket_info.bucket.name;
 
     const string& path = profile->target_path;
 
@@ -631,19 +656,29 @@ struct AWSSyncConfig {
 
     new_path += string("/") + get_key_oid(obj);
 
-    return new_path;
+    *ppath = std::move(new_path);
+
+    return 0;
   }
 
-  void get_target(std::shared_ptr<AWSSyncConfig_Profile>& profile,
-                  const RGWBucketInfo& bucket_info,
-                  const rgw_obj_key& obj,
-                  string *bucket_name,
-                  string *obj_name) {
-    string path = get_path(profile, bucket_info, obj);
+  int get_target(const DoutPrefixProvider *dpp,
+                 std::shared_ptr<AWSSyncConfig_Profile>& profile,
+                 const RGWBucketInfo& bucket_info,
+                 const rgw_obj_key& obj,
+                 string *bucket_name,
+                 string *obj_name) {
+    string path;
+    int r = get_path(dpp, profile, bucket_info, obj, &path);
+    if (r < 0) {
+      return r;
+    }
+
     size_t pos = path.find('/');
 
     *bucket_name = path.substr(0, pos);
     *obj_name = path.substr(pos + 1);
+
+    return 0;
   }
 
   void init_conns(RGWDataSyncCtx *sc, const string& id) {
@@ -1634,7 +1669,11 @@ public:
       }
 
       instance.get_profile(sync_pipe.info.source_bs.bucket, &target);
-      instance.conf.get_target(target, sync_pipe.dest_bucket_info, key, &dest_obj.bucket.name, &dest_obj.key.name);
+      ret = instance.conf.get_target(dpp, target, sync_pipe.dest_bucket_info, key,
+                                     &dest_obj.bucket.name, &dest_obj.key.name);
+      if (ret < 0) {
+        return set_cr_error(ret);
+      }
 
       if (bucket_created.find(dest_obj.bucket.name) == bucket_created.end()){
         yield {
@@ -1739,6 +1778,7 @@ class RGWAWSRemoveRemoteObjCBCR : public RGWCoroutine {
   ceph::real_time mtime;
   AWSSyncInstanceEnv& instance;
   int ret{0};
+  string path;
 public:
   RGWAWSRemoveRemoteObjCBCR(RGWDataSyncCtx *_sc,
                           rgw_bucket_sync_pipe& _sync_pipe, rgw_obj_key& _key, const ceph::real_time& _mtime,
@@ -1749,9 +1789,13 @@ public:
     reenter(this) {
       ldpp_dout(dpp, 0) << ": remove remote obj: z=" << sc->source_zone
                               << " b=" <<sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
+      instance.get_profile(sync_pipe.info.source_bs.bucket, &target);
+      ret = instance.conf.get_path(dpp, target, sync_pipe.dest_bucket_info, key, &path);
+      if (ret < 0) {
+        return set_cr_error(ret);
+      }
+
       yield {
-        instance.get_profile(sync_pipe.info.source_bs.bucket, &target);
-        string path =  instance.conf.get_path(target, sync_pipe.dest_bucket_info, key);
         ldpp_dout(dpp, 0) << "AWS: removing aws object at" << path << dendl;
 
         call(new RGWDeleteRESTResourceCR(sc->cct, target->conn.get(),
