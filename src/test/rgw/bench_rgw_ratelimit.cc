@@ -37,7 +37,7 @@ struct parameters {
 std::shared_ptr<std::vector<client_info>> ds = std::make_shared<std::vector<client_info>>(std::vector<client_info>());
 
 std::string method[2] = {"PUT", "GET"};
-void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, boost::asio::yield_context& yield, boost::asio::io_context& ioctx)
+void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::shared_ptr<RateLimitStore> ratelimit, const parameters& params, boost::asio::yield_context& yield, boost::asio::io_context& ioctx)
 {
     auto dout = DoutPrefix(g_ceph_context, ceph_subsys_rgw, "rate limiter: ");
     boost::asio::steady_timer timer(ioctx);
@@ -84,7 +84,7 @@ void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::share
         }
     }
 }
-bool simulate_request(client_info& it, const RGWRateLimitInfo& info, std::shared_ptr<RateLimiter> ratelimit)
+bool simulate_request(client_info& it, const RGWRateLimitInfo& info, std::shared_ptr<RateLimitStore> ratelimit)
 {
     boost::asio::io_context context;
     auto time = ceph::coarse_real_clock::now();
@@ -101,7 +101,7 @@ bool simulate_request(client_info& it, const RGWRateLimitInfo& info, std::shared
     it.accepted++;
     return false;
 }
-void simulate_client(client_info& it, const RGWRateLimitInfo& info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, boost::asio::yield_context& ctx, bool& to_run, boost::asio::io_context& ioctx)
+void simulate_client(client_info& it, const RGWRateLimitInfo& info, std::shared_ptr<RateLimitStore> ratelimit, const parameters& params, boost::asio::yield_context& ctx, bool& to_run, boost::asio::io_context& ioctx)
 {
     for (;;)
     {
@@ -123,7 +123,7 @@ void simulate_client(client_info& it, const RGWRateLimitInfo& info, std::shared_
                     simulate_transfer(it, &info, ratelimit, params, ctx, ioctx);
     }
 }
-void simulate_clients(boost::asio::io_context& context, std::string tenant, const RGWRateLimitInfo& info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, bool& to_run)
+void simulate_clients(boost::asio::io_context& context, std::string tenant, const RGWRateLimitInfo& info, std::shared_ptr<RateLimitStore> ratelimit, const parameters& params, bool& to_run)
 {
     for (int i = 0; i < params.num_clients; i++)
     {
