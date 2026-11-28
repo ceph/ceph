@@ -931,6 +931,117 @@ TEST(ErasureCodeLrc, encode_decode_2)
   }
 }
 
+// DDc_DDc_ with local parities at 3 and 7: losing a data chunk and its
+// local parity needs the global layer before the local layer can help.
+IGNORE_DEPRECATED
+TEST(ErasureCodeLrc, decode_two_erasures_kml)
+{
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["k"] = "4";
+  profile["m"] = "2";
+  profile["l"] = "3";
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  const unsigned int chunk_count = lrc.get_chunk_count();
+  EXPECT_EQ(8U, chunk_count);
+
+  const unsigned int chunk_size = 4096;
+  bufferlist in;
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++)
+    in.append(string(chunk_size, 'A' + i));
+  shard_id_set want_to_encode;
+  for (unsigned int i = 0; i < chunk_count; i++)
+    want_to_encode.insert(shard_id_t(i));
+  shard_id_map<bufferlist> encoded(chunk_count);
+  EXPECT_EQ(0, lrc.encode(want_to_encode, in, &encoded));
+
+  for (unsigned int a = 0; a < chunk_count; a++) {
+    for (unsigned int b = a + 1; b < chunk_count; b++) {
+      SCOPED_TRACE("erased " + stringify(a) + "," + stringify(b));
+      shard_id_set want_to_read;
+      want_to_read.insert(shard_id_t(a));
+      want_to_read.insert(shard_id_t(b));
+      shard_id_set available_chunks;
+      shard_id_map<bufferlist> chunks(chunk_count);
+      set<int> legacy_want_to_read = {int(a), int(b)};
+      set<int> legacy_available_chunks;
+      map<int, bufferlist> legacy_chunks;
+      for (unsigned int i = 0; i < chunk_count; i++) {
+	if (i == a || i == b)
+	  continue;
+	available_chunks.insert(shard_id_t(i));
+	chunks[shard_id_t(i)] = encoded[shard_id_t(i)];
+	legacy_available_chunks.insert(i);
+	legacy_chunks[i] = encoded[shard_id_t(i)];
+      }
+
+      shard_id_set minimum;
+      EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks,
+					  &minimum));
+      set<int> legacy_minimum;
+      EXPECT_EQ(0, lrc._minimum_to_decode(legacy_want_to_read,
+					  legacy_available_chunks,
+					  &legacy_minimum));
+
+      shard_id_map<bufferlist> decoded(chunk_count);
+      EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
+      map<int, bufferlist> legacy_decoded;
+      EXPECT_EQ(0, lrc._decode(legacy_want_to_read, legacy_chunks,
+			       &legacy_decoded));
+      for (unsigned int i : {a, b}) {
+	EXPECT_TRUE(decoded[shard_id_t(i)].contents_equal(
+		      encoded[shard_id_t(i)]));
+	EXPECT_TRUE(legacy_decoded[i].contents_equal(encoded[shard_id_t(i)]));
+      }
+    }
+  }
+}
+END_IGNORE_DEPRECATED
+
+// ECUtil puts only the wanted chunks in *out*.
+TEST(ErasureCodeLrc, decode_chunks_unwanted_erasure_kml)
+{
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["k"] = "4";
+  profile["m"] = "2";
+  profile["l"] = "3";
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  const unsigned int chunk_count = lrc.get_chunk_count();
+
+  const unsigned int chunk_size = 4096;
+  bufferlist data;
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++)
+    data.append(string(chunk_size, 'A' + i));
+  shard_id_set want_to_encode;
+  for (unsigned int i = 0; i < chunk_count; i++)
+    want_to_encode.insert(shard_id_t(i));
+  shard_id_map<bufferlist> encoded(chunk_count);
+  EXPECT_EQ(0, lrc.encode(want_to_encode, data, &encoded));
+
+  for (unsigned int a = 0; a < chunk_count; a++) {
+    for (unsigned int b = 0; b < chunk_count; b++) {
+      if (a == b)
+	continue;
+      SCOPED_TRACE("want " + stringify(a) + ", also erased " + stringify(b));
+      shard_id_map<bufferptr> in(chunk_count);
+      for (unsigned int i = 0; i < chunk_count; i++) {
+	if (i != a && i != b)
+	  in[shard_id_t(i)] = bufferptr(encoded[shard_id_t(i)].c_str(),
+					chunk_size);
+      }
+      shard_id_map<bufferptr> out(chunk_count);
+      out[shard_id_t(a)] = buffer::create_page_aligned(chunk_size);
+      shard_id_set want_to_read;
+      want_to_read.insert(shard_id_t(a));
+      EXPECT_EQ(0, lrc.decode_chunks(want_to_read, in, out));
+      EXPECT_EQ(1U, out.size());
+      EXPECT_EQ(0, memcmp(out[shard_id_t(a)].c_str(),
+			  encoded[shard_id_t(a)].c_str(), chunk_size));
+    }
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;
