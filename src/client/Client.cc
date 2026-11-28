@@ -1188,8 +1188,13 @@ void Client::update_inode_file_time(Inode *in, int issued, uint64_t time_warp_se
       in->atime = atime;
       in->time_warp_seq = time_warp_seq;
     } else if (time_warp_seq == in->time_warp_seq) {
+      // A local write under dirty or flushing CEPH_CAP_FILE_WR has set mtime to
+      // the write time. Keep it: an equal-seq MDS grant must not replace it with
+      // an older or futuristic value. An explicit time change bumps
+      // time_warp_seq, so it never arrives in this branch.
+      bool local_write_dirty = (in->dirty_caps | in->flushing_caps) & CEPH_CAP_FILE_WR;
       //take max times
-      if (mtime > in->mtime)
+      if (!local_write_dirty && mtime > in->mtime)
 	in->mtime = mtime;
       if (atime > in->atime)
 	in->atime = atime;
