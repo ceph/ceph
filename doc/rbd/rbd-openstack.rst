@@ -346,6 +346,32 @@ Configuring Nova
 In order to boot virtual machines directly from Ceph volumes, you must
 configure the ephemeral backend for Nova.
 
+On every compute node, edit the ``[libvirt]`` section of
+``/etc/nova/nova.conf``::
+
+    [libvirt]
+    images_type = rbd
+    images_rbd_pool = vms
+    images_rbd_ceph_conf = /etc/ceph/ceph.conf
+    rbd_user = cinder
+    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
+    disk_cachemodes = network=writeback
+    hw_disk_discard = unmap
+
+- ``images_type = rbd`` stores guest disks as RBD images instead of as files
+  on the hypervisor.
+- ``images_rbd_pool`` is the pool for guest disks, here the ``vms`` pool
+  created earlier.
+- ``images_rbd_ceph_conf`` is the Ceph configuration file that Nova reads.
+- ``rbd_user`` and ``rbd_secret_uuid`` are the same values that Nova uses to
+  attach Cinder volumes, as described in the previous section.
+- ``disk_cachemodes = network=writeback`` sets the QEMU cache mode for network
+  disks to writeback, which enables the RBD cache. QEMU's cache mode overrides
+  ``rbd_cache`` in the Ceph configuration file. See `QEMU cache options`_.
+- ``hw_disk_discard = unmap`` passes discard (TRIM) requests from guests to
+  Ceph, so that space freed inside a guest is freed in the pool. Discard can
+  cost some performance. See `Discard/TRIM`_.
+
 It is recommended to enable the RBD cache in your Ceph configuration file; this
 is enabled by default. Moreover, enabling the
 client admin socket allows the collection of metrics and can be invaluable
@@ -428,3 +454,5 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
+.. _QEMU cache options: ../qemu-rbd/#qemu-cache-options
+.. _Discard/TRIM: ../qemu-rbd/#enabling-discard-trim
