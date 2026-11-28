@@ -46,6 +46,49 @@
             }
           </ng-template>
         </div>
+        @if (!isRgw) {
+          <!-- Persistent Handles -->
+          <div class="form-item">
+            <cds-checkbox
+              id="persistent_handles"
+              formControlName="persistent_handles"
+              i18n
+              >Persistent Handles
+            </cds-checkbox>
+            <cd-help-text i18n>
+              Allows clients to maintain persistent connections and recover file handles after
+              failover. Persistent-handle state management can impact performance. Individual shares
+              can opt out.
+            </cd-help-text>
+            <cd-help-text i18n>
+              Can only be enabled before the cluster is first deployed. Once deployed, it cannot be
+              re-enabled after being disabled. Disabling does not revoke existing handles.
+            </cd-help-text>
+          </div>
+          @if (smbForm.get('persistent_handles').value) {
+            <!-- Persistent Handles Durability -->
+            <div class="form-item">
+              <cds-select
+                formControlName="persistent_handles_durability"
+                for="persistent_handles_durability"
+                label="Persistent Handles Durability"
+                i18n-label
+                id="persistent_handles_durability"
+                helperText="Full outage maintains on-disk backup to survive full cluster outages (higher overhead). Partial outage keeps state in-memory across surviving nodes without on-disk backup overhead. Only applies when clustering is enabled."
+                i18n-helperText
+              >
+                @for (durability of allDurability; track durability) {
+                  <option [value]="durability">
+                    {{ durabilityLabels[durability] }}
+                  </option>
+                }
+              </cds-select>
+              <cd-help-text i18n>
+                The durability policy can only be changed before the cluster is first deployed.
+              </cd-help-text>
+            </div>
+          }
+        }
         <!-- Client Compatibility -->
         <div class="form-item">
           <cds-checkbox
@@ -555,3 +598,12 @@
     </ng-container>
   </div>
 }
+
+<ng-template #disablePersistentHandlesTpl>
+  <p i18n>
+    Disabling persistent handles does not revoke existing handles or restart the service. Once the
+    cluster has been deployed, persistent handles cannot be re-enabled if no CephFS share requires
+    them.
+  </p>
+  <p i18n>Do you want to continue?</p>
+</ng-template>
