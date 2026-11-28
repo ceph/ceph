@@ -804,7 +804,43 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         return pending_clones_info
 
+    def remove_orphan_clones(self, snapname):
+        """
+        Drop the 'clone snaps' entries of a snapshot whose clone index entry
+        no longer exists.
+
+        The cloner only finds clones through the clone index, so such a clone
+        is never processed or detached, and its entry in .meta would make
+        the snapshot look like it has a pending clone forever. The cloner
+        removes the index entry and the .meta entry together under the volume
+        lock, so with the lock held a missing index entry is a real orphan.
+        """
+        track_ids = self.metadata_mgr.filter_keys('clone snaps', snapname)
+        if not track_ids:
+            return
+
+        try:
+            with open_clone_index(self.fs, self.vol_spec) as index:
+                index_path = index.path
+        except IndexException as e:
+            log.warning(f"failed to open clone index to check snapshot '{snapname}' for orphan clones: {e}")
+            return
+
+        removed = 0
+        for track_id in track_ids:
+            try:
+                self.fs.lstat(os.path.join(index_path, track_id.encode('utf-8')))
+            except cephfs.Error as e:
+                if e.args[0] != errno.ENOENT:
+                    raise VolumeException(-e.args[0], e.args[1])
+                log.info(f"removing orphan clone {track_id} of snapshot '{snapname}'")
+                self.metadata_mgr.remove_option('clone snaps', track_id)
+                removed += 1
+        if removed:
+            self.metadata_mgr.flush()
+
     def remove_snapshot(self, snapname, force=False):
+        self.remove_orphan_clones(snapname)
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
         snappath = self.snapshot_path(snapname)

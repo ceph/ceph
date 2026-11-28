@@ -884,6 +884,11 @@ Use a command of the following form to remove a snapshot of a subvolume:
 Using the ``--force`` flag allows the command to succeed when it would
 otherwise fail (if the snapshot did not exist).
 
+The command fails with ``EAGAIN`` while clones of the snapshot are pending.
+Orphan clones do not block removal. An orphan clone is still recorded against
+the snapshot but is missing from the clone index, so it never runs. The command
+drops the records of orphan clones and removes the snapshot.
+
 .. note:: If the last snapshot within a snapshot retained subvolume is removed, the subvolume is also removed.
 
 Fetching Path of a Snapshot of a Subvolume
