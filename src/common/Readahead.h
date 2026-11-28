@@ -4,7 +4,6 @@
 #ifndef CEPH_READAHEAD_H
 #define CEPH_READAHEAD_H
 
-#include <list>
 #include <vector>
 
 #include "include/Context.h"
@@ -178,7 +177,7 @@ private:
   ceph::mutex m_pending_lock = ceph::make_mutex("Readahead::m_pending_lock");
 
   /// Waiters for pending readahead
-  std::list<Context *> m_pending_waiting;
+  std::vector<Context *> m_pending_waiting;
 
   /// Shared optional counters; not owned
   PerfCounters *m_logger = nullptr;

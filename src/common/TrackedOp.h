@@ -25,7 +25,7 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include <atomic>
-#include <list>
+#include <deque>
 #include <set>
 #include <vector>
 
@@ -43,7 +43,7 @@ typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 class OpHistoryServiceThread : public Thread
 {
 private:
-  std::list<std::pair<utime_t, TrackedOpRef>> _external_queue;
+  std::deque<std::pair<utime_t, TrackedOpRef>> _external_queue;
   OpHistory* _ophistory;
   mutable ceph::spinlock queue_spinlock;
   bool _break_thread;

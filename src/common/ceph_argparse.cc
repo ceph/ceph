@@ -198,8 +198,7 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
 bool parse_ip_port_vec(const char *s, std::vector<entity_addrvec_t>& vec, int type)
 {
   // first split by [ ;], which are not valid for an addrvec
-  std::list<std::string> items;
-  get_str_list(s, " ;", items);
+  auto items = get_str_vec(s, " ;");
 
   for (auto& i : items) {
     const char *s = i.c_str();

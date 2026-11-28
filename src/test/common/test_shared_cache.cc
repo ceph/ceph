@@ -140,6 +140,31 @@ TEST_F(SharedLRU_all, empty) {
   ASSERT_TRUE(cache.empty());
 }
 
+TEST_F(SharedLRU_all, eviction_releases_refs_after_unlock) {
+  SharedLRUTest cache;
+  cache.set_size(1);
+  std::weak_ptr<int> evicted = cache.add(1, new int(10));
+
+  auto retained = cache.add(2, new int(20));
+  EXPECT_TRUE(evicted.expired());
+  EXPECT_EQ(20, *cache.lookup(2));
+}
+
+TEST_F(SharedLRU_all, bulk_shrink_releases_refs_after_unlock) {
+  SharedLRUTest cache;
+  cache.set_size(8);
+  std::vector<std::weak_ptr<int>> evicted;
+  for (unsigned int key = 0; key < 8; ++key) {
+    evicted.emplace_back(cache.add(key, new int(key)));
+  }
+
+  cache.set_size(0);
+  EXPECT_TRUE(cache.empty());
+  for (const auto& ref : evicted) {
+    EXPECT_TRUE(ref.expired());
+  }
+}
+
 TEST_F(SharedLRU_all, lookup) {
   SharedLRUTest cache;
   unsigned int key = 1;
