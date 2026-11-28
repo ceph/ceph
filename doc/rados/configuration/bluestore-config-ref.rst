@@ -192,6 +192,45 @@ When *not* using a mix of fast and slow devices, there is no requirement to
 create separate logical volumes for ``block.db`` or ``block.wal``. BlueStore
 will automatically colocate these devices within the space of ``block``.
 
+Checking DB Usage
+=================
+
+To see how much of an OSD's ``block.db`` device is in use, and whether BlueFS
+has spilled RocksDB data over to the slow ``block`` device, run the following
+command:
+
+.. prompt:: bash #
+
+   ceph tell osd.N bluestore bluefs device info
+
+For each device, the output gives its ``total`` size, its ``free`` space, and
+the space that BlueFS uses on it (``bluefs_used``). On an OSD with a separate
+DB device, BlueFS space in use on the slow device is spillover.
+
+For a breakdown, run ``ceph tell osd.N bluefs stats``. Its table shows how much
+space each kind of BlueFS file (``log``, ``db.wal``, ``db``, and ``db.slow``)
+uses on each device (``WAL``, ``DB``, and ``SLOW``). The ``bluefs`` performance
+counters ``db_total_bytes``, ``db_used_bytes``, and ``slow_used_bytes`` give
+the same totals:
+
+.. prompt:: bash #
+
+   ceph tell osd.N perf dump bluefs
+
+With ``ceph-exporter`` running, Prometheus has these counters for every OSD as
+``ceph_bluefs_db_total_bytes``, ``ceph_bluefs_db_used_bytes``, and
+``ceph_bluefs_slow_used_bytes``, labeled with ``ceph_daemon``. On OSDs with a
+separate DB device, ``ceph_bluefs_slow_used_bytes > 0`` shows the ones that have
+spilled over.
+
+To see the size of each RocksDB level, set ``rocksdb_perf`` and
+``rocksdb_collect_compaction_stats`` to ``true`` for the OSD, run ``ceph tell
+osd.N dump_objectstore_kv_stats``, and then set both back to ``false``.
+
+When an OSD spills over, the cluster raises the ``BLUEFS_SPILLOVER`` health
+check: see :doc:`/rados/operations/health-checks` and
+:doc:`/rados/bluestore/bluefs-spillover-cleaner`.
+
 Automatic Cache Sizing
 ======================
 
