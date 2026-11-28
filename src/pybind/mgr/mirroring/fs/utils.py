@@ -3,11 +3,19 @@ import json
 import logging
 import os
 import threading
+from enum import Enum
 
 import rados
 import cephfs
 
 from .exception import MirrorException
+
+class AuthMode(Enum):
+    """How a peer authenticates to the remote cluster: legacy uses one key
+    with 'rwps' on '/'; per_share uses a super-key that fetches per-share
+    keys."""
+    legacy = 'legacy'
+    per_share = 'per_share'
 
 MIRROR_OBJECT_PREFIX = 'cephfs_mirror'
 MIRROR_OBJECT_NAME = MIRROR_OBJECT_PREFIX
@@ -15,6 +23,13 @@ MIRROR_OBJECT_NAME = MIRROR_OBJECT_PREFIX
 INSTANCE_ID_PREFIX = "instance_"
 DIRECTORY_MAP_PREFIX = "dir_map_"
 SYNC_STAT_KEY_PREFIX = "sync_stat"
+PEER_KEY_PREFIX = "peer_"
+SHARE_KEY_PREFIX = "share_"
+
+# advertised in a mirror daemon's heartbeat reply when it understands version
+# 2 acquire messages: it routes each directory to the peer named in the
+# message and syncs the snapshot directories the message lists
+PER_SHARE_FEATURE = "per_share"
 
 log = logging.getLogger(__name__)
 
