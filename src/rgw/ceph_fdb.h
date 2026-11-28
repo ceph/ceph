@@ -35,23 +35,15 @@ namespace ceph::buffer {
 
 auto serialize(auto& archive, ceph::buffer::list& target)
 {
- // This should be revisited after the library is separated from the larger
- // surrounding project-- essentially, we can't write directly /into/ the buffer::list
- // that I know of; yet, it would obviously be great to eliminate the copy
- // here. I believe that somewhere in zpp::bits there's probably a way to get the
- // archive to call a custom function-- but it is not clear to me at this time and
- // I need to move on for now, unfortunately:
- std::vector<std::uint8_t> out;
+ // Decode a transient view, then copy the bytes once into their durable Ceph
+ // owner:
+ std::span<const std::uint8_t> bytes;
+ auto result = archive(bytes);
 
- auto r = archive(out);
-
- // JFW: this is really annoying, but again buffer::list is not something I find
- // easy to wrangle-- I'm not sure there's a straightforward way to just assign
- // a new value... so if you know what that is, please improve this:
  target.clear();
- target.append(out);
+ target.append(reinterpret_cast<const char *>(bytes.data()), std::size(bytes));
 
- return r;
+ return result;
 }
 
 auto serialize(auto& archive, const ceph::buffer::list& src)

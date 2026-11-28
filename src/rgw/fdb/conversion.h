@@ -37,21 +37,29 @@
  * outputs, translates errors, and leaves a clean extension point for future
  * caller-owned memory or a different serializer. */
 
-namespace ceph::libfdb::to {
+namespace ceph::libfdb::detail {
 
-inline auto convert(const auto& from,
-                    std::vector<std::uint8_t>& out_data)
- -> std::span<const std::uint8_t>
+inline auto convert_to_buffer(const auto& from, auto& out_data,
+                              auto ...options) -> std::span<const std::uint8_t>
 {
  out_data.clear();
 
- zpp::bits::out out(out_data);
+ zpp::bits::out out(out_data, options...);
  if (const auto status = out(from); zpp::bits::failure(status)) {
   throw libfdb_exception(std::make_error_code(static_cast<std::errc>(status)),
                          "unable to encode value");
  }
 
  return out_data;
+}
+
+} // namespace ceph::libfdb::detail
+
+namespace ceph::libfdb::to {
+
+inline auto convert(const auto& from, std::vector<std::uint8_t>& out_data) -> std::span<const std::uint8_t>
+{
+ return detail::convert_to_buffer(from, out_data);
 }
 
 inline auto convert(const auto& from) -> std::vector<std::uint8_t>
@@ -102,7 +110,7 @@ inline void convert(const std::span<const std::uint8_t>& in,
 {
  const auto input = ::ceph::libfdb::detail::as_string_view(in);
 
- std::invoke(write_output_fn, input.data(), input.size());
+ std::invoke(write_output_fn, std::data(input), std::size(input));
 }
 
 } // namespace ceph::libfdb::from

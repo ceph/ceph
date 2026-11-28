@@ -574,12 +574,26 @@ target_link_libraries(unittest_yield_completion
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_FDB)
- list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ list(APPEND rgw_incs "${zpp_bits_SOURCE_DIR}")
  add_catch2_test_rgw(rgw_hex)
  add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_query)
+ add_catch2_test_rgw(fdb_query_algebra)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_content)
+
+ if(LIBFDB_EXPERIMENTAL_CONCURRENCY STREQUAL "NVIDIA_STDEXEC")
+  add_catch2_test_rgw(fdb_execution NO_CATCH2_MAIN)
+  target_link_libraries(unittest_fdb_execution rgw_fdb_execution)
+ elseif(LIBFDB_EXPERIMENTAL_CONCURRENCY STREQUAL "ASIO")
+  add_catch2_test_rgw(fdb_asio NO_CATCH2_MAIN)
+  target_link_libraries(unittest_fdb_asio rgw_fdb_execution)
+ endif()
+
+ if(TARGET rgw_fdb_execution)
+  add_executable(bench_fdb_concurrency EXCLUDE_FROM_ALL bench_fdb_concurrency.cc)
+  target_link_libraries(bench_fdb_concurrency rgw_fdb_execution)
+ endif()
 endif()
 
 if(WITH_RADOSGW_LANCEDB)

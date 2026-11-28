@@ -191,6 +191,22 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    CHECK(direct == via_serialize);
  }
 
+ SECTION("truncated buffer::list encoding is rejected")
+ {
+   ceph::buffer::list source;
+   source.append("truncated");
+
+   auto encoded = ceph::libfdb::to::convert(source);
+   encoded.pop_back();
+
+   ceph::buffer::list output;
+   output.append("old value");
+
+   CHECK_THROWS_AS(ceph::libfdb::from::convert(encoded, output),
+                   std::system_error);
+   CHECK(0 == output.length());
+ }
+
  SECTION("empty buffer::list round trip through public set/get")
  {
    ceph::buffer::list in;
@@ -259,7 +275,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  SECTION("buffer::ptr")
  {
     string_view in("Hello, World!");
-    ceph::buffer::ptr p(ceph::buffer::copy(in.data(), in.size()));
+    ceph::buffer::ptr p(ceph::buffer::copy(std::data(in), std::size(in)));
 
     CHECK(in == string_view(p.c_str(), p.length()));
 
@@ -756,7 +772,7 @@ BENCHMARK_ADVANCED("write simple records-- one transaction per block")(Catch::Be
    std::for_each(std::begin(block), std::end(block), [&txn](const auto& kv) mutable {
      lfdb::set(txn, kv.first, kv.second);
    });
-   lfdb::commit(txn);
+   lfdb::commit(txn).value();
   }
  });
 };
@@ -787,7 +803,7 @@ BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")
                     lfdb::set(txn, kv.first, kv.second);
                   });
 
-                  lfdb::commit(txn);
+                  lfdb::commit(txn).value();
                 });
  });
 };
