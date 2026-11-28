@@ -1533,6 +1533,109 @@ def test_failover_failback():
             log.info('restoring original master zone=%s', orig.name)
             set_master_zone(orig, ['--yes-i-really-mean-it'])
 
+def mdlog_shard_of(section, key, num_shards):
+    """ the mdlog shard of a metadata entry, as rgw_shard_name() computes it """
+    h = 0
+    for c in ('%s:%s' % (section, key)).encode():
+        h = ((h + (c << 4) + (c >> 4)) * 11) & 0xffffffff
+    return h % num_shards
+
+def test_multi_period_incremental_sync_backlog():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 3:
+        raise SkipTest("test_multi_period_incremental_sync_backlog skipped. Requires 3 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    z1, z2, z3 = zonegroup.zones[0:3]
+    assert(z1 == zonegroup.master_zone)
+    if z2.is_read_only() or not z3.has_buckets():
+        raise SkipTest("test_multi_period_incremental_sync_backlog skipped. Requires zone 2 writable and zone 3 with buckets.")
+
+    # stop zone 3 so it has to catch up on the next period after it ends
+    z3.stop()
+
+    # change master to zone 2 -> period 2
+    set_master_zone(z2)
+
+    # create more buckets than metadata sync reads in one batch (100 entries),
+    # all with their mdlog entry in the same shard
+    num_shards = len(meta_master_log_status(z2))
+    tenant = get_tenant()
+    shard = None
+    buckets = []
+    z2_conn = zonegroup_conns.zones[zonegroup.zones.index(z2)]
+    while len(buckets) < 150:
+        bucket_name = gen_bucket_name()
+        s = mdlog_shard_of('bucket', tenant + '/' + bucket_name if tenant else bucket_name, num_shards)
+        if shard is None:
+            shard = s
+        elif s != shard:
+            continue
+        z2_conn.s3_client.create_bucket(Bucket=bucket_name)
+        buckets.append(bucket_name)
+    log.info('created %d buckets in mdlog shard %d of %d on zone=%s',
+             len(buckets), shard, num_shards, z2.name)
+
+    zone_meta_checkpoint(z1)
+
+    # change master back to zone 1 -> period 3
+    set_master_zone(z1)
+
+    # restart zone 3 and wait for it to sync period 2
+    z3.start()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    z3_conn = zonegroup_conns.zones[zonegroup.zones.index(z3)]
+    assert check_all_buckets_exist(z3_conn, buckets)
+
+def test_multi_period_incremental_sync_trimmed():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_multi_period_incremental_sync_trimmed skipped. Requires 2 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    z1, z2 = zonegroup.zones[0:2]
+    assert(z1 == zonegroup.master_zone)
+    if z2.is_read_only() or not z2.has_buckets():
+        raise SkipTest("test_multi_period_incremental_sync_trimmed skipped. Requires zone 2 writable with buckets.")
+    z1_conn = zonegroup_conns.zones[zonegroup.zones.index(z1)]
+    z2_conn = zonegroup_conns.zones[zonegroup.zones.index(z2)]
+
+    # change master to zone 2 -> period 2. zone 2 doesn't run metadata sync while it's
+    # the master, so its sync position stays in period 1
+    set_master_zone(z2)
+    period2 = realm.current_period.id
+
+    buckets = []
+    for _ in range(3):
+        bucket_name = gen_bucket_name()
+        z2_conn.s3_client.create_bucket(Bucket=bucket_name)
+        buckets.append(bucket_name)
+
+    # the other zones sync period 2, then every zone trims it
+    zonegroup_meta_checkpoint(zonegroup)
+    mdlog_autotrim(z2)
+    for zone in zonegroup.zones:
+        if zone != z2:
+            mdlog_autotrim(zone)
+    for zone in zonegroup.zones:
+        assert len(mdlog_list(zone, period2)) == 0
+
+    # change master back to zone 1 -> period 3. zone 2 now has to sync period 2 from a
+    # log whose entries are gone
+    set_master_zone(z1)
+
+    bucket_name = gen_bucket_name()
+    z1_conn.s3_client.create_bucket(Bucket=bucket_name)
+    buckets.append(bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    assert check_all_buckets_exist(z2_conn, buckets)
+
 def test_datalog_autotrim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
