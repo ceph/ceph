@@ -21,7 +21,7 @@ void MockPeeringListener::request_local_background_io_reservation(
   PGPeeringEventURef on_preempt) {
   // Check inject_event_stall first: a grant delivered across a later interval
   // change would hit a PeeringState in Reset and abort.
-  if (inject_event_stall) {
+  if (inject_event_stall || inject_local_reservation_stall) {
     stalled_events.push_back(std::move(on_grant));
   } else if (event_loop) {
     PGPeeringEventRef evt_ref = std::move(on_grant);
