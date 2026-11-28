@@ -1143,6 +1143,38 @@ NFS_CORE_PARAM {
         assert len(exports) == 2
         assert exports[0].export_id == 1
 
+    def test_remove_obj_updates_config_before_removing_object(self) -> None:
+        self._do_mock_test(
+            self._do_test_remove_obj_updates_config_before_removing_object)
+
+    def _do_test_remove_obj_updates_config_before_removing_object(self) -> None:
+        """
+        The %url reference must be dropped from conf-nfs.<cluster> before the
+        export object is deleted, so that an interruption between the two
+        RADOS operations never leaves a dangling %url in the config object.
+        """
+        from nfs.rados_utils import NFSRados
+
+        conf_obj = f'conf-nfs.{self.cluster_id}'
+        url = f'rados://{NFS_POOL_NAME}/{self.cluster_id}/export-1'
+        store = self.temp_store[self.cluster_id]
+        assert url in store[conf_obj].raw
+
+        def remove_mock(key: str) -> None:
+            assert url not in store[conf_obj].raw, \
+                'export object removed while config still references it'
+            self._ioctx_remove_mock(key)
+
+        self.io_mock.remove_object.side_effect = remove_mock
+
+        nfs_mod = Module('nfs', '', '')
+        NFSRados(nfs_mod.rados, self.cluster_id).remove_obj('export-1', conf_obj)
+
+        self.io_mock.remove_object.assert_called_once_with('export-1')
+        assert 'export-1' not in store
+        assert url not in store[conf_obj].raw
+        assert f'rados://{NFS_POOL_NAME}/{self.cluster_id}/export-2' in store[conf_obj].raw
+
     def test_create_export_rgw_bucket(self):
         self._do_mock_test(self._do_test_create_export_rgw_bucket)
 
