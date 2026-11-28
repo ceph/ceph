@@ -9510,6 +9510,17 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
   const auto& req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << dendl;
 
+  // a real forward happens while traversing the paths, before they are locked.
+  // A request from an mds is dropped, not sent on, so the target rank is only
+  // logged.
+  if (req->get_source().is_mds() &&
+      !(mdr->locking_state & MutationImpl::PATH_LOCKED) &&
+      g_conf().get_val<bool>("mds_inject_rename_forward")) {
+    dout(5) << " injecting a forward of a rename from mds" << dendl;
+    mdcache->request_forward(mdr, req->get_source().num());
+    return;
+  }
+
   filepath destpath = req->get_filepath();
   filepath srcpath = req->get_filepath2();
   if (srcpath.is_last_dot_or_dotdot() || destpath.is_last_dot_or_dotdot()) {

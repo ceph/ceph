@@ -1605,6 +1605,18 @@ options:
   default: 0
   services:
   - mds
+- name: mds_inject_rename_forward
+  type: bool
+  level: dev
+  desc: forward stray renames sent by an MDS instead of handling them
+  long_desc: Testing only. A rename that an MDS sends to reintegrate or migrate
+    a stray, including one this MDS sends to itself, is forwarded as if this MDS
+    were not auth for the destination, so the sender gets -EAGAIN.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_request_load_average_decay_rate
   type: float
   level: advanced
