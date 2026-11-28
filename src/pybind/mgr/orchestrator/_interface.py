@@ -543,6 +543,12 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def show_operations(self,
+                        show_all: bool = False,
+                        limit: Optional[int] = None) -> OrchResult[List[Dict[str, Any]]]:
+        """List active (and optionally recent) orchestrator operations."""
+        raise NotImplementedError()
+
     def cert_store_cert_ls(self,
                            filter_by: str = '',
                            show_details: bool = False,

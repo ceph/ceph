@@ -1191,6 +1191,19 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 result_str += f'{indent}{k}: {v}\n'
         return result_str
 
+    @OrchestratorCLICommand.Read('orch operations')
+    def _orch_operations(self,
+                         show_all: bool = False,
+                         limit: Optional[int] = None,
+                         format: Format = Format.plain) -> HandleCommandResult:
+        """Show active and recent cephadm operations"""
+        completion = self.show_operations(show_all, limit)
+        ops = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(ops, format, many=True, cls=None))
+        from cephadm.operations import OperationsRegistry
+        return HandleCommandResult(stdout=OperationsRegistry.format_operations(ops))
+
     @OrchestratorCLICommand.Read('orch certmgr reload')
     def _cert_store_reload(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_reload()

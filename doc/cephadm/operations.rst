@@ -42,6 +42,28 @@ the Monitor container's stderr. If you enable logging to files (see
 
 .. _cephadm-daemon-control:
 
+Listing Cephadm Operations
+==========================
+
+``ceph progress`` may show an in-progress cephadm deployment event (and
+``ceph -s`` can surface that progress), but it does not list independent or
+queued operations. ``ceph orch operations`` lists those operations and their
+progress (for example concurrent mon and mgr placement changes).
+
+.. prompt:: bash #
+
+  ceph orch operations
+  ceph orch operations --show-all
+  ceph orch operations --format json
+
+Currently this tracks:
+
+* ``placement:update`` — daemon add/remove while applying a service spec
+* ``service:remove`` — removing orphan daemons after ``ceph orch rm``
+
+
+.. _cephadm-daemon-control:
+
 Ceph Daemon Control
 ===================
 

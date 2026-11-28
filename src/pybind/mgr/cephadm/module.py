@@ -17,6 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
+from cephadm.operations import OperationsRegistry
 from .utils import get_default_ssh_config
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 from ceph.deployment.tls_utils import (
@@ -829,6 +830,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self._init_cert_mgr()
 
         self.migration = Migrations(self)
+        self.ops = OperationsRegistry(self)
 
         self.mgr_service: MgrService = cast(MgrService, service_registry.get_service('mgr'))
         self.osd_service: OSDService = cast(OSDService, service_registry.get_service('osd'))
@@ -3220,6 +3222,15 @@ Then run the following:
                         dd.ports = sorted(set(dd.ports or []) | rgw_ports)
                 result.append(dd)
         return result
+
+    @handle_orch_error
+    def show_operations(
+        self,
+        show_all: bool = False,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return active (and optionally recent) cephadm operations."""
+        return self.ops.list_operations(show_all=show_all, limit=limit)
 
     def _unmanaged_noop_note(self, service_name: str) -> Optional[str]:
         """Warn when an orch action is scheduled but deferred by unmanaged.
