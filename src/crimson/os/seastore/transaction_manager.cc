@@ -2105,6 +2105,8 @@ TransactionManager::clone_ret TransactionManager::clone_range(
   bool updateref)
 {
   LOG_PREFIX(TransactionManager::clone_range);
+  auto phase_lat = t.record_phase_latency(
+    phase_latency_bucket_t::mapping_management);
   co_await pos.co_refresh();
   mapping = co_await mapping.refresh();
   SUBDEBUGT(seastore_tm,
@@ -2160,6 +2162,8 @@ TransactionManager::punch_mappings_ret TransactionManager::remove_mappings_in_ra
   remove_mappings_param_t params)
 {
   LOG_PREFIX(TransactionManager::remove_mappings_in_range);
+  auto phase_lat = t.record_phase_latency(
+    phase_latency_bucket_t::mapping_management);
   auto mapping = co_await first_mapping.refresh();
   SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
     t, start, unaligned_len, mapping);
