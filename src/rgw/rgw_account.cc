@@ -20,6 +20,7 @@
 
 #include "common/random_string.h"
 #include "common/utf8.h"
+#include "include/scope_guard.h"
 
 #include "rgw_arn.h"
 #include "rgw_oidc_provider.h"
@@ -595,6 +596,109 @@ int stats(const DoutPrefixProvider* dpp,
   encode_json("last_synced", last_synced, f);
   encode_json("last_updated", last_updated, f);
   f->close_section(); // AccountStats
+  flusher.flush();
+
+  return 0;
+}
+
+// dump an account's info and storage stats as a single object. returns
+// -ENOENT if the account doesn't exist
+static int dump_info_and_stats(const DoutPrefixProvider* dpp,
+                               rgw::sal::Driver* driver,
+                               std::string_view account_id,
+                               ceph::Formatter* f, optional_yield y)
+{
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs; // ignored
+  RGWObjVersionTracker objv; // ignored
+  int ret = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWStorageStats stats;
+  ceph::real_time last_synced;
+  ceph::real_time last_updated;
+  ret = driver->load_stats(dpp, y, rgw_account_id{info.id}, stats,
+                           last_synced, last_updated);
+  if (ret < 0) {
+    return ret;
+  }
+
+  f->open_object_section("account");
+  encode_json("info", info, f);
+  encode_json("stats", stats, f);
+  encode_json("last_synced", last_synced, f);
+  encode_json("last_updated", last_updated, f);
+  f->close_section(); // account
+  return 0;
+}
+
+int list_stats(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+               const std::string& marker, bool max_entries_specified,
+               int max_entries, std::string& err_msg,
+               RGWFormatterFlusher& flusher, optional_yield y)
+{
+  void* handle = nullptr;
+  int ret = driver->meta_list_keys_init(dpp, "account", marker, &handle);
+  if (ret < 0) {
+    err_msg = "failed to list accounts";
+    return ret;
+  }
+  auto complete = make_scope_guard([driver, handle] {
+    driver->meta_list_keys_complete(handle);
+  });
+
+  Formatter* formatter = flusher.get_formatter();
+  flusher.start(0);
+
+  if (max_entries_specified) {
+    formatter->open_object_section("result");
+  }
+  formatter->open_array_section("accounts");
+
+  constexpr int max_chunk = 1000;
+  bool truncated = false;
+  int listed = 0; // keys read, for pagination
+  int count = 0; // accounts dumped
+  int left = 0;
+  do {
+    std::list<std::string> keys;
+    left = max_entries_specified ? max_entries - listed : max_chunk;
+    ret = driver->meta_list_keys_next(dpp, handle, left, keys, &truncated);
+    if (ret == -ENOENT) {
+      truncated = false;
+      break;
+    } else if (ret < 0) {
+      err_msg = "failed to list accounts";
+      return ret;
+    }
+
+    for (const auto& account_id : keys) {
+      ret = dump_info_and_stats(dpp, driver, account_id, formatter, y);
+      if (ret == -ENOENT) {
+        // account was removed since it was listed
+      } else if (ret < 0) {
+        err_msg = fmt::format("failed to read account {}", account_id);
+        return ret;
+      } else {
+        ++count;
+      }
+      ++listed;
+    }
+    flusher.flush();
+  } while (truncated && left > 0);
+
+  formatter->close_section(); // accounts
+
+  if (max_entries_specified) {
+    encode_json("truncated", truncated, formatter);
+    encode_json("count", count, formatter);
+    if (truncated) {
+      encode_json("marker", driver->meta_get_marker(handle), formatter);
+    }
+    formatter->close_section(); // result
+  }
   flusher.flush();
 
   return 0;
