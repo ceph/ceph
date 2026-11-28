@@ -50,6 +50,9 @@ private:
 
   std::string m_command_perms;
   const MgrSession* m_session = nullptr;
+
+  // Log the pending Python exception and mark the module failed.
+  void fail_on_pyerror(const char *what);
 public:
   Finisher finisher; // per active module finisher to execute commands
 

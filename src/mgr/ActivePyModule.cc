@@ -55,6 +55,16 @@ int ActivePyModule::load(ActivePyModules *py_modules)
   return 0;
 }
 
+void ActivePyModule::fail_on_pyerror(const char *what)
+{
+  // Read the message first: handle_pyerror() clears the exception.
+  std::string exc_msg = peek_pyerror();
+  derr << get_name() << "." << what << ":" << dendl;
+  derr << handle_pyerror(true, get_name(),
+                         std::string("ActivePyModule::") + what) << dendl;
+  py_module->fail(exc_msg);
+}
+
 void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
   if (is_dead()) {
@@ -80,12 +90,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
       py_module->perfcounter->inc(py_module->l_pym_notify_avg_usec, usec);
     }
   } else {
-    derr << get_name() << ".notify:" << dendl;
-    derr << handle_pyerror(true, get_name(), "ActivePyModule::notify") << dendl;
-    // FIXME: callers can't be expected to handle a python module
-    // that has spontaneously broken, but Mgr() should provide
-    // a hook to unload misbehaving modules when they have an
-    // error somewhere like this
+    fail_on_pyerror("notify");
   }
 }
 
@@ -119,12 +124,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
       py_module->perfcounter->inc(py_module->l_pym_notify_avg_usec, usec);
     }
   } else {
-    derr << get_name() << ".notify_clog:" << dendl;
-    derr << handle_pyerror(true, get_name(), "ActivePyModule::notify_clog") << dendl;
-    // FIXME: callers can't be expected to handle a python module
-    // that has spontaneously broken, but Mgr() should provide
-    // a hook to unload misbehaving modules when they have an
-    // error somewhere like this
+    fail_on_pyerror("notify_clog");
   }
 }
 
@@ -249,6 +249,8 @@ void ActivePyModule::config_notify()
 					  (char*)NULL);
   if (remoteResult != nullptr) {
     Py_DECREF(remoteResult);
+  } else {
+    fail_on_pyerror("config_notify");
   }
 }
 

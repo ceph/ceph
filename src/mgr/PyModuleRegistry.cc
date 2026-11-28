@@ -216,6 +216,28 @@ void PyModuleRegistry::active_start(
             Objecter &objecter_, Finisher &f,
             DaemonServer &server)
 {
+  // Shut standby modules down without holding our lock: send_beacon()
+  // takes it via get_modules(), and a slow module shutdown() must not
+  // stall beacons past mon_mgr_beacon_grace.
+  std::unique_ptr<StandbyPyModules> standby;
+  {
+    std::lock_guard l(lock);
+    standby = std::move(standby_modules);
+  }
+  if (standby) {
+    const auto abandoned = standby->shutdown();
+    if (!abandoned.empty()) {
+      std::lock_guard l(lock);
+      for (const auto& name : abandoned) {
+        abandoned_standby_modules[name] =
+          "standby shutdown() timed out, its thread was abandoned";
+      }
+      // The abandoned module code still references it: leak on purpose.
+      (void)standby.release();
+    }
+    standby.reset();
+  }
+
   std::lock_guard locker(lock);
 
   dout(4) << "Starting modules in active mode" << dendl;
@@ -225,11 +247,6 @@ void PyModuleRegistry::active_start(
   // Must have seen a MgrMap by this point, in order to know
   // which modules should be enabled
   ceph_assert(mgr_map.epoch > 0);
-
-  if (standby_modules != nullptr) {
-    standby_modules->shutdown();
-    standby_modules.reset();
-  }
 
   active_modules.reset(
     new ActivePyModules(
@@ -484,6 +501,22 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
 	std::ostringstream ss;
         ss << "Module '" << i.first << "' has failed: " << i.second;
 	d.detail.push_back(ss.str());
+      }
+    }
+
+    if (!abandoned_standby_modules.empty()) {
+      std::ostringstream ss;
+      if (abandoned_standby_modules.size() == 1) {
+        auto iter = abandoned_standby_modules.begin();
+        ss << "Module '" << iter->first << "' " << iter->second;
+      } else {
+        ss << abandoned_standby_modules.size()
+           << " mgr modules have abandoned standby threads";
+      }
+      auto& d = checks->add("MGR_MODULE_SHUTDOWN_TIMEOUT", HEALTH_WARN,
+                            ss.str(), abandoned_standby_modules.size());
+      for (const auto& [name, reason] : abandoned_standby_modules) {
+        d.detail.push_back("Module '" + name + "' " + reason);
       }
     }
   }

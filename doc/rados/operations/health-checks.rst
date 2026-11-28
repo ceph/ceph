@@ -712,6 +712,18 @@ If the modules are still failing to initialize, please file a bug
 report under the `"mgr" project <https://tracker.ceph.com/projects/mgr>`_
 for further assistance.
 
+MGR_MODULE_SHUTDOWN_TIMEOUT
+___________________________
+
+When a standby Manager was promoted to active, a module's standby
+``shutdown()`` did not finish within :confval:`mgr_module_shutdown_timeout`.
+The promotion went ahead and the module runs normally in active mode, but
+its standby thread was abandoned and may still be running.
+
+This indicates a bug in the module: please open a Ceph bug report. To clear
+the warning, restart the active Manager daemon, for example with
+``ceph mgr fail``.
+
 OSDs
 ----
 
