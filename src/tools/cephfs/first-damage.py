@@ -160,7 +160,7 @@ if __name__ == '__main__':
         # V=$(dd if="$SNAPTABLE" bs=1 count=1 skip=8 | od --endian=little -An -t u1)
         V = struct.unpack('<b', data[8:9])[0]
         log.debug("version is %d", V)
-        if V != 5:
+        if V not in (5, 6):
             raise RuntimeError("incompatible snaptable")
         # skip version,struct_v,compat_v,length
         # NEXT_SNAP=$((1 + $(dd if="$SNAPTABLE" bs=1 count=8 skip=14 | od --endian=little -An -t u8)))
