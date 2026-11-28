@@ -278,6 +278,9 @@ public:
 
   std::string_view get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
+  bool has_filepath2() const {
+    return std::holds_alternative<filepath>(arg2);
+  }
   const filepath& get_filepath2() const {
     return std::get<filepath>(arg2);
   }

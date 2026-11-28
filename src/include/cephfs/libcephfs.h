@@ -1415,6 +1415,36 @@ int ceph_truncate(struct ceph_mount_info *cmount, const char *path, int64_t size
  */
 int ceph_mknod(struct ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev);
 /**
+ * Create several regular files in one directory with a single request to the
+ * MDS (prototype).  Either all of the files are created or none is.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param dirpath the path of the directory to create the files in.
+ * @param names the names of the files, without any path.
+ * @param n the number of names, at most 1024.
+ * @param mode the permissions of the files.  Only regular files (S_IFREG, or
+ *        no type at all) can be created this way.
+ * @returns 0 on success or negative error code on failure: -EEXIST if any of
+ *        the names exists, -EINVAL if a name is given twice or n is too large.
+ */
+int ceph_mknod_batch(struct ceph_mount_info *cmount, const char *dirpath,
+		     const char **names, int n, mode_t mode);
+/**
+ * Unlink several files of one directory with a single request to the MDS
+ * (prototype).  Either all of the files are unlinked or none is.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param dirpath the path of the directory that holds the files.
+ * @param names the names of the files, without any path.
+ * @param n the number of names, at most 1024.
+ * @returns 0 on success or negative error code on failure: -ENOENT if any of
+ *        the names does not exist, -EISDIR if one is a directory, -EINVAL if
+ *        a name is given twice or n is too large, -EOPNOTSUPP for a file
+ *        this call cannot unlink (one with other hard links, for example).
+ */
+int ceph_unlink_batch(struct ceph_mount_info *cmount, const char *dirpath,
+		      const char **names, int n);
+/**
  * Create and/or open a file.
  *
  * @param cmount the ceph mount handle to use for performing the open.

@@ -33,6 +33,10 @@ class InoTable : public MDSTable {
 
   void project_alloc_ids(interval_set<inodeno_t>& inos, int want);
   void apply_alloc_ids(interval_set<inodeno_t>& inos);
+  // project_alloc_ids() takes the lowest of these
+  const interval_set<inodeno_t>& get_projected_free() const {
+    return projected_free;
+  }
 
   void project_release_ids(const interval_set<inodeno_t>& inos);
   void apply_release_ids(const interval_set<inodeno_t>& inos);

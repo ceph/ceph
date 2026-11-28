@@ -2672,7 +2672,11 @@ void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
     encode_inode_release(req->other_inode(), req,
 			 mds, req->other_inode_drop,
 			 req->other_inode_unless);
-  
+  if (req->batch_inode_drop) {
+    for (auto& in : req->batch_inodes)
+      encode_inode_release(in.get(), req, mds, req->batch_inode_drop, 0);
+  }
+
   if (req->dentry_drop && req->dentry())
     encode_dentry_release(req->dentry(), req,
 			  mds, req->dentry_drop,
@@ -3254,7 +3258,8 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
 bool Client::is_dir_operation(MetaRequest *req)
 {
   int op = req->get_op();
-  if (op == CEPH_MDS_OP_MKNOD || op == CEPH_MDS_OP_LINK ||
+  if (op == CEPH_MDS_OP_MKNOD || op == CEPH_MDS_OP_MKNOD_BATCH ||
+      op == CEPH_MDS_OP_LINK ||
       op == CEPH_MDS_OP_UNLINK || op == CEPH_MDS_OP_RENAME ||
       op == CEPH_MDS_OP_MKDIR || op == CEPH_MDS_OP_RMDIR ||
       op == CEPH_MDS_OP_SYMLINK || op == CEPH_MDS_OP_CREATE)
@@ -16497,6 +16502,211 @@ int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& per
   int r = _readlink(in, "", buf, buflen, perms);
   ldout(cct, 3) << "ll_readlink " << vino << " = " << r << dendl;
   return r;
+}
+
+/*
+ * Prototype: create several regular files in one directory with a single
+ * CEPH_MDS_OP_MKNOD_BATCH request.  All of them are created or none is.  The
+ * reply carries no trace, so nothing is added to the cache: the directory
+ * stops being complete and the new names are looked up when first used.
+ */
+int Client::mknod_batch(const char *dirpath, const std::vector<std::string>& names,
+			mode_t mode, const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  if (names.empty())
+    return -EINVAL;
+  if ((mode & S_IFMT) == 0)
+    mode |= S_IFREG;
+  if (!S_ISREG(mode))
+    return -EINVAL;
+  for (const auto& name : names) {
+    if (name.empty() || name == "." || name == ".." ||
+	name.find('/') != std::string::npos)
+      return -EINVAL;
+    if (name.length() > NAME_MAX)
+      return -ENAMETOOLONG;
+  }
+
+  std::scoped_lock lock(client_lock);
+
+  InodeRef diri;
+  if (int rc = path_walk(cwd, filepath(dirpath), &diri, perms, {}); rc < 0)
+    return rc;
+  if (!diri->is_dir())
+    return -ENOTDIR;
+  if (diri->snapid != CEPH_NOSNAP)
+    return -EROFS;
+  if (diri->is_fscrypt_enabled())
+    return -EOPNOTSUPP;
+  if (should_check_perms()) {
+    int r = may_create(diri, perms);
+    if (r < 0)
+      return r;
+  }
+  if (is_quota_files_exceeded(diri.get(), perms))
+    return -EDQUOT;
+
+  ldout(cct, 8) << __func__ << "(" << diri->ino << " " << names.size()
+		<< " names, first " << names.front() << ", 0" << oct << mode
+		<< dec << ")" << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD_BATCH);
+  req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
+
+  filepath path;
+  diri->make_nosnap_relative_path(path);
+  path.push_dentry(names.front());
+  req->set_filepath(path);
+
+  filepath more;
+  for (size_t i = 1; i < names.size(); i++)
+    more.push_dentry(names[i]);
+  req->set_filepath2(more);
+
+  req->set_inode(diri);
+  req->head.args.mknod.mode = mode;
+  req->head.args.mknod.rdev = 0;
+  // as a create does through its dentry: give back Fs on the directory
+  // unless we hold Fx, so the mds need not revoke it to change the dir
+  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_unless = CEPH_CAP_FILE_EXCL;
+
+  int res = make_request(req, perms);
+
+  if (res == 0) {
+    // We were told nothing about the new files.  Make sure nothing cached
+    // says they do not exist.
+    clear_dir_complete_and_ordered(diri.get(), true);
+    if (diri->dir) {
+      for (const auto& name : names) {
+	auto it = diri->dir->dentries.find(name);
+	if (it != diri->dir->dentries.end() && !it->second->inode) {
+	  it->second->lease_mds = -1;
+	  it->second->cap_shared_gen = diri->shared_gen - 1;
+	}
+      }
+    }
+  }
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << path << " + " << more.depth()
+		<< ") = " << res << dendl;
+  return res;
+}
+
+/*
+ * Unlink several files of one directory with one CEPH_MDS_OP_UNLINK_BATCH
+ * request.  All of them are unlinked or none is.  The reply carries no trace,
+ * so the dentries we have cached for the names are unlinked here.
+ */
+int Client::unlink_batch(const char *dirpath, const std::vector<std::string>& names,
+			 const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  if (names.empty())
+    return -EINVAL;
+  for (const auto& name : names) {
+    if (name.empty() || name == "." || name == ".." ||
+	name.find('/') != std::string::npos)
+      return -EINVAL;
+    if (name.length() > NAME_MAX)
+      return -ENAMETOOLONG;
+  }
+
+  std::scoped_lock lock(client_lock);
+
+  InodeRef diri;
+  if (int rc = path_walk(cwd, filepath(dirpath), &diri, perms, {}); rc < 0)
+    return rc;
+  if (!diri->is_dir())
+    return -ENOTDIR;
+  if (diri->snapid != CEPH_NOSNAP)
+    return -EROFS;
+  if (diri->is_fscrypt_enabled())
+    return -EOPNOTSUPP;
+  if (should_check_perms()) {
+    int r = _getattr_for_perm(diri, perms);
+    if (r < 0)
+      return r;
+    r = inode_permission(diri, perms, CLIENT_MAY_EXEC | CLIENT_MAY_WRITE);
+    if (r < 0)
+      return r;
+    // the sticky bit asks for a check of each file's owner
+    if (perms.uid() != 0 && (diri->mode & S_ISVTX) && diri->uid != perms.uid())
+      return -EOPNOTSUPP;
+  }
+
+  ldout(cct, 8) << __func__ << "(" << diri->ino << " " << names.size()
+		<< " names, first " << names.front() << ")" << dendl;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK_BATCH);
+
+  filepath path;
+  diri->make_nosnap_relative_path(path);
+  path.push_dentry(names.front());
+  req->set_filepath(path);
+
+  filepath more;
+  for (size_t i = 1; i < names.size(); i++)
+    more.push_dentry(names[i]);
+  if (more.depth())
+    req->set_filepath2(more);
+
+  req->set_inode(diri);
+  // as an unlink does through its dentry: give back Fs on the directory
+  // unless we hold Fx
+  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_unless = CEPH_CAP_FILE_EXCL;
+
+  // as an unlink does for its one file: give back the link caps of the
+  // files we know with the request, so that the mds need not revoke them
+  if (diri->dir) {
+    for (const auto& name : names) {
+      auto it = diri->dir->dentries.find(name);
+      if (it != diri->dir->dentries.end() && it->second->inode) {
+	it->second->inode->break_all_delegs();
+	req->batch_inodes.push_back(it->second->inode);
+      }
+    }
+  }
+  req->batch_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  int res = make_request(req, perms);
+
+  if (res == 0 && diri->dir) {
+    // what a reply with a null dentry in its trace does for one name
+    bool cleared = false;
+    for (const auto& name : names) {
+      auto it = diri->dir->dentries.find(name);
+      if (it == diri->dir->dentries.end())
+	continue;
+      Dentry *dn = it->second;
+      if (dn->inode) {
+	if (!cleared) {
+	  clear_dir_complete_and_ordered(diri.get(), false);
+	  cleared = true;
+	}
+	unlink(dn, true, true);  // keep dir, dentry
+      }
+      // we were given no lease: do not trust the null dentry
+      dn->lease_mds = -1;
+      dn->cap_shared_gen = diri->shared_gen - 1;
+    }
+  }
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << path << " + " << more.depth()
+		<< ") = " << res << dendl;
+  return res;
 }
 
 int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,

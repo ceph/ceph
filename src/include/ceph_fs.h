@@ -416,6 +416,14 @@ enum {
 	CEPH_MDS_OP_LINK       = 0x01202,
 	CEPH_MDS_OP_UNLINK     = 0x01203,
 	CEPH_MDS_OP_RENAME     = 0x01204,
+	/* prototype: create several regular files in one directory with one
+	 * request.  path is <dir>/<first name>, path2 holds the other names
+	 * as its components, args.mknod.mode the mode of all of them. */
+	CEPH_MDS_OP_MKNOD_BATCH = 0x01210,
+	/* prototype: unlink several files of one directory with one request.
+	 * path is <dir>/<first name>, path2 holds the other names as its
+	 * components. */
+	CEPH_MDS_OP_UNLINK_BATCH = 0x01211,
 	CEPH_MDS_OP_MKDIR      = 0x01220,
 	CEPH_MDS_OP_RMDIR      = 0x01221,
 	CEPH_MDS_OP_SYMLINK    = 0x01222,
@@ -452,6 +460,7 @@ enum {
 
 #define IS_CEPH_MDS_OP_NEWINODE(op) (op == CEPH_MDS_OP_CREATE     || \
 				     op == CEPH_MDS_OP_MKNOD      || \
+				     op == CEPH_MDS_OP_MKNOD_BATCH || \
 				     op == CEPH_MDS_OP_MKDIR      || \
 				     op == CEPH_MDS_OP_SYMLINK)
 
