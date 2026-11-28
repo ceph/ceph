@@ -924,7 +924,7 @@ groups:
         annotations:
           description: "Number of image replications per daemon is not supposed to go beyond threshold 100"
           summary: "Number of image replications are now above 100 on cluster {{ $labels.cluster }}"
-        expr: "sum by (cluster, ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > 100"
+        expr: "count by (cluster, ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > 100"
         for: "1m"
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.10.2"
