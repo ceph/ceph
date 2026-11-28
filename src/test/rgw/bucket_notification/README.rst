@@ -323,3 +323,5 @@ To run the RabbitMQ SSL security tests use the following::
 During these tests, the test script will restart the RabbitMQ server with the correct security configuration (``sudo`` privileges will be needed).
 For that reason it is not recommended to run the `amqp_ssl_test` tests, that assumes a manually configured rabbirmq server, in the same run as `amqp_test` tests, 
 that assume the rabbitmq daemon running on the host as a service.
+
+To run the X-Forwarded-For source IP test, start RGW with ``rgw_remote_addr_param = HTTP_X_FORWARDED_FOR`` (ceph.conf, restart required) and use ``-m 'remote_addr_xff_test'``.

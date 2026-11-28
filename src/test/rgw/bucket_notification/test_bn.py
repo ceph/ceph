@@ -2001,6 +2001,122 @@ def test_notification_cloudevents():
 
 
 @pytest.mark.http_test
+def test_notification_source_ip():
+    """ test that the source ip of the request is set in the notification """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # the address the client connects from
+    s = socket.create_connection((get_config_host(), int(get_config_port())))
+    expected_ip = s.getsockname()[0]
+    s.close()
+
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    http_server = HTTPServerWithEvents((host, port))
+
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    endpoint_args = 'push-endpoint=http://'+host+':'+str(port)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert status/100 == 2
+
+    number_of_objects = 3
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    events = http_server.get_and_reset_events()
+    assert len(events) >= number_of_objects
+    for event in events:
+        for record in event['Records']:
+            assert record['requestParameters']['sourceIPAddress'] == expected_ip
+
+    # cleanup
+    for key in bucket.list():
+        key.delete()
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    conn.delete_bucket(bucket_name)
+    http_server.close()
+
+
+@pytest.mark.remote_addr_xff_test
+def test_notification_source_ip_forwarded():
+    """ test that the source ip is taken from X-Forwarded-For when configured
+
+    requires RGW started with rgw_remote_addr_param = HTTP_X_FORWARDED_FOR
+    (ceph.conf, restart required). In production the fronting proxy must set
+    or overwrite X-Forwarded-For with the client address, e.g. HAProxy
+    "http-request set-header X-Forwarded-For %[src]"
+    """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+    forwarded_ip = '10.20.30.40'
+
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    http_server = HTTPServerWithEvents((host, port))
+
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    endpoint_args = 'push-endpoint=http://'+host+':'+str(port)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert status/100 == 2
+
+    s3_client = boto3.client('s3',
+                             endpoint_url='http://'+get_config_host()+':'+str(get_config_port()),
+                             aws_access_key_id=get_access_key(),
+                             aws_secret_access_key=get_secret_key())
+    s3_client.meta.events.register(
+        'before-send.s3.PutObject',
+        lambda request, **kwargs: request.headers.__setitem__('X-Forwarded-For', forwarded_ip))
+    number_of_objects = 3
+    for i in range(number_of_objects):
+        s3_client.put_object(Bucket=bucket_name, Key=str(i), Body=b'bar')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    events = http_server.get_and_reset_events()
+    assert len(events) >= number_of_objects
+    for event in events:
+        for record in event['Records']:
+            assert record['requestParameters']['sourceIPAddress'] == forwarded_ip
+
+    # cleanup
+    for key in bucket.list():
+        key.delete()
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    conn.delete_bucket(bucket_name)
+    http_server.close()
+
+
+@pytest.mark.http_test
 def test_opaque_data():
     """ test that opaque id set in topic, is sent in notification """
     hostname = get_ip()
