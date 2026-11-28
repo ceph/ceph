@@ -382,6 +382,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(SCRUBLS,      __CEPH_OSD_OP(RD, PG, 7),       "scrubls")          \
 	f(PG_POOL_MIGRATION_RESERVE, __CEPH_OSD_OP(WR, PG, 8), "pg-pool-migration-reserve") \
 	f(PG_POOL_MIGRATION_RELEASE, __CEPH_OSD_OP(WR, PG, 9), "pg-pool-migration-release") \
+									    \
+	f(ASSERT_TIME_RANGE, __CEPH_OSD_OP(RD, DATA, 45), "assert-time-range") \
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
