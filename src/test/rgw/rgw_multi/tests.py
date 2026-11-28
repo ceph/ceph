@@ -1939,6 +1939,72 @@ def test_versioned_bucket_sync_disable_enable_object_delete():
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+@attr('bucket_sync_disable')
+def test_versioned_bucket_full_sync_null_version():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # create a non-versioned bucket
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload the null versions
+    for obj in ('obj', 'nullonly'):
+        primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='null')
+
+    # enable versioning
+    primary.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # 'obj' gets a newer version, 'nullonly' keeps only its null version
+    version_id = primary.s3_client.put_object(Bucket=bucket.name, Key='obj', Body='v1')['VersionId']
+    resp = primary.s3_client.put_object(Bucket=bucket.name, Key='nullonly', Body='v1')
+    primary.s3_client.delete_object(Bucket=bucket.name, Key='nullonly', VersionId=resp['VersionId'])
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # remove the null versions from the secondary only, so full sync restores
+    # them: 'obj' under a head that only holds the olh, 'nullonly' without a head
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for obj in ('obj', 'nullonly'):
+        cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', 'null']
+        secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    def secondary_versions(key):
+        resp = secondary.s3_client.list_object_versions(Bucket=bucket.name, Prefix=key)
+        return sorted((v['VersionId'], v['IsLatest'])
+                      for v in resp.get('Versions', []) if v['Key'] == key)
+
+    for obj in ('obj', 'nullonly'):
+        resp = secondary.s3_client.get_object(Bucket=bucket.name, Key=obj, VersionId='null')
+        assert resp['Body'].read() == b'null'
+    assert secondary_versions('obj') == sorted([('null', False), (version_id, True)])
+    assert secondary_versions('nullonly') == [('null', True)]
+
+    # deleting the null versions removes them from the secondary as well, and
+    # the newer version of 'obj' stays current
+    for obj in ('obj', 'nullonly'):
+        primary.s3_client.delete_object(Bucket=bucket.name, Key=obj, VersionId='null')
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    assert secondary_versions('obj') == [(version_id, True)]
+    assert secondary_versions('nullonly') == []
+
 def test_multipart_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)

@@ -4697,6 +4697,14 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
   return 0;
 }
 
+// when fetching a null version, a destination head that only holds the olh
+// has no null version. its mtime belongs to another version
+static bool is_missing_null_version(const rgw_obj& src_obj, const RGWObjState* state,
+                                    const RGWObjManifest* manifest)
+{
+  return src_obj.key.have_null_instance() && state->is_olh && !manifest;
+}
+
 int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                const rgw_owner* user_id,
                const rgw_user* perm_check_uid,
@@ -4872,7 +4880,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     if (ret < 0)
       goto set_err_state;
 
-    if (!real_clock::is_zero(dest_state->mtime)) {
+    if (!real_clock::is_zero(dest_state->mtime) &&
+        !is_missing_null_version(src_obj, dest_state, manifest)) {
       dest_mtime_weight.init(dest_state);
       pmod = &dest_mtime_weight.mtime;
     }
@@ -5102,7 +5111,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
       dest_mtime_weight.init(dest_state);
       dest_mtime_weight.high_precision = high_precision_time;
       if (!dest_state->exists ||
-        dest_mtime_weight < set_mtime_weight) {
+          is_missing_null_version(src_obj, dest_state, manifest) ||
+          dest_mtime_weight < set_mtime_weight) {
         ldpp_dout(rctx.dpp, 20) << "retrying writing " << fetched_obj
                                 << " mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime
                                 << " dest_state->exists=" << dest_state->exists << dendl;
