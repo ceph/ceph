@@ -1968,6 +1968,34 @@ print('created new bucket')" > "$CEPH_OUT_DIR/$rgw_python_file"
    prun python $CEPH_OUT_DIR/$rgw_python_file
 }
 
+rgw_vstart_user_exists() {
+    $CEPH_BIN/radosgw-admin user info --uid "$1" -c $conf_fn > /dev/null 2>&1
+}
+
+rgw_vstart_account_exists() {
+    $CEPH_BIN/radosgw-admin account get --account-id "$1" -c $conf_fn > /dev/null 2>&1
+}
+
+# Create an IAM s3test fixture unless it already exists. Another vstart
+# invocation may create it between the existence check and the create
+# call, so a failed create is only an error if the fixture is still
+# missing afterwards.
+rgw_vstart_ensure_account() {
+    local account_id="$1"
+    shift
+    rgw_vstart_account_exists "$account_id" && return 0
+    $CEPH_BIN/radosgw-admin account create --account-id "$account_id" "$@" -c $conf_fn > /dev/null ||
+        rgw_vstart_account_exists "$account_id"
+}
+
+rgw_vstart_ensure_user() {
+    local uid="$1"
+    shift
+    rgw_vstart_user_exists "$uid" && return 0
+    $CEPH_BIN/radosgw-admin user create --uid "$uid" "$@" -c $conf_fn > /dev/null ||
+        rgw_vstart_user_exists "$uid"
+}
+
 do_rgw_create_users()
 {
     # Create S3 user
@@ -2004,22 +2032,24 @@ do_rgw_create_users()
         # create accounts/users for iam s3tests
         a1_akey='AAAAAAAAAAAAAAAAAAaa'
         a1_skey='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-        $CEPH_BIN/radosgw-admin account create --account-id RGW11111111111111111 --account-name Account1 --email account1@ceph.com -c $conf_fn > /dev/null
-        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1root --account-root \
-            --display-name 'Account1Root' --access-key $a1_akey --secret $a1_skey -c $conf_fn > /dev/null
+        rgw_vstart_ensure_account RGW11111111111111111 --account-name Account1 --email account1@ceph.com
+        rgw_vstart_ensure_user testacct1root --account-id RGW11111111111111111 --account-root \
+            --display-name 'Account1Root' --access-key $a1_akey --secret $a1_skey
 
         a2_akey='BBBBBBBBBBBBBBBBBBbb'
         a2_skey='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-        $CEPH_BIN/radosgw-admin account create --account-id RGW22222222222222222 --account-name Account2 --email account2@ceph.com -c $conf_fn > /dev/null
-        $CEPH_BIN/radosgw-admin user create --account-id RGW22222222222222222 --uid testacct2root --account-root \
-            --display-name 'Account2Root' --access-key $a2_akey --secret $a2_skey -c $conf_fn > /dev/null
+        rgw_vstart_ensure_account RGW22222222222222222 --account-name Account2 --email account2@ceph.com
+        rgw_vstart_ensure_user testacct2root --account-id RGW22222222222222222 --account-root \
+            --display-name 'Account2Root' --access-key $a2_akey --secret $a2_skey
 
         a1u_akey='CCCCCCCCCCCCCCCCCCcc'
         a1u_skey='cccccccccccccccccccccccccccccccccccccccc'
-        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1user \
-            --display-name 'Account1User' --access-key $a1u_akey --secret $a1u_skey -c $conf_fn > /dev/null
+        rgw_vstart_ensure_user testacct1user --account-id RGW11111111111111111 \
+            --display-name 'Account1User' --access-key $a1u_akey --secret $a1u_skey
+        # attaching an already attached managed policy fails with EEXIST (17)
         $CEPH_BIN/radosgw-admin user policy attach --uid testacct1user \
-            --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess -c $conf_fn > /dev/null
+            --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess -c $conf_fn > /dev/null ||
+            [ $? -eq 17 ]
     fi
 
     # Create Swift user
