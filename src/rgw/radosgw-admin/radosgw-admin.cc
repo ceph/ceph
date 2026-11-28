@@ -182,6 +182,7 @@ void usage()
   cout << "  account list                     list all account ids\n";
   cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
   cout << "  bucket limit check               show bucket sharding stats (optional --uid or --bucket)\n";
+  cout << "  bucket layout                    get the layout of a bucket\n";
   cout << "  bucket link                      link bucket to specified user\n";
   cout << "  bucket unlink                    unlink bucket from specified user\n";
   cout << "  bucket stats                     returns bucket statistics\n";
