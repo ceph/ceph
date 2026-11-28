@@ -36,6 +36,7 @@ from ..model.certificate import CEPHADM_ROOT_CA_CERT
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
+from . import multicluster_config
 from .ceph_service import CephService
 from .orchestrator import OrchClient
 from .service import RgwServiceManager
@@ -1722,10 +1723,18 @@ class RgwMultisiteAutomation:
                                  http_status_code=500, component='rgw')
 
     def _get_cluster_details(self, cluster_fsid, cluster_details):
+        stored_config = multicluster_config.load()
         for cluster in cluster_details:
             if cluster['name'] == cluster_fsid:
+                # The token is read from the server-side configuration: the API
+                # does not expose it anymore. The one sent by the client is only
+                # a fallback for clients of previous releases.
+                cluster_token = multicluster_config.find_token(
+                    stored_config, cluster['url'], cluster.get('user')) or cluster.get('token')
+                if not cluster_token:
+                    break
                 cluster_url = cluster['url'].rstrip('/') + '/'
-                return cluster_url, cluster['token']
+                return cluster_url, cluster_token
         raise DashboardException("Cluster details not found",
                                  http_status_code=500, component='rgw')
 

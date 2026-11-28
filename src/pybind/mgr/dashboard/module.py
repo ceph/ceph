@@ -36,6 +36,7 @@ from . import mgr
 from .cli import DBCLICommand
 from .controllers import Router, json_error_page, nvmeof  # noqa # pylint: disable=unused-import
 from .grafana import push_local_dashboards
+from .services import multicluster_config
 from .services import nvmeof_cli, nvmeof_top_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, AuthType, JwtManager
 from .services.exception import dashboard_exception_handler
@@ -265,6 +266,19 @@ class Module(MgrModule, CherryPyConfig):
             'perm': 'r'
         },
         {
+            'cmd': 'dashboard set-jwt-token-max-ttl '
+                   'name=seconds,type=CephInt',
+            'desc': 'Set the maximum lifetime in seconds of the long-lived tokens '
+                    'that administrators can request (e.g. multi-cluster). '
+                    '0 disables them',
+            'perm': 'w'
+        },
+        {
+            'cmd': 'dashboard get-jwt-token-max-ttl',
+            'desc': 'Get the maximum lifetime in seconds of long-lived admin tokens',
+            'perm': 'r'
+        },
+        {
             "cmd": "dashboard create-self-signed-cert",
             "desc": "Create self signed certificate",
             "perm": "w"
@@ -284,6 +298,11 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='server_port', type='int', default=8080),
         Option(name='ssl_server_port', type='int', default=8443),
         Option(name='jwt_token_ttl', type='int', default=28800),
+        Option(name='jwt_token_max_ttl', type='int', default=2592000, min=0),
+        # Legacy: previous releases kept the multi-cluster configuration (which
+        # includes credentials) here. It is only declared so it can be migrated
+        # to the KV store and removed. Never read or write it otherwise.
+        Option(name='MULTICLUSTER_CONFIG', type='str', default=''),
         Option(name='url_prefix', type='str', default=''),
         Option(name='key_file', type='str', default=''),
         Option(name='crt_file', type='str', default=''),
@@ -361,6 +380,10 @@ class Module(MgrModule, CherryPyConfig):
 
         AuthManager.initialize()
         load_sso_db()
+        try:
+            multicluster_config.migrate_legacy()
+        except Exception:  # pylint: disable=broad-except
+            logger.exception('Failed to migrate the multi-cluster configuration')
 
         conf_result = self.await_configuration()
         if conf_result is None:
@@ -574,6 +597,14 @@ class Module(MgrModule, CherryPyConfig):
             return 0, 'JWT token TTL updated', ''
         if cmd['prefix'] == 'dashboard get-jwt-token-ttl':
             ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
+            return 0, str(ttl), ''
+        if cmd['prefix'] == 'dashboard set-jwt-token-max-ttl':
+            if cmd['seconds'] < 0:
+                return -errno.EINVAL, '', 'The maximum TTL must not be negative'
+            self.set_module_option('jwt_token_max_ttl', str(cmd['seconds']))
+            return 0, 'JWT token maximum TTL updated', ''
+        if cmd['prefix'] == 'dashboard get-jwt-token-max-ttl':
+            ttl = self.get_module_option('jwt_token_max_ttl', JwtManager.JWT_TOKEN_MAX_TTL)
             return 0, str(ttl), ''
         if cmd['prefix'] == 'dashboard grafana dashboards update':
             push_local_dashboards()

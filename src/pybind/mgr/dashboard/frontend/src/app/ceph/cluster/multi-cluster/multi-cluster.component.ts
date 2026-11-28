@@ -429,6 +429,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
               url: clusterDetails.url
             });
 
+            // The token is kept on the server: the backend reuses it when no password is given
             this.multiClusterService
               .reConnectCluster(
                 clusterDetails.url,
@@ -436,8 +437,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
                 null,
                 clusterDetails.ssl_verify,
                 clusterDetails.ssl_certificate,
-                clusterDetails.ttl,
-                clusterDetails.token
+                clusterDetails.ttl
               )
               .subscribe({
                 error: (errorResponse: any) => {

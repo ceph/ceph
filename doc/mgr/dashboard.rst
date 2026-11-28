@@ -1026,6 +1026,36 @@ an unknown CA or that do not match the host name.
 User and Role Management
 ------------------------
 
+Token Lifetime
+^^^^^^^^^^^^^^
+
+Login tokens expire after the TTL defined by the cluster administrator
+(8 hours by default):
+
+.. prompt:: bash #
+
+   ceph dashboard set-jwt-token-ttl <seconds>
+   ceph dashboard get-jwt-token-ttl
+
+Users cannot choose the lifetime of their own tokens. A client can only
+request a *shorter* lifetime through the ``ttl`` parameter (in hours) of
+``POST /api/auth``. Only users with the ``administrator`` role can request a
+*longer* one, which is used by the Multi-Cluster feature to keep connections
+to remote clusters open. It is capped by:
+
+.. prompt:: bash #
+
+   ceph dashboard set-jwt-token-max-ttl <seconds>
+   ceph dashboard get-jwt-token-max-ttl
+
+The default is 30 days. ``0`` disables long-lived tokens: Multi-Cluster
+connections then expire after the regular TTL and have to be reconnected.
+
+.. note:: Tokens issued by previous releases for non-administrator users with a
+   lifetime longer than the regular TTL are no longer accepted, and the user
+   has to log in again. Tokens of administrators, such as the ones used by
+   existing Multi-Cluster connections, keep working until they expire.
+
 Password Policy
 ^^^^^^^^^^^^^^^
 

@@ -17,7 +17,7 @@ import cherrypy
 
 from ... import mgr
 from ...exceptions import ExpiredSignatureError, InvalidAlgorithmError, InvalidTokenError
-from ..access_control import LocalAuthenticator, UserDoesNotExist
+from ..access_control import ADMIN_ROLE, LocalAuthenticator, UserDoesNotExist
 
 if TYPE_CHECKING:
     from dashboard.services.sso import SsoDB
@@ -94,6 +94,9 @@ class SSOAuth(BaseAuth):
 class JwtManager(object):
     JWT_TOKEN_BLOCKLIST_KEY = "jwt_token_block_list"
     JWT_TOKEN_TTL = 28800  # default 8 hours
+    # Upper bound (seconds) for tokens requested with an explicit TTL, which
+    # is only honoured for administrators (e.g. multi-cluster connections).
+    JWT_TOKEN_MAX_TTL = 2592000  # default 30 days
     JWT_ALGORITHM = 'HS256'
     _secret = None
 
@@ -166,13 +169,81 @@ class JwtManager(object):
         return decoded_message
 
     @classmethod
+    def _default_ttl(cls) -> int:
+        return int(mgr.get_module_option('jwt_token_ttl', cls.JWT_TOKEN_TTL))
+
+    @classmethod
+    def _max_ttl(cls) -> int:
+        """
+        Maximum lifetime (seconds) of a token requested with an explicit TTL.
+        0 disables explicit TTLs. Set by the cluster administrator.
+        """
+        return max(int(mgr.get_module_option('jwt_token_max_ttl', cls.JWT_TOKEN_MAX_TTL)), 0)
+
+    @staticmethod
+    def _is_admin(username) -> bool:
+        try:
+            user = AuthManager.get_user(username)
+        except UserDoesNotExist:
+            return False
+        return ADMIN_ROLE.name in {role.name for role in user.roles}
+
+    @classmethod
+    def _token_lifetime(cls, username, requested_hours: Optional[int]) -> int:
+        """
+        Users must not be able to choose the expiration of their own
+        credentials. The TTL is the administrator-defined default, unless:
+        - a shorter one is requested (always harmless), or
+        - an administrator requests a longer one, which is capped by the
+          administrator-defined ``jwt_token_max_ttl`` (this is what the
+          multi-cluster feature uses for its long-lived connections).
+        """
+        default_ttl = cls._default_ttl()
+        if requested_hours is None:
+            return default_ttl
+        try:
+            requested = int(requested_hours) * 60 * 60  # convert hours to seconds
+        except (TypeError, ValueError):
+            requested = 0
+        if requested <= 0:
+            return default_ttl
+        if requested <= default_ttl:
+            return requested
+        max_ttl = cls._max_ttl()
+        if max_ttl > 0 and cls._is_admin(username):
+            return min(requested, max_ttl)
+        cls.logger.warning(  # type: ignore
+            'Ignoring the requested token TTL for user "%s": not allowed', username)
+        return default_ttl
+
+    @classmethod
+    def _lifetime_allowed(cls, dtoken) -> bool:
+        """
+        Reject tokens issued with a lifetime longer than currently allowed, e.g.
+        the ones created by previous releases with an arbitrary ``ttl``.
+        Only administrators may hold tokens living longer than the default TTL
+        (up to ``jwt_token_max_ttl``), which keeps the multi-cluster tokens
+        (always issued to administrators) working.
+        """
+        if mgr.SSO_DB.protocol == AuthType.OAUTH2:
+            return True  # lifetime is defined by the identity provider
+        try:
+            lifetime = int(dtoken['exp']) - int(dtoken['iat'])
+        except (KeyError, TypeError, ValueError):
+            return True  # handled by the 'iat' check
+        if lifetime <= max(cls._default_ttl(), cls.JWT_TOKEN_TTL):
+            return True
+        return lifetime <= cls._max_ttl() and cls._is_admin(dtoken.get('username'))
+
+    @classmethod
     def gen_token(cls, username, ttl: Optional[int] = None):
+        """
+        :param ttl: optional requested token lifetime in hours. See
+            :meth:`_token_lifetime` for the conditions under which it is honoured.
+        """
         if not cls._secret:
             cls.init()
-        if ttl is None:
-            ttl = mgr.get_module_option('jwt_token_ttl', cls.JWT_TOKEN_TTL)
-        else:
-            ttl = int(ttl) * 60 * 60  # convert hours to seconds
+        ttl = cls._token_lifetime(username, ttl)
         now = int(time.time())
         payload = {
             'iss': 'ceph-dashboard',
@@ -228,7 +299,10 @@ class JwtManager(object):
         try:
             dtoken = cls.decode_token(token)
             if 'jti' in dtoken:
-                if not cls.is_blocklisted(dtoken['jti']):
+                if not cls._lifetime_allowed(dtoken):
+                    cls.logger.debug(  # type: ignore
+                        'Token lifetime exceeds the maximum allowed')
+                elif not cls.is_blocklisted(dtoken['jti']):
                     user = AuthManager.get_user(dtoken['username'])
                     if 'iat' in dtoken and user.last_update <= dtoken['iat']:
                         return user
