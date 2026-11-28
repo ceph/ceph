@@ -91,12 +91,6 @@ static const std::string LIMIT("limit");
 static const std::string SKIP_QUIESCE("skip-quiesce");
 static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
 
-static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, IMAGE_SHARED, IMAGE_THICK_PROVISION, IMAGE_FLATTEN,
-  NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
-  IGNORE_QUIESCE_ERROR
-};
-
 struct ImageSize {};
 struct ImageOrder {};
 struct ImageObjectSize {};

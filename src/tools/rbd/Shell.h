@@ -43,17 +43,11 @@ public:
 
   };
 
-  struct SwitchArguments {
-    SwitchArguments(const std::initializer_list<std::string> &arguments) {
-      Shell::get_switch_arguments().insert(arguments.begin(), arguments.end());
-    }
-  };
-
   int execute(int argc, const char **argv);
 
 private:
   static std::vector<Action *>& get_actions();
-  static std::set<std::string>& get_switch_arguments();
+  static const std::set<std::string>& get_switch_arguments();
 
   void get_command_spec(const std::vector<std::string> &arguments,
                         std::vector<std::string> *command_spec);

@@ -337,7 +337,6 @@ int execute(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"long", "l"});
 Shell::Action action(
   {"list"}, {"ls"}, "List rbd images.", "", &get_arguments, &execute);
 

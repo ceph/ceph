@@ -113,7 +113,6 @@ int execute(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"allow-shrink"});
 Shell::Action action(
   {"resize"}, {}, "Resize (expand or shrink) image.", "", &get_arguments,
   &execute);

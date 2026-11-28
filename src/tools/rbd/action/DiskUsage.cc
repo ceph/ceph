@@ -368,7 +368,6 @@ int execute(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"exact", "merge-snapshots"});
 Shell::Action action(
   {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot.",
   "", &get_arguments, &execute);
