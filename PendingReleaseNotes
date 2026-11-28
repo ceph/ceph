@@ -1,4 +1,17 @@
 >=22.0.0
+* RGW: A new, off-by-default option `rgw_crypt_s3_kms_key_scope` can be set to
+  `tenant` or `owner` to require that SSE-KMS key ids be prefixed with the
+  requesting tenant's or the destination bucket owner's id (followed by
+  `rgw_crypt_s3_kms_key_scope_separator`, `:` by default). When enabled,
+  requests that reference a KMS key id that isn't prefixed for the right
+  owner are rejected with `AccessDenied`, both on object writes and on
+  `PutBucketEncryption`. This closes a gap where any authenticated user could
+  encrypt objects with any KMS key id known to them, regardless of which
+  tenant the external KMS considers that key to belong to. The default
+  (`none`) preserves prior behavior.
+
+>=18.2.7
+--------
 
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
