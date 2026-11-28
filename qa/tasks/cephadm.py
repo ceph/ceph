@@ -1637,6 +1637,28 @@ def _shell_command(obj):
     raise ValueError(f'invalid command item: {obj!r}')
 
 
+def use_image(ctx, config):
+    """
+    Run later cephadm shells, health checks and the task's teardown with
+    another container image, for example the one the cluster was upgraded
+    to: a shell from the bootstrap image is a client of that release, which
+    the cluster may refuse once newer clients are required.
+
+      tasks:
+      - cephadm.use_image:
+          image: quay.ceph.io/ceph-ci/ceph:main
+
+    Without an image, the job's sha1 names it: quay.ceph.io/ceph-ci/ceph:<sha1>.
+    """
+    config = config or {}
+    cluster_name = config.get('cluster', 'ceph')
+    image = config.get('image')
+    if not image:
+        image = 'quay.ceph.io/ceph-ci/ceph:' + ctx.config['sha1']
+    log.info('cephadm shells now use image %s', image)
+    ctx.ceph[cluster_name].image = image
+
+
 def apply(ctx, config):
     """
     Apply spec

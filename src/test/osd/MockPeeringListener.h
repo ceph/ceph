@@ -495,6 +495,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   void on_pool_change() override {
     pool_changed = true;
+    if (ps) {
+      backend_listener->pool.info = ps->get_pgpool().info;
+    }
   }
 
   void on_role_change() override {
