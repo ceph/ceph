@@ -115,7 +115,7 @@ the trust policy to allow a user to assume a role.
 RGW now supports REST APIs for tagging, listing tags and untagging actions on a role. More information related to
 role tagging can be found here :doc:`role`.
 
-An example of a role's trust policy that uses aws:ResourceTag is as follows:
+An example of a role's trust policy that uses iam:ResourceTag is as follows:
 
 .. code-block:: python
 
