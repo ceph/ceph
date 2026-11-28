@@ -666,6 +666,27 @@ public:
     return pg_to_shard_mapping.set_pg_primary(pgid, is_primary);
   }
 
+  /**
+   * An op mapped pgid to this core but found no pg here and dropped it.
+   * Stop counting the pg for placement unless it exists by now; if it is
+   * created later, pg_created() counts it again. If its pool is already gone
+   * from this core's osdmap, e.g. a late op that arrived after
+   * PGShardManager::remove_uncounted_pgs_of_deleted_pools() ran, the pg can
+   * no longer be created here, so remove the mapping right away.
+   */
+  seastar::future<> release_pg_count_if_absent(spg_t pgid) {
+    if (local_state.pg_map.get_pg(pgid)) {
+      return seastar::now();
+    }
+    return pg_to_shard_mapping.release_pg_count(pgid).then([this, pgid] {
+      if (local_state.get_osdmap()->have_pg_pool(pgid.pool()) ||
+          local_state.pg_map.has_pg_or_creating(pgid)) {
+        return seastar::now();
+      }
+      return pg_to_shard_mapping.remove_uncounted_pg_mapping(pgid);
+    });
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -837,7 +858,13 @@ public:
   FORWARD_TO_LOCAL(update_shard_superblock)
   FORWARD_TO_LOCAL(get_osdmap_tlb)
 
-  FORWARD(pg_created, pg_created, local_state.pg_map)
+  // a template, so that PG needs not be complete here
+  template <typename PGRef>
+  seastar::future<> pg_created(spg_t pgid, PGRef &&pg) {
+    bool is_primary = pg->is_primary();
+    local_state.pg_map.pg_created(pgid, std::forward<PGRef>(pg));
+    return pg_to_shard_mapping.claim_pg_count(pgid, is_primary);
+  }
 
   FORWARD_TO_OSD_SINGLETON_TARGET(
     snap_dump_reservations,
