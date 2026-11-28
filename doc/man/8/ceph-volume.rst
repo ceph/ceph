@@ -15,7 +15,8 @@ Synopsis
 **ceph-volume** **inventory**
 
 **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
-| *zap* | *list* | *batch* | *new-wal* | *new-db* | *migrate* ]
+| *zap* | *list* | *batch* | *new-wal* | *new-db* | *migrate*
+| *set-lockbox-secret* ]
 
 **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
 
@@ -445,6 +446,31 @@ Required arguments:
 .. option:: --target
 
    logical volume to move data to
+
+set-lockbox-secret
+^^^^^^^^^^^^^^^^^^
+
+.. program:: ceph-volume lvm set-lockbox-secret
+
+Replace the lockbox cephx secret stored in the ``ceph.cephx_lockbox_secret``
+tag of every logical volume for one encrypted OSD. When ``lockbox.keyring``
+already exists in the OSD directory, it is rewritten too. A missing keyring is
+left absent. The new secret is read from stdin. This command does not contact
+the Monitors.
+
+Usage::
+
+    ceph-volume lvm set-lockbox-secret --osd-id OSD_ID --osd-fsid OSD_FSID
+
+Required arguments:
+
+.. option:: --osd-id
+
+   the OSD id
+
+.. option:: --osd-fsid
+
+   the OSD fsid
 
 simple
 ------

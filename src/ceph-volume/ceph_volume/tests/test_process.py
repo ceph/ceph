@@ -68,6 +68,31 @@ class TestCall(object):
         assert 'stdout: stdout' in err
         assert out == ''
 
+    def test_obfuscate_redacts_logged_command_only(self, caplog, monkeypatch):
+        caplog.set_level(logging.DEBUG)
+        captured = {}
+        secret = 'synthetic-lockbox-secret'
+
+        def popen(cmd, **kw):
+            captured['cmd'] = list(cmd)
+            stdout_stream = Factory(read=lambda: b'')
+            stderr_stream = Factory(read=lambda: b'')
+            return Factory(
+                stdout=stdout_stream,
+                stderr=stderr_stream,
+                wait=lambda: 0,
+                communicate=lambda x: (b'', b''),
+            )
+
+        monkeypatch.setattr(process.subprocess, 'Popen', popen)
+        process.call(
+            ['echo', '--deltag', 'tag=%s' % secret, '--addtag', 'tag=%s' % secret],
+            obfuscate=['--deltag', '--addtag'],
+        )
+        logged = '\n'.join(record.getMessage() for record in caplog.records)
+        assert secret not in logged
+        assert secret in ' '.join(captured['cmd'])
+
     def test_silent_verbose_on_failure(self, mock_call, caplog, capsys):
         caplog.set_level(logging.INFO)
         mock_call(stdout='stdout\n', stderr='stderr\n', returncode=1)
