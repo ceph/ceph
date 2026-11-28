@@ -50,7 +50,9 @@ CircularJournalSpace::roll_ertr::future<> CircularJournalSpace::roll() {
 }
 
 CircularJournalSpace::write_ertr::future<>
-CircularJournalSpace::write(ceph::bufferlist&& to_write) {
+CircularJournalSpace::write(
+  ceph::bufferlist&& to_write,
+  dma_write_times_t *dma_times) {
   LOG_PREFIX(CircularJournalSpace::write);
   assert(get_written_to().segment_seq != NULL_SEG_SEQ);
   auto encoded_size = to_write.length();
@@ -69,7 +71,7 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   DEBUG("length {}, commit target {}, used_size {}",
         encoded_size, target, get_records_used_size());
 
-  return device_write_bl(target, to_write
+  return device_write_bl(target, to_write, dma_times
   ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all( "Invalid error" )
@@ -152,7 +154,7 @@ ceph::bufferlist CircularJournalSpace::encode_header()
 
 CircularJournalSpace::submit_ertr::future<>
 CircularJournalSpace::device_write_bl(
-    rbm_abs_addr offset, bufferlist &bl)
+    rbm_abs_addr offset, bufferlist &bl, dma_write_times_t *dma_times)
 {
   LOG_PREFIX(CircularJournalSpace::device_write_bl);
   auto length = bl.length();
@@ -168,7 +170,7 @@ CircularJournalSpace::device_write_bl(
   // sub-sector metadata is coalesced), and the kernel driver issues a vectored
   // dma_write. Gathering into one buffer here would memcpy the whole record and
   // defeat that.
-  co_await device->writev(offset, bl
+  co_await device->writev(offset, bl, 0, dma_times
   ).handle_error(
     submit_ertr::pass_further{},
     crimson::ct_error::assert_all( "Invalid error device->writev" )

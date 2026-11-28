@@ -128,7 +128,8 @@ SPDKNVMeIODriver::write_ertr::future<> SPDKNVMeIODriver::write(
 
 SPDKNVMeIODriver::write_ertr::future<> SPDKNVMeIODriver::writev(
   device_id_t /*device_id*/, uint64_t offset,
-  bufferlist &&bl, size_t /*block_size*/, uint16_t /*stream*/)
+  bufferlist &&bl, size_t /*block_size*/, uint16_t /*stream*/,
+  dma_write_times_t * /*dma_times*/)
 {
   // One write per record: zero-copy when the record is already a single DMA
   // buffer (the common RBM case), otherwise a single gathered DMA write.

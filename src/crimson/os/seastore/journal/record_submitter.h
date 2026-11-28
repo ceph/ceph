@@ -37,7 +37,11 @@ public:
   virtual journal_seq_t get_written_to() const = 0;
 
   using write_ertr = base_ertr;
-  virtual write_ertr::future<> write(ceph::bufferlist&& to_write) = 0;
+  // dma_times, if given, is filled in with when the device write ran
+  // (RBM only; the segmented allocator leaves it blank)
+  virtual write_ertr::future<> write(
+    ceph::bufferlist&& to_write,
+    dma_write_times_t *dma_times = nullptr) = 0;
 
   virtual bool can_write() const = 0;
   
@@ -173,7 +177,10 @@ public:
 
   // Set the write result and reset for reuse
   using maybe_result_t = std::optional<extent_len_t>;
-  void set_result(maybe_result_t maybe_write_length);
+  void set_result(
+      maybe_result_t maybe_write_length,
+      std::chrono::steady_clock::time_point write_start,
+      dma_write_times_t dma_times);
 
   // The fast path that is equivalent to submit a single record as a batch.
   //
@@ -211,6 +218,9 @@ private:
   struct promise_result_t {
     extent_len_t write_length;
     extent_len_t mdlength;
+    std::chrono::steady_clock::time_point write_start;
+    std::chrono::steady_clock::time_point write_end;
+    dma_write_times_t dma_times;
   };
   using maybe_promise_result_t = std::optional<promise_result_t>;
   std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;
@@ -317,7 +327,11 @@ private:
   void account_submission(const record_group_t&);
 
   using maybe_result_t = RecordBatch::maybe_result_t;
-  void finish_submit_batch(RecordBatch*, maybe_result_t);
+  void finish_submit_batch(
+      RecordBatch*,
+      maybe_result_t,
+      std::chrono::steady_clock::time_point write_start,
+      dma_write_times_t dma_times);
 
   void flush_current_batch();
 

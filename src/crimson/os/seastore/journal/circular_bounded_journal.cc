@@ -124,7 +124,9 @@ CircularBoundedJournal::submit_record(
 
   record_locator_t result = co_await std::move(submit_ret.future);
 
+  auto finalize_start = std::chrono::steady_clock::now();
   co_await handle.enter(write_pipeline->finalize);
+  result.finalize_wait = std::chrono::steady_clock::now() - finalize_start;
 
   DEBUG("H{} finish with {}", (void*)&handle, result);
   auto new_committed_to = result.write_result.get_end_seq();
