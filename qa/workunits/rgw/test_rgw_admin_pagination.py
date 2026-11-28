@@ -15,6 +15,8 @@ from urllib.parse import urljoin
 
 import typing as ty
 
+from common import rgw_endpoints
+
 
 class RGWAdminException(Exception):
     def __init__(self, r: subprocess.CompletedProcess):
@@ -127,20 +129,20 @@ class TestRGWAdminHelper:
 
     def get_boto3_client(self, session: boto3.session.Session):
         """Get a boto3 s3 client from a session."""
-        def _try_client(portnum: str, ssl: bool, proto: str):
-            endpoint = proto + '://localhost:' + portnum
+        def _try_client(endpoint: str):
             client = session.client(
-                's3', use_ssl=ssl, endpoint_url=endpoint, verify=False)
+                's3', use_ssl=endpoint.startswith('https://'),
+                endpoint_url=endpoint, verify=False)
             list(client.list_buckets(MaxBuckets=1))
             return endpoint, client
 
-        try:
-            return _try_client('80', False, 'http')
-        except Exception:
+        endpoints = rgw_endpoints()
+        for idx, endpoint in enumerate(endpoints):
             try:
-                return _try_client('8000', False, 'http')
+                return _try_client(endpoint)
             except Exception:
-                return _try_client('443', True, 'https')
+                if idx == len(endpoints) - 1:
+                    raise
 
 
 class TestRGWAdminBucket(unittest.TestCase):

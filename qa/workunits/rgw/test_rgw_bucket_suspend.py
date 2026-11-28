@@ -12,7 +12,7 @@ Tests radosgw-admin bucket suspend/unsuspend commands.
 
 USER = 'suspend-tester'
 DISPLAY_NAME = 'Bucket Suspend Testing'
-ACCESS_KEY = '0555b35654ad1656d804'
+ACCESS_KEY = 'SUSPENDTESTER0KEY001'
 SECRET_KEY = 'h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
 BUCKET_NAME = 'suspend-bucket'
 

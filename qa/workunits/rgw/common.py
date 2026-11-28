@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
+"""
+Helpers shared by the rgw workunits. README.md says how they find radosgw.
+"""
+
 import errno
 import io
+import os
 import subprocess
 import logging as log
 import boto3
@@ -32,15 +37,31 @@ def exec_cmd(cmd, wait = True, **kwargs):
     
 def create_user(uid, display_name, access_key, secret_key):
     _, ret = exec_cmd(f'radosgw-admin user create --uid {uid} --display-name "{display_name}" --access-key {access_key} --secret {secret_key}', check_retcode=False)
-    assert(ret == 0 or errno.EEXIST)
-    
+    assert(ret == 0 or ret == errno.EEXIST)
+
+def rgw_endpoints():
+    """
+    The radosgw endpoints to try, in order.
+
+    AWS_ENDPOINT_URL, if set, is the only endpoint. Otherwise try RGW_HOST
+    (default: localhost) on port 80, then 8000, then 443 with ssl.
+    """
+    url = os.environ.get('AWS_ENDPOINT_URL')
+    if url:
+        return [url]
+    host = os.environ.get('RGW_HOST', 'localhost')
+    return [f'http://{host}:80', f'http://{host}:8000', f'https://{host}:443']
+
 def boto_connect(access_key, secret_key, config=None):
-    def try_connect(portnum, ssl, proto):
-        endpoint = proto + '://localhost:' + portnum
+    """
+    A boto3 s3 resource for the first of rgw_endpoints() that answers.
+    If none does, raises the connection error from the last one.
+    """
+    def try_connect(endpoint):
         conn = boto3.resource('s3',
                               aws_access_key_id=access_key,
                               aws_secret_access_key=secret_key,
-                              use_ssl=ssl,
+                              use_ssl=endpoint.startswith('https://'),
                               endpoint_url=endpoint,
                               verify=False,
                               config=config,
@@ -52,14 +73,13 @@ def boto_connect(access_key, secret_key, config=None):
             raise
         print('connected to', endpoint)
         return conn
-    try:
-        return try_connect('80', False, 'http')
-    except botocore.exceptions.ConnectionError:
-        try: # retry on non-privileged http port
-            return try_connect('8000', False, 'http')
+    endpoints = rgw_endpoints()
+    for idx, endpoint in enumerate(endpoints):
+        try:
+            return try_connect(endpoint)
         except botocore.exceptions.ConnectionError:
-            # retry with ssl
-            return try_connect('443', True, 'https')
+            if idx == len(endpoints) - 1:
+                raise
 
 def object_stat(bucket_name, object_key):
     """Run radosgw-admin object stat and return parsed JSON."""
