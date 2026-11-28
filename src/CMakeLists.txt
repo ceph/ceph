@@ -187,7 +187,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
     -Wno-vla-cxx-extension)
   endif()
-  if(FREEBSD)
+  if(FREEBSD AND NOT CMAKE_LINKER_TYPE)
     # Need to use the GNU binutils linker to get versioning right.
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
@@ -204,6 +204,8 @@ add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wconditional-
 # --copy-dt-needed-entries is a GNU ld option; lld, Apple's ld64 and
 # lld in MinGW mode reject it. Test the linker instead of the OS or
 # the compiler, since clang on Linux uses GNU ld by default.
+# Recheck on each configure, as the linker may have changed.
+unset(HAVE_LINK_COPY_DT_NEEDED_ENTRIES CACHE)
 check_linker_flag(CXX "-Wl,--copy-dt-needed-entries" HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
 
 if(WITH_CEPH_DEBUG_MUTEX)
