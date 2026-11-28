@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import botocore.exceptions
 from common import exec_cmd, create_user, boto_connect, object_stat, \
     get_compression_type, get_storage_class, get_crypt_mode, \
     get_crypt_attr_raw, make_compressible_body, upload_object, \
@@ -27,7 +28,8 @@ Test plan:
   5. GET object and verify data integrity
 
 Also checks that a transition canceled by a concurrent overwrite is
-not reported as transitioned.
+not reported as transitioned, and that a noncurrent null version deleted
+or overwritten during its transition is not brought back.
 
 With --encrypt, objects are uploaded with SSE-KMS and the test
 verifies encryption is preserved across each transition. This
@@ -301,6 +303,212 @@ def run_failure_test_canceled_transition():
     log.info('Canceled transition test passed')
 
 
+def run_failure_test_transition_of_deleted_null_version():
+    """
+    Delete a noncurrent null version while lifecycle is transitioning it.
+    The transition must not bring the deleted version back.
+    """
+    log.info('=== Testing transition of a null version deleted concurrently ===')
+    object_key = 'test-object-null'
+    # sorts after object_key without containing it, and is never raced
+    control_key = 'test-object-xother-null'
+    control_body = b'control null data'
+    bucket_name = BUCKET_NAME + '-null'
+
+    conn = boto_connect(ACCESS_KEY, SECRET_KEY)
+    client = conn.meta.client
+    # a bucket left by an earlier run would already be versioned
+    try:
+        old = conn.Bucket(bucket_name)
+        old.object_versions.all().delete()
+        old.delete()
+    except Exception:
+        pass
+    bucket = conn.create_bucket(Bucket=bucket_name)
+    # written before versioning is enabled, so it's the null version. the next
+    # write makes it noncurrent
+    bucket.put_object(Key=object_key, Body=b'null data')
+    bucket.put_object(Key=control_key, Body=control_body)
+    client.put_bucket_versioning(Bucket=bucket_name,
+                                 VersioningConfiguration={'Status': 'Enabled'})
+    bucket.put_object(Key=object_key, Body=b'current data')
+    bucket.put_object(Key=control_key, Body=b'control current data')
+
+    # due in 5s for radosgw-admin (1s days) but in 50s for rgw's own LC thread (10s days)
+    transition_days = 5
+    client.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name,
+        LifecycleConfiguration={'Rules': [{
+            'ID': 'noncurrent-to-lukewarm',
+            'Filter': {'Prefix': ''},
+            'Status': 'Enabled',
+            'NoncurrentVersionTransitions': [{
+                'NoncurrentDays': transition_days,
+                'StorageClass': 'LUKEWARM',
+            }],
+        }]})
+    time.sleep(transition_days + 1)
+
+    # hold the transition after it reads the null version and before it
+    # rewrites it
+    with tempfile.NamedTemporaryFile(suffix='.log') as lc_log:
+        def read_lc_log():
+            with open(lc_log.name, 'rb') as f:
+                return f.read()
+
+        lc = None
+        deadline = time.time() + LC_TIMEOUT
+        try:
+            while b'injecting delay' not in read_lc_log():
+                if lc is None or lc.poll() is not None:
+                    # one worker, so keys are processed in order: raced key, then control
+                    lc = subprocess.Popen([
+                        'radosgw-admin', 'lc', 'process', f'--bucket={bucket_name}',
+                        '--rgw-lc-debug-interval=1', '--rgw-lc-max-wp-worker=1',
+                        '--rgw-inject-delay-sec=15',
+                        '--rgw-inject-delay-pattern=delay_copy_obj_data_complete',
+                        '--debug-rgw-lifecycle=2', f'--log-file={lc_log.name}'])
+                assert time.time() < deadline, 'timed out waiting for the transition to start'
+                time.sleep(0.5)
+            client.delete_object(Bucket=bucket_name, Key=object_key, VersionId='null')
+            assert lc.wait(timeout=LC_TIMEOUT) == 0
+        finally:
+            if lc is not None and lc.poll() is None:
+                lc.kill()
+                lc.wait()
+        out = read_lc_log()
+
+    assert not [l for l in out.splitlines() if b'TRANSITIONED:' in l and object_key.encode() in l], \
+        'canceled transition was reported as transitioned'
+    assert [l for l in out.splitlines() if b'object changed concurrently' in l and object_key.encode() in l], \
+        'canceled transition was not logged'
+    versions = client.list_object_versions(Bucket=bucket_name, Prefix=object_key).get('Versions', [])
+    assert not any(v['VersionId'] == 'null' for v in versions), \
+        f'deleted null version is listed: {versions}'
+    try:
+        client.head_object(Bucket=bucket_name, Key=object_key, VersionId='null')
+        raise AssertionError('deleted null version still exists')
+    except botocore.exceptions.ClientError as e:
+        assert e.response['Error']['Code'] == '404'
+    assert client.get_object(Bucket=bucket_name, Key=object_key)['Body'].read() == b'current data'
+
+    # positive control: the untouched null version was transitioned
+    head = client.head_object(Bucket=bucket_name, Key=control_key, VersionId='null')
+    assert head.get('StorageClass') == 'LUKEWARM', \
+        f'control null version was not transitioned: {head.get("StorageClass")}'
+    got = client.get_object(Bucket=bucket_name, Key=control_key, VersionId='null')
+    assert got['Body'].read() == control_body
+
+    bucket.object_versions.all().delete()
+    bucket.delete()
+    log.info('Transition of a deleted null version test passed')
+
+
+def run_failure_test_transition_of_overwritten_null_version():
+    """
+    Overwrite a noncurrent null version in a versioning-suspended bucket while
+    lifecycle is transitioning it. The new null version replaces its head and
+    becomes current, and the transition must not overwrite it.
+    """
+    log.info('=== Testing transition of a null version overwritten concurrently ===')
+    object_key = 'test-object-suspended'
+    # sorts after object_key without containing it, and is never raced
+    control_key = 'test-object-xother-suspended'
+    control_body = b'control null data'
+    new_body = b'new null data'
+    bucket_name = BUCKET_NAME + '-suspended'
+
+    conn = boto_connect(ACCESS_KEY, SECRET_KEY)
+    client = conn.meta.client
+    # a bucket left by an earlier run would already be versioned
+    try:
+        old = conn.Bucket(bucket_name)
+        old.object_versions.all().delete()
+        old.delete()
+    except Exception:
+        pass
+    bucket = conn.create_bucket(Bucket=bucket_name)
+    # written before versioning is enabled, so it's the null version. the next
+    # write makes it noncurrent
+    bucket.put_object(Key=object_key, Body=b'old null data')
+    bucket.put_object(Key=control_key, Body=control_body)
+    client.put_bucket_versioning(Bucket=bucket_name,
+                                 VersioningConfiguration={'Status': 'Enabled'})
+    current_id = client.put_object(Bucket=bucket_name, Key=object_key,
+                                   Body=b'current data')['VersionId']
+    client.put_object(Bucket=bucket_name, Key=control_key,
+                      Body=b'control current data')
+    # a write in a suspended bucket replaces the null version
+    client.put_bucket_versioning(Bucket=bucket_name,
+                                 VersioningConfiguration={'Status': 'Suspended'})
+
+    # due in 5s for radosgw-admin (1s days) but in 50s for rgw's own LC thread (10s days)
+    transition_days = 5
+    client.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name,
+        LifecycleConfiguration={'Rules': [{
+            'ID': 'noncurrent-to-lukewarm',
+            'Filter': {'Prefix': ''},
+            'Status': 'Enabled',
+            'NoncurrentVersionTransitions': [{
+                'NoncurrentDays': transition_days,
+                'StorageClass': 'LUKEWARM',
+            }],
+        }]})
+    time.sleep(transition_days + 1)
+
+    # hold the transition after it reads the null version and before it
+    # rewrites it
+    with tempfile.NamedTemporaryFile(suffix='.log') as lc_log:
+        def read_lc_log():
+            with open(lc_log.name, 'rb') as f:
+                return f.read()
+
+        lc = None
+        deadline = time.time() + LC_TIMEOUT
+        try:
+            while b'injecting delay' not in read_lc_log():
+                if lc is None or lc.poll() is not None:
+                    # one worker, so keys are processed in order: raced key, then control
+                    lc = subprocess.Popen([
+                        'radosgw-admin', 'lc', 'process', f'--bucket={bucket_name}',
+                        '--rgw-lc-debug-interval=1', '--rgw-lc-max-wp-worker=1',
+                        '--rgw-inject-delay-sec=15',
+                        '--rgw-inject-delay-pattern=delay_copy_obj_data_complete',
+                        '--debug-rgw-lifecycle=2', f'--log-file={lc_log.name}'])
+                assert time.time() < deadline, 'timed out waiting for the transition to start'
+                time.sleep(0.5)
+            bucket.put_object(Key=object_key, Body=new_body)
+            assert lc.wait(timeout=LC_TIMEOUT) == 0
+        finally:
+            if lc is not None and lc.poll() is None:
+                lc.kill()
+                lc.wait()
+        out = read_lc_log()
+
+    assert not [l for l in out.splitlines() if b'TRANSITIONED:' in l and object_key.encode() in l], \
+        'canceled transition was reported as transitioned'
+    assert [l for l in out.splitlines() if b'object changed concurrently' in l and object_key.encode() in l], \
+        'canceled transition was not logged'
+    assert client.get_object(Bucket=bucket_name, Key=object_key)['Body'].read() == new_body
+    head = client.head_object(Bucket=bucket_name, Key=object_key, VersionId='null')
+    assert head.get('StorageClass', 'STANDARD') == 'STANDARD', \
+        f'null version was transitioned to {head.get("StorageClass")}'
+    got = client.get_object(Bucket=bucket_name, Key=object_key, VersionId=current_id)
+    assert got['Body'].read() == b'current data'
+
+    # positive control: the untouched null version was transitioned
+    head = client.head_object(Bucket=bucket_name, Key=control_key, VersionId='null')
+    assert head.get('StorageClass') == 'LUKEWARM', \
+        f'control null version was not transitioned: {head.get("StorageClass")}'
+    got = client.get_object(Bucket=bucket_name, Key=control_key, VersionId='null')
+    assert got['Body'].read() == control_body
+
+    bucket.object_versions.all().delete()
+    bucket.delete()
+    log.info('Transition of an overwritten null version test passed')
+
+
 def main():
     encrypt = '--encrypt' in sys.argv
 
@@ -319,6 +527,11 @@ def main():
 
     for size_kb in sizes_kb:
         run_happy_path_transition_tests(size_kb, encrypt)
+
+    if not encrypt:
+        # these races don't depend on encryption
+        run_failure_test_transition_of_deleted_null_version()
+        run_failure_test_transition_of_overwritten_null_version()
 
     run_failure_test_canceled_transition()
 
