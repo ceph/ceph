@@ -83,13 +83,15 @@ TEST(TOKEN, EMPTY) {
 }
 
 TEST(TOKEN, BADINPUT) {
-    RGWToken token{from_base64(non_base64)}; // decode ctor
-    ASSERT_FALSE(token.valid());
+  EXPECT_THROW({
+    RGWToken token{from_base64(non_base64)};
+  }, std::exception);
 }
 
 TEST(TOKEN, BADINPUT2) {
-    RGWToken token{from_base64(non_base64_sploded)}; // decode ctor
-    ASSERT_FALSE(token.valid());
+  EXPECT_THROW({
+    RGWToken token{from_base64(non_base64_sploded)};
+  }, std::exception);
 }
 
 TEST(TOKEN, BADINPUT3) {
