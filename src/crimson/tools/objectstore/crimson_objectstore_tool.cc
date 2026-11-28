@@ -37,6 +37,7 @@
 #include "crimson/osd/main_config_bootstrap_helpers.h"
 #include "include/expected.hpp"
 #include "osd/osd_types.h"
+#include "osd/osd_types_fmt.h"
 #include "json_spirit/json_spirit_reader.h"
 
 SET_SUBSYS(osd);

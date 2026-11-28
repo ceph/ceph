@@ -43,10 +43,14 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/OnFinisher.h"
 #include "global/global_context.h"
+#include "include/Context.h" // for C_GatherBuilder
 #include "include/denc.h"
 #include "include/denc_contiguous.h"
+#include "include/denc_tuple.h"
 #include "include/ceph_assert.h"
+#include "include/cephfs/encoding.h"
 #include "include/cephfs/json.h"
 #include "include/int_types.h"
 #include "include/random.h" // for ceph::util::generate_random_number()

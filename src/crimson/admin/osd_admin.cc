@@ -13,6 +13,7 @@
 #include <seastar/core/with_timeout.hh>
 
 #include "common/config.h"
+#include "include/byte_u_t.h"
 #include "crimson/admin/admin_socket.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"

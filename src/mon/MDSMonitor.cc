@@ -15,6 +15,8 @@
 
 #include "MDSMonitor.h"
 
+#include <fmt/chrono.h>
+
 #include <regex>
 #include <sstream>
 #include <queue>
@@ -35,6 +37,7 @@
 #include "common/cmdparse.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "messages/MMDSBeacon.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -43,6 +46,9 @@
 #include "messages/MGenericMessage.h"
 
 #include "include/ceph_assert.h"
+#include "include/cephfs/encoding.h" // for encode(mds_gid_t)
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
@@ -70,6 +76,7 @@ using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_fsmap())
@@ -232,7 +239,7 @@ void MDSMonitor::assign_quiesce_db_leader(FSMap &fsmap) {
   }
 }
 
-void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MDSMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   auto &pending = get_pending_fsmap_writeable();
   auto epoch = pending.get_epoch();
@@ -2000,13 +2007,13 @@ void MDSMonitor::update_metadata(mds_gid_t gid,
   }
   pending_metadata[gid] = metadata;
 
-  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
+  MonitorDBStoreTransactionRef t = paxos.get_pending_transaction();
   bufferlist bl;
   encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
 }
 
-void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t)
+void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStoreTransactionRef t)
 {
   bool update = false;
   for (auto it = pending_metadata.begin(); it != pending_metadata.end(); ) {
@@ -2026,6 +2033,8 @@ void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStore::Transa
 
 int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
+  using ceph::decode;
+
   bufferlist bl;
   int r = mon.store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
   if (r) {
@@ -2034,7 +2043,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   }
 
   auto it = bl.cbegin();
-  ceph::decode(m, it);
+  decode(m, it);
   return 0;
 }
 

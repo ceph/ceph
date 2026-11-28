@@ -7,6 +7,7 @@
 #include "common/ceph_releases.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "include/encoding_chrono.h"
 
 #include "objclass/objclass.h"
 #include "osd/PrimaryLogPG.h"

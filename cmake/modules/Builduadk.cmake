@@ -7,6 +7,9 @@ function(build_uadk)
     set(UADK_WD_ZIP_LIBRARY ${UADK_LIBRARY_DIR}/uadk/libhisi_zip.a)
     set(configure_cmd env ./configure --prefix=${UADK_INSTALL_DIR})
     list(APPEND configure_cmd --with-pic --enable-static --disable-shared --with-static_drv)
+    # uadk adds -Werror, which breaks with new compilers and C libraries;
+    # CFLAGS comes after uadk's AM_CFLAGS, so -Wno-error overrides it
+    list(APPEND configure_cmd "CFLAGS=-g -O2 -Wno-error")
 
     # command prefix to unset DESTDIR; otherwise debhelper and
     # CMake fight about installation directories, and since

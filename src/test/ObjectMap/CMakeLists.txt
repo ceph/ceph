@@ -4,6 +4,7 @@ add_executable(ceph_test_object_map
   )
 add_ceph_unittest(ceph_test_object_map)
 target_link_libraries(ceph_test_object_map
+  kv
   os
   ceph-common
   ${UNITTEST_LIBS}

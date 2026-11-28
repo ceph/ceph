@@ -17,6 +17,7 @@
 #include "common/debug.h"
 #include "include/ceph_assert.h"	// re-clobber assert
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
@@ -319,7 +320,7 @@ void MgrStatMonitor::create_pending()
   encode(service_map, pending_service_map_bl, mon.get_quorum_con_features());
 }
 
-void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MgrStatMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   ++version;
   dout(10) << " " << version << dendl;

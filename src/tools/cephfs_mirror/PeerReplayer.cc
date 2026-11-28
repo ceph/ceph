@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <iomanip> // for std::fixed, std::setfill, std::setprecision, std::setw
 #include <stack>
 #include <vector>
 #include <fcntl.h>

@@ -31,6 +31,8 @@
 
 #include "include/neorados/RADOS.hpp"
 #include "include/buffer.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
 
 #include "test/neorados/common_tests.h"
 

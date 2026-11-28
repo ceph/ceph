@@ -131,8 +131,8 @@ private:
   void create_pending() override;  // prepare a new pending
   // propose pending update to peers
   void generate_logentry_key(const std::string& channel, version_t v, std::string *out);
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
-  void encode_full(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
+  void encode_full(MonitorDBStoreTransactionRef t) override;
   version_t get_trim_to() const override;
   bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
   bool prepare_update(MonOpRequestRef op) override;

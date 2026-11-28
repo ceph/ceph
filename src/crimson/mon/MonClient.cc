@@ -16,6 +16,7 @@
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/hostname.h"
+#include "common/LogFmt.h"
 #include "include/utime_fmt.h"
 
 #include "crimson/auth/KeyRing.h"
@@ -38,6 +39,7 @@
 #include "messages/MMonMap.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
+#include "msg/MessageFmt.h"
 
 using std::string;
 using std::tuple;

@@ -13,6 +13,7 @@
 
 #include "ThreadMonitor.h"
 
+#include <fstream>
 #include <iomanip> // for std::setprecision()
 
 #define dout_context g_ceph_context

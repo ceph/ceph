@@ -27,6 +27,7 @@
 #include "common/config.h"
 #include "include/ceph_assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_epoch())
@@ -81,7 +82,7 @@ Elector::Elector(Monitor *m, int strategy) : logic(this, static_cast<ElectionLog
 
 void Elector::persist_epoch(epoch_t e)
 {
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", e);
   t->put(Monitor::MONITOR_NAME, "connectivity_scores", peer_tracker.get_encoded_bl());
   mon->store->apply_transaction(t);
@@ -90,7 +91,7 @@ void Elector::persist_epoch(epoch_t e)
 void Elector::persist_connectivity_scores()
 {
   dout(20) << __func__ << dendl;
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->put(Monitor::MONITOR_NAME, "connectivity_scores", peer_tracker.get_encoded_bl());
   mon->store->apply_transaction(t);
 }
@@ -102,7 +103,7 @@ epoch_t Elector::read_persisted_epoch() const
 
 void Elector::validate_store()
 {
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
   int r = mon->store->apply_transaction(t);
   ceph_assert(r >= 0);
@@ -720,7 +721,7 @@ void Elector::dispatch(MonOpRequestRef op)
 		<< ", taking it"
 		<< dendl;
 	mon->monmap->decode(em->monmap_bl);
-        auto t(std::make_shared<MonitorDBStore::Transaction>());
+        auto t(std::make_shared<MonitorDBStoreTransaction>());
         t->put("monmap", mon->monmap->epoch, em->monmap_bl);
         t->put("monmap", "last_committed", mon->monmap->epoch);
         mon->store->apply_transaction(t);

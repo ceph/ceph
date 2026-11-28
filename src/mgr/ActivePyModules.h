@@ -25,8 +25,8 @@
 #include "common/LogClient.h"
 #include "mon/MgrMap.h"
 #include "mon/MonCommand.h"
-#include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "mon/ProgressEvent.h"
 #include "mgr/MDSPerfMetricTypes.h"
 #include "mgr/MgrMapCache.h"
 

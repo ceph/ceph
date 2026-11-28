@@ -23,7 +23,6 @@
 #include "common/ref.h" // for cref_t
 
 #include "include/common_fwd.h"
-#include "include/Context.h" // for C_GatherBase
 #include "include/mempool.h"
 
 #include "messages/MClientReclaimReply.h"
@@ -58,6 +57,8 @@ class MDCache;
 class MDLog;
 class MDSContext;
 class C_MDSInternalNoop;
+template <class ContextType, class ContextInstanceType> class C_GatherBase;
+template <class ContextType, class GatherType> class C_GatherBuilderBase;
 using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
 using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 class MDSLogContextBase;

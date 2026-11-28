@@ -2,6 +2,9 @@
 #include <algorithm>
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 
 namespace crimson::os {
 

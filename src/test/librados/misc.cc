@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados.h"
+#include "include/ceph_release_numbers.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/scope_guard.h"

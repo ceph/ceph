@@ -16,7 +16,7 @@
 #define CRYPTO_PLUGIN_H
 
 // -----------------------------------------------------------------------------
-#include "common/PluginRegistry.h"
+#include "common/Plugin.h"
 #include "ostream"
 
 #include "crypto/crypto_accel.h"

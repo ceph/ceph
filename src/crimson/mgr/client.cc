@@ -16,6 +16,7 @@
 #include "messages/MMgrMap.h"
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrReport.h"
+#include "msg/MessageFmt.h"
 
 SET_SUBSYS(mgrc);
 

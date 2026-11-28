@@ -25,7 +25,6 @@
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
 #include "kv/KeyValueDB.h"
-#include "mon/MonitorDBStore.h"
 
 class Monitor;
 

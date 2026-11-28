@@ -47,6 +47,8 @@
 #include <sstream>
 #include <syslog.h>
 
+#define dout_context g_ceph_context
+
 #include "LogMonitor.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
@@ -58,6 +60,7 @@
 #include "msg/Messenger.h"
 #include "common/Graylog.h"
 #include "common/Journald.h"
+#include "common/LogFmt.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
@@ -530,7 +533,7 @@ void LogMonitor::generate_logentry_key(
   out->append(vs);
 }
 
-void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void LogMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   version_t version = get_last_committed() + 1;
   bufferlist bl;
@@ -619,7 +622,7 @@ bool LogMonitor::should_stash_full()
 }
 
 
-void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
+void LogMonitor::encode_full(MonitorDBStoreTransactionRef t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
   ceph_assert(get_last_committed() == summary.version);

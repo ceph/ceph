@@ -18,6 +18,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/hobject_fmt.h"
 #include "crush/CrushWrapper.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGPCT.h"

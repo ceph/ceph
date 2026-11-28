@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <iterator>
+#include <ostream>
+
 #include "aio.h"
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio)

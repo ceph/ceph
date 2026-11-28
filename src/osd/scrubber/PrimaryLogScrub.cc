@@ -7,6 +7,7 @@
 
 #include "common/debug.h"
 #include "common/scrub_types.h"
+#include "common/hobject_fmt.h"
 #include "osd/PeeringState.h"
 #include "osd/PrimaryLogPG.h"
 #include "osd/osd_types_fmt.h"

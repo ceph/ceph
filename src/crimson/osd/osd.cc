@@ -17,6 +17,7 @@
 #include <seastar/coroutine/parallel_for_each.hh>
 
 #include "common/pick_address.h"
+#include "common/LogFmt.h"
 #include "crimson/common/failsafe_full_ratio.h"
 #include "include/util.h"
 #include "include/utime_fmt.h"

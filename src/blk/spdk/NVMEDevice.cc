@@ -33,6 +33,7 @@
 #include <spdk/nvme.h>
 #include <spdk/version.h>
 
+#include "include/byte_u_t.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
 #include "include/types.h"

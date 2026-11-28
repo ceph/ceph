@@ -62,6 +62,10 @@ function(build_rocksdb)
   include(CheckCXXCompilerFlag)
   check_cxx_compiler_flag("-Wno-deprecated-copy" HAS_WARNING_DEPRECATED_COPY)
   set(rocksdb_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  # RocksDB relies on transitive includes of the C++ standard library;
+  # e.g. env/fs_on_demand.cc uses std::back_inserter without <iterator>,
+  # which recent libc++ versions no longer include transitively at all
+  string(APPEND rocksdb_CXX_FLAGS " -U_LIBCPP_REMOVE_TRANSITIVE_INCLUDES -include iterator")
   if(HAS_WARNING_DEPRECATED_COPY)
     string(APPEND rocksdb_CXX_FLAGS " -Wno-deprecated-copy")
   endif()

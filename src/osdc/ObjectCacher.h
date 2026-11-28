@@ -8,10 +8,10 @@
 #include "include/lru.h"
 #include "include/Context.h"
 #include "include/object.h"
+#include "include/sobject.h"
 #include "include/xlist.h"
 #include "include/common_fwd.h"
 
-#include "common/Cond.h"
 #include "common/Finisher.h"
 #include "common/snap_types.h" // for class SnapContext
 #include "common/Thread.h"
