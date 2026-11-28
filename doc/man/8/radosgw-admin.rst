@@ -523,6 +523,26 @@ as follows:
 :command:`reshard cancel`
   Cancel resharding a bucket
 
+:command:`mfa create`
+  Create a new MFA TOTP token for a user.
+
+:command:`mfa list`
+  List a user's MFA TOTP tokens.
+
+:command:`mfa get`
+  Show an MFA TOTP token.
+
+:command:`mfa remove`
+  Delete an MFA TOTP token.
+
+:command:`mfa check`
+  Check a pin against an MFA TOTP token. A pin that passes the check cannot be
+  used again.
+
+:command:`mfa resync`
+  Re-sync an MFA TOTP token whose clock has drifted, using two consecutive
+  pins.
+
 :command:`topic list`
   List bucket notifications topics
 
@@ -961,6 +981,37 @@ Quota Options
 .. option:: --quota-scope
 
     The scope of quota (bucket, user).
+
+MFA Options
+===========
+
+.. option:: --totp-serial
+
+   A string that identifies a TOTP token. Do not use spaces, because the
+   ``x-amz-mfa`` header separates the serial from the pin with a space.
+
+.. option:: --totp-seed
+
+   The secret seed that is used to calculate the TOTP.
+
+.. option:: --totp-seed-type
+
+   The encoding of the seed: ``hex`` or ``base32``. The default is ``hex``.
+
+.. option:: --totp-seconds
+
+   The time resolution, in seconds, that is used for TOTP generation. The
+   default is 30.
+
+.. option:: --totp-window
+
+   The number of TOTP time steps that are checked before and after the
+   current one when validating a pin. The default is 2.
+
+.. option:: --totp-pin
+
+   The value of a TOTP token at a certain time. :command:`mfa resync` takes
+   two consecutive pins, the earlier one first.
 
 
 Orphans Search Options
