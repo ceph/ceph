@@ -1,7 +1,8 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
+import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
 import { CLIENT_COMPAT, SMBCluster } from '../smb.model';
 
@@ -12,6 +13,7 @@ import { CLIENT_COMPAT, SMBCluster } from '../smb.model';
   standalone: false
 })
 export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
+  private readonly ctx = inject(SMB_CONTEXT);
   private sub = new Subscription();
 
   section = '';
@@ -67,7 +69,7 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
   }
 
   private buildOverviewFields(cluster: SMBCluster): OverviewField[] {
-    return [
+    const fields: OverviewField[] = [
       {
         label: $localize`Name`,
         value: cluster.cluster_id
@@ -75,11 +77,14 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
       {
         label: $localize`Authentication Mode`,
         value: cluster.auth_mode
-      },
-      {
-        label: $localize`Compatibility`,
-        value: cluster.client_compat || CLIENT_COMPAT.Default
       }
     ];
+    if (this.ctx.showMacOsCompat) {
+      fields.push({
+        label: $localize`Compatibility`,
+        value: cluster.client_compat || CLIENT_COMPAT.Default
+      });
+    }
+    return fields;
   }
 }
