@@ -153,4 +153,56 @@ bool LBAMapping::is_initial_pending() const {
     direct_cursor->get_laddr());
 }
 
+paddr_t LBAMapping::get_adjacent_paddr_hint(laddr_t laddr,
+  extent_len_t expected_object_size)
+{
+  auto& cursor = get_effective_cursor();
+  if (!cursor.is_viewable()) {
+    return P_ADDR_NULL;
+  }
+
+  auto& leaf = *cursor.parent;
+  auto pos = cursor.get_pos();
+  auto prefix = laddr.get_metadata_prefix();
+  const auto logical_offset = laddr.get_offset_bytes();
+  auto get_hint = [&](uint16_t index) -> paddr_t {
+    auto iter = leaf.iter_idx(index);
+    auto key = iter.get_key();
+    auto val = iter.get_val();
+    if (!key.is_object_address() ||
+        key.get_metadata_prefix() != prefix ||
+        key.get_offset_bytes() >= expected_object_size ||
+        !val.pladdr.is_paddr()) {
+      return P_ADDR_NULL;
+    }
+
+    auto paddr = val.pladdr.get_paddr();
+    if (!paddr.is_absolute_random_block()) {
+      return P_ADDR_NULL;
+    }
+
+    auto delta =
+      static_cast<device_off_t>(logical_offset) -
+      static_cast<device_off_t>(key.get_offset_bytes());
+    auto offset = paddr.as_blk_paddr().get_device_off() + delta;
+    if (offset < 0 || offset > DEVICE_OFF_MAX) {
+      return P_ADDR_NULL;
+    }
+    return paddr.add_offset(delta);
+  };
+
+  // check previous mapping
+  if (pos > 0) {
+    auto hint = get_hint(pos - 1);
+    if (hint != P_ADDR_NULL) {
+      return hint;
+    }
+  }
+  // check next mapping
+  if (pos < leaf.get_size()) {
+    return get_hint(pos);
+  }
+  return P_ADDR_NULL;
+}
+
 } // namespace crimson::os::seastore

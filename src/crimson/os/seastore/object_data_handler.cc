@@ -453,7 +453,10 @@ ObjectDataHandler::write_ret do_write(
   assert(data.bl);
   return ctx.tm.alloc_data_extents<ObjectDataBlock>(
     ctx.t,
-    laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
+    laddr_hint_t::create_as_fixed(
+      overwrite_range.aligned_begin,
+      laddr_t::UNIT_SIZE,
+      ctx.onode.get_expected_object_size()),
     overwrite_range.aligned_end.template get_byte_distance<
       extent_len_t>(overwrite_range.aligned_begin),
     std::move(write_pos)

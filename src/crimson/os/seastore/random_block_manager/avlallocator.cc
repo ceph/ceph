@@ -94,6 +94,12 @@ extent_len_t AvlAllocator::find_block(
   size_t size,
   rbm_abs_addr &start)
 {
+  if (start != 0 &&
+      is_aligned(start, block_size) &&
+      is_free_extent(start, size)) {
+    return size;
+  }
+
   uint64_t max_size = 0;
   auto p = extent_size_tree.rbegin();
   if (p != extent_size_tree.rend()) {

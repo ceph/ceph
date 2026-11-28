@@ -2695,6 +2695,11 @@ SeaStore::Shard::_do_transaction_step(
      });
    }
  }
+        if (op->expected_object_size > 0 &&
+            op->expected_object_size <= max_object_size) {
+          onode->set_alloc_hint(op->expected_object_size);
+        }
+
         return tm_iertr::now();
       }
       case Transaction::OP_CLONE:
