@@ -267,6 +267,46 @@ value to `-1`.
    setfattr -n ceph.dir.pin -v -1 home
 
 
+Choosing a pinning policy
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each kind of pin suits a different shape of directory tree:
+
+* An export pin (``ceph.dir.pin``) keeps a directory tree on the rank that you
+  choose. Use it when you know which trees are busy, or when a tree must stay
+  on a particular rank.
+
+* A distributed ephemeral pin (``ceph.dir.pin.distributed``) spreads the
+  immediate children of one directory across the ranks, and directories
+  further down go with their parent. Use it when each unit of work is a child
+  of the same directory, such as the home directories under ``/home`` or the
+  subvolumes in a subvolume group.
+
+* A random ephemeral pin (``ceph.dir.pin.random``) applies to every directory
+  beneath the one on which it is set, at any depth. The MDS pins each of those
+  directories with the given probability when it creates the directory or
+  loads it into its cache. Use it for a large tree in which users or
+  applications create many independent directories at different depths and
+  set no pins themselves: for example, a scratch tree such as ``/cephfs/tmp``
+  in which each job creates its own directories.
+
+The directories beneath a randomly pinned directory go to the same rank unless
+they are pinned themselves, and the balancer does not move them. A directory
+that is already in the cache when the policy is set is not considered until it
+is loaded again, and the MDS decides afresh each time a directory is loaded. A
+random pin therefore cannot keep a given directory on a given rank: use an
+export pin for that.
+
+Each directory that a random pin selects becomes a separate subtree, on the
+rank that the hash of its inode number picks. A high probability over a large
+tree creates many subtrees and scatters the subdirectories of one directory
+across the ranks. ``mds_export_ephemeral_random_max`` limits this: the MDS uses
+the smaller of that option and the value of the policy. Lowering the option
+reduces new random pins across the file system without changing each policy,
+and directories that are already pinned keep their pins until they are dropped
+from the cache.
+
+
 Dynamic Subtree Partitioning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
