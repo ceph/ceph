@@ -85,7 +85,7 @@ SnapRealm::SnapRealm(MDCache *c, CInode *in) :
  */
 void SnapRealm::build_snap_set() const
 {
-  dout(10) << "build_snap_set on " << *this << dendl;
+  dout(10) << __func__ << " on " << *this << dendl;
 
   cached_snaps.clear();
 
@@ -157,7 +157,7 @@ void SnapRealm::check_cache() const
 
   build_snap_trace();
   
-  dout(10) << "check_cache rebuilt " << cached_snaps
+  dout(10) << __func__ << " rebuilt " << cached_snaps
 	   << " seq " << seq
 	   << " cached_seq " << cached_seq
 	   << " cached_last_created " << cached_last_created
@@ -170,7 +170,7 @@ void SnapRealm::check_cache() const
 const set<snapid_t>& SnapRealm::get_snaps() const
 {
   check_cache();
-  dout(10) << "get_snaps " << cached_snaps
+  dout(10) << __func__ << " " << cached_snaps
 	   << " (seq " << srnode.seq << " cached_seq " << cached_seq << ")"
 	   << dendl;
   return cached_snaps;
@@ -199,7 +199,7 @@ const SnapContext& SnapRealm::get_snap_context() const
 void SnapRealm::get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t first, snapid_t last)
 {
   const set<snapid_t>& snaps = get_snaps();
-  dout(10) << "get_snap_info snaps " << snaps << dendl;
+  dout(10) << __func__ << " snaps " << snaps << dendl;
 
   // include my snaps within interval [first,last]
   for (auto p = srnode.snaps.lower_bound(first); // first element >= first
@@ -254,7 +254,7 @@ std::string_view SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
 snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid_t first, snapid_t last)
 {
   // first try me
-  dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
+  dout(10) << __func__ << " '" << n << "' in [" << first << "," << last << "]" << dendl;
 
   bool actual = (atino == inode->ino());
   string pname;
@@ -324,7 +324,7 @@ void SnapRealm::adjust_parent()
     newparent = pdn ? pdn->get_dir()->get_inode()->find_snaprealm() : NULL;
   }
   if (newparent != parent) {
-    dout(10) << "adjust_parent " << parent << " -> " << newparent << dendl;
+    dout(10) << __func__ << " " << parent << " -> " << newparent << dendl;
     if (parent)
       parent->open_children.erase(this);
     parent = newparent;
