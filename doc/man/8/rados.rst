@@ -247,6 +247,10 @@ Global commands
   Show utilization statistics, including disk usage (bytes) and object
   counts, over the entire system and broken down by pool.
 
+:command:`cppool` *src-pool* *dest-pool*
+  Copy all objects from *src-pool* to *dest-pool*. Does not preserve
+  ``user_version`` or self-managed snapshots.
+
 :command:`list-inconsistent-pg` *pool*
   List inconsistent PGs in given pool.
 
