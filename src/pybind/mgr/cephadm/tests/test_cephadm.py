@@ -2006,6 +2006,35 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == []
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
+        json.dumps([
+            dict(
+                name='osd.0',
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                version='version',
+                state='running',
+            )
+        ])
+    ))
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.RemoveUtil.get_weight", lambda _, __: 1.0)
+    def test_remove_osds_zap_hint(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
+
+            # without --zap, point at the containerized ceph-volume, since
+            # the host of a cephadm cluster usually has no ceph-volume
+            out = wait(cephadm_module, cephadm_module.remove_osds(['0']))
+            assert out.startswith('Scheduled OSD(s) for removal.\n')
+            assert out.endswith(
+                ':\n\n  cephadm ceph-volume -- lvm zap --destroy <VG/LV> [<VG/LV>...]')
+
+            cephadm_module.to_remove_osds = OSDRemovalQueue(cephadm_module)
+            out = wait(cephadm_module, cephadm_module.remove_osds(['0'], zap=True))
+            assert out == 'Scheduled OSD(s) for removal.'
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_rgw_update(self, cephadm_module):
         with with_host(cephadm_module, 'host1'):
