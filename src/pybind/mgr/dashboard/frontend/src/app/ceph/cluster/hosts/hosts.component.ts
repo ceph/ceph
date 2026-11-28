@@ -59,6 +59,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   public hostMetricTmpl: TemplateRef<any>;
   @ViewChild('hostDimlessTmpl', { static: true })
   public hostDimlessTmpl: TemplateRef<any>;
+  @ViewChild('hostMemoryDimlessTmpl', { static: true })
+  public hostMemoryDimlessTmpl: TemplateRef<any>;
   @ViewChild('maintenanceConfirmTpl', { static: true })
   maintenanceConfirmTpl: TemplateRef<any>;
   @ViewChild('orchTmpl', { static: true })
@@ -273,7 +275,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Total memory`,
         prop: 'memory_total_bytes',
-        cellTemplate: this.hostDimlessTmpl,
+        cellTemplate: this.hostMemoryDimlessTmpl,
         flexGrow: 0.4
       },
       {
