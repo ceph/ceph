@@ -93,6 +93,27 @@ describe('RbdFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('edit request size', () => {
+    // 1150 MiB is shown as "1.1 GiB", which converts back to only 1126.4 MiB
+    const imageSize = 1150 * 1024 * 1024;
+
+    beforeEach(() => {
+      component.response = { size: imageSize, features_name: [] } as RbdFormResponseModel;
+      component.getDirtyConfigurationValues = () => ({});
+      component.rbdForm.get('size').setValue('1.1 GiB');
+    });
+
+    it('should keep the exact image size if the size was not changed', () => {
+      expect(component.editRequest().size).toBe(imageSize);
+    });
+
+    it('should send the entered size if the size was changed', () => {
+      component.rbdForm.get('size').setValue('2 GiB');
+      component.rbdForm.get('size').markAsDirty();
+      expect(component.editRequest().size).toBe(2 * 1024 * 1024 * 1024);
+    });
+  });
+
   describe('create/edit/clone/copy image', () => {
     let createAction: jasmine.Spy;
     let editAction: jasmine.Spy;
