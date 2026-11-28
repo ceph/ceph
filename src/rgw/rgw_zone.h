@@ -61,7 +61,10 @@ struct RGWZoneParams {
 
   rgw_pool get_pool(CephContext *cct) const;
 
-  const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
+  // the placement's compression type, or "none" for an object whose logical
+  // size is known to be below the placement's compression min size
+  const std::string& get_compression_type(const rgw_placement_rule& placement_rule,
+                                          std::optional<uint64_t> size = std::nullopt) const;
   
   void encode(bufferlist& bl) const {
     ENCODE_START(19, 1, bl);
