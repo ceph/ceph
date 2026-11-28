@@ -493,6 +493,7 @@ public:
     SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
+  void doCompressionRequiredRatioTest(const char* write_v2);
 };
 
 struct MatrixArg
@@ -13997,6 +13998,104 @@ TEST_P(StoreTestSpecificAUSize, WriteV2CompressReject64K) {
   r = store->read(ch, hoid, 0, object_size, object_content_read);
   EXPECT_EQ(r, (int)object_size);
   EXPECT_TRUE(bl_eq(object_content_read, object_content_bl));
+}
+
+void StoreTestSpecificAUSize::doCompressionRequiredRatioTest(
+  const char* write_v2)
+{
+  SetVal(g_conf(), "bluestore_write_v2", write_v2);
+  SetVal(g_conf(), "bluestore_compression_algorithm", "snappy");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  SetVal(g_conf(), "bluestore_compression_max_blob_size", "65536");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(4096);
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // 64K that compresses to a single 4K allocation unit
+  bufferlist zeros;
+  zeros.append_zero(0x10000);
+  // 64K of which 40K are random, so it needs more than 40K compressed
+  bufferlist mixed;
+  mixed.append(random_string(0xa000));
+  mixed.append_zero(0x6000);
+  // 4K of zeros followed by 60K of random data, so it still takes 64K
+  // compressed (the zeros go first, snappy skips ahead over data that
+  // does not compress)
+  bufferlist almost;
+  almost.append_zero(0x1000);
+  almost.append(random_string(0xf000));
+
+  struct {
+    const char* ratio;
+    const bufferlist& data;
+    bool compressed;
+  } cases[] = {
+    {"0.99", zeros, true},
+    {"0.1",  zeros, true},   // 4K <= 6.4K
+    {"0.05", zeros, false},  // 4K > 3.2K
+    {"0.01", zeros, false},  // 4K > 655
+    {"0.9",  mixed, true},
+    {"0.5",  mixed, false},
+    {"1.0",  mixed, true},
+    {"1.0",  almost, false}, // no allocation is saved
+  };
+  int n = 0;
+  for (auto& c : cases) {
+    SetVal(g_conf(), "bluestore_compression_required_ratio", c.ratio);
+    g_conf().apply_changes(nullptr);
+
+    ghobject_t hoid(hobject_t(sobject_t("Object " + stringify(n++),
+                                        CEPH_NOSNAP)));
+    store_statfs_t before, after;
+    ASSERT_EQ(store->statfs(&before), 0);
+    ObjectStore::Transaction t;
+    bufferlist bl = c.data;
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(store->statfs(&after), 0);
+
+    auto original =
+      after.data_compressed_original - before.data_compressed_original;
+    auto allocated =
+      after.data_compressed_allocated - before.data_compressed_allocated;
+    cerr << "write_v2 " << write_v2 << " ratio " << c.ratio
+         << " compressed_original 0x" << std::hex << original
+         << " compressed_allocated 0x" << allocated << std::dec << std::endl;
+    if (c.compressed) {
+      EXPECT_EQ(0x10000, original) << "ratio " << c.ratio;
+    } else {
+      EXPECT_EQ(0, original) << "ratio " << c.ratio;
+    }
+
+    bufferlist read_bl;
+    r = store->read(ch, hoid, 0, bl.length(), read_bl);
+    EXPECT_EQ(r, (int)bl.length());
+    bufferlist expected = c.data;
+    EXPECT_TRUE(bl_eq(expected, read_bl));
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, CompressionRequiredRatio) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  doCompressionRequiredRatioTest("false");
+}
+
+TEST_P(StoreTestSpecificAUSize, CompressionRequiredRatioV2) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  doCompressionRequiredRatioTest("true");
 }
 
 #endif  // WITH_BLUESTORE
