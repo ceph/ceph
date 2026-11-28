@@ -4,28 +4,34 @@ tasks:
     clients:
       - set -x
       - cd $TESTDIR
-      # partially or incorrectly installed mpich will create a mess and the
-      # configure script or the build process (which is initiated using "make"
-      # command) for the ior project will fail
-      - sudo apt purge -y mpich
-      - sudo apt install -y mpich
+      # The distro mpich lives in /usr/lib64/mpich and is normally set up via
+      # environment modules. Build against it directly, with an rpath so the
+      # binaries find libmpi without LD_LIBRARY_PATH.
+      - sudo dnf install -y mpich mpich-devel wget bzip2 tree
+      - export PATH=/usr/lib64/mpich/bin:$PATH
       - wget http://download.ceph.com/qa/ior-3.3.0.tar.bz2
       - tar xvfj ior-3.3.0.tar.bz2
       - cd ior-3.3.0
-      - ./configure
+      - ./configure LDFLAGS=-Wl,-rpath,/usr/lib64/mpich/lib
       - make
       - make install DESTDIR=$TESTDIR/binary/
       - cd $TESTDIR/
-      - sudo apt install -y tree
       - tree binary/
       - rm ior-3.3.0.tar.bz2
       - rm -r ior-3.3.0
       - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
+      # The mpi task runs a bare "mpiexec", and hydra starts its proxy on the
+      # other hosts from the directory mpiexec was found in.
+      - sudo ln -sf /usr/lib64/mpich/bin/mpiexec /usr/bin/mpiexec
+      - sudo ln -sf /usr/lib64/mpich/bin/hydra_pmi_proxy /usr/bin/hydra_pmi_proxy
 - ssh_keys:
 - mpi:
-    exec: $TESTDIR/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o $TESTDIR/gmnt/ior.testfile
+    # mpich uses libfabric (ch4:ofi). Keep it off the RDMA providers, which
+    # may not work on the lab NICs.
+    exec: -genv FI_PROVIDER tcp $TESTDIR/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o $TESTDIR/gmnt/ior.testfile
 - pexec:
     clients:
       - rm -f $TESTDIR/gmnt/ior.testfile
       - rm -f $TESTDIR/gmnt
       - rm -rf $TESTDIR/binary
+      - sudo rm -f /usr/bin/mpiexec /usr/bin/hydra_pmi_proxy
