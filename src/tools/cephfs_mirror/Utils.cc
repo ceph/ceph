@@ -35,7 +35,18 @@ int connect(std::string_view client_name, std::string_view cluster_name,
     cct->_conf->cluster = cluster_name;
   }
 
-  int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
+  const std::string conf_file = [&args]() {
+    std::string cf;
+    for (auto i = args.begin(); i != args.end(); ) {
+      if (!ceph_argparse_witharg(args, i, &cf, "-c", "--conf", (char*)NULL)) {
+        ++i;
+      }
+    }
+    return cf;
+  }();
+
+  const char *conf_file_list = conf_file.empty() ? nullptr : conf_file.c_str();
+  int r = cct->_conf.parse_config_files(conf_file_list, nullptr, 0);
   if (r < 0 && r != -ENOENT) {
     derr << ": could not read ceph conf: " << ": " << cpp_strerror(r) << dendl;
     return r;
