@@ -810,7 +810,7 @@ options:
 - name: paxos_trim_min
   type: int
   level: advanced
-  default: 250
+  default: 500
   services:
   - mon
   fmt_desc: Number of extra proposals tolerated before trimming
@@ -819,7 +819,7 @@ options:
 - name: paxos_trim_max
   type: int
   level: advanced
-  default: 500
+  default: 1000
   services:
   - mon
   fmt_desc: The maximum number of extra proposals to trim at a time
@@ -828,7 +828,7 @@ options:
 - name: paxos_service_trim_min
   type: uint
   level: advanced
-  default: 250
+  default: 500
   services:
   - mon
   fmt_desc: The minimum number of versions to trigger a trim (0 disables it)
@@ -837,7 +837,7 @@ options:
 - name: paxos_service_trim_max
   type: uint
   level: advanced
-  default: 500
+  default: 1000
   services:
   - mon
   fmt_desc: The maximum number of versions to trim during a single proposal (0 disables it)
