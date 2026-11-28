@@ -87,11 +87,11 @@ class DaemonWatchdog(Greenlet):
                 except:
                     self.logger.exception("ignoring exception:")
         daemons = []
-        daemons.extend(filter(lambda daemon: not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('rgw', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('rgw', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.finished(), self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)))
 
         for daemon in daemons:
             try:
@@ -125,11 +125,11 @@ class DaemonWatchdog(Greenlet):
             mgrs = self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)
 
             daemon_failures = []
-            daemon_failures.extend(filter(lambda daemon: daemon.finished(), osds))
-            daemon_failures.extend(filter(lambda daemon: daemon.finished(), mons))
-            daemon_failures.extend(filter(lambda daemon: daemon.finished(), mdss))
-            daemon_failures.extend(filter(lambda daemon: daemon.finished(), rgws))
-            daemon_failures.extend(filter(lambda daemon: daemon.finished(), mgrs))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.finished(), osds))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.finished(), mons))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.finished(), mdss))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.finished(), rgws))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.finished(), mgrs))
 
             for daemon in daemon_failures:
                 name = daemon.role + '.' + daemon.id_
