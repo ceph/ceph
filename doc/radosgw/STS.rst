@@ -104,6 +104,8 @@ A shadow user is created corresponding to every federated user. The user ID is d
 The user is created in a separate namespace ``oidc`` such that the user ID doesn't clash with any other user IDs in RGW. The format of the user ID
 is ``<tenant>$<user-namespace>$<sub>`` where ``user-namespace`` is ``oidc`` for users that authenticate with OIDC providers.
 
+.. note:: For roles in :ref:`User Accounts <radosgw-account>`, resources created under the assumed role are owned by that account. No shadow users are created, and IAM policy does not match user principals in that shadow user format.
+
 RGW now supports Session tags that can be passed in the web token to AssumeRoleWithWebIdentity call. More information related to Session Tags can be found here
 :doc:`session-tags`.
 
