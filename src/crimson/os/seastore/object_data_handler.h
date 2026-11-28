@@ -335,9 +335,9 @@ using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 
 class ObjectDataHandler {
 public:
-  ObjectDataHandler(uint32_t mos) : max_object_size(mos),
-    delta_based_overwrite_max_extent_size(
-      crimson::common::get_conf<Option::size_t>("seastore_data_delta_based_overwrite")) {}
+  ObjectDataHandler(uint32_t mos, extent_len_t dbo_max_extent_size)
+    : max_object_size(mos),
+      delta_based_overwrite_max_extent_size(dbo_max_extent_size) {}
 
   struct context_t {
     TransactionManager &tm;

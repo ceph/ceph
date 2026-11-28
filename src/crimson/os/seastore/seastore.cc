@@ -129,6 +129,8 @@ SeaStore::Shard::Shard(
   :root(root),
    max_object_size(
      get_conf<uint64_t>("seastore_default_max_object_size")),
+   delta_based_overwrite_max_extent_size(
+     get_conf<Option::size_t>("seastore_data_delta_based_overwrite")),
    is_test(is_test),
    throttler(
       get_conf<uint64_t>("seastore_max_concurrent_transactions")),
@@ -1620,7 +1622,7 @@ SeaStore::Shard::_read(
     size - offset :
     std::min(size - offset, len);
 
-  return ObjectDataHandler(max_object_size).read(
+  return ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size).read(
     ObjectDataHandler::context_t{
       *transaction_manager,
       t,
@@ -2039,7 +2041,7 @@ SeaStore::Shard::_fiemap(
     size - off:
     std::min(size - off, len);
   return seastar::do_with(
-    ObjectDataHandler(max_object_size),
+    ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
     [this, off, adjust_len, &t, &onode](auto &objhandler) {
     return objhandler.fiemap(
       ObjectDataHandler::context_t{
@@ -2831,7 +2833,8 @@ SeaStore::Shard::_migrate_onode(
       ? L_ADDR_NULL
       : onode->get_layout().object_data.get().get_reserved_data_base(),
     d_onode->get_hobj());
-  ObjectDataHandler objHandler(max_object_size);
+  ObjectDataHandler objHandler(
+    max_object_size, delta_based_overwrite_max_extent_size);
   co_await _maybe_copy_on_write(ctx, *onode, objHandler);
 
   if (auto prefix = onode->get_clone_prefix(); prefix) {
@@ -2885,7 +2888,7 @@ SeaStore::Shard::_remove(
       get_omap_root(omap_type_t::XATTR, *onode));
   }).si_then([this, &ctx, &onode] {
     return seastar::do_with(
-      ObjectDataHandler(max_object_size),
+      ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
       [&onode, this, &ctx](auto &objhandler)
     {
       return _maybe_copy_on_write(ctx, *onode, objhandler
@@ -2914,7 +2917,7 @@ SeaStore::Shard::_touch(
   internal_context_t &ctx,
   Onode &onode)
 {
-  auto objhandler = ObjectDataHandler(max_object_size);
+  auto objhandler = ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size);
   co_await objhandler.touch(ObjectDataHandler::context_t{
     *transaction_manager,
     *ctx.transaction,
@@ -2949,7 +2952,7 @@ SeaStore::Shard::_write(
   }
   return seastar::do_with(
     std::move(_bl),
-    ObjectDataHandler(max_object_size),
+    ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
     [=, this, &ctx, &onode](auto &bl, auto &objhandler)
   {
     return _maybe_copy_on_write(ctx, onode, objhandler
@@ -2973,7 +2976,7 @@ SeaStore::Shard::_clone(
   Onode &d_onode)
 {
   return seastar::do_with(
-    ObjectDataHandler(max_object_size),
+    ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler)
   {
     auto &object_size = onode.get_layout().size;
@@ -3064,7 +3067,7 @@ SeaStore::Shard::_clone_range(
       std::max<uint64_t>(srcoff + length, d_object_size));
   }
   return seastar::do_with(
-    ObjectDataHandler(max_object_size),
+    ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
     [=, this, &ctx](auto &objHandler) {
     return objHandler.clone_range(
       ObjectDataHandler::context_t{
@@ -3096,7 +3099,7 @@ SeaStore::Shard::_zero(
     *ctx.transaction,
     std::max<uint64_t>(offset + len, object_size));
   return seastar::do_with(
-    ObjectDataHandler(max_object_size),
+    ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
     [=, this, &ctx, &onode](auto &objhandler)
   {
     return _maybe_copy_on_write(ctx, onode, objhandler
@@ -3151,7 +3154,7 @@ SeaStore::Shard::_truncate(
 {
   onode.update_onode_size(*ctx.transaction, size);
   return seastar::do_with(
-    ObjectDataHandler(max_object_size),
+    ObjectDataHandler(max_object_size, delta_based_overwrite_max_extent_size),
     [=, this, &ctx, &onode](auto &objhandler)
   {
     return _maybe_copy_on_write(ctx, onode, objhandler
