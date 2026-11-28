@@ -43,6 +43,7 @@
 
 #include "crush/CrushTreeDumper.h"
 #include "crush/CrushWrapper.h"
+#include "erasure-code/lrc/ErasureCodeLrcLayers.h"
 #include "common/Clock.h"
 #include "mon/PGMap.h"
 #include "common/pick_address.h"
@@ -5399,6 +5400,7 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
   int r = get_json_str_map(cct->_conf.get_val<string>("osd_pool_default_erasure_code_profile"),
 		      *ss,
 		      &profile_map);
+  ceph::set_lrc_layer_plugin_default(profile_map);
   return r;
 }
 
@@ -8564,6 +8566,52 @@ void OSDMap::check_health(CephContext *cct,
       ss << detail.size() << " pool(s) have no replicas configured";
       auto& d = checks->add("POOL_NO_REDUNDANCY", HEALTH_WARN,
         ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
+
+  // LRC_LAYER_PLUGIN_UNSET
+  {
+    // Upgraded OSDs will not serve a pool using an LRC profile without a valid
+    // layer-plugin (tracker 81369), so raise this as soon as the monitors are
+    // upgraded, before any OSD has been restarted.
+    map<string, vector<string>> unusable;
+    for (const auto& [name, profile] : erasure_code_profiles) {
+      if (ceph::lrc_profile_layer_plugin_unusable(profile)) {
+        unusable.try_emplace(name);
+      }
+    }
+    if (!unusable.empty()) {
+      for (const auto& [id, pool] : pools) {
+        if (!pool.is_erasure())
+          continue;
+        if (auto p = unusable.find(pool.erasure_code_profile);
+            p != unusable.end())
+          p->second.push_back(get_pool_name(id));
+      }
+      bool in_use = false;
+      list<string> detail;
+      for (const auto& [name, pool_names] : unusable) {
+        ostringstream ss;
+        ss << "LRC erasure-code profile '" << name << "' "
+           << ceph::lrc_layer_plugin_problem(erasure_code_profiles.at(name));
+        if (pool_names.empty()) {
+          ss << " and is not used by any pool";
+        } else {
+          in_use = true;
+          ss << "; used by pool(s) " << boost::algorithm::join(pool_names, ", ");
+        }
+        detail.push_back(ss.str());
+      }
+      ostringstream ss;
+      ss << unusable.size() << " LRC erasure-code profile(s) do not set a "
+         << "valid '" << ceph::LRC_LAYER_PLUGIN_KEY << "'";
+      if (in_use) {
+        ss << "; upgraded OSDs will not serve their pools";
+      }
+      auto& d = checks->add("LRC_LAYER_PLUGIN_UNSET",
+                            in_use ? HEALTH_ERR : HEALTH_WARN,
+                            ss.str(), unusable.size());
       d.detail.swap(detail);
     }
   }

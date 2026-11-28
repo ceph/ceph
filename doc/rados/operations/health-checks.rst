@@ -2007,6 +2007,37 @@ you can label the pool by running the following low-level command:
 
 For more information, see :ref:`associate-pool-to-application`.
 
+LRC_LAYER_PLUGIN_UNSET
+______________________
+
+One or more LRC erasure-code profiles do not set ``layer-plugin``, the
+sub-plugin (``jerasure`` or ``isa``) used to compute their layers, or set it
+to some other value. The two sub-plugins are not interchangeable, so Ceph does
+not guess: OSDs will not serve the PGs of a pool that uses such a profile, and
+an OSD that holds them does not boot. This check is raised as ``HEALTH_ERR``
+if a pool uses one of these profiles, and as ``HEALTH_WARN`` if none does. It
+usually means the profile was created by a release that did not record the
+key, or that a mistyped value was set on such a release, which did not check
+it.
+
+To resolve this issue, set ``layer-plugin`` on each listed profile, using the
+sub-plugin its data was written with: ``jerasure`` if the profile's existing
+pools were written before Tentacle, ``isa`` otherwise. Re-specify the full
+profile, because ``set`` replaces it:
+
+.. prompt:: bash #
+
+   ceph osd erasure-code-profile get <name>
+   ceph osd erasure-code-profile set <name> <all existing settings> layer-plugin=<jerasure|isa> --force --yes-i-really-mean-it
+
+A profile that no pool uses can instead be removed:
+
+.. prompt:: bash #
+
+   ceph osd erasure-code-profile rm <name>
+
+See :doc:`erasure-code-lrc` for details.
+
 POOL_FULL
 _________
 

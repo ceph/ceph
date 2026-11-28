@@ -463,6 +463,132 @@ TEST_F(OSDMapTest, Create) {
   ASSERT_EQ(get_num_osds(), osdmap.get_num_in_osds());
 }
 
+// LRC profiles without layer-plugin raise LRC_LAYER_PLUGIN_UNSET: a warning
+// while no pool uses them, an error once one does (tracker 81369)
+TEST_F(OSDMapTest, LrcLayerPluginUnsetHealth) {
+  set_up_map();
+  const string check = "LRC_LAYER_PLUGIN_UNSET";
+  const map<string,string> keyless = {
+    {"plugin", "lrc"}, {"k", "4"}, {"m", "2"}, {"l", "3"}};
+  map<string,string> keyed = keyless;
+  keyed["layer-plugin"] = "jerasure";
+  auto health = [this]() {
+    health_check_map_t checks;
+    osdmap.check_health(g_ceph_context, &checks);
+    return checks;
+  };
+
+  // no LRC profile, or a non-LRC profile without the key
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.set_erasure_code_profile(
+      "jer", {{"plugin", "jerasure"}, {"k", "2"}, {"m", "1"}});
+    osdmap.apply_incremental(inc);
+    ASSERT_EQ(0u, health().checks.count(check));
+  }
+
+  // an unused keyless LRC profile is a warning
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.set_erasure_code_profile("lrc-unused", keyless);
+    osdmap.apply_incremental(inc);
+    auto checks = health();
+    ASSERT_EQ(1u, checks.checks.count(check));
+    const auto& c = checks.checks[check];
+    EXPECT_EQ(HEALTH_WARN, c.severity);
+    ASSERT_EQ(1u, c.detail.size());
+    EXPECT_NE(string::npos, c.detail.front().find("lrc-unused"));
+    EXPECT_NE(string::npos, c.detail.front().find("not used by any pool"));
+  }
+
+  // a keyless LRC profile used by a pool is an error naming the pool
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.set_erasure_code_profile("lrc-used", keyless);
+    pg_pool_t *p = inc.get_new_pool(my_ec_pool,
+                                    osdmap.get_pg_pool(my_ec_pool));
+    p->erasure_code_profile = "lrc-used";
+    osdmap.apply_incremental(inc);
+    auto checks = health();
+    ASSERT_EQ(1u, checks.checks.count(check));
+    const auto& c = checks.checks[check];
+    EXPECT_EQ(HEALTH_ERR, c.severity);
+    EXPECT_EQ(2u, c.detail.size());
+    bool found = false;
+    for (const auto& d : c.detail) {
+      if (d.find("'lrc-used'") != string::npos) {
+        found = true;
+        EXPECT_NE(string::npos, d.find("pool(s) ec"));
+      }
+    }
+    EXPECT_TRUE(found);
+  }
+
+  // an invalid value (a typo stored by a release that ignored the key) is
+  // reported like a missing one
+  {
+    map<string,string> typo = keyless;
+    typo["layer-plugin"] = "jerasue";
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.set_erasure_code_profile("lrc-unused", keyed);
+    inc.set_erasure_code_profile("lrc-used", typo);
+    osdmap.apply_incremental(inc);
+    auto checks = health();
+    ASSERT_EQ(1u, checks.checks.count(check));
+    const auto& c = checks.checks[check];
+    EXPECT_EQ(HEALTH_ERR, c.severity);
+    ASSERT_EQ(1u, c.detail.size());
+    EXPECT_NE(string::npos, c.detail.front().find("invalid"));
+    EXPECT_NE(string::npos, c.detail.front().find("'jerasue'"));
+  }
+
+  // setting a valid key on both clears the check
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.set_erasure_code_profile("lrc-unused", keyed);
+    inc.set_erasure_code_profile("lrc-used", keyed);
+    osdmap.apply_incremental(inc);
+    ASSERT_EQ(0u, health().checks.count(check));
+  }
+}
+
+// The default EC profile records the LRC sub-plugin wherever it is created,
+// including the one built with a new cluster's first OSDMap (tracker 81369)
+TEST_F(OSDMapTest, LrcDefaultProfileStamped) {
+  auto& conf = g_ceph_context->_conf;
+  const string saved =
+    conf.get_val<string>("osd_pool_default_erasure_code_profile");
+  conf.set_val("osd_pool_default_erasure_code_profile",
+               "plugin=lrc k=4 m=2 l=3 crush-failure-domain=osd");
+
+  map<string,string> profile;
+  ASSERT_EQ(0, osdmap.get_erasure_code_profile_default(g_ceph_context,
+                                                        profile, &cerr));
+  EXPECT_EQ("isa", profile["layer-plugin"]);
+
+  // build_simple() creates the "default" profile from the same option
+  set_up_map();
+  ASSERT_TRUE(osdmap.has_erasure_code_profile("default"));
+  EXPECT_EQ("isa",
+            osdmap.get_erasure_code_profile("default").at("layer-plugin"));
+
+  // an explicit value in the option is kept, and non-LRC defaults untouched
+  conf.set_val("osd_pool_default_erasure_code_profile",
+               "plugin=lrc k=4 m=2 l=3 layer-plugin=jerasure");
+  profile.clear();
+  ASSERT_EQ(0, osdmap.get_erasure_code_profile_default(g_ceph_context,
+                                                        profile, &cerr));
+  EXPECT_EQ("jerasure", profile["layer-plugin"]);
+  conf.set_val("osd_pool_default_erasure_code_profile",
+               "plugin=jerasure k=2 m=1");
+  profile.clear();
+  ASSERT_EQ(0, osdmap.get_erasure_code_profile_default(g_ceph_context,
+                                                        profile, &cerr));
+  EXPECT_EQ(0u, profile.count("layer-plugin"));
+
+  conf.set_val("osd_pool_default_erasure_code_profile", saved);
+}
+
 TEST_F(OSDMapTest, Features) {
   // with EC pool
   set_up_map();

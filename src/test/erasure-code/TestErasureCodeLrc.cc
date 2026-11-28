@@ -450,6 +450,225 @@ TEST(ErasureCodeLrc, init_kml)
   EXPECT_EQ((unsigned int)(4 + 2 + (4 + 2) / 3), lrc.get_chunk_count());
 }
 
+TEST(ErasureCodeLrc, lrc_profile_missing_layer_plugin)
+{
+  // non-LRC profile is never considered missing a layer-plugin
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure"; p["k"] = "4"; p["m"] = "2";
+    EXPECT_FALSE(ceph::lrc_profile_missing_layer_plugin(p));
+  }
+  // LRC profile with no sub-plugin set is ambiguous
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_TRUE(ceph::lrc_profile_missing_layer_plugin(p));
+  }
+  // LRC profile with an explicit sub-plugin is fine
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_FALSE(ceph::lrc_profile_missing_layer_plugin(p));
+  }
+}
+
+TEST(ErasureCodeLrc, set_lrc_layer_plugin_default)
+{
+  // non-LRC profile. Should be untouched, no key added.
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure"; p["k"] = "4"; p["m"] = "2";
+    EXPECT_FALSE(ceph::set_lrc_layer_plugin_default(p));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+  }
+  // LRC with no sub-plugin set. Newly-created profiles default to isa.
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_TRUE(ceph::set_lrc_layer_plugin_default(p));
+    EXPECT_EQ("isa", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // already set, left alone
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_FALSE(ceph::set_lrc_layer_plugin_default(p));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+}
+
+TEST(ErasureCodeLrc, resolve_lrc_layer_plugin)
+{
+  // new LRC profile gets the default
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(nullptr, p, &cerr));
+    EXPECT_EQ("isa", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // an explicit value is left alone, new or override
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "isa";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(nullptr, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // an override that omits the key keeps the recorded value
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p["crush-failure-domain"] = "host";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // an override of a keyless LRC profile that omits the key is refused
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(&existing, p, &ss));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+    EXPECT_NE(string::npos, ss.str().find(ceph::LRC_LAYER_PLUGIN_KEY));
+  }
+  // replacing a non-LRC profile with an LRC one gets the default
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "jerasure";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("isa", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // non-LRC profile is untouched
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(nullptr, p, &cerr));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+  }
+  // the key is refused on a non-LRC profile
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "isa";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(nullptr, p, &ss));
+    EXPECT_NE(string::npos, ss.str().find("only applies to the lrc plugin"));
+  }
+  // a value other than jerasure or isa is refused, new or override
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(nullptr, p, &ss));
+    EXPECT_NE(string::npos, ss.str().find("jerasue"));
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+  }
+  // an existing invalid value (stored by a release that ignored the key) is
+  // never carried over; it must be replaced explicitly
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(&existing, p, &ss));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+    EXPECT_NE(string::npos, ss.str().find("invalid"));
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+}
+
+TEST(ErasureCodeLrc, lrc_profile_layer_plugin_unusable)
+{
+  ErasureCodeProfile p;
+  p["plugin"] = "jerasure";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+  // a stray key on a non-LRC profile does not matter
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+
+  p.clear();
+  p["plugin"] = "lrc";
+  EXPECT_TRUE(ceph::lrc_profile_layer_plugin_unusable(p));
+  EXPECT_NE(string::npos, ceph::lrc_layer_plugin_problem(p).find("does not set"));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "isa";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+  EXPECT_TRUE(ceph::lrc_profile_layer_plugin_unusable(p));
+  EXPECT_NE(string::npos, ceph::lrc_layer_plugin_problem(p).find("'jerasue'"));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "";
+  EXPECT_TRUE(ceph::lrc_profile_layer_plugin_unusable(p));
+}
+
+TEST(ErasureCodeLrc, layer_plugin_default_kml)
+{
+  // k/m/l form: layer-plugin key applies to every layer
+  for (string plugin : {string("jerasure"), string("isa")}) {
+    ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+    ErasureCodeProfile profile;
+    profile["k"] = "4"; profile["m"] = "2"; profile["l"] = "3";
+    profile[ceph::LRC_LAYER_PLUGIN_KEY] = plugin;
+    EXPECT_EQ(0, lrc.init(profile, &cerr));
+    ASSERT_FALSE(lrc.layers.empty());
+    for (auto &layer : lrc.layers)
+      EXPECT_EQ(plugin, layer.profile["plugin"]);
+  }
+  // default is ISA
+  {
+    ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+    ErasureCodeProfile profile;
+    profile["k"] = "4"; profile["m"] = "2"; profile["l"] = "3";
+    EXPECT_EQ(0, lrc.init(profile, &cerr));
+    ASSERT_FALSE(lrc.layers.empty());
+    for (auto &layer : lrc.layers)
+      EXPECT_EQ("isa", layer.profile["plugin"]);
+  }
+}
+
+TEST(ErasureCodeLrc, layer_plugin_default_explicit_layers)
+{
+  // Explicit-layers form: layer-plugin is default; a layer that explicitly
+  // chooses a plugin keeps it, the others inherit the default.
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["mapping"] = "DD__DD__";
+  profile[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+  profile["layers"] =
+    "[ "
+    " [ \"DDc_DDc_\", \"\" ],"
+    " [ \"DDDc____\", \"plugin=isa\" ],"
+    " [ \"____DDDc\", \"\" ],"
+    "]";
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  ASSERT_EQ(3u, lrc.layers.size());
+  EXPECT_EQ("jerasure", lrc.layers[0].profile["plugin"]);
+  EXPECT_EQ("isa",      lrc.layers[1].profile["plugin"]);
+  EXPECT_EQ("jerasure", lrc.layers[2].profile["plugin"]);
+}
+
 TEST(ErasureCodeLrc, minimum_to_decode)
 {
   // trivial : no erasures, the minimum is want_to_read

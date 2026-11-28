@@ -45,6 +45,7 @@
 #include "osd/scrubber/pg_scrubber.h"
 #include "osd/ECCommon.h"
 #include "osd/ECInject.h"
+#include "erasure-code/lrc/ErasureCodeLrcLayers.h"
 
 #include "include/types.h"
 #include "include/compat.h"
@@ -4893,6 +4894,7 @@ int OSD::shutdown()
   }
 
   monc->shutdown();
+  deferred_lrc_pgs.clear();
   osd_lock.unlock();
   {
     std::unique_lock l{map_lock};
@@ -5223,7 +5225,29 @@ PG* OSD::_make_pg(
     pi = *createmap->get_pg_pool(pgid.pool());
     name = createmap->get_pool_name(pgid.pool());
     if (pi.is_erasure()) {
-      ec_profile = createmap->get_erasure_code_profile(pi.erasure_code_profile);
+      const string& profname = pi.erasure_code_profile;
+      ec_profile = createmap->get_erasure_code_profile(profname);
+      OSDMapRef curmap =
+        ceph::is_lrc_profile(ec_profile) ? get_osdmap() : OSDMapRef();
+      if (curmap &&
+          curmap->have_pg_pool(pgid.pool()) &&
+          curmap->has_erasure_code_profile(profname)) {
+        // Build an LRC PG from the current profile, not createmap's: its
+        // layer-plugin may have been set since
+        ec_profile = curmap->get_erasure_code_profile(profname);
+        if (ceph::lrc_profile_layer_plugin_unusable(ec_profile)) {
+          // The caller should have deferred this PG and this should be unreachable
+          derr << __func__ << " " << pgid << " pool '" << name
+               << "' LRC erasure-code profile '" << profname << "' "
+               << ceph::lrc_layer_plugin_problem(ec_profile)
+               << "; refusing to build the PG to avoid data corruption "
+               << "(tracker 81369)" << dendl;
+          ceph_abort_msg("LRC erasure-code profile has no valid layer-plugin");
+        }
+        dout(10) << __func__ << " " << pgid << " LRC "
+                 << ceph::LRC_LAYER_PLUGIN_KEY << "="
+                 << ec_profile.at(ceph::LRC_LAYER_PLUGIN_KEY) << dendl;
+      }
     }
   } else {
     // pool was deleted; grab final pg_pool_t off disk.
@@ -5245,6 +5269,12 @@ PG* OSD::_make_pg(
       return nullptr;
     }
     decode(ec_profile, p);
+  }
+  // A deleted pool's PGs are only torn down, never decoded, so any valid
+  // sub-plugin will do; an invalid one would fail to load and abort
+  if (ceph::lrc_profile_layer_plugin_unusable(ec_profile) &&
+      !get_osdmap()->have_pg_pool(pgid.pool())) {
+    ec_profile[ceph::LRC_LAYER_PLUGIN_KEY] = ceph::LRC_LAYER_PLUGIN_DEFAULT;
   }
   PGPool pool(createmap, pgid.pool(), pi, name);
   PG *pg;
@@ -5375,6 +5405,22 @@ PGRef OSD::lookup_lock_pg(spg_t pgid)
   return _lookup_lock_pg(pgid);
 }
 
+static bool pool_is_lrc(const OSDMap& osdmap, int64_t poolid)
+{
+  const pg_pool_t *pool = osdmap.get_pg_pool(poolid);
+  return pool && pool->is_erasure() &&
+    ceph::is_lrc_profile(
+      osdmap.get_erasure_code_profile(pool->erasure_code_profile));
+}
+
+static bool pool_lrc_layer_plugin_unusable(const OSDMap& osdmap, int64_t poolid)
+{
+  const pg_pool_t *pool = osdmap.get_pg_pool(poolid);
+  return pool && pool->is_erasure() &&
+    ceph::lrc_profile_layer_plugin_unusable(
+      osdmap.get_erasure_code_profile(pool->erasure_code_profile));
+}
+
 void OSD::load_pgs()
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
@@ -5424,61 +5470,173 @@ void OSD::load_pgs()
       continue;
     }
 
-    PGRef pg;
-    if (map_epoch > 0) {
-      OSDMapRef pgosdmap = service.try_get_map(map_epoch);
-      if (!pgosdmap) {
-	if (!get_osdmap()->have_pg_pool(pgid.pool())) {
-	  derr << __func__ << ": could not find map for epoch " << map_epoch
-	       << " on pg " << pgid << ", but the pool is not present in the "
-	       << "current map, so this is probably a result of bug 10617.  "
-	       << "Skipping the pg for now, you can use ceph-objectstore-tool "
-	       << "to clean it up later." << dendl;
-	  continue;
-	} else {
-	  derr << __func__ << ": have pgid " << pgid << " at epoch "
-	       << map_epoch << ", but missing map.  Crashing."
-	       << dendl;
-	  ceph_abort_msg("Missing map in load_pgs");
-	}
+    // Defer every PG of an LRC pool rather than build it from the map stored
+    // on disk (tracker 81369), which may predate its layer-plugin being set or
+    // changed. _preboot() loads the PG once it has the latest map, and does
+    // not boot the OSD until that map names a valid sub-plugin.
+    if (pool_is_lrc(*get_osdmap(), pgid.pool())) {
+      const OSDMapRef curmap = get_osdmap();
+      const auto& profile = curmap->get_erasure_code_profile(
+        curmap->get_pg_pool(pgid.pool())->erasure_code_profile);
+      if (ceph::lrc_profile_layer_plugin_unusable(profile)) {
+        derr << __func__ << " " << pgid << " deferred: pool's LRC "
+             << "erasure-code profile "
+             << ceph::lrc_layer_plugin_problem(profile) << dendl;
+      } else {
+        dout(10) << __func__ << " " << pgid << " deferred until the latest "
+                 << "map: LRC pool" << dendl;
       }
-      pg = _make_pg(pgosdmap, pgid);
-    } else {
-      pg = _make_pg(get_osdmap(), pgid);
-    }
-    if (!pg) {
-      recursive_remove_collection(cct, store.get(), pgid, *it);
+      // Pin the PG's map so trim_maps() keeps it until the PG is loaded
+      deferred_lrc_pgs[pgid] = {
+        *it, map_epoch,
+        map_epoch > 0 ? service.try_get_map(map_epoch) : OSDMapRef()};
       continue;
     }
 
-    // there can be no waiters here, so we don't call _wake_pg_slot
-
-    pg->lock();
-    pg->ch = store->open_collection(pg->coll);
-
-    // read pg state, log
-    pg->read_state(store.get());
-
-    if (pg->dne())  {
-      dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
-      pg->ch = nullptr;
-      pg->unlock();
-      recursive_remove_collection(cct, store.get(), pgid, *it);
-      continue;
-    }
-    {
-      uint32_t shard_index = pgid.hash_to_shard(shards.size());
-      ceph_assert(NULL != shards[shard_index]);
-      store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
-    }
-
-    dout(10) << __func__ << " loaded " << *pg << dendl;
-    pg->unlock();
-
-    register_pg(pg);
-    ++num;
+    if (_load_pg(*it, pgid, map_epoch))
+      ++num;
   }
   dout(0) << __func__ << " opened " << num << " pgs" << dendl;
+  if (!deferred_lrc_pgs.empty()) {
+    dout(0) << __func__ << " deferred " << deferred_lrc_pgs.size()
+            << " LRC pgs until the latest map" << dendl;
+  }
+}
+
+PGRef OSD::_load_pg(const coll_t& coll, spg_t pgid, epoch_t map_epoch)
+{
+  PGRef pg;
+  if (map_epoch > 0) {
+    OSDMapRef pgosdmap = service.try_get_map(map_epoch);
+    if (!pgosdmap) {
+      if (!get_osdmap()->have_pg_pool(pgid.pool())) {
+        derr << __func__ << ": could not find map for epoch " << map_epoch
+             << " on pg " << pgid << ", but the pool is not present in the "
+             << "current map, so this is probably a result of bug 10617.  "
+             << "Skipping the pg for now, you can use ceph-objectstore-tool "
+             << "to clean it up later." << dendl;
+        return nullptr;
+      } else {
+        derr << __func__ << ": have pgid " << pgid << " at epoch "
+             << map_epoch << ", but missing map.  Crashing."
+             << dendl;
+        ceph_abort_msg("Missing map in load_pgs");
+      }
+    }
+    pg = _make_pg(pgosdmap, pgid);
+  } else {
+    pg = _make_pg(get_osdmap(), pgid);
+  }
+  if (!pg) {
+    recursive_remove_collection(cct, store.get(), pgid, coll);
+    return nullptr;
+  }
+
+  // there can be no waiters here, so we don't call _wake_pg_slot
+
+  pg->lock();
+  pg->ch = store->open_collection(pg->coll);
+
+  // read pg state, log
+  pg->read_state(store.get());
+
+  if (pg->dne())  {
+    dout(10) << "load_pgs " << coll << " deleting dne" << dendl;
+    pg->ch = nullptr;
+    pg->unlock();
+    recursive_remove_collection(cct, store.get(), pgid, coll);
+    return nullptr;
+  }
+  {
+    uint32_t shard_index = pgid.hash_to_shard(shards.size());
+    ceph_assert(NULL != shards[shard_index]);
+    store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
+  }
+
+  dout(10) << __func__ << " loaded " << *pg << dendl;
+  pg->unlock();
+
+  register_pg(pg);
+  return pg;
+}
+
+bool OSD::load_deferred_lrc_pgs(const OSDMapRef& osdmap,
+                                std::set<std::string> *waiting_profiles)
+{
+  ceph_assert(ceph_mutex_is_locked(osd_lock));
+  vector<PGRef> loaded;
+  for (auto p = deferred_lrc_pgs.begin(); p != deferred_lrc_pgs.end();) {
+    const pg_pool_t *pool = osdmap->get_pg_pool(p->first.pool());
+    if (pool_lrc_layer_plugin_unusable(*osdmap, p->first.pool())) {
+      waiting_profiles->insert(pool->erasure_code_profile);
+      ++p;
+      continue;
+    }
+    // A valid sub-plugin is now set, or the pool was deleted and the PG only
+    // needs tearing down
+    dout(10) << __func__ << " loading deferred " << p->first << dendl;
+    PGRef pg = _load_pg(p->second.coll, p->first, p->second.map_epoch);
+    if (pg)
+      loaded.push_back(pg);
+    p = deferred_lrc_pgs.erase(p);
+  }
+
+  // For each PG we've just loaded, do the same setup that normal startup does
+  // for every other PG. Register any splits and merges since its epoch, then
+  // queue an event so it catches up to the current map
+  for (auto& pg : loaded) {
+    {
+      std::scoped_lock l{*pg};
+      set<pair<spg_t,epoch_t>> new_children;
+      set<pair<spg_t,epoch_t>> merge_pgs;
+      service.identify_splits_and_merges(pg->get_osdmap(), osdmap, pg->pg_id,
+                                         &new_children, &merge_pgs);
+      if (!new_children.empty()) {
+        for (auto shard : shards) {
+          shard->prime_splits(osdmap, &new_children);
+        }
+        ceph_assert(new_children.empty());
+      }
+      if (!merge_pgs.empty()) {
+        for (auto shard : shards) {
+          shard->prime_merges(osdmap, &merge_pgs);
+        }
+        ceph_assert(merge_pgs.empty());
+      }
+    }
+    enqueue_peering_evt(
+      pg->pg_id,
+      PGPeeringEventRef(
+        std::make_shared<PGPeeringEvent>(
+          osdmap->get_epoch(),
+          osdmap->get_epoch(),
+          NullEvt())));
+  }
+  return deferred_lrc_pgs.empty();
+}
+
+bool OSD::_preboot_lrc_ready(const OSDMapRef& osdmap)
+{
+  std::set<std::string> waiting;
+  if (load_deferred_lrc_pgs(osdmap, &waiting))
+    return true;
+  derr << "not booting: waiting for '" << ceph::LRC_LAYER_PLUGIN_KEY
+       << "' to be set to jerasure or isa on LRC erasure-code profile(s) "
+       << waiting << dendl;
+  if (!deferred_lrc_pgs_logged) {
+    deferred_lrc_pgs_logged = true;
+    clog->error() << "osd." << whoami << " will not boot: it holds PGs of "
+                  << "pools whose LRC erasure-code profile(s) " << waiting
+                  << " do not set a valid '" << ceph::LRC_LAYER_PLUGIN_KEY
+                  << "' (jerasure or isa), so "
+                  << "the sub-plugin their data was written with is unknown. "
+                  << "Set it on each profile ('ceph osd erasure-code-profile set "
+                  << "<name> <all existing settings> "
+                  << ceph::LRC_LAYER_PLUGIN_KEY << "=<jerasure|isa> --force "
+                  << "--yes-i-really-mean-it'); the OSD then boots on its own. "
+                  << "See https://tracker.ceph.com/issues/81369.";
+  }
+  return false;
 }
 
 
@@ -5510,6 +5668,30 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
 	       << "create, pool does not have CREATING flag set" << dendl;
       return nullptr;
     }
+  }
+
+  // Refuse to create a PG whose LRC sub-plugin is unknown rather than abort in
+  // _make_pg (which checks the same map): the PG then stays unavailable until
+  // a valid layer-plugin is set (tracker 81369)
+  if (OSDMapRef curmap = get_osdmap();
+      pool_lrc_layer_plugin_unusable(*curmap, pgid.pool())) {
+    const string& profname =
+      curmap->get_pg_pool(pgid.pool())->erasure_code_profile;
+    const string problem = ceph::lrc_layer_plugin_problem(
+      curmap->get_erasure_code_profile(profname));
+    dout(10) << __func__ << " not creating " << pgid << ": LRC erasure-code "
+             << "profile '" << profname << "' " << problem << dendl;
+    std::lock_guard l(lrc_refused_pools_lock);
+    if (lrc_refused_pools.insert(pgid.pool()).second) {
+      clog->error() << "not creating PGs of pool "
+                    << curmap->get_pool_name(pgid.pool()) << ": its LRC "
+                    << "erasure-code profile '" << profname << "' " << problem
+                    << ", so the sub-plugin its "
+                    << "data was written with is unknown. The pool is "
+                    << "unavailable until it is set. See "
+                    << "https://tracker.ceph.com/issues/81369.";
+    }
+    return nullptr;
   }
 
   int up_primary, acting_primary;
@@ -7014,6 +7196,10 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
 	     << " < newest_map " << superblock.current_epoch << dendl;
     _get_purged_snaps();
+  } else if (!deferred_lrc_pgs.empty() &&
+             (osdmap->get_epoch() < newest || !_preboot_lrc_ready(osdmap))) {
+    dout(10) << __func__ << " waiting for the latest map to load deferred LRC PGs"
+             << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
 
@@ -11112,6 +11298,13 @@ void OSDShard::prime_merges(const OSDMapRef& as_of_osdmap,
       PGCreateInfo cinfo(pgid, epoch - 1,
 			 history, PastIntervals(), false);
       PGRef pg = osd->handle_pg_create_info(shard_osdmap, &cinfo);
+      if (!pg) {
+        derr << __func__ << " could not create empty merge participant "
+             << pgid << ": refused by handle_pg_create_info (PG limit "
+             << "reached, or LRC erasure-code profile has no valid "
+             << "'layer-plugin')" << dendl;
+        ceph_abort_msg("could not create empty merge participant");
+      }
       _attach_pg(r.first->second.get(), pg.get());
       _wake_pg_slot(pgid, slot);
       pg->unlock();
