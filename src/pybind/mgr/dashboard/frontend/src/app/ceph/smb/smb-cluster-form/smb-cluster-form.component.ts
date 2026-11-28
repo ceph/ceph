@@ -36,7 +36,6 @@ import { HostService } from '~/app/shared/api/host.service';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
-import { CephServicePlacement } from '~/app/shared/models/service.interface';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
 import { Host } from '~/app/shared/models/host.interface';
 
@@ -57,7 +56,6 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   allClustering: string[] = [];
   CLUSTERING = CLUSTERING;
   AUTHMODE = AUTHMODE;
-  selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   action: string;
   resource: string;
@@ -228,9 +226,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     });
   }
 
-  multiSelector(event: any, field: 'label' | 'hosts') {
-    if (field === PLACEMENT.host) this.selectedHosts = event.map((host: any) => host.content);
-    else this.selectedLabels = event.map((label: any) => label.content);
+  multiSelector(event: any) {
+    this.selectedHosts = event.map((host: any) => host.content);
   }
 
   onAuthModeChange() {
@@ -278,21 +275,6 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   submitAction() {
     const domainSettingsControl = this.smbForm.get('domain_settings');
     const authMode = this.smbForm.get('auth_mode').value;
-
-    const values = this.smbForm.getRawValue();
-    const serviceSpec: object = {
-      placement: {}
-    };
-    switch (values['placement']) {
-      case PLACEMENT.host:
-        if (values['hosts'].length > 0) {
-          serviceSpec['placement']['hosts'] = this.selectedHosts;
-        }
-        break;
-      case PLACEMENT.label:
-        serviceSpec['placement']['label'] = this.selectedLabels;
-        break;
-    }
 
     // Domain Setting should be mandatory if authMode is "Active Directory"
     if (authMode === AUTHMODE.ActiveDirectory && !domainSettingsControl.value) {
@@ -403,27 +385,32 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     return requestModel;
   }
 
-  getPlacementSpec(values: CephServicePlacement) {
-    const serviceSpec = {
-      placement: {}
+  getPlacementSpec(values: {
+    placement?: string;
+    hosts?: string[];
+    label?: string | { content: string };
+    count?: number;
+  }) {
+    const placement: { count?: number; hosts?: string[]; label?: string } = {
+      count: values.count
     };
 
-    serviceSpec['placement']['count'] = values.count;
-
-    switch (values['placement']) {
+    switch (values.placement) {
       case 'hosts':
-        if (values['hosts'].length > 0) {
-          serviceSpec['placement']['hosts'] = this.selectedHosts;
-          serviceSpec['placement']['count'] = values.count;
+        if (values.hosts?.length > 0) {
+          placement.hosts = this.selectedHosts;
         }
         break;
       case 'label':
-        serviceSpec['placement']['label'] = this.selectedLabels;
-        serviceSpec['placement']['count'] = values.count;
+        // PlacementSpec.label must be a single string (not a list)
+        if (values.label) {
+          placement.label =
+            typeof values.label === 'string' ? values.label : values.label.content;
+        }
         break;
     }
 
-    return serviceSpec.placement;
+    return placement;
   }
 
   editDomainSettingsModal() {

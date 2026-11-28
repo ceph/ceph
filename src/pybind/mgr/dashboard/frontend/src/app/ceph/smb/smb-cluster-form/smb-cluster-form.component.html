@@ -282,7 +282,7 @@
                   value="label"
                   i18n
                 >
-                  Labels
+                  Label
                 </option>
               </cds-select>
             </div>
@@ -292,16 +292,15 @@
                 <div class="form-item">
                   <cds-combo-box
                     cdComboBoxSearchReset
-                    type="multi"
+                    type="single"
                     selectionFeedback="top-after-reopen"
                     label="Label"
                     formControlName="label"
                     id="label"
-                    placeholder="Select labels..."
+                    placeholder="Select a label..."
                     [appendInline]="true"
                     [items]="data.labels"
                     i18n-placeholder
-                    (selected)="multiSelector($event, 'label')"
                     [invalid]="smbForm.controls.label.invalid && smbForm.controls.label.dirty"
                     [invalidText]="labelError"
                     cdRequiredField="Label"
@@ -334,7 +333,7 @@
                     i18n-placeholder
                     [appendInline]="true"
                     [items]="data.hosts"
-                    (selected)="multiSelector($event, 'hosts')"
+                    (selected)="multiSelector($event)"
                     i18n
                   >
                     <cds-dropdown-list></cds-dropdown-list>
