@@ -105,3 +105,30 @@ def test_inventory_case_insensitive_operations(cephadm_module: CephadmOrchestrat
 
     inv.rm_label('MYHOST-01', 'mon')
     assert inv.has_label('myhost-01', 'mon') is False
+
+
+def test_known_hostnames_survive_mgr_restart(cephadm_module: CephadmOrchestrator):
+    # get_fqdn() must return the fqdn learned from gather-facts right after a
+    # mgr restart, before facts are refreshed again. Otherwise certificates
+    # generated at startup (e.g. for mgr/prometheus) only carry the short name.
+    from ceph.deployment.hostspec import HostSpec
+    from cephadm.inventory import HostCache
+
+    cephadm_module.inventory.add_host(HostSpec('host1'))
+    assert cephadm_module.inventory.get_fqdn('host1') == 'host1'
+
+    host_facts = {'hostname': 'host1',
+                  'shortname': 'host1',
+                  'fqdn': 'host1.domain'}
+    assert cephadm_module.cache.update_host_facts('host1', host_facts)
+    # same names again: nothing new to persist
+    assert not cephadm_module.cache.update_host_facts('host1', host_facts)
+    cephadm_module.cache.save_host('host1')
+
+    # simulate a mgr restart: names are only known from the stored record
+    cephadm_module.inventory._all_known_names = {}
+    assert cephadm_module.inventory.get_fqdn('host1') == 'host1'
+    cache = HostCache(cephadm_module)
+    cache.load()
+    assert cache.known_hostnames['host1'] == ['host1', 'host1', 'host1.domain']
+    assert cephadm_module.inventory.get_fqdn('host1') == 'host1.domain'
