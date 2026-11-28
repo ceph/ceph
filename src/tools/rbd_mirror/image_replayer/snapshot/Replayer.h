@@ -258,6 +258,7 @@ private:
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
   bool m_sync_in_progress = false;
+  std::string m_replay_state;
 
   PerfCounters *m_perf_counters = nullptr;
 
