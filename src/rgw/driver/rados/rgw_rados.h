@@ -879,6 +879,9 @@ public:
         std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
         bool canceled;
+        // set once the head object is written: the object is committed even if
+        // a later step fails, so the tails it references must not be removed
+        bool head_written;
         const std::string *user_data;
         rgw_zone_set *zones_trace;
         bool modify_tail;
@@ -888,7 +891,7 @@ public:
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
-                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 if_match(NULL), if_nomatch(NULL), canceled(false), head_written(false), user_data(nullptr), zones_trace(nullptr),
                  modify_tail(false), keep_tail(false), completeMultipart(false), appendable(false) {}
       } meta;
 

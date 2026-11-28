@@ -3211,6 +3211,16 @@ options:
   with_legacy: true
   services:
   - rgw
+- name: rgw_debug_inject_index_complete_err
+  type: uint
+  level: dev
+  desc: Error code to inject when completing the bucket index update of an object
+    write, after its head object was written (0 disables). This exists for
+    development and testing purposes.
+  default: 0
+  with_legacy: true
+  services:
+  - rgw
 - name: rgw_debug_inject_olh_cancel_modification_err
   type: bool
   level: dev

@@ -3443,6 +3443,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
 #endif
 
+  meta.head_written = false;
+
   RGWObjState *state;
   RGWObjManifest *manifest = nullptr;
   int r = target->get_state(rctx.dpp, &state, &manifest, false, rctx.y, assume_noent);
@@ -3660,6 +3662,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     }
     goto done_cancel;
   }
+  meta.head_written = true;
 
   poolid = ioctx.get_id();
 
@@ -3689,12 +3692,19 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
 
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
-  r = index_op->complete(rctx.dpp, poolid, epoch, index_size, index_accounted_size,
-                        meta.set_mtime, etag, content_type,
-                        storage_class, meta.owner,
-			 meta.category, meta.remove_objs, rctx.y,
-			 meta.user_data, meta.appendable, log_op,
-			 idx_restore_status, idx_restore_expiry_date);
+  if (const int inject_err = static_cast<int>(
+          store->ctx()->_conf->rgw_debug_inject_index_complete_err);
+      inject_err) {
+    // fail here to simulate an index update failure after the head write
+    r = -inject_err;
+  } else {
+    r = index_op->complete(rctx.dpp, poolid, epoch, index_size,
+                           index_accounted_size, meta.set_mtime, etag,
+                           content_type, storage_class, meta.owner,
+                           meta.category, meta.remove_objs, rctx.y,
+                           meta.user_data, meta.appendable, log_op,
+                           idx_restore_status, idx_restore_expiry_date);
+  }
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -3711,7 +3721,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     bool add_log = log_op && store->svc.zone->need_to_log_data();
     r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
     if (r < 0) {
-      return r;
+      // the object is committed, but may not be the current version. return
+      // an error that clients retry
+      ldpp_dout(rctx.dpp, 0) << "ERROR: failed to link " << obj
+          << " as the current version, r=" << r << dendl;
+      return -ERR_INTERNAL_ERROR;
     }
   }
 
@@ -3740,6 +3754,17 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   return 0;
 
 done_cancel:
+  if (meta.head_written) {
+    // the object is committed. like after -ETIMEDOUT below, leave the pending
+    // entry in the index for check_disk_state() to repair from the head, and
+    // return an error that clients retry
+    ldpp_dout(rctx.dpp, 0)
+        << "ERROR: failed to complete the bucket index or data log update "
+        << "after writing " << obj << ", r=" << r << dendl;
+    target->invalidate_state();
+    return -ERR_INTERNAL_ERROR;
+  }
+
   // if r == -ETIMEDOUT, rgw can't determine whether or not the rados op succeeded
   // we shouldn't be calling index_op->cancel() in this case
   // Instead, we should leave that pending entry in the index so than bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
@@ -5592,6 +5617,10 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
+    if (ret == -ETIMEDOUT || write_op.meta.head_written) {
+      // the head may reference the tails, keep their references
+      return ret;
+    }
     goto done_ret;
   }
 
