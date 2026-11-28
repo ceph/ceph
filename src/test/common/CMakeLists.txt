@@ -389,6 +389,9 @@ add_ceph_unittest(unittest_split)
 add_executable(unittest_static_ptr test_static_ptr.cc)
 add_ceph_unittest(unittest_static_ptr)
 
+add_executable(unittest_scope_guard test_scope_guard.cc)
+add_ceph_unittest(unittest_scope_guard)
+
 add_executable(unittest_hobject test_hobject.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_hobject global ceph-common)
