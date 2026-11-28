@@ -275,6 +275,11 @@ Pool specific commands
 :command:`rm` [--force-full] *name* ...
   Remove object(s) with name(s). With ``--force-full`` will remove when cluster is marked full.
 
+:command:`purge` *pool-name* --yes-i-really-really-mean-it
+  Remove all objects from pool *pool-name* without removing the pool
+  itself. This permanently destroys all objects in the pool; the
+  confirmation flag is required.
+
 :command:`listwatchers` *name*
   List the watchers of object name.
 
