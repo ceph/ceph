@@ -259,6 +259,7 @@ if(HAVE_INTEL)
       "-i${PROJECT_SOURCE_DIR}/src/isa-l/crc/")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc_const.asm
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_avx2.asm
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
   endif(HAVE_NASM_X64_AVX512_VPCLMUL)
 elseif(HAVE_POWER8)

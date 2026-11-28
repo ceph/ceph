@@ -7,6 +7,7 @@ extern "C" {
 
 extern int ceph_arch_intel_avx512_vpclmul; /* true if we have AVX512+VPCLMUL features */
 extern int ceph_arch_intel_pclmul; /* true if we have PCLMUL features */
+extern int ceph_arch_intel_avx2_vpclmul; /* true if we have AVX2+GFNI+VAES+VPCLMUL features */
 extern int ceph_arch_intel_sse42;  /* true if we have sse 4.2 features */
 extern int ceph_arch_intel_sse41;  /* true if we have sse 4.1 features */
 extern int ceph_arch_intel_ssse3;  /* true if we have ssse 3 features */

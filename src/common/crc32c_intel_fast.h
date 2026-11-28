@@ -8,11 +8,13 @@ extern "C" {
 /* is the fast version compiled in */
 extern int ceph_crc32c_intel_fast_exists(void);
 extern int ceph_crc32c_intel_fast_avx512_vpclmul_exists(void);
+extern int ceph_crc32c_intel_fast_avx2_vpclmul_exists(void);
 
 #ifdef __x86_64__
 
 extern uint32_t ceph_crc32c_intel_fast_avx512_vpclmul(uint32_t crc, unsigned char const *buffer, unsigned len);
 extern uint32_t ceph_crc32c_intel_fast_pclmul(uint32_t crc, unsigned char const *buffer, unsigned len);
+extern uint32_t ceph_crc32c_intel_fast_avx2_vpclmul(uint32_t crc, unsigned char const *buffer, unsigned len);
 
 #else
 
@@ -22,6 +24,10 @@ static inline uint32_t ceph_crc32c_intel_fast_avx512_vpclmul(uint32_t crc, unsig
 }
 
 static inline uint32_t ceph_crc32c_intel_fast_pclmul(uint32_t crc, unsigned char const *buffer, unsigned len)
+{
+	return 0;
+}
+static inline uint32_t ceph_crc32c_intel_fast_avx2_vpclmul(uint32_t crc, unsigned char const *buffer, unsigned len)
 {
 	return 0;
 }

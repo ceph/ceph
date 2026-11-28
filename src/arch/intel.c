@@ -18,6 +18,7 @@
 /* flags we export */
 int ceph_arch_intel_avx512_vpclmul = 0;
 int ceph_arch_intel_pclmul = 0;
+int ceph_arch_intel_avx2_vpclmul = 0;
 int ceph_arch_intel_sse42 = 0;
 int ceph_arch_intel_sse41 = 0;
 int ceph_arch_intel_ssse3 = 0;
@@ -39,6 +40,14 @@ int ceph_arch_intel_aesni = 0;
 #define CPUID_SSE2	(1 << 26)
 #define CPUID_AESNI 	(1 << 25)
 #define CPUID_OSXSAVE	(1 << 27)
+#define CPUID_AVX	(1 << 28)
+/* SSE:[1] AVX:[2] */
+#define XCR0_AVX		(0x00000006ULL)
+/* Match ISA-L requirements (its 'AVX2 gen 2') since we call into it. */
+/* AVX2:[5] */
+#define CPUID7_0_AVX2_EBX	(0x00000020UL)
+/* GFNI:[8] VAES:[9] VPCLMULQDQ:[10] */
+#define CPUID7_0_AVX2_ECX	(0x00000700UL)
 
 /* SSE:[1] AVX:[2] Opmask:[5] ZMM_HI256:[6] ZMM16-31:[7]*/
 #define XCR0_AVX512		(0x000000E6ULL)
@@ -97,6 +106,17 @@ int ceph_arch_intel_probe(void)
 	    ((ebx_7_0 & CPUID7_0_AVX512_EBX) == CPUID7_0_AVX512_EBX) &&
 	    ((ecx_7_0 & CPUID7_0_AVX512_ECX) == CPUID7_0_AVX512_ECX)) {
 		ceph_arch_intel_avx512_vpclmul = 1;
+	}
+	/*
+	 * AVX2 with GFNI, VAES and VPCLMULQDQ, in the same order:
+	 * the OS saves the AVX state (OSXSAVE, XCR0), then the features
+	 */
+	if ((ecx & CPUID_OSXSAVE) && (ecx & CPUID_AVX) &&
+	    ((ceph_xgetbv(0) & XCR0_AVX) == XCR0_AVX) &&
+	    (__get_cpuid_count(7, 0, &eax_7_0, &ebx_7_0, &ecx_7_0, &edx_7_0)) &&
+	    ((ebx_7_0 & CPUID7_0_AVX2_EBX) == CPUID7_0_AVX2_EBX) &&
+	    ((ecx_7_0 & CPUID7_0_AVX2_ECX) == CPUID7_0_AVX2_ECX)) {
+		ceph_arch_intel_avx2_vpclmul = 1;
 	}
 	return 0;
 }
