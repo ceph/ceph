@@ -15,6 +15,7 @@
 #include "PyModuleRegistry.h"
 
 #include <filesystem>
+#include <iomanip>  // for std::quoted
 #include <boost/scope_exit.hpp>
 
 #include "include/stringify.h"
