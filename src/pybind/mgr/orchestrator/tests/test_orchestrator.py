@@ -312,6 +312,39 @@ def test_orch_device_ls():
         assert r.stderr == ''
 
 
+upgrade_ls_result = {
+    'image': 'quay.io/ceph/ceph',
+    'registry': 'quay.io',
+    'bare_image': 'ceph/ceph',
+    'versions': ['19.2.1', '19.2.0'],
+}
+
+
+@mock.patch("orchestrator.OrchestratorCli.upgrade_ls", return_value=OrchResult(upgrade_ls_result))
+def test_orch_upgrade_ls(_upgrade_ls):
+    m = OrchestratorCli('orchestrator', 0, 0)
+
+    # without --format the output stays the indented JSON it has always been
+    r = m._handle_command(None, {'prefix': 'orch upgrade ls'})
+    assert r == HandleCommandResult(retval=0, stdout=json.dumps(upgrade_ls_result, indent=4), stderr='')
+
+    r = m._handle_command(None, {'prefix': 'orch upgrade ls', 'format': 'yaml'})
+    assert r.retval == 0
+    assert yaml.safe_load(r.stdout) == upgrade_ls_result
+    assert r.stdout == textwrap.dedent("""
+        bare_image: ceph/ceph
+        image: quay.io/ceph/ceph
+        registry: quay.io
+        versions:
+        - 19.2.1
+        - 19.2.0
+        """).lstrip()
+
+    r = m._handle_command(None, {'prefix': 'orch upgrade ls', 'format': 'json'})
+    assert r.retval == 0
+    assert json.loads(r.stdout) == upgrade_ls_result
+
+
 def test_preview_table_osd_smoke():
     data = [
         {
