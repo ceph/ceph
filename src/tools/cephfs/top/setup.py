@@ -10,6 +10,7 @@ setup(
     description='top(1) like utility for Ceph Filesystem',
     keywords='cephfs, top',
     scripts=['cephfs-top'],
+    py_modules=['fstopbase'],
     install_requires=[
         'rados',
     ],

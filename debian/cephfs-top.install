@@ -1,3 +1,4 @@
 usr/bin/cephfs-top
 usr/lib/python3*/dist-packages/cephfs_top-*.egg-info
+usr/lib/python3*/*-packages/fstopbase.py /usr/lib/python3/dist-packages/
 usr/share/man/man8/cephfs-top.8

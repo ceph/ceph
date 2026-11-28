@@ -2956,6 +2956,8 @@ fi
 
 %files -n cephfs-top
 %{python3_sitelib}/cephfs_top-*.egg-info
+%{python3_sitelib}/fstopbase.py
+%{python3_sitelib}/__pycache__/fstopbase.cpython*.py*
 %{_bindir}/cephfs-top
 %{_mandir}/man8/cephfs-top.8*
 

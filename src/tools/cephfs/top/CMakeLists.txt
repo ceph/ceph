@@ -1,5 +1,6 @@
 include(Distutils)
-distutils_install_module(cephfs-top)
+distutils_install_module(cephfs-top
+  EXTRA_SRCS fstopbase.py)
 
 if(WITH_TESTS)
   include(AddCephTest)
