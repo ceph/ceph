@@ -1738,6 +1738,60 @@ TEST_F(ConditionTest, Null)
   }
 }
 
+TEST_F(ConditionTest, UnquotedBoolParsing)
+{
+  auto policy_with = [](std::string_view cond) {
+    return fmt::format(R"(
+    {{
+      "Version": "2012-10-17",
+      "Statement": [{{
+        "Effect": "Allow",
+        "Principal": "*",
+        "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::example_bucket/*",
+        "Condition": {}
+      }}]
+    }}
+    )", cond);
+  };
+  const string tenant;
+  const std::string key = "aws:SecureTransport";
+
+  // An unquoted Boolean is kept as the string its quoted form gives
+  for (const auto& [text, val] : {
+         std::pair{R"({"Bool": {"aws:SecureTransport": false}})", "false"},
+         std::pair{R"({"Bool": {"aws:SecureTransport": true}})", "true"},
+         std::pair{R"({"Bool": {"aws:SecureTransport": [true, false]}})",
+                   "true"}}) {
+    boost::optional<Policy> p;
+    ASSERT_NO_THROW(p = Policy(cct.get(), &tenant, policy_with(text), true))
+      << text;
+    ASSERT_EQ(p->statements.size(), 1U);
+    ASSERT_EQ(p->statements[0].conditions.size(), 1U);
+    const auto& c = p->statements[0].conditions[0];
+    EXPECT_EQ(c.op, TokenID::Bool);
+    EXPECT_EQ(c.key, key);
+    ASSERT_FALSE(c.vals.empty());
+    EXPECT_EQ(c.vals[0], val);
+    EXPECT_TRUE(c.eval({{key, val}}, nullptr)) << text;
+  }
+
+  // A Boolean outside a condition value and a null are still refused, with
+  // an error that says why
+  for (const auto& [text, why] : {
+         std::pair{R"({"Bool": {"aws:SecureTransport": null}})",
+                   "null is not allowed"},
+         std::pair{R"(true)", "Booleans are not allowed"}}) {
+    try {
+      Policy(cct.get(), &tenant, policy_with(text), true);
+      ADD_FAILURE() << "accepted " << text;
+    } catch (const rgw::IAM::PolicyParseException& e) {
+      EXPECT_NE(std::string_view{e.what()}.find(why), std::string_view::npos)
+        << e.what();
+    }
+  }
+}
+
 TEST_F(ConditionTest, KeyStoneRoleStringEquals)
 {
   std::string key = "keystone:role";

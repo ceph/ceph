@@ -480,6 +480,8 @@ struct ParseState {
   bool key(const char* s, size_t l);
   bool do_string(CephContext* cct, const char* s, size_t l);
   bool number(const char* str, size_t l);
+  bool boolean(bool b);
+  bool bare_value(std::string_view v, std::string_view what);
 };
 
 // If this confuses you, look up the Curiously Recurring Template Pattern
@@ -639,6 +641,18 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
     }
 
     return s.back().number(str, length);
+  }
+  bool Bool(bool b) {
+    if (s.empty()) {
+      annotation = "Boolean not allowed at top level.";
+      return false;
+    }
+
+    return s.back().boolean(b);
+  }
+  bool Null() {
+    annotation = "null is not allowed in a policy.";
+    return false;
   }
   bool StartArray() {
     if (s.empty()) {
@@ -933,13 +947,25 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 }
 
 bool ParseState::number(const char* s, size_t l) {
+  return bare_value({s, l}, "Numbers");
+}
+
+// The policy grammar makes the quotation marks around Boolean and
+// numeric condition values optional, so an unquoted true or false is
+// kept as the same string that its quoted form gives.
+bool ParseState::boolean(bool b) {
+  return bare_value(b ? "true" : "false", "Booleans");
+}
+
+bool ParseState::bare_value(std::string_view v, std::string_view what) {
   // Top level!
   if (w->kind == TokenKind::cond_key) {
     auto& t = pp->policy.statements.back();
-    t.conditions.back().vals.emplace_back(s, l);
+    t.conditions.back().vals.emplace_back(v);
   } else {
     // Failure
-    annotate("Numbers are not allowed outside condition arguments.");
+    annotate(fmt::format("{} are not allowed outside condition arguments.",
+                         what));
     return false;
   }
 
