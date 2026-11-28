@@ -1683,6 +1683,10 @@ Usage::
 
     ceph osd reweight-by-utilization {<int[100-]> {<float[0.0-]> {<int[0-]>}}} {--no-increasing}
 
+With ``--no-increasing`` (off by default), OSD weights will not be increased
+even if an OSD is underutilized. The same flag is accepted by
+``test-reweight-by-utilization``.
+
 Subcommand ``rm`` removes OSD(s) <id> [<id>...] from the OSD map.
 
 
@@ -2142,13 +2146,6 @@ Options
 .. option:: --connect-timeout CLUSTER_TIMEOUT
 
    Set a timeout for connecting to the cluster.
-
-.. option:: --no-increasing
-
-   ``--no-increasing`` is off by default. So increasing the OSD weight is allowed
-   using the ``reweight-by-utilization`` or ``test-reweight-by-utilization`` commands.
-   If this option is used with these commands, it will not increase OSD weight
-   even the OSD is underutilized.
 
 .. option:: --block
 
