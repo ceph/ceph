@@ -35,6 +35,7 @@
 #include "Gil.h"
 
 #include <algorithm>
+#include <new>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -1567,7 +1568,11 @@ ceph_unregister_client(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_get_daemon_health_metrics(BaseMgrModule *self, PyObject *args)
 {
-  return self->py_modules->get_daemon_health_metrics();
+  try {
+    return self->py_modules->get_daemon_health_metrics();
+  } catch (const std::bad_alloc&) {
+    return PyErr_NoMemory();
+  }
 }
 
 static PyObject*
