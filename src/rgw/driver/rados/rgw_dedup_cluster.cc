@@ -612,7 +612,7 @@ namespace rgw::dedup {
     }
 
     // lock paramters:
-    const utime_t     lock_duration;  // zero duration means lock doesn't expire
+    const ceph::timespan lock_duration = ceph::timespan::zero(); // zero duration means lock doesn't expire
     const uint8_t     lock_flags = 0; // no flags
     const std::string lock_tag;       // no tag
 
