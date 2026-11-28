@@ -1257,6 +1257,8 @@ int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvid
     return ret;
 
   params.parts_count = next->params.parts_count;
+  params.part_ofs = next->params.part_ofs;
+  params.full_obj_size = next->params.full_obj_size;
   return 0;
 }
 

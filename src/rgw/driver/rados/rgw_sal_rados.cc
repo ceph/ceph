@@ -3141,7 +3141,7 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
     bool part_prefetch = false;
     ret = RGWRados::get_part_obj_state(dpp, y, store->getRados(), bucket_info, &obj_ctx,
 				       obj_m, cur_part_id, &parts_count,
-				       part_prefetch, &astate, &obj_m);
+				       nullptr, part_prefetch, &astate, &obj_m);
 
     if (ret < 0) {
       ldpp_dout_fmt(dpp, 4,
@@ -4004,6 +4004,8 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
   source->set_obj_size(obj_size);
   source->set_mtime(*params.lastmod);
   params.parts_count = parent_op.params.parts_count;
+  params.part_ofs = parent_op.params.part_ofs;
+  params.full_obj_size = parent_op.params.full_obj_size;
 
   return ret;
 }

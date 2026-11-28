@@ -1953,6 +1953,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     }
 
     params.parts_count = next->params.parts_count;
+    // the load_obj_state() reload replaces a part's size with the whole-object size,
+    // so keep a part's prepared offset/size only for non-multipart partNumber=1.
+    if (!params.parts_count) {
+      params.part_ofs = next->params.part_ofs;
+      params.full_obj_size = next->params.full_obj_size;
+    }
     this->source->load_obj_state(dpp, y);
     attrs = source->get_attrs();
     source->set_attrs_from_obj_state(dpp, y, attrs);
@@ -1997,15 +2003,13 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
         if (params.part_num && *(params.part_num) != 1) {
           return -ERR_INVALID_PART;
         }
+        // partNumber 1 on a non-multipart object spans the whole object: full range.
+        // accounted_size is the plaintext size for plain/CBC/AEAD/compressed.
+        params.part_ofs = 0;
+        params.full_obj_size = source->get_accounted_size();
       } else {
-        next->params = params;
-        auto ret = next->prepare(y, dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): next->prepare failed, ret=" << ret << dendl;
-          return ret;
-        }
-        params.parts_count = next->params.parts_count;
-        return 0;
+        // the base filter forwards params to next and copies the results back.
+        return FilterReadOp::prepare(y, dpp);
       }
     }
     bufferlist etag_bl;

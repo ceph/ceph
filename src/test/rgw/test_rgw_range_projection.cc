@@ -336,3 +336,27 @@ TEST(CryptHelpers, EncToPlaintextSize)
   EXPECT_EQ(0u, crypt_enc_to_plaintext_size(10, 4096, 4112));
 }
 
+// Inverse projection: recover a part's plaintext start offset (for Content-Range
+// on a partNumber read) from its on-disk position.
+
+TEST(PartPlaintextOffset, CompressionMapsBlockBoundaryToPlaintext)
+{
+  // 3 parts, each 4096 plaintext -> 2048 compressed
+  auto cs = make_cs_info({{4096, 2048}, {4096, 2048}, {4096, 2048}}, 12288);
+
+  // a part starts on a block boundary: its compressed-stream offset maps to the
+  // block's plaintext old_ofs
+  EXPECT_EQ(0u, compress_block_plaintext_offset(0, cs).value());
+  EXPECT_EQ(4096u, compress_block_plaintext_offset(2048, cs).value());
+  EXPECT_EQ(8192u, compress_block_plaintext_offset(4096, cs).value());
+}
+
+TEST(PartPlaintextOffset, CompressionNoExactMatchReturnsNullopt)
+{
+  auto cs = make_cs_info({{4096, 2048}, {4096, 2048}}, 8192);
+
+  // an offset that doesn't land on a block boundary can't be mapped
+  EXPECT_FALSE(compress_block_plaintext_offset(1000, cs).has_value());
+  EXPECT_FALSE(compress_block_plaintext_offset(5000, cs).has_value());
+}
+

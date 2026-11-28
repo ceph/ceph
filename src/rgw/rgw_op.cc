@@ -2848,6 +2848,8 @@ void RGWGetObj::execute(optional_yield y)
   encrypted_obj_size = s->obj_size;
   attrs = s->object->get_attrs();
   multipart_parts_count = read_op->params.parts_count;
+  multipart_part_ofs = read_op->params.part_ofs;
+  multipart_full_obj_size = read_op->params.full_obj_size;
   if (op_ret < 0)
     goto done_err;
 

@@ -843,6 +843,9 @@ public:
 	uint64_t *epoch;
         int* part_num = nullptr;
         std::optional<int> parts_count;
+        // partNumber read: part plaintext offset + object size, for Content-Range.
+        std::optional<uint64_t> part_ofs;
+        std::optional<uint64_t> full_obj_size;
         RGWObjVersionTracker *objv_tracker = nullptr;
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
@@ -1155,7 +1158,8 @@ public:
   static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 		       RGWRados* store, RGWBucketInfo& bucket_info,
 		       RGWObjectCtx* rctx, RGWObjManifest* manifest,
-		       int part_num, int* parts_count, bool prefetch,
+		       int part_num, int* parts_count,
+		       uint64_t* part_offset_out, bool prefetch,
 		       RGWObjState** pstate, RGWObjManifest** pmanifest);
 
   int on_last_entry_in_listing(const DoutPrefixProvider *dpp,
