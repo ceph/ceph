@@ -843,6 +843,116 @@ TEST_F(TestECStretchPeering, ZoneBlockSwap_UpShardBehindAuthLogRestarted)
   EXPECT_EQ(ps->get_peer_info(x).last_backfill, hobject_t());
 }
 
+// A two-zone version of PeeringStateTest.Issue81183_ContiguityTail.
+//
+// choose_acting() judged whether a shard can be recovered from the log by
+// comparing its last_update with auth_log_shard's log tail, but the primary
+// gets its log from get_log_shard and extends it back only as far as that
+// shard's tail.  A shard between the two tails was kept in the acting set and
+// then reset by activate() without a backfill.  calc_ec_acting_stretch() and
+// usable_backfill_targets have to judge by the same tail as calc_ec_acting().
+//
+// 2+1 pool over two zones; shards 1 and 4 are the nonprimary shards.
+//  x (shard 4) goes down and misses everything from here.
+//  l (shard 2) goes down three writes later.
+//  The log is trimmed past x's last_update, but not past l's.
+//  l returns and is caught up from the log, so it keeps its log back to the
+//  old tail: the longest log of the shards that can be primary.
+//  A partial write skips shard 1 and is not rolled forward when x returns:
+//  shard 1 has the oldest last_update and a trimmed log.
+//  x returns:
+//   auth_log_shard is l, whose log reaches back to x's last_update;
+//   get_log_shard is shard 1, whose log does not, and neither does the
+//   primary's, so GetLog does not extend the primary's log back to x.
+//  x has to be backfilled.
+TEST_F(TestECStretchPeering, Issue81183_ContiguityTail)
+{
+  ASSERT_TRUE(all_shards_active());
+  // The monitor's min_size for a 2+1 stretch pool: the PG stays active with
+  // one shard of each zone block down.
+  set_pool_min_size(k);
+  trim_log(true);
+
+  vector<int> a;
+  int acting_primary;
+  osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
+  const pg_shard_t p(a[0], shard_id_t(0));
+  const pg_shard_t n(a[1], shard_id_t(1));
+  const pg_shard_t l(a[2], shard_id_t(2));
+  const pg_shard_t x(a[4], shard_id_t(4));
+  ASSERT_EQ(acting_primary, p.osd);
+
+  const std::string data(stripe_unit * k, 'B');
+  vector<std::string> names;
+  auto write_objects = [&](int count) {
+    for (int i = 0; i < count; ++i) {
+      names.push_back("obj" + std::to_string(names.size()));
+      create_and_write_verify(names.back(), data);
+    }
+  };
+  write_objects(2);
+  mark_osd_down(x.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  write_objects(3);
+  mark_osd_down(l.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  // Trim past x's last_update, but not past l's.
+  enable_log_trimming = true;
+  set_target_pg_log_entries(3);
+  const size_t first_missed = names.size();
+  write_objects(2);
+  enable_log_trimming = false;
+
+  mark_osd_up(l.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  for (size_t i = first_missed; i < names.size(); ++i) {
+    run_recovery(names[i], false, data);
+  }
+  // The first write of an interval goes to every shard.
+  write_objects(1);
+  // Chunk 0 only: written to shard 0 and the parity shard of each zone block.
+  write_verify(names[0], 0, std::string(stripe_unit, 'C'), data.size());
+
+  const pg_info_t &pi = get_test_pg(p)->get_peering_state()->get_info();
+  const pg_info_t &ni = get_test_pg(n)->get_peering_state()->get_info();
+  const pg_info_t &li = get_test_pg(l)->get_peering_state()->get_info();
+  const pg_info_t &xi = get_test_pg(x)->get_peering_state()->get_info();
+  // l has the newest log and the longest, and it reaches back to x.
+  ASSERT_EQ(li.last_update, pi.last_update);
+  ASSERT_LT(li.log_tail, pi.log_tail);
+  ASSERT_LE(li.log_tail, xi.last_update);
+  // The partial write skipped shard 1; its log and the primary's are trimmed
+  // past x.
+  ASSERT_LT(ni.last_update, pi.last_update);
+  ASSERT_LT(xi.last_update, ni.log_tail);
+  ASSERT_LT(xi.last_update, pi.log_tail);
+
+  mark_osd_up(x.osd);
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_primary(), p);
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  EXPECT_TRUE(ps->is_backfill_target(x))
+    << "backfill_targets=" << ps->get_backfill_targets()
+    << " async_recovery_targets=" << ps->get_async_recovery_targets();
+  // x is backfilled from scratch: it is not one of the complete backfill
+  // targets that are caught up from the log (usable_backfill_targets), whose
+  // missing objects would be counted from peer_missing, which is empty here.
+  EXPECT_EQ(ps->get_peer_info(x).last_backfill, hobject_t());
+  ps->prepare_stats_for_publish(std::nullopt, object_stat_collection_t());
+  EXPECT_GT(ps->get_peer_info(x).stats.stats.sum.num_objects_missing, 0);
+  // activate() must not have reset a shard that nothing will backfill.
+  for (const auto &shard : ps->get_acting_recovery_backfill()) {
+    if (shard == ps->get_primary()) {
+      continue;
+    }
+    EXPECT_TRUE(ps->get_peer_info(shard).last_backfill.is_max() ||
+                ps->is_backfill_target(shard))
+      << "osd." << shard << " was reset to last_backfill "
+      << ps->get_peer_info(shard).last_backfill
+      << " but is not a backfill target";
+  }
+}
+
 // An older release's 'osd pool stretch set' gave this 2+1 pool stretch values
 // over two datacenters and left its size at 3, so the pool has one zone.
 class TestECOlderStretchValues : public ECCrushTestFixture {
