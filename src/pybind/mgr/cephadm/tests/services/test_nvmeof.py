@@ -1243,7 +1243,7 @@ timeout = 1.0
             'mon_command',
             return_value=(0, '{"result": true}', ''),
         ):
-            result, group, gateway_disabled = (
+            result, group, gateway_disabled, retry_soon = (
                 self.nvmeof_service.ok_to_redeploy(
                     daemon,
                     set(),
@@ -1253,6 +1253,7 @@ timeout = 1.0
         assert result.retval == 0
         assert group == ('testpool', 'testgroup')
         assert gateway_disabled is True
+        assert retry_soon is False
 
     def test_ok_to_redeploy_force_bypasses_mon(self):
         daemon = MagicMock()
@@ -1274,7 +1275,7 @@ timeout = 1.0
             self.mgr,
             'mon_command',
         ) as mon_command:
-            result, group, gateway_disabled = (
+            result, group, gateway_disabled, retry_soon = (
                 self.nvmeof_service.ok_to_redeploy(
                     daemon,
                     set(),
@@ -1285,6 +1286,7 @@ timeout = 1.0
         assert result.retval == 0
         assert group == ('testpool', 'testgroup')
         assert gateway_disabled is False
+        assert retry_soon is False
         mon_command.assert_not_called()
 
     def test_ok_to_redeploy_down_gateway_bypasses_mon(self):
@@ -1307,7 +1309,7 @@ timeout = 1.0
             self.mgr,
             'mon_command',
         ) as mon_command:
-            result, group, gateway_disabled = (
+            result, group, gateway_disabled, retry_soon = (
                 self.nvmeof_service.ok_to_redeploy(
                     daemon,
                     set(),
@@ -1317,6 +1319,7 @@ timeout = 1.0
         assert result.retval == 0
         assert group == ('testpool', 'testgroup')
         assert gateway_disabled is False
+        assert retry_soon is False
         mon_command.assert_not_called()
 
     def test_ok_to_redeploy_same_group_already_redeployed(self):
@@ -1339,7 +1342,7 @@ timeout = 1.0
             self.mgr,
             'mon_command',
         ) as mon_command:
-            result, group, gateway_disabled = (
+            result, group, gateway_disabled, retry_soon = (
                 self.nvmeof_service.ok_to_redeploy(
                     daemon,
                     {('testpool', 'testgroup')},
@@ -1349,7 +1352,41 @@ timeout = 1.0
         assert result.retval == -errno.EBUSY
         assert group == ('testpool', 'testgroup')
         assert gateway_disabled is False
+        assert retry_soon is True
         mon_command.assert_not_called()
+
+    def test_ok_to_redeploy_mon_unsafe_retries_soon(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+        daemon.status = DaemonDescriptionStatus.running
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        with patch.object(
+            self.mgr.spec_store.all_specs,
+            'get',
+            return_value=spec,
+        ), patch.object(
+            self.mgr,
+            'mon_command',
+            return_value=(-errno.EINVAL, '', 'gateway is not safe to stop'),
+        ):
+            result, group, gateway_disabled, retry_soon = (
+                self.nvmeof_service.ok_to_redeploy(
+                    daemon,
+                    set(),
+                )
+            )
+
+        assert result.retval == -errno.EINVAL
+        assert group == ('testpool', 'testgroup')
+        assert gateway_disabled is False
+        assert retry_soon is True
 
     def test_ok_to_stop_denied(self):
         daemon = MagicMock()

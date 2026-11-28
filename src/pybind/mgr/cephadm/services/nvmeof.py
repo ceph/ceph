@@ -428,6 +428,7 @@ class NvmeofService(CephService):
         HandleCommandResult,
         Optional[tuple[str, str]],
         bool,
+        bool,
     ]:
         if daemon.daemon_id is None:
             return (
@@ -437,6 +438,7 @@ class NvmeofService(CephService):
                     'Unable to redeploy NVMe-oF daemon without a daemon id',
                 ),
                 None,
+                False,
                 False,
             )
 
@@ -449,6 +451,7 @@ class NvmeofService(CephService):
                     f'Unable to find NVMe-oF service spec for {daemon.name()}',
                 ),
                 None,
+                False,
                 False,
             )
 
@@ -464,16 +467,21 @@ class NvmeofService(CephService):
                 ),
                 group,
                 False,
+                True,
             )
 
         if force or daemon.status != DaemonDescriptionStatus.running:
-            return HandleCommandResult(0, '', ''), group, False
+            return HandleCommandResult(0, '', ''), group, False, False
 
         result, gateway_disabled = self.check_and_disable_gateway(daemon)
+
+        retry_soon = result.retval in (-errno.EBUSY, -errno.EINVAL)
+
         return (
             result,
             group,
             gateway_disabled if not result.retval else False,
+            retry_soon,
         )
 
     def _gateway_id(self, daemon: DaemonDescription) -> str:

@@ -52,6 +52,7 @@ REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw'
 DISABLED_SERVICES = ['nfs', 'keepalived']
 
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
+DAEMON_RETRY_INTERVAL_SECONDS = 10
 
 
 class CephadmServe:
@@ -70,6 +71,7 @@ class CephadmServe:
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
         self.last_certificates_check: Optional[datetime.datetime] = None
+        self._daemon_retry_requested = False
 
     def serve(self) -> None:
         """
@@ -82,6 +84,7 @@ class CephadmServe:
 
         while self.mgr.run:
             self.log.debug("serve loop start")
+            self._daemon_retry_requested = False
 
             try:
 
@@ -186,7 +189,10 @@ class CephadmServe:
             # agent-down detection on its own thread.
             down_mult = max(self.mgr.agent_down_multiplier, 1.5)
             candidates.append(int(down_mult * self.mgr.agent_refresh_rate))
-        sleep_interval = max(30, min(candidates))
+        if self._daemon_retry_requested:
+            sleep_interval = DAEMON_RETRY_INTERVAL_SECONDS
+        else:
+            sleep_interval = max(30, min(candidates))
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
@@ -1380,6 +1386,7 @@ class CephadmServe:
                         continue
                 nvmeof_redeploy_group = None
                 nvmeof_gateway_disabled = False
+                retry_soon = False
                 nvmeof_service: Optional[NvmeofService] = None
 
                 if (
@@ -1403,6 +1410,7 @@ class CephadmServe:
                         r,
                         nvmeof_redeploy_group,
                         nvmeof_gateway_disabled,
+                        retry_soon,
                     ) = nvmeof_service.ok_to_redeploy(
                         dd,
                         nvmeof_redeploy_groups,
@@ -1416,6 +1424,8 @@ class CephadmServe:
                             dd.name(),
                             r.stderr,
                         )
+                        if retry_soon:
+                            self._daemon_retry_requested = True
                         continue
 
                 try:
