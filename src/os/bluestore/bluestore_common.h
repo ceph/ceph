@@ -108,4 +108,97 @@ struct FragMetric {
   }
 };
 
+// ---------------------------------------------------------------------------
+// alloc_tag_t — classifies the data that will occupy an allocated extent.
+//
+// Bit layout:
+//   [63:60]  kind          — top-level category (alloc_tag_kind_t)
+//   [59:0]   kind-specific — layout defined per kind; zero if unused
+//
+// kind = BLUEFS (0x2):
+//   [59:56]  subkind       — alloc_tag_bluefs_t
+//   [55:0]   reserved/zero
+//
+// kind = PG (0x3):
+//   [59:52]  reserved/zero
+//   [51:32]  pool_id       — pg_t::m_pool (low 20 bits)
+//   [31:0]   pg_seed       — pg_t::m_seed
+//
+// A zero-initialised alloc_tag_t is UNKNOWN and is always safe to pass.
+// Allocators that do not understand tags ignore it.
+// ---------------------------------------------------------------------------
+
+enum class alloc_tag_kind_t : uint8_t {
+  UNKNOWN        = 0x0,  // zero-init, safe default; allocator ignores tag
+  BLUESTORE_META = 0x1,  // label, reserved regions
+  BLUEFS         = 0x2,  // all BlueFS allocations
+  PG             = 0x3,  // RADOS object data (PG collections)
+  // 0x4..0xF reserved
+};
+
+// subkind for kind == BLUEFS, stored in bits [59:56]
+enum class alloc_tag_bluefs_t : uint8_t {
+  OTHER = 0x0,  // unknown / other BlueFS files
+  WAL   = 0x1,  // RocksDB WAL (.log files)
+  SST   = 0x2,  // RocksDB SST (.sst files)
+  LOG   = 0x3,  // BlueFS journal (ino == 1)
+  // 0x4..0xF reserved
+};
+
+struct alloc_tag_t {
+  uint64_t v = 0; // ZERO UNKNOWN
+
+  static constexpr int      KIND_SHIFT       = 60;
+  static constexpr uint64_t KIND_MASK        = 0xFULL << KIND_SHIFT;
+  // BLUEFS subkind lives at [59:56]
+  static constexpr int      BLUEFS_SK_SHIFT  = 56;
+  static constexpr uint64_t BLUEFS_SK_MASK   = 0xFULL << BLUEFS_SK_SHIFT;
+  // PG pool_id lives at [51:32] (20 bits), pg_seed at [31:0]
+  static constexpr int      PG_POOL_SHIFT    = 32;
+  static constexpr uint64_t PG_POOL_MASK     = 0xFFFFFULL << PG_POOL_SHIFT;
+  static constexpr uint64_t PG_SEED_MASK     = 0xFFFFFFFFULL;
+
+  static alloc_tag_t unknown() { return {}; }
+
+  static alloc_tag_t bluestore_meta() {
+    alloc_tag_t t;
+    t.v = (uint64_t)alloc_tag_kind_t::BLUESTORE_META << KIND_SHIFT;
+    return t;
+  }
+
+  static alloc_tag_t bluefs(alloc_tag_bluefs_t sk) {
+    alloc_tag_t t;
+    t.v = ((uint64_t)alloc_tag_kind_t::BLUEFS  << KIND_SHIFT) |
+          ((uint64_t)sk << BLUEFS_SK_SHIFT);
+    return t;
+  }
+
+  // pool_id: pg_t::m_pool (only low 20 bits stored)
+  // pg_seed: pg_t::m_seed
+  static alloc_tag_t pg(uint64_t pool_id, uint32_t pg_seed) {
+    alloc_tag_t t;
+    t.v = ((uint64_t)alloc_tag_kind_t::PG << KIND_SHIFT) |
+          ((pool_id & 0xFFFFFULL) << PG_POOL_SHIFT) |
+          (uint64_t)pg_seed;
+    return t;
+  }
+
+  alloc_tag_kind_t kind() const {
+    return (alloc_tag_kind_t)((v & KIND_MASK) >> KIND_SHIFT);
+  }
+
+  alloc_tag_bluefs_t bluefs_subkind() const {
+    return (alloc_tag_bluefs_t)((v & BLUEFS_SK_MASK) >> BLUEFS_SK_SHIFT);
+  }
+
+  uint32_t pg_pool_id() const { return (uint32_t)((v & PG_POOL_MASK) >> PG_POOL_SHIFT); }
+  uint32_t pg_seed() const { return (uint32_t)(v & PG_SEED_MASK); }
+
+  bool is_unknown() const { return v == 0; }
+  bool is_bluefs() const { return kind() == alloc_tag_kind_t::BLUEFS; }
+  bool is_pg() const { return kind() == alloc_tag_kind_t::PG; }
+
+  bool operator==(const alloc_tag_t&) const = default;
+};
+
 #endif

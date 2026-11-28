@@ -16,6 +16,7 @@ int64_t HybridAllocatorBase<T>::allocate(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   dout(10) << __func__ << std::hex
@@ -48,17 +49,17 @@ int64_t HybridAllocatorBase<T>::allocate(
                          want < T::_lowest_size_available());
 
   int64_t res = _allocate_or_rollback(primary_first,
-    want, unit, max_alloc_size, hint, extents);
+    want, unit, max_alloc_size, hint, tag, extents);
   ceph_assert(res >= 0);
   if ((uint64_t)res < want) {
     auto orig_size = extents->size();
     int64_t res2 = 0;
     // try alternate allocator
     if (!primary_first) {
-      res2 = T::_allocate(want - res, unit, max_alloc_size, hint, extents);
+      res2 = T::_allocate(want - res, unit, max_alloc_size, hint, tag, extents);
     } else if (bmap_alloc) {
       res2 =
-        bmap_alloc->allocate(want - res, unit, max_alloc_size, hint, extents);
+        bmap_alloc->allocate(want - res, unit, max_alloc_size, hint, tag, extents);
     }
     if (res2 >= 0) {
       res += res2;
@@ -143,6 +144,7 @@ uint64_t HybridAllocatorBase<T>::_spillover_allocate(uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   return _allocate_or_rollback(false,
@@ -150,6 +152,7 @@ uint64_t HybridAllocatorBase<T>::_spillover_allocate(uint64_t want,
     unit,
     max_alloc_size,
     hint,
+    tag,
     extents);
 }
 
@@ -211,6 +214,7 @@ uint64_t HybridAllocatorBase<PrimaryAllocator>::_allocate_or_rollback(
   uint64_t unit,
   uint64_t max_alloc_size,
   int64_t  hint,
+  alloc_tag_t tag,
   PExtentVector* extents)
 {
   int64_t res = 0;
@@ -218,9 +222,10 @@ uint64_t HybridAllocatorBase<PrimaryAllocator>::_allocate_or_rollback(
   // preserve original 'extents' vector state
   auto orig_size = extents->size();
   if (primary) {
-    res = PrimaryAllocator::_allocate(want, unit, max_alloc_size, hint, extents);
+    res = PrimaryAllocator::_allocate(want, unit, max_alloc_size, hint, tag, extents);
   } else if (bmap_alloc) {
-    res = bmap_alloc->allocate(want, unit, max_alloc_size, hint, extents);
+    res = bmap_alloc->allocate(want, unit, max_alloc_size, hint,
+                        tag, extents);
   }
   if (res < 0) {
     // got a failure, release already allocated
