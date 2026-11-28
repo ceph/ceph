@@ -165,6 +165,64 @@ conditions are met:
 
 Ceph will not provision an OSD on a device that is not *available*.
 
+.. _cephadm-osd-declarative:
+
+Declarative State
+-----------------
+
+The effect of ``ceph orch apply`` is persistent. This means that drives that
+are added to the system after the ``ceph orch apply`` command completes will be
+automatically detected and added to the cluster as specified.  It also means that drives that
+become available (e.g. by zapping) after the ``ceph orch apply``
+command completes will be automatically found and added to the cluster.
+
+We will examine the effects of the following command:
+
+.. prompt:: bash #
+
+  ceph orch apply osd --all-available-devices
+
+After running the above command: 
+
+* When you add new drives to the cluster, they will automatically be used to
+  create new OSDs.
+* When you remove an OSD and clean the LVM physical volume, a new OSD will be
+  created automatically.
+
+If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
+
+.. prompt:: bash #
+
+  ceph orch apply osd --all-available-devices --unmanaged=true
+
+.. note::
+
+    Keep these four facts in mind:
+
+    - The default behavior of ``ceph orch apply`` causes ``cephadm`` to
+      constantly reconcile. Each time that ``cephadm`` refreshes the device
+      list of a host, it creates OSDs on any newly available devices that
+      match a managed OSD service. It refreshes the list every
+      ``mgr/cephadm/device_cache_timeout`` seconds (1800 by default) and when
+      you run ``ceph orch device ls --refresh``.
+
+    - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
+
+    - Since Tentacle, ``ceph orch daemon add osd`` places the OSDs that it
+      creates in a managed OSD service named ``osd.default``. If that service
+      does not exist, ``cephadm`` creates it with the host and the device
+      paths given in the command.
+
+    - It is prudent to check the health of a new or replacement drive and to
+      update its firmware before it is used for an OSD. If a managed OSD
+      service matches the drive, ``cephadm`` can create an OSD on it before
+      you have done so. To prevent this, set that service to unmanaged with
+      ``ceph orch set-unmanaged <service_name>`` before you install the drive,
+      and set it back with ``ceph orch set-managed <service_name>`` when the
+      drive is ready.
+
+For more on ``cephadm``, see also :ref:`cephadm-spec-unmanaged`.
+
 Creating New OSDs
 -----------------
 
@@ -275,51 +333,6 @@ For example:
 
 The first run may print ``Preview data is being generated.. Please re-run this
 command in a bit.`` in place of the OSD table. Run the command again.
-
-.. _cephadm-osd-declarative:
-
-Declarative State
------------------
-
-The effect of ``ceph orch apply`` is persistent. This means that drives that
-are added to the system after the ``ceph orch apply`` command completes will be
-automatically detected and added to the cluster as specified.  It also means that drives that
-become available (e.g. by zapping) after the ``ceph orch apply``
-command completes will be automatically found and added to the cluster.
-
-We will examine the effects of the following command:
-
-.. prompt:: bash #
-
-  ceph orch apply osd --all-available-devices
-
-After running the above command: 
-
-* When you add new drives to the cluster, they will automatically be used to
-  create new OSDs.
-* When you remove an OSD and clean the LVM physical volume, a new OSD will be
-  created automatically.
-
-If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
-
-.. prompt:: bash #
-
-  ceph orch apply osd --all-available-devices --unmanaged=true
-
-.. note::
-
-    Keep these three facts in mind:
-
-    - The default behavior of ``ceph orch apply`` causes ``cephadm`` to constantly reconcile. This means that ``cephadm`` creates OSDs as soon as new drives are detected.
-
-    - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
-
-    - Since Tentacle, ``ceph orch daemon add osd`` places the OSDs that it
-      creates in a managed OSD service named ``osd.default``. If that service
-      does not exist, ``cephadm`` creates it with the host and the device
-      paths given in the command.
-
-For more on ``cephadm``, see also :ref:`cephadm-spec-unmanaged`.
 
 .. _cephadm-osd-removal:
 
