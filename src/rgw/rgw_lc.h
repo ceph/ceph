@@ -178,6 +178,7 @@ enum class LCFlagType : uint16_t
   none = 0,
   ArchiveZone,
   Filter,
+  BackupZone,
 };
 
 class LCFlag {
@@ -203,10 +204,11 @@ class LCFilter
     }
    }
 
-   static constexpr std::array<LCFlag, 3> filter_flags = {
+   static constexpr std::array<LCFlag, 4> filter_flags = {
      LCFlag(LCFlagType::none, "none"),
      LCFlag(LCFlagType::ArchiveZone, "ArchiveZone"),
      LCFlag(LCFlagType::Filter, "Filter"),
+     LCFlag(LCFlagType::BackupZone, "BackupZone"),
    };
 
 protected:

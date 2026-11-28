@@ -28,6 +28,7 @@ for configuring any sync plugin.
    Elasticsearch Sync Module <elastic-sync-module>
    Cloud Sync Module <cloud-sync-module>
    Archive Sync Module <archive-sync-module>
+   Backup Sync Module <backup-sync-module>
 
 .. note ``rgw`` is the default sync plugin and there is no need to explicitly
    configure this.

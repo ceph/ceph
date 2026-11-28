@@ -852,6 +852,14 @@ public:
   int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
+class RGWBackupSyncModule : public RGWDefaultSyncModule {
+public:
+  RGWBackupSyncModule() {}
+  bool supports_writes() override { return true; }
+  bool supports_data_export() override { return false; }
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+};
+
 class RGWUserPermHandler {
   friend struct Init;
   friend class Bucket;

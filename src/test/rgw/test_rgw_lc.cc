@@ -112,6 +112,30 @@ TEST(TestLCFilterInvalidAnd, XMLDoc3)
   ASSERT_EQ(filter.get_flags(), uint32_t(LCFlagType::none));
 }
 
+static const char* xmldoc_backup =
+R"(<Filter>
+   <And>
+      <BackupZone />
+      <Prefix>logs/</Prefix>
+    </And>
+</Filter>
+)";
+
+TEST(TestLCFilterDecoder, XMLDocBackupZone)
+{
+  RGWXMLDecoder::XMLParser parser;
+  ASSERT_TRUE(parser.init());
+  ASSERT_TRUE(parser.parse(xmldoc_backup, strlen(xmldoc_backup), 1));
+  LCFilter_S3 filter;
+  auto result = RGWXMLDecoder::decode_xml("Filter", filter, &parser, true);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(filter.get_prefix(), "logs/");
+  /* check our flags */
+  ASSERT_EQ(filter.get_flags(), LCFilter::make_flag(LCFlagType::BackupZone));
+  ASSERT_TRUE(filter.have_flag(LCFlagType::BackupZone));
+  ASSERT_FALSE(filter.have_flag(LCFlagType::ArchiveZone));
+}
+
 TEST(ExpHdr, ReplaceStrftime)
 {
   using namespace std::chrono;
@@ -186,6 +210,60 @@ TEST(TestLCConfigurationDecoder, XMLDoc5)
   const auto& filter = rule.get_filter();
   ASSERT_EQ(filter.get_size_gt(), 1024);
   ASSERT_EQ(filter.get_size_lt(), 65536);
+}
+
+static const char *xmldoc_backup_ok =
+R"(<Rule>
+        <ID>backup-purge</ID>
+        <Filter>
+           <BackupZone />
+        </Filter>
+        <Status>Enabled</Status>
+        <Expiration>
+            <ExpiredObjectDeleteMarker>true</ExpiredObjectDeleteMarker>
+        </Expiration>
+        <NoncurrentVersionExpiration>
+            <NewerNoncurrentVersions>10</NewerNoncurrentVersions>
+            <NoncurrentDays>90</NoncurrentDays>
+        </NoncurrentVersionExpiration>
+    </Rule>
+)";
+
+static const char *xmldoc_backup_expire_current =
+R"(<Rule>
+        <ID>backup-expire-current</ID>
+        <Filter>
+           <BackupZone />
+        </Filter>
+        <Status>Enabled</Status>
+        <Expiration>
+            <Days>30</Days>
+        </Expiration>
+    </Rule>
+)";
+
+static int add_rule_from_xml(const char* xml)
+{
+  RGWXMLDecoder::XMLParser parser;
+  EXPECT_TRUE(parser.init());
+  EXPECT_TRUE(parser.parse(xml, strlen(xml), 1));
+  LCRule_S3 rule;
+  EXPECT_TRUE(RGWXMLDecoder::decode_xml("Rule", rule, &parser, true));
+  RGWLifecycleConfiguration config;
+  return config.check_and_add_rule(rule);
+}
+
+TEST(TestLCConfigurationDecoder, BackupZoneNoncurrent)
+{
+  ASSERT_EQ(add_rule_from_xml(xmldoc_backup_ok), 0);
+}
+
+TEST(TestLCConfigurationDecoder, BackupZoneRejectsCurrentExpiration)
+{
+  /* expiring current versions would remove objects that still exist
+   * in the source bucket */
+  ASSERT_EQ(add_rule_from_xml(xmldoc_backup_expire_current),
+            -ERR_INVALID_REQUEST);
 }
 
 struct LCWorkTimeTests : ::testing::Test

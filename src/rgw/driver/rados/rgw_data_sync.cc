@@ -2646,7 +2646,8 @@ public:
                             std::optional<uint64_t> versioned_epoch,
                             const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace) override;
-  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *remove_object(       const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, 
+                                     rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
 };
@@ -3100,8 +3101,8 @@ RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dp
                            source_trace_entry, zones_trace);
 }
 
-RGWCoroutine *RGWDefaultDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
-                                                      real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWDefaultDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
@@ -3127,7 +3128,23 @@ public:
                             std::optional<uint64_t> versioned_epoch,
                             const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace) override;
-  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                                     rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+};
+
+class RGWBackupDataSyncModule : public RGWDefaultDataSyncModule {
+public:
+  RGWBackupDataSyncModule() {}
+
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
+                            rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+                            std::optional<uint64_t> versioned_epoch,
+                            const rgw_zone_set_entry& source_trace_entry,
+                            rgw_zone_set *zones_trace) override;
+  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
 };
@@ -3156,9 +3173,39 @@ public:
   }
 };
 
+class RGWBackupSyncModuleInstance : public RGWDefaultSyncModuleInstance {
+  RGWBackupDataSyncModule data_handler;
+public:
+  RGWBackupSyncModuleInstance() {}
+  RGWDataSyncModule *get_data_handler() override {
+    return &data_handler;
+  }
+  auto alloc_bucket_meta_handler(librados::Rados& rados,
+                                 RGWSI_Bucket* svc_bucket,
+                                 RGWBucketCtl* ctl_bucket)
+      -> std::unique_ptr<RGWMetadataHandler> override {
+    return create_backup_bucket_metadata_handler(rados, svc_bucket, ctl_bucket);
+  }
+  auto alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver,
+                                          RGWSI_Zone* svc_zone,
+                                          RGWSI_Bucket* svc_bucket,
+                                          RGWSI_BucketIndex* svc_bi,
+                                          RGWDataChangesLog *svc_datalog)
+      -> std::unique_ptr<RGWMetadataHandler> override {
+    return create_backup_bucket_instance_metadata_handler(
+        driver, svc_zone, svc_bucket, svc_bi, svc_datalog);
+  }
+};
+
 int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
 {
   instance->reset(new RGWArchiveSyncModuleInstance());
+  return 0;
+}
+
+int RGWBackupSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
+{
+  instance->reset(new RGWBackupSyncModuleInstance());
   return 0;
 }
 
@@ -3193,11 +3240,95 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dp
                            stat_follow_olh, source_trace_entry, zones_trace);
 }
 
-RGWCoroutine *RGWArchiveDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
-                                                     real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWBackupDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
+                                                    rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+                                                    std::optional<uint64_t> versioned_epoch,
+                                                    const rgw_zone_set_entry& source_trace_entry,
+                                                    rgw_zone_set *zones_trace)
+{
+  auto sync_env = sc->env;
+  ldout(sc->cct, 5) << "SYNC_BACKUP: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+
+  std::optional<rgw_obj_key> dest_key;
+  bool stat_follow_olh = false;
+
+
+  if (versioned_epoch.value_or(0) == 0) { /* force version if not set */
+    stat_follow_olh = true;
+    versioned_epoch = 0;
+    dest_key = key;
+    if (key.instance.empty()) {
+      sync_env->driver->getRados()->gen_rand_obj_instance_name(&(*dest_key));
+    }
+  }
+
+  if (key.instance.empty()) {
+    dest_key = key;
+    sync_env->driver->getRados()->gen_rand_obj_instance_name(&(*dest_key));
+  }
+
+  return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch,
+                           stat_follow_olh, source_trace_entry, zones_trace);
+}
+
+RGWCoroutine *RGWArchiveDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   ldout(sc->cct, 0) << "SYNC_ARCHIVE: remove_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
   return NULL;
+}
+
+RGWCoroutine *RGWBackupDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                                                     rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
+{
+  ldout(sc->cct, 0) << "SYNC_BACKUP: remove_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
+	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+  auto sync_env = sc->env;
+  /* never reuse the source's version id as the marker id: for UNLINK_INSTANCE that id names the
+   * copy we're retaining, and cls_rgw would rewrite it in place as a delete marker and unlink it.
+   * clearing it makes delete_obj() generate a fresh marker instance instead. */
+  rgw_obj_key marker_key = key;
+  marker_key.instance.clear();
+  /* for UNLINK_INSTANCE (versioned) the bilog timestamp is the removed instance's own mtime --
+   * cls_rgw logs it as having "no real meaning in instance removal context" -- not the time of
+   * the delete. passing it would arm del_if_older, which then compares it against whatever the
+   * olh currently resolves to, and silently skips the marker whenever a newer version exists.
+   * a null timestamp drops that guard and lets delete_obj() stamp the marker with its own now.
+   * CLS_RGW_OP_DEL does log a real delete time, so keep the guard there. */
+  real_time *pmtime = versioned ? nullptr : &mtime;
+  /* a version-specific delete should only move our head if the version it removed was the head.
+   * the source's bilog cannot tell those apart, so hand the version id down and let the olh
+   * decide. CLS_RGW_OP_DEL needs no such check -- the source dropped its only copy, so the head
+   * always becomes the marker, which olh_epoch=0 gets us by making cls_rgw stamp a fresh local
+   * now_epoch (beating the epoch sync_object() forced onto the olh when it fetched the object).
+   * for UNLINK_INSTANCE pass the source's epoch down: the olh of a versioned source's object
+   * carries source epochs, see create_delete_marker() below. */
+  std::optional<rgw_obj_key> promote_if_head;
+  uint64_t olh_epoch = 0;
+  if (versioned) {
+    promote_if_head = key;
+    olh_epoch = versioned_epoch;
+  }
+  return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
+                            sync_pipe, marker_key, true, olh_epoch,
+                            &owner.id, &owner.display_name, true, pmtime, zones_trace,
+                            promote_if_head);
+}
+
+RGWCoroutine *RGWBackupDataSyncModule::create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+                                                            rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
+{
+  ldout(sc->cct, 0) << "SYNC_BACKUP: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
+	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+  auto sync_env = sc->env;
+  /* a versioned source's data versions keep their source olh epoch here, so the marker must use
+   * the source's epoch too: a locally stamped now_epoch is later than any version the source
+   * wrote before we synced the marker, and that version would never become current. without a
+   * source epoch, olh_epoch=0 lets the backup zone stamp its own, see remove_object() above */
+  uint64_t olh_epoch = versioned ? versioned_epoch : 0;
+  return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
+                            sync_pipe, key, versioned, olh_epoch,
+                            &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
 RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
@@ -4522,7 +4653,7 @@ public:
               key.instance = "null";
             }
             tn->log(10, SSTR("removing obj: " << sc->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
-            call(data_sync_module->remove_object(dpp, sc, sync_pipe, key, timestamp, versioned, versioned_epoch.value_or(0), &zones_trace));
+            call(data_sync_module->remove_object(dpp, sc, sync_pipe, key, timestamp, owner, versioned, versioned_epoch.value_or(0), &zones_trace));
             // our copy of the object is more recent, continue as if it succeeded
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             set_status("creating delete marker");
@@ -4822,7 +4953,12 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
 }
 
 static bool has_olh_epoch(RGWModifyOp op) {
-  return op == CLS_RGW_OP_LINK_OLH || op == CLS_RGW_OP_UNLINK_INSTANCE;
+  /* LINK_OLH_DM logs ver.pool=-1 and ver.epoch=<olh epoch> just like LINK_OLH, so it is an olh
+   * op too. otherwise a null-version delete marker (versioning-suspended source bucket), which
+   * shares the squash key (object, "") with the null version itself, can never win the squash
+   * slot and gets dropped before it reaches the sync module. */
+  return op == CLS_RGW_OP_LINK_OLH || op == CLS_RGW_OP_LINK_OLH_DM ||
+         op == CLS_RGW_OP_UNLINK_INSTANCE;
 }
 
 class RGWBucketShardIsDoneCR : public RGWCoroutine {
@@ -5113,6 +5249,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
+
         if (make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
           set_status() << "squashed operation, skipping";
           tn->log(20, SSTR("skipping object: "
@@ -5120,6 +5257,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
+        
         tn->set_flag(RGW_SNS_FLAG_ACTIVE);
         tn->log(20, SSTR("syncing object: "
             << bucket_shard_str{bs} << "/" << key));

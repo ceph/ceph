@@ -20,11 +20,14 @@ from rgw_multi.zone_cloud import CloudZone as CloudZone
 from rgw_multi.zone_cloud import CloudZoneConfig as CloudZoneConfig
 from rgw_multi.zone_az import AZone as AZone
 from rgw_multi.zone_az import AZoneConfig as AZoneConfig
+from rgw_multi.zone_backup import BZone as BZone
+from rgw_multi.zone_backup import BZoneConfig as BZoneConfig
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
 from rgw_multi.tests_es import *
 from rgw_multi.tests_az import *
+from rgw_multi.tests_backup import *
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -177,6 +180,7 @@ def init(parse_args):
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
                                          'num_az_zones': 0,
+                                         'num_bz_zones': 0,
                                          'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
@@ -224,6 +228,7 @@ def init(parse_args):
     es_cfg = []
     cloud_cfg = []
     az_cfg = []
+    bz_cfg = []
 
     for s in cfg.sections():
         if s.startswith('elasticsearch'):
@@ -232,6 +237,8 @@ def init(parse_args):
             cloud_cfg.append(CloudZoneConfig(cfg, s))
         elif s.startswith('archive'):
             az_cfg.append(AZoneConfig(cfg, s))
+        elif s.startswith('backup'):
+            bz_cfg.append(BZoneConfig(cfg, s))
 
 
     argv = []
@@ -275,8 +282,9 @@ def init(parse_args):
     num_es_zones = len(es_cfg)
     num_cloud_zones = len(cloud_cfg)
     num_az_zones = cfg.getint(section, 'num_az_zones')
+    num_bz_zones = cfg.getint(section, 'num_bz_zones')
 
-    num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_az_zones
+    num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_az_zones + num_bz_zones
 
     use_ssl = cfg.getboolean(section, 'use_ssl')
 
@@ -337,7 +345,9 @@ def init(parse_args):
 
             es_zone = (z >= args.num_zones and z < args.num_zones + num_es_zones)
             cloud_zone = (z >= args.num_zones + num_es_zones and z < args.num_zones + num_es_zones + num_cloud_zones)
-            az_zone = (z >= args.num_zones + num_es_zones + num_cloud_zones)
+            az_zone = (z >= args.num_zones + num_es_zones + num_cloud_zones and
+                       z < args.num_zones + num_es_zones + num_cloud_zones + num_az_zones)
+            bz_zone = (z >= args.num_zones + num_es_zones + num_cloud_zones + num_az_zones)
 
             # create the zone in its zonegroup
             zone = multisite.Zone(zone_name(zg, z), zonegroup, cluster)
@@ -352,6 +362,9 @@ def init(parse_args):
             elif az_zone:
                 zone_index = z - args.num_zones - num_es_zones - num_cloud_zones
                 zone = AZone(zone_name(zg, z), zonegroup, cluster)
+            elif bz_zone:
+                zone_index = z - args.num_zones - num_es_zones - num_cloud_zones - num_az_zones
+                zone = BZone(zone_name(zg, z), zonegroup, cluster)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 

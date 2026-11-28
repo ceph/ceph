@@ -131,6 +131,9 @@ void LCFilter_S3::dump_xml(Formatter *f) const
     if (have_flag(LCFlagType::ArchiveZone)) {
       encode_xml("ArchiveZone", "", f);
     }
+    if (have_flag(LCFlagType::BackupZone)) {
+      encode_xml("BackupZone", "", f);
+    }
   }
   if (has_size_gt()) {
     encode_xml("ObjectSizeGreaterThan", size_gt, f);
@@ -164,6 +167,11 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
   /* parse optional ArchiveZone flag (extension) */
   if (o->find_first("ArchiveZone")) {
     flags |= make_flag(LCFlagType::ArchiveZone);
+  }
+
+  /* parse optional BackupZone flag (extension) */
+  if (o->find_first("BackupZone")) {
+    flags |= make_flag(LCFlagType::BackupZone);
   }
 
   RGWXMLDecoder::decode_xml("ObjectSizeGreaterThan", size_gt, o, false);
