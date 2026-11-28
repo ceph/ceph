@@ -1808,7 +1808,7 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 
   if (! op_ret) {
     list_all_buckets_start(s);
-    dump_owner(s, s->user->get_id(), s->user->get_display_name());
+    dump_owner(s, to_string(s->owner.id), s->owner.display_name);
     s->formatter->open_array_section("Buckets");
     sent_data = true;
   }
