@@ -158,7 +158,12 @@ PurgeQueue::PurgeQueue(
   ceph_assert(cct != nullptr);
   ceph_assert(on_error != nullptr);
   ceph_assert(objecter != nullptr);
-  journaler.set_write_error_handler(on_error);
+  // _report_error() queues on_error at most once for the finisher to
+  // complete and free, so the journaler needs a separate handler.
+  journaler.set_write_error_handler(new LambdaContext([this](int r) {
+    std::lock_guard l(lock);
+    _report_error(r);
+  }));
 }
 
 PurgeQueue::~PurgeQueue()
@@ -232,10 +237,14 @@ void PurgeQueue::activate()
 
 void PurgeQueue::shutdown()
 {
-  std::lock_guard l(lock);
+  {
+    std::lock_guard l(lock);
 
-  journaler.shutdown();
-  timer.shutdown();
+    journaler.shutdown();
+    timer.shutdown();
+  }
+  // Contexts on the finisher take `lock`, and Journaler::shutdown() has
+  // just queued its waiters there: join the finisher without holding it.
   finisher.stop();
 }
 
@@ -249,12 +258,20 @@ void PurgeQueue::open(Context *completion)
     waiting_for_recovery.push_back(completion);
 
   journaler.recover(new LambdaContext([this](int r){
+    std::lock_guard l(lock);
+    if (journaler.is_stopping()) {
+      // Journaler::shutdown() ran after the recovery completed, or cancelled
+      // it with -ESHUTDOWN (the same value as -EBLOCKLISTED). The error
+      // code alone cannot distinguish shutdown from a recovery error.
+      dout(10) << "journaler is shutting down" << dendl;
+      finish_contexts(g_ceph_context, waiting_for_recovery, -EAGAIN);
+      return;
+    }
     if (r == -ENOENT) {
       dout(1) << "Purge Queue not found, assuming this is an upgrade and "
                  "creating it." << dendl;
-      create(NULL);
+      _create(NULL);
     } else if (r == 0) {
-      std::lock_guard l(lock);
       dout(4) << "open complete" << dendl;
 
       // Journaler only guarantees entries before head write_pos have been
@@ -295,6 +312,14 @@ void PurgeQueue::_recover()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
+  if (journaler.is_stopping()) {
+    // Journaler::shutdown() sets the error to -EAGAIN, but a read failing
+    // after it replaces that, so check the journaler rather than the error
+    dout(10) << "journaler is shutting down" << dendl;
+    finish_contexts(g_ceph_context, waiting_for_recovery, -EAGAIN);
+    return;
+  }
+
   // Journaler::is_readable() adjusts write_pos if partial entry is encountered
   while (1) {
     if (!journaler.is_readable() &&
@@ -333,8 +358,14 @@ void PurgeQueue::_recover()
 
 void PurgeQueue::create(Context *fin)
 {
-  dout(4) << "creating" << dendl;
   std::lock_guard l(lock);
+  _create(fin);
+}
+
+void PurgeQueue::_create(Context *fin)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  dout(4) << "creating" << dendl;
 
   if (fin)
     waiting_for_recovery.push_back(fin);
@@ -460,13 +491,21 @@ bool PurgeQueue::_can_consume()
   }
 }
 
+void PurgeQueue::_report_error(int r)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  if (on_error) {
+    finisher.queue(on_error, r);
+    on_error = nullptr;
+  }
+}
+
 void PurgeQueue::_go_readonly(int r)
 {
   if (readonly) return;
   dout(1) << "going readonly because internal IO failed: " << strerror(-r) << dendl;
   readonly = true;
-  finisher.queue(on_error, r);
-  on_error = nullptr;
+  _report_error(r);
   journaler.set_readonly();
   finish_contexts(g_ceph_context, waiting_for_recovery, r);
 }
@@ -474,6 +513,13 @@ void PurgeQueue::_go_readonly(int r)
 bool PurgeQueue::_consume()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
+
+  if (journaler.is_stopping()) {
+    // as in _recover(); going read-only would also fail the !readonly
+    // assertion of a head write or flush that completes after the shutdown
+    dout(10) << "journaler is shutting down" << dendl;
+    return false;
+  }
 
   bool could_consume = false;
   while(_can_consume()) {
@@ -501,7 +547,9 @@ bool PurgeQueue::_consume()
           std::lock_guard l(lock);
           if (r == 0) {
             _consume();
-          } else if (r != -EAGAIN) {
+          } else if (!journaler.is_stopping()) {
+            // -EAGAIN from Journaler::shutdown() is not the only error that
+            // can reach us after it: one queued before it can too
             _go_readonly(r);
           }
         }));
@@ -606,8 +654,7 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
     std::lock_guard l(lock);
 
     if (r == -EBLOCKLISTED) {
-      finisher.queue(on_error, r);
-      on_error = nullptr;
+      _report_error(r);
       return;
     }
 
@@ -619,7 +666,7 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
     // Also do this periodically even if not idle, so that the persisted
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
-    if (!readonly &&
+    if (!readonly && !journaler.is_stopping() &&
         (in_flight.empty() || journaler.write_head_needed())) {
       journaler.write_head(nullptr);
     }
