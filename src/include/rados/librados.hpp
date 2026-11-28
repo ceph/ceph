@@ -123,8 +123,8 @@ inline namespace v14_2_0 {
     bool operator!=(const NObjectIterator& rhs) const;
     const ListObject& operator*() const;
     const ListObject* operator->() const;
-    NObjectIterator &operator++(); //< Preincrement; errors are thrown as exceptions
-    NObjectIterator operator++(int); //< Postincrement; errors are thrown as exceptions
+    NObjectIterator &operator++(); ///< Preincrement; errors are thrown as exceptions
+    NObjectIterator operator++(int); ///< Postincrement; errors are thrown as exceptions
     friend class IoCtx;
     friend class librados::NObjectIteratorImpl;
 
@@ -294,7 +294,7 @@ inline namespace v14_2_0 {
     OPERATION_RETURNVEC          = LIBRADOS_OPERATION_RETURNVEC,
   };
 
-  /*
+  /**
    * Alloc hint flags for the alloc_hint operation.
    */
   enum AllocHintFlags {
@@ -311,7 +311,7 @@ inline namespace v14_2_0 {
     ALLOC_HINT_FLAG_LOG = 1024,
   };
 
-  /*
+  /**
    * ObjectOperation : compound object operation
    * Batch multiple object operations into a single request, to be applied
    * atomically.
@@ -355,11 +355,14 @@ inline namespace v14_2_0 {
      * Add an exec to read OR write operation. Only read-only methods may be
      * added this way. Use ObjectWriteOperation::exec() for write methods.
      *
-     * @param method the method as defined in cls/<class>/cls_<class>_ops.h
-     * @param inbl where to find input
-     * @param obl (optional) where to store output
-     * @param prval (optional) storage for return value.
-     * @param completion (optional) completion callback.
+     * @param method the method as defined in `cls/<ClassID>/cls_<ClassID>_ops.h`
+     * @param args forwarded arguments. Accepted forms:
+     *   - `(bufferlist& inbl)`
+     *   - `(bufferlist& inbl, bufferlist *obl, int *prval)`
+     *   - `(bufferlist& inbl, ObjectOperationCompletion *completion)`
+     * where @p inbl is the input, @p obl (optional) receives the output,
+     * @p prval (optional) receives the method's return value, and
+     * @p completion (optional) is called when the operation completes.
      */
     template <typename Tag, typename ClassID, typename... Args>
     void exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) {
@@ -408,7 +411,7 @@ inline namespace v14_2_0 {
     friend class Rados;
   };
 
-  /*
+  /**
    * ObjectWriteOperation : compound object write operation
    * Batch multiple object operations into a single request, to be applied
    * atomically.
@@ -536,10 +539,16 @@ inline namespace v14_2_0 {
      *
      * @param expected_object_size expected size of the object, in bytes
      * @param expected_write_size expected size of writes to the object, in bytes
-     * @param flags flags ()
      */
     void set_alloc_hint(uint64_t expected_object_size,
                         uint64_t expected_write_size);
+    /**
+     * Set allocation hint for an object, with flags
+     *
+     * @param expected_object_size expected size of the object, in bytes
+     * @param expected_write_size expected size of writes to the object, in bytes
+     * @param flags hints about future IO patterns (AllocHintFlags)
+     */
     void set_alloc_hint2(uint64_t expected_object_size,
 			 uint64_t expected_write_size,
 			 uint32_t flags);
@@ -570,11 +579,14 @@ inline namespace v14_2_0 {
      *
      * Add an exec to write operation. Read or Write exec methods are permitted.
      *
-     * @param method the method as defined in cls/<class>/cls_<class>_ops.h
-     * @param inbl where to find input
-     * @param obl (optional) where to store output
-     * @param prval (optional) storage for return value.
-     * @param completion (optional) completion callback.
+     * @param method the method as defined in `cls/<ClassID>/cls_<ClassID>_ops.h`
+     * @param args forwarded arguments. Accepted forms:
+     *   - `(bufferlist& inbl)`
+     *   - `(bufferlist& inbl, bufferlist *obl, int *prval)`
+     *   - `(bufferlist& inbl, ObjectOperationCompletion *completion)`
+     * where @p inbl is the input, @p obl (optional) receives the output,
+     * @p prval (optional) receives the method's return value, and
+     * @p completion (optional) is called when the operation completes.
      */
     template <typename Tag, typename ClassID, typename... Args>
     void exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) {
@@ -583,7 +595,7 @@ inline namespace v14_2_0 {
     }
   };
 
-  /*
+  /**
    * ObjectReadOperation : compound object operation that return value
    * Batch multiple object operations into a single request, to be applied
    * atomically.
@@ -638,6 +650,7 @@ inline namespace v14_2_0 {
      * @param start_after [in] list no keys smaller than start_after
      * @param max_return [in] list no more than max_return key/value pairs
      * @param out_vals [out] place returned values in out_vals on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
      * @param prval [out] place error code in prval upon completion
      */
     void omap_get_vals2(
@@ -804,6 +817,7 @@ inline namespace v14_2_0 {
      * @param src_offset [in] source offset to indicate the start position of 
      * 				a chunk in the source object
      * @param src_length [in] source length to set the length of the chunk
+     * @param tgt_ioctx  [in] I/O context of the target object's pool
      * @param tgt_oid    [in] target object's id to set a chunk
      * @param tgt_offset [in] the start position of the target object
      * @param flag       [in] flag for the source object
@@ -871,21 +885,21 @@ inline namespace v14_2_0 {
 
     bool is_valid() const;
 
-    // Close our pool handle
+    /// Close our pool handle
     void close();
 
-    // deep copy
+    /// deep copy
     void dup(const IoCtx& rhs);
 
-    // set pool auid
+    /// set pool auid
     int set_auid(uint64_t auid_)
       __attribute__ ((deprecated));
 
-    // set pool auid
+    /// set pool auid
     int set_auid_async(uint64_t auid_, PoolAsyncCompletion *c)
       __attribute__ ((deprecated));
 
-    // get pool auid
+    /// get pool auid
     int get_auid(uint64_t *auid_)
       __attribute__ ((deprecated));
 
@@ -898,27 +912,27 @@ inline namespace v14_2_0 {
     uint64_t pool_required_alignment();
     int pool_required_alignment2(uint64_t * alignment);
 
-    // create an object
+    /// create an object
     int create(const std::string& oid, bool exclusive);
     int create(const std::string& oid, bool exclusive,
 	       const std::string& category); ///< category is unused
 
     /**
-     * write bytes to an object at a specified offset
+     * @brief write bytes to an object at a specified offset
      *
-     * NOTE: this call steals the contents of @param bl.
+     * @note this call steals the contents of @p bl.
      */
     int write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     /**
-     * append bytes to an object
+     * @brief append bytes to an object
      *
-     * NOTE: this call steals the contents of @param bl.
+     * @note this call steals the contents of @p bl.
      */
     int append(const std::string& oid, bufferlist& bl, size_t len);
     /**
-     * replace object contents with provided data
+     * @brief replace object contents with provided data
      *
-     * NOTE: this call steals the contents of @param bl.
+     * @note this call steals the contents of @p bl.
      */
     int write_full(const std::string& oid, bufferlist& bl);
     int writesame(const std::string& oid, bufferlist& bl,
@@ -940,13 +954,13 @@ inline namespace v14_2_0 {
     int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
     int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts);
    protected:
-    // IoCtx needs a distinction between ro and rw to pick the correct flags
-    // for the operate call.
+    /// IoCtx needs a distinction between ro and rw to pick the correct flags
+    /// for the operate call.
     int exec_impl(const std::string& oid, const char *cls, const char *method,
                   bufferlist& inbl, bufferlist& outbl);
    public:
     /**
-     * Execute an OSD class method on an object
+     * @brief Execute an OSD class method on an object
      *
      * The OSD has a plugin mechanism for performing complicated
      * operations on an object atomically. These plugins are called
@@ -958,7 +972,7 @@ inline namespace v14_2_0 {
      * interface.
      *
      * @param oid the object name
-     * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+     * @param method the method as defined in `cls/<ClassID>/cls_<ClassID>_ops.h`
      * @param inbl where to find input
      * @param outbl where to store output
      * @returns return code (>=0 for success, otherwise stanard OSD errors)
@@ -971,9 +985,9 @@ inline namespace v14_2_0 {
     }
 
     /**
-     * modify object tmap based on encoded update sequence
+     * @brief modify object tmap based on encoded update sequence
      *
-     * NOTE: this call steals the contents of @param bl
+     * @note this call steals the contents of @p bl
      */
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
 
@@ -1025,27 +1039,27 @@ inline namespace v14_2_0 {
     void snap_set_read(snap_t seq);
     int selfmanaged_snap_set_write_ctx(snap_t seq, std::vector<snap_t>& snaps);
 
-    // Create a snapshot with a given name
+    /// Create a snapshot with a given name
     int snap_create(const char *snapname);
 
-    // Look up a snapshot by name.
-    // Returns 0 on success; error code otherwise
+    /// Look up a snapshot by name.
+    /// Returns 0 on success; error code otherwise
     int snap_lookup(const char *snapname, snap_t *snap);
 
-    // Gets a timestamp for a snap
+    /// Gets a timestamp for a snap
     int snap_get_stamp(snap_t snapid, time_t *t);
 
-    // Gets the name of a snap
+    /// Gets the name of a snap
     int snap_get_name(snap_t snapid, std::string *s);
 
-    // Remove a snapshot from this pool
+    /// Remove a snapshot from this pool
     int snap_remove(const char *snapname);
 
     int snap_list(std::vector<snap_t> *snaps);
 
     int snap_rollback(const std::string& oid, const char *snapname);
 
-    // Deprecated name kept for backward compatibility - same as snap_rollback()
+    /// Deprecated name kept for backward compatibility - same as snap_rollback()
     int rollback(const std::string& oid, const char *snapname)
       __attribute__ ((deprecated));
 
@@ -1057,7 +1071,7 @@ inline namespace v14_2_0 {
 
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
 
-    // Advisory locking on rados objects.
+    /// Advisory locking on rados objects.
     int lock_exclusive(const std::string &oid, const std::string &name,
 		       const std::string &cookie,
 		       const std::string &description,
@@ -1121,7 +1135,7 @@ inline namespace v14_2_0 {
     /**
      * List available hit set objects
      *
-     * @param uint32_t [in] hash position to query
+     * @param hash [in] hash position to query
      * @param c [in] completion
      * @param pls [out] list of available intervals
      */
@@ -1274,7 +1288,7 @@ inline namespace v14_2_0 {
      *
      * @param oid the object name
      * @param c aio completion
-     * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+     * @param method the method as defined in `cls/<ClassID>/cls_<ClassID>_ops.h`
      * @param inbl where to find input
      * @param outbl where to store output
      */
@@ -1287,13 +1301,13 @@ inline namespace v14_2_0 {
       return aio_exec_impl(oid, c, method.cls, method.name, inbl, outbl);
     }
 
-    /*
+    /**
      * asynchronous version of unlock
      */
     int aio_unlock(const std::string &oid, const std::string &name,
 	           const std::string &cookie, AioCompletion *c);
 
-    // compound object operations
+    /// compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectWriteOperation *op, int flags);
     int operate(const std::string& oid, ObjectWriteOperation *op, int flags, const jspan_context *trace_info);
@@ -1342,7 +1356,7 @@ inline namespace v14_2_0 {
         ObjectReadOperation *op, int flags,
         bufferlist *pbl, const blkin_trace_info *trace_info);
 
-    // watch/notify
+    /// watch/notify
     int watch2(const std::string& o, uint64_t *handle,
 	       librados::WatchCtx2 *ctx);
     int watch3(const std::string& o, uint64_t *handle,
@@ -1377,13 +1391,15 @@ inline namespace v14_2_0 {
     int notify2(const std::string& o,   ///< object
 		bufferlist& bl,         ///< optional broadcast payload
 		uint64_t timeout_ms,    ///< timeout (in ms)
-		bufferlist *pbl);       ///< reply buffer
+		bufferlist *pbl         ///< reply buffer
+		);
     int aio_notify(const std::string& o,   ///< object
                    AioCompletion *c,       ///< completion when notify completes
                    bufferlist& bl,         ///< optional broadcast payload
                    uint64_t timeout_ms,    ///< timeout (in ms)
-                   bufferlist *pbl);       ///< reply buffer
-   /*
+                   bufferlist *pbl         ///< reply buffer
+                   );
+   /**
     * Decode a notify response into acks and timeout vectors.
     */
     void decode_notify_response(bufferlist &bl,
@@ -1398,7 +1414,8 @@ inline namespace v14_2_0 {
     void notify_ack(const std::string& o, ///< watched object
 		    uint64_t notify_id,   ///< notify id
 		    uint64_t cookie,      ///< our watch handle
-		    bufferlist& bl);      ///< optional reply payload
+		    bufferlist& bl        ///< optional reply payload
+		    );
 
     /***
      * check on watch validity
@@ -1416,7 +1433,7 @@ inline namespace v14_2_0 {
      */
     int watch_check(uint64_t cookie);
 
-    // old, deprecated versions
+    /// old, deprecated versions
     int watch(const std::string& o, uint64_t ver, uint64_t *cookie,
 	      librados::WatchCtx *ctx) __attribute__ ((deprecated));
     int notify(const std::string& o, uint64_t ver, bufferlist& bl)
@@ -1444,7 +1461,7 @@ inline namespace v14_2_0 {
 			uint64_t expected_write_size,
 			uint32_t flags);
 
-    // assert version for next sync operations
+    /// assert version for next sync operations
     void set_assert_version(uint64_t ver);
 
     /**
@@ -1464,7 +1481,7 @@ inline namespace v14_2_0 {
 
     int64_t get_id();
 
-    // deprecated versions
+    /// deprecated versions
     uint32_t get_object_hash_position(const std::string& oid)
       __attribute__ ((deprecated));
     uint32_t get_object_pg_hash_position(const std::string& oid)
@@ -1559,7 +1576,8 @@ inline namespace v14_2_0 {
     int service_daemon_register(
       const std::string& service,  ///< service name (e.g., 'rgw')
       const std::string& name,     ///< daemon name (e.g., 'gwfoo')
-      const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
+      const std::map<std::string,std::string>& metadata  ///< static metadata about daemon
+      );
     int service_daemon_update_status(
       std::map<std::string,std::string>&& status);
 
@@ -1599,7 +1617,7 @@ inline namespace v14_2_0 {
     int ioctx_create(const char *name, IoCtx &pioctx);
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
 
-    // Features useful for test cases
+    /// Features useful for test cases
     void test_blocklist_self(bool set);
 
     /* pool info */
@@ -1665,7 +1683,7 @@ inline namespace v14_2_0 {
                                   const object_id_t &start_after,
                                   unsigned max_return,
                                   AioCompletion *c,
-                                  std::vector<inconsistent_snapset_t>* snapset,
+                                  std::vector<inconsistent_snapset_t>* snapsets,
                                   uint32_t* interval);
 
     /// get/wait for the most recent osdmap
@@ -1676,7 +1694,7 @@ inline namespace v14_2_0 {
 
     std::string get_addrs() const;
 
-    /*
+    /**
      * pool aio
      *
      * It is up to the caller to release the completion handler, even if the pool_create_async()
@@ -1695,7 +1713,7 @@ inline namespace v14_2_0 {
   private:
     friend class neorados::RADOS;
 
-    // We don't allow assignment or copying
+    /// We don't allow assignment or copying
     Rados(const Rados& rhs);
     const Rados& operator=(const Rados& rhs);
     RadosClient *client;
