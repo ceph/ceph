@@ -2539,7 +2539,7 @@ To silence this alert, set :confval:`mon_warn_on_osd_down_out_interval_zero` to
 
 .. prompt:: bash #
 
-   ceph config global mon mon_warn_on_osd_down_out_interval_zero false
+   ceph config set mon mon_warn_on_osd_down_out_interval_zero false
 
 DASHBOARD_DEBUG
 _______________
