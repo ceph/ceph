@@ -13,28 +13,29 @@ loki.source.file "system" {
 	legacy_positions_file = "/var/lib/alloy/data/positions.yaml"
 }
 
+// File logs → stream labels: job, host, component
+// Generic path rules; ceph-client.* overrides the broad ceph-<type> match.
 loki.relabel "ceph_component" {
 	forward_to = [loki.process.remove_timestamp.receiver]
 
-	// ensure host is a stream label
 	rule {
 		source_labels = ["host"]
 		target_label  = "host"
 		action        = "replace"
 	}
 
-	// ceph-client.<id>.log - rgw, rbd-mirror, nfs, ceph-exporter
+	// ceph-<type>.<id>.log (osd, mon, mgr, mds, crash, …)
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|ceph-exporter)\\.[^/]+\\.log"
+		regex         = ".*/ceph-([^.]+)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}
 
-	// ceph-<type>.<id>.log
+	// ceph-client.<type>.<id>.log — wins over the rule above (type ≠ "client")
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log"
+		regex         = ".*/ceph-client\\.([^.]+)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}
@@ -48,29 +49,60 @@ loki.relabel "ceph_component" {
 	}
 }
 
-loki.process "remove_timestamp" {
-	forward_to = [loki.write.default.receiver]
+// Journald: Cephadm units only (not host-wide journal).
+// Unit form: ceph-<fsid>@<type>.<id>[.service] → component=<type>
+// Keep stream labels aligned with file path: job, host, component only.
+loki.relabel "ceph_journal" {
+	forward_to = [loki.process.remove_timestamp.receiver]
 
-	// Extract leading timestamp (Ceph + other ISO-like forms), apply as Loki
-	// entry timestamp, then strip it from the message body.
-	stage.regex {
-		expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+"
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "ceph-[^@]+@([^.]+)\\..*"
+		action        = "keep"
 	}
 
+	// Drop collectors / monitoring stack (cardinality + self-ingest)
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "ceph-[^@]+@(alloy|loki|promtail|prometheus|grafana|alertmanager|node-exporter|pushgateway|snmp-gateway|mgmt-gateway|oauth2-proxy)\\..*"
+		action        = "drop"
+	}
+
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		regex         = "ceph-[^@]+@([^.]+)\\..*"
+		target_label  = "component"
+		replacement   = "$1"
+	}
+}
+
+loki.source.journal "ceph_daemons" {
+	max_age       = "12h"
+	path          = "/var/log/journal"
+	relabel_rules = loki.relabel.ceph_journal.rules
+	forward_to    = [loki.process.remove_timestamp.receiver]
+	labels        = {
+		job  = "Cluster Logs",
+		host = constants.hostname,
+	}
+}
+
+loki.process "remove_timestamp" {
+	forward_to = [loki.write.default.receiver]
+	stage.regex {
+		expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+(?P<body>.*)$"
+	}
 	stage.timestamp {
 		source            = "ts"
 		format            = "2006-01-02T15:04:05.999999-0700"
-		fallback_formats  = ["2006-01-02T15:04:05.999999Z07:00",
-		                     "2006-01-02 15:04:05.999999-0700",
-		                     "2006-01-02 15:04:05.999999Z07:00",
-		                     "RFC3339",
-		                     "RFC3339Nano"]
 		action_on_failure = "skip"
 	}
-
-	stage.replace {
-		expression = "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+"
-		replace    = ""
+	// Only rewrite the line when a Ceph timestamp prefix was present.
+	stage.match {
+		selector = "{job=\"Cluster Logs\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2}T\""
+		stage.output {
+			source = "body"
+		}
 	}
 }
 

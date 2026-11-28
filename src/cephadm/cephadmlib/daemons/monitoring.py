@@ -373,6 +373,11 @@ class Monitoring(ContainerDaemonForm):
             mounts[os.path.join(data_dir, 'etc/alloy')] = '/etc/alloy:Z'
             mounts[log_dir] = '/var/log/ceph:z'
             mounts[os.path.join(data_dir, 'data')] = '/var/lib/alloy/data:Z'
+            # journald access for non-core Ceph component logs
+            mounts['/var/log/journal'] = '/var/log/journal:ro'
+            mounts['/run/log/journal'] = '/run/log/journal:ro'
+            mounts['/etc/machine-id'] = '/etc/machine-id:ro'
+            mounts['/run/systemd/journal'] = '/run/systemd/journal:ro'
         elif daemon_type == 'node-exporter':
             mounts[
                 os.path.join(data_dir, 'etc/node-exporter')
