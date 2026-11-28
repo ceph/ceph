@@ -1219,7 +1219,11 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
   auto priv = con->get_priv();
   if (auto session = static_cast<Session *>(priv.get()); session) {
     if (session->is_closed()) {
-      dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
+      // Level 1: this can tear down a socket the client has only just
+      // opened (the messenger reuses this Connection for it), which the
+      // client sees as another reset.  Rare; keep it visible.
+      dout(1) << "ms_handle_remote_reset closing connection for session " << session->info.inst
+	      << " con " << con << dendl;
       con->mark_down();
       con->set_priv(nullptr);
     }
@@ -1271,6 +1275,23 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   entity_name_t n(con->get_peer_type(), con->get_peer_global_id());
   std::lock_guard l(mds_lock);
   if (stopping) {
+    return;
+  }
+
+  // The accept may have been queued before we marked the connection down,
+  // e.g. when a client resets and the messenger reuses the existing
+  // Connection for its new socket: the remote reset is delivered first and
+  // ms_handle_remote_reset() marks the connection down, then the accept for
+  // it arrives.  Do not attach a Session to a dead connection: nothing can be
+  // sent on it, and a session request still parked from it (wait_for_replay)
+  // would otherwise find a fresh bootstrap Session when it is retried and
+  // open a session whose reply is never delivered.
+  // (con->is_closed() is the Connection's state, not a Session's.)  This is
+  // rare, so log it at level 1: it is the evidence that the ordering occurred.
+  if (con->is_closed()) {
+    dout(1) << "ms_handle_accept " << n << " " << con->get_peer_socket_addr()
+            << " con " << con << " is already closed, not attaching a session"
+            << dendl;
     return;
   }
 

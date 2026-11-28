@@ -178,6 +178,12 @@ public:
   /**
    * Callback indicating we have accepted an incoming connection.
    *
+   * This is delivered in order with the other notifications for the
+   * Connection, so it may arrive after the Connection has been marked down
+   * (e.g. from an ms_handle_remote_reset() queued before it, when an existing
+   * Connection is reused for a peer's new session).  Use
+   * Connection::is_closed() to detect that case.
+   *
    * @param con The (new or existing) Connection associated with the session
    */
   virtual void ms_handle_accept(Connection *con) {}

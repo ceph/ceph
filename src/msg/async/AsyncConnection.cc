@@ -536,6 +536,13 @@ bool AsyncConnection::is_connected() {
   return protocol->is_connected();
 }
 
+bool AsyncConnection::is_closed() {
+  // STATE_CLOSED is only set by _stop() and is terminal: a closed
+  // connection is unregistered and never picked up for reuse.
+  std::lock_guard<std::mutex> l(lock);
+  return state == STATE_CLOSED;
+}
+
 void AsyncConnection::connect(const entity_addrvec_t &addrs, int type,
                               entity_addr_t &target) {
 

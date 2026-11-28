@@ -436,6 +436,13 @@ public:
   // -- leases --
   uint32_t lease_seq = 0;
 
+  // We sent CEPH_SESSION_CLOSE when we denied a reconnect, and close the
+  // session because of it (Server::close_session_denied_reconnect).
+  bool deny_close_sent = false;
+  // state_seq of the close close_session_denied_reconnect() journaled; only
+  // that close skips the second CLOSE and mark_disposable in _session_logged
+  uint64_t deny_close_seq = 0;
+
 protected:
   ConnectionRef connection;
 

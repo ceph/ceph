@@ -1377,6 +1377,152 @@ TEST_P(MessengerTest, StatefulTest) {
   client_msgr->wait();
 }
 
+/*
+ * A stateful server sees its client reset (new client cookie): the existing
+ * Connection is reused for the new socket, and both a remote reset and an
+ * accept are queued for it.  A dispatcher that marks the connection down
+ * from ms_handle_remote_reset() (as MDSDaemon does for sessionless clients)
+ * may do so after the accept was queued, and then still gets
+ * ms_handle_accept() for the dead connection.  is_closed() must report that,
+ * and must not report an ordinary accept as closed.
+ */
+TEST_P(MessengerTest, AcceptAfterRemoteResetMarkDownTest) {
+  class MarkDownDispatcher : public FakeDispatcher {
+  public:
+    // all protected by FakeDispatcher::lock
+    bool armed = false;
+    bool fast_accept_timed_out = false;
+    Connection *fast_accepted = nullptr;
+    ConnectionRef marked_down;
+    bool got_accept_after_mark_down = false;
+    bool accept_after_mark_down_closed = false;
+    unsigned other_accepts = 0;
+    unsigned other_accepts_closed = 0;
+
+    MarkDownDispatcher() : FakeDispatcher(true) {}
+
+    void ms_handle_fast_accept(Connection *con) override {
+      // called right after the accept has been queued
+      FakeDispatcher::ms_handle_fast_accept(con);
+      std::lock_guard l{lock};
+      fast_accepted = con;
+      cond.notify_all();
+    }
+    void ms_handle_remote_reset(Connection *con) override {
+      bool do_mark_down = false;
+      {
+        std::unique_lock l{lock};
+        if (armed) {
+          // wait for the messenger to queue the accept for the socket that
+          // replaces this connection's old one; if it never does (e.g.
+          // accept_conn() failed), let the test fail instead of hanging
+          armed = false;
+          if (cond.wait_for(l, 60s, [&] { return fast_accepted == con; })) {
+            do_mark_down = true;
+          } else {
+            fast_accept_timed_out = true;
+            cond.notify_all();
+          }
+        }
+      }
+      if (do_mark_down) {
+        // do not hold our lock across mark_down(): the messenger calls
+        // ms_handle_fast_accept() with the connection lock held
+        con->mark_down();
+      }
+      std::lock_guard l{lock};
+      if (do_mark_down) {
+        marked_down = con;
+      }
+      auto priv = con->get_priv();
+      if (auto s = static_cast<Session*>(priv.get()); s) {
+        s->con.reset();
+        con->set_priv(nullptr);
+      }
+      got_remote_reset = true;
+      cond.notify_all();
+    }
+    void ms_handle_accept(Connection *con) override {
+      // query before taking our lock (lock order, see above)
+      bool closed = con->is_closed();
+      std::lock_guard l{lock};
+      if (marked_down && con == marked_down.get()) {
+        got_accept_after_mark_down = true;
+        accept_after_mark_down_closed = closed;
+      } else {
+        ++other_accepts;
+        if (closed) {
+          ++other_accepts_closed;
+        }
+      }
+      cond.notify_all();
+    }
+  };
+
+  Message *m;
+  FakeDispatcher cli_dispatcher(false);
+  MarkDownDispatcher srv_dispatcher;
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  Messenger::Policy p = Messenger::Policy::stateful_server(0);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
+  p = Messenger::Policy::lossless_client(0);
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
+
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef conn = client_msgr->connect_to(server_msgr->get_mytype(),
+					       server_msgr->get_myaddrs());
+  {
+    m = new MPing();
+    ASSERT_EQ(conn->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    ASSERT_TRUE(cli_dispatcher.cond.wait_for(l, 60s, [&] {
+      return cli_dispatcher.got_new; })) << "no ping reply";
+    cli_dispatcher.got_new = false;
+  }
+  {
+    std::unique_lock l{srv_dispatcher.lock};
+    ASSERT_TRUE(srv_dispatcher.cond.wait_for(l, 60s, [&] {
+      return srv_dispatcher.other_accepts > 0; })) << "no first accept";
+    // an accept for a live connection is never reported as closed
+    ASSERT_EQ(0U, srv_dispatcher.other_accepts_closed);
+    srv_dispatcher.fast_accepted = nullptr;
+    srv_dispatcher.armed = true;
+  }
+
+  // reset the client side and reconnect with a new client cookie
+  conn->mark_down();
+  ASSERT_TRUE(conn->is_closed());
+  conn = client_msgr->connect_to(server_msgr->get_mytype(),
+				 server_msgr->get_myaddrs());
+  ASSERT_FALSE(conn->is_closed());
+  m = new MPing();
+  ASSERT_EQ(conn->send_message(m), 0);
+
+  {
+    std::unique_lock l{srv_dispatcher.lock};
+    ASSERT_TRUE(srv_dispatcher.cond.wait_for(l, 120s, [&] {
+      return srv_dispatcher.got_accept_after_mark_down ||
+             srv_dispatcher.fast_accept_timed_out; }))
+      << "no accept after the remote reset";
+    ASSERT_FALSE(srv_dispatcher.fast_accept_timed_out)
+      << "the accept for the reused connection was never queued";
+    ASSERT_TRUE(srv_dispatcher.marked_down->is_closed());
+    ASSERT_TRUE(srv_dispatcher.accept_after_mark_down_closed);
+    srv_dispatcher.marked_down.reset();
+  }
+
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
+
 TEST_P(MessengerTest, StatelessTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
