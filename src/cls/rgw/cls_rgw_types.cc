@@ -450,7 +450,8 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
   if (type == BIIndexType::Plain) {
     return entry.exists && entry.flags == 0;
   } else if (type == BIIndexType::Instance) {
-    return entry.exists;
+    // older null delete markers were written with exists set
+    return entry.exists && !entry.is_delete_marker();
   }
   return false;
 }

@@ -1502,6 +1502,10 @@ public:
     instance_entry.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
     instance_entry.meta = meta;
     instance_entry.tag = "delete-marker";
+    // a null delete marker reuses the entry of the null version it replaces,
+    // which has exists set. a delete marker has no data, and check_index()
+    // and reshard count every instance entry that exists
+    instance_entry.exists = false;
 
     initialized = true;
   }
@@ -3623,7 +3627,8 @@ static int check_index(cls_method_context_t hctx,
         return -EIO;
       }
 
-      if (entry.exists) {
+      // older null delete markers were written with exists set
+      if (entry.exists && !entry.is_delete_marker()) {
         rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
         stats.num_entries++;
         stats.total_size += entry.meta.accounted_size;
