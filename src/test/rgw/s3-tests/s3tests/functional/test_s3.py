@@ -10987,6 +10987,45 @@ def test_restore_object_permanent():
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws
 @pytest.mark.fails_on_dbstore
+def test_lifecycle_cloud_stub_tagging_stays_cloudtiered():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    bucket = get_new_bucket()
+    client = get_client()
+    key = 'test_stub_tagging'
+    data = 'cloud stub data'
+
+    client.put_object(Bucket=bucket, Key=key, Body=data)
+
+    # Transition object to cloud storage class
+    lc_interval = get_lc_debug_interval()
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(10 * lc_interval)
+    verify_transition(client, bucket, key, cloud_sc)
+
+    # tag the stub before any restore; restore attrs would otherwise keep it cloud tiered
+    client.put_object_tagging(Bucket=bucket, Key=key, Tagging={'TagSet': [{'Key': 'k', 'Value': 'v'}]})
+
+    # lifecycle must skip the stub instead of transitioning it to a non-cloud storage class
+    rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': 'STANDARD'}], 'Prefix': '', 'Status': 'Enabled'}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(10 * lc_interval)
+    verify_transition(client, bucket, key, cloud_sc)
+
+    # delete lifecycle to prevent re-transition before restore check
+    client.delete_bucket_lifecycle(Bucket=bucket)
+
+    # the stub can still be restored with its original payload
+    client.restore_object(Bucket=bucket, Key=key, RestoreRequest={'Days': 20})
+    time.sleep(3 * get_restore_processor_period())
+    verify_object(client, bucket, key, data, cloud_sc)
+
+@pytest.mark.cloud_restore
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
 def test_read_through():
     cloud_sc = get_cloud_storage_class()
     if cloud_sc is None:
