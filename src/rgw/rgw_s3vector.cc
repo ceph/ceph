@@ -292,6 +292,14 @@ namespace rgw::s3vector {
     const auto& conf = cct->_conf;
     const auto backend_type = backend_config.backend_type;
 
+    if (!rgw::s3vector::sessions_enabled(cct)) {
+      ldpp_dout(dpp, 20) << "INFO: sessions are disabled, connecting without a session to: " <<
+        vector_bucket_name << dendl;
+      return LanceDBSessionConnHandle{
+        .conn = connect(dpp, driver, ns, vector_bucket_name, backend_config, result)
+      };
+    }
+
     auto session_sp = rgw::s3vector::get_session(dpp, ns, vector_bucket_name);
     if (!session_sp) {
       // No cached session — create a short-lived connection using caller's driver/dpp
@@ -2511,15 +2519,18 @@ namespace rgw::s3vector {
     const auto& configuration = operation.rest_config;
     log_configuration(dpp, "ListVectors", configuration);
     int open_result = 0;
-    LanceDBTable* table = open_table(dpp, driver, ns, configuration.vector_bucket_name, configuration.index_name, operation.backend_config, open_result);
-    if (!table) {
+    auto table_handle = open_table_with_session_handle(dpp, driver, ns, configuration.vector_bucket_name, configuration.index_name, operation.backend_config, open_result);
+    if (!table_handle) {
       return open_result;
     }
+    LanceDBTable* table = table_handle.table;
+    LanceDBConnection* conn = table_handle.conn_handle.conn;
 
     LanceDBQuery* query = lancedb_query_new(table);
     if (!query) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create query for index: " << configuration.index_name << dendl;
       lancedb_table_free(table);
+      lancedb_connection_free(conn);
       return -EIO;
     }
 
@@ -2531,6 +2542,7 @@ namespace rgw::s3vector {
         lancedb_free_string(error_message);
         lancedb_query_free(query);
         lancedb_table_free(table);
+        lancedb_connection_free(conn);
         return lancedb_error_to_errno(result);
       }
     }
@@ -2540,6 +2552,7 @@ namespace rgw::s3vector {
       lancedb_free_string(error_message);
       lancedb_query_free(query);
       lancedb_table_free(table);
+      lancedb_connection_free(conn);
       return lancedb_error_to_errno(result);
     }
 
@@ -2549,6 +2562,7 @@ namespace rgw::s3vector {
         lancedb_free_string(error_message);
         lancedb_query_free(query);
         lancedb_table_free(table);
+        lancedb_connection_free(conn);
         return lancedb_error_to_errno(result);
       }
     }
@@ -2558,6 +2572,7 @@ namespace rgw::s3vector {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to execute query on index: " << configuration.index_name << dendl;
       lancedb_query_free(query);
       lancedb_table_free(table);
+      lancedb_connection_free(conn);
       return -EIO;
     }
 
@@ -2570,6 +2585,7 @@ namespace rgw::s3vector {
       }
     }
     lancedb_table_free(table);
+    lancedb_connection_free(conn);
     return ret;
   }
 

@@ -164,6 +164,11 @@ def create_users(ctx, config):
                     '--display-name', s3vtests_conf[section]['display_name'],
                     '--access-key', s3vtests_conf[section]['access_key'],
                     '--secret', s3vtests_conf[section]['secret_key'],
+                    # the admin API of the vector buckets needs the buckets
+                    # capability. user metadata can be changed only on the
+                    # master zone, so it is given here, and synced with the
+                    # user to the other zones
+                    '--caps', 'buckets=*',
                     '--cluster', cluster_name,
                     ],
                 )

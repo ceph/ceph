@@ -60,6 +60,7 @@
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
+#include "rgw_rest_vector_bucket.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #ifdef WITH_RADOSGW_LANCEDB
