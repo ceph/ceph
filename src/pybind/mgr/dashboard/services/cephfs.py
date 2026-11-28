@@ -44,9 +44,9 @@ def get_subvolumegroup_path(vol_name: str, group_name: str) -> str:
 def has_mirroring_mds_caps(mds_caps: Optional[str], fs_name: str) -> bool:
     """Return True if MDS caps allow CephFS snapshot mirroring for fs_name.
 
-    Mirroring requires the equivalent of ``fs authorize <fs> <entity> / rwps``,
-    stored as ``allow rwps fsname=<fs>`` (path ``/`` is omitted). ``allow *``
-    and unrestricted ``allow rwps`` are also sufficient.
+    Mirroring peer bootstrap uses ``fs authorize <fs> <entity> / *``,
+    stored as ``allow * fsname=<fs>`` (path ``/`` is omitted). Unrestricted
+    ``allow rwps`` is still treated as sufficient for peer detection.
     """
     if not mds_caps or not fs_name:
         return False

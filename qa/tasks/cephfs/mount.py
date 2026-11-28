@@ -1627,7 +1627,7 @@ class CephFSMountBase(object):
 
     def compare_trees(self, src, dst, compare_data=True):
         """
-        Compare two directory trees. Compare based on file names and contents.
+        Recursively compare two directory trees by names and contents.
 
         :param src:
         :param dst:
@@ -1637,45 +1637,48 @@ class CephFSMountBase(object):
         """
         pyscript = dedent("""
             import os
-            import errno
             import hashlib
 
             def _md5hash_file(file):
                 md5 = hashlib.md5()
-                contents = ''
-                with open(file, 'r') as f:
-                    contents = f.read()
-                md5.update(contents.encode("utf-8"))
+                with open(file, 'rb') as f:
+                    for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                        md5.update(chunk)
                 return md5.hexdigest()
 
-            compare_data = {compare_data}
-            files = os.listdir('{src}')
-            for file in files:
-                src_file = '{src}/' + file
-                dst_file = '{dst}/' + file
+            def _compare_dir(src_dir, dst_dir, compare_data):
+                src_names = sorted(os.listdir(src_dir))
+                dst_names = sorted(os.listdir(dst_dir))
+                if src_names != dst_names:
+                    raise AssertionError(
+                        'name mismatch under %r: %r vs %r' %
+                        (src_dir, src_names, dst_names))
 
-                exists = os.path.exists(dst_file)
-                lexists = os.path.lexists(dst_file)
-                if not exists and not lexists:
-                    log.debug('path_dne:=' + dst_file)
-                    raise
+                for name in src_names:
+                    src_file = os.path.join(src_dir, name)
+                    dst_file = os.path.join(dst_dir, name)
 
-                if os.path.islink(src_file):
-                    #do link check
-                    if os.readlink(src_file) != os.readlink(dst_file):
-                        raise
-                elif os.path.isfile(src_file):
-                    #check reported size
-                    rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
-                    if not rsize_match:
-                        raise
+                    if os.path.islink(src_file):
+                        if not os.path.lexists(dst_file):
+                            raise AssertionError('missing link %r' % dst_file)
+                        if os.readlink(src_file) != os.readlink(dst_file):
+                            raise AssertionError('symlink mismatch %r' % src_file)
+                    elif os.path.isdir(src_file):
+                        if not os.path.isdir(dst_file):
+                            raise AssertionError('missing dir %r' % dst_file)
+                        _compare_dir(src_file, dst_file, compare_data)
+                    elif os.path.isfile(src_file):
+                        if not os.path.isfile(dst_file):
+                            raise AssertionError('missing file %r' % dst_file)
+                        if os.path.getsize(src_file) != os.path.getsize(dst_file):
+                            raise AssertionError('size mismatch %r' % src_file)
+                        if compare_data:
+                            if _md5hash_file(src_file) != _md5hash_file(dst_file):
+                                raise AssertionError('content mismatch %r' % src_file)
+                    else:
+                        raise AssertionError('unsupported entry %r' % src_file)
 
-                    if compare_data:
-                        #check contents
-                        src_hash = _md5hash_file(src_file)
-                        dest_hash = _md5hash_file(dst_file)
-                        if src_hash != dest_hash:
-                            raise
+            _compare_dir({src!r}, {dst!r}, {compare_data})
             """).format(src=src, dst=dst, compare_data=compare_data)
         proc = self._run_python(pyscript)
         proc.wait()

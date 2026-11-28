@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <stack>
 #include <vector>
@@ -10,6 +11,9 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <sys/file.h>
+#if defined(__linux__)
+#include <linux/fscrypt.h>
+#endif
 #include <boost/optional/optional_io.hpp>
 #include <boost/scope_exit.hpp>
 #include "include/scope_guard.h"
@@ -97,6 +101,375 @@ const std::string PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer";
 
 // Matches the mgr mirroring omap read batch size (dir_map/load.py MAX_RETURN).
 constexpr size_t SYNC_STAT_OMAP_LOAD_BATCH_SIZE = 256;
+
+// Ciphertext sync needs the source nonce/logical size and long-name material.
+// Order matches volumes cptree: auth before file so logical-size update keeps blocks.
+constexpr const char *FSCRYPT_AUTH_XATTR = "ceph.fscrypt.auth";
+constexpr const char *FSCRYPT_SYNC_XATTRS[] = {
+  FSCRYPT_AUTH_XATTR,
+  "ceph.fscrypt.file",
+  "ceph.alternate_name",
+};
+
+bool fd_has_fscrypt_auth(MountRef mnt, int fd) {
+  int size = ceph_fgetxattr(mnt, fd, FSCRYPT_AUTH_XATTR, nullptr, 0);
+  return size > 0;
+}
+
+// Probe ceph.fscrypt.auth only. Used to detect a new policy root under a
+// plaintext parent; skipped entirely when the parent is already fscrypt.
+int probe_fscrypt_auth_at(MountRef mnt, int dirfd, const std::string &epath,
+                          int open_flags, bool *has_auth) {
+  *has_auth = false;
+  int fd = ceph_openat(mnt, dirfd, epath.c_str(), open_flags, 0);
+  if (fd < 0) {
+    return fd;
+  }
+  *has_auth = fd_has_fscrypt_auth(mnt, fd);
+  ceph_close(mnt, fd);
+  return 0;
+}
+
+int resolve_dir_is_fscrypt(MountRef mnt, int dirfd, const std::string &epath,
+                           bool parent_is_fscrypt, bool *is_fscrypt) {
+  if (parent_is_fscrypt) {
+    *is_fscrypt = true;
+    return 0;
+  }
+  return probe_fscrypt_auth_at(mnt, dirfd, epath,
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW, is_fscrypt);
+}
+
+int sync_fscrypt_xattrs(MountRef src, int src_fd, MountRef dst, int dst_fd) {
+  for (const char *name : FSCRYPT_SYNC_XATTRS) {
+    int size = ceph_fgetxattr(src, src_fd, name, nullptr, 0);
+    if (size == -ENODATA || size == -EOPNOTSUPP) {
+      continue;
+    }
+    if (size < 0) {
+      return size;
+    }
+    if (size == 0) {
+      continue;
+    }
+
+    std::vector<char> buf(size);
+    int r = ceph_fgetxattr(src, src_fd, name, buf.data(), buf.size());
+    if (r < 0) {
+      return r;
+    }
+    r = ceph_fsetxattr(dst, dst_fd, name, buf.data(), r, 0);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
+int sync_fscrypt_xattrs_at(MountRef src, int src_dirfd, MountRef dst, int dst_dirfd,
+                           const std::string &epath, int open_flags) {
+  int sfd = ceph_openat(src, src_dirfd, epath.c_str(), open_flags, 0);
+  if (sfd < 0) {
+    return sfd;
+  }
+
+  int dfd = ceph_openat(dst, dst_dirfd, epath.c_str(), open_flags, 0);
+  if (dfd < 0) {
+    ceph_close(src, sfd);
+    return dfd;
+  }
+
+  int r = sync_fscrypt_xattrs(src, sfd, dst, dfd);
+  ceph_close(src, sfd);
+  ceph_close(dst, dfd);
+  return r;
+}
+
+int fscrypt_open_flags_for_mode(mode_t mode) {
+  if (S_ISLNK(mode)) {
+#if defined(__linux__) && defined(O_PATH)
+    return O_PATH | O_NOFOLLOW;
+#else
+    return O_RDONLY | O_NOFOLLOW;
+#endif
+  }
+  if (S_ISDIR(mode)) {
+    return O_RDONLY | O_DIRECTORY | O_NOFOLLOW;
+  }
+  return O_RDONLY | O_NOFOLLOW;
+}
+
+#if defined(__linux__)
+// fscrypt CLI stores policy/protector metadata at the FS root. Ciphertext
+// sync alone is enough to decrypt once the key is loaded; these files are
+// needed for `fscrypt status` / `fscrypt unlock` on the peer.
+constexpr const char *FSCRYPT_CLI_BASE = "/.fscrypt";
+constexpr const char *FSCRYPT_CLI_POLICIES = "/.fscrypt/policies";
+constexpr const char *FSCRYPT_CLI_PROTECTORS = "/.fscrypt/protectors";
+
+std::string fscrypt_key_id_hex(const uint8_t *id, size_t len) {
+  static constexpr char HEX[] = "0123456789abcdef";
+  std::string out(len * 2, '\0');
+  for (size_t i = 0; i < len; ++i) {
+    out[i * 2] = HEX[id[i] >> 4];
+    out[i * 2 + 1] = HEX[id[i] & 0xf];
+  }
+  return out;
+}
+
+bool pb_read_varint(const uint8_t *&p, const uint8_t *end, uint64_t *v) {
+  *v = 0;
+  int shift = 0;
+  while (p < end && shift <= 63) {
+    uint8_t b = *p++;
+    *v |= uint64_t(b & 0x7f) << shift;
+    if ((b & 0x80) == 0) {
+      return true;
+    }
+    shift += 7;
+  }
+  return false;
+}
+
+bool pb_skip_field(const uint8_t *&p, const uint8_t *end, uint32_t wire) {
+  uint64_t len = 0;
+  switch (wire) {
+  case 0: // varint
+    return pb_read_varint(p, end, &len);
+  case 1: // 64-bit
+    if (end - p < 8) {
+      return false;
+    }
+    p += 8;
+    return true;
+  case 2: // length-delimited
+    if (!pb_read_varint(p, end, &len) || len > uint64_t(end - p)) {
+      return false;
+    }
+    p += len;
+    return true;
+  case 5: // 32-bit
+    if (end - p < 4) {
+      return false;
+    }
+    p += 4;
+    return true;
+  default:
+    return false;
+  }
+}
+
+// Pull protector_descriptor strings from fscrypt PolicyData protobuf
+// (field 3 = WrappedPolicyKey; inner field 1 = protector_descriptor).
+void fscrypt_policy_protector_ids(const uint8_t *data, size_t len,
+                                  std::vector<std::string> *out) {
+  const uint8_t *p = data;
+  const uint8_t *end = data + len;
+  while (p < end) {
+    uint64_t tag = 0;
+    if (!pb_read_varint(p, end, &tag)) {
+      return;
+    }
+    uint32_t field = tag >> 3;
+    uint32_t wire = tag & 7;
+    if (field == 3 && wire == 2) {
+      uint64_t mlen = 0;
+      if (!pb_read_varint(p, end, &mlen) || mlen > uint64_t(end - p)) {
+        return;
+      }
+      const uint8_t *mp = p;
+      const uint8_t *mend = p + mlen;
+      p += mlen;
+      while (mp < mend) {
+        uint64_t itag = 0;
+        if (!pb_read_varint(mp, mend, &itag)) {
+          break;
+        }
+        uint32_t ifield = itag >> 3;
+        uint32_t iwire = itag & 7;
+        if (ifield == 1 && iwire == 2) {
+          uint64_t slen = 0;
+          if (!pb_read_varint(mp, mend, &slen) || slen > uint64_t(mend - mp)) {
+            break;
+          }
+          out->emplace_back(reinterpret_cast<const char *>(mp), slen);
+          mp += slen;
+        } else if (!pb_skip_field(mp, mend, iwire)) {
+          break;
+        }
+      }
+    } else if (!pb_skip_field(p, end, wire)) {
+      return;
+    }
+  }
+}
+
+int read_fscrypt_cli_file(MountRef src, const std::string &path,
+                          std::vector<uint8_t> *out, mode_t *mode) {
+  int sfd = ceph_open(src, path.c_str(), O_RDONLY, 0);
+  if (sfd < 0) {
+    return sfd;
+  }
+
+  struct ceph_statx stx;
+  int r = ceph_fstatx(src, sfd, &stx, CEPH_STATX_MODE | CEPH_STATX_SIZE,
+                      AT_SYMLINK_NOFOLLOW);
+  if (r < 0) {
+    ceph_close(src, sfd);
+    return r;
+  }
+  if (mode) {
+    *mode = stx.stx_mode & 0777;
+  }
+
+  out->assign(stx.stx_size, 0);
+  if (stx.stx_size > 0) {
+    r = ceph_read(src, sfd, reinterpret_cast<char *>(out->data()), out->size(),
+                  0);
+    if (r < 0) {
+      ceph_close(src, sfd);
+      return r;
+    }
+    if (uint64_t(r) != stx.stx_size) {
+      ceph_close(src, sfd);
+      return -EIO;
+    }
+  }
+  ceph_close(src, sfd);
+  return 0;
+}
+
+int write_fscrypt_cli_file(MountRef dst, const std::string &path,
+                           const uint8_t *data, size_t len, mode_t mode) {
+  int dfd = ceph_open(dst, path.c_str(), O_CREAT | O_TRUNC | O_WRONLY, mode);
+  if (dfd < 0) {
+    return dfd;
+  }
+  int r = 0;
+  if (len > 0) {
+    r = ceph_write(dst, dfd, reinterpret_cast<const char *>(data), len, 0);
+    if (r >= 0 && uint64_t(r) != len) {
+      r = -EIO;
+    } else if (r > 0) {
+      r = 0;
+    }
+  }
+  ceph_close(dst, dfd);
+  return r;
+}
+
+int copy_fscrypt_cli_file(MountRef src, MountRef dst, const std::string &path) {
+  std::vector<uint8_t> buf;
+  mode_t mode = 0600;
+  int r = read_fscrypt_cli_file(src, path, &buf, &mode);
+  if (r < 0) {
+    return r;
+  }
+  return write_fscrypt_cli_file(dst, path, buf.data(), buf.size(), mode);
+}
+
+// Sync only the policy (and its protectors) for this encrypted directory.
+// Missing CLI metadata on the source is not an error.
+int sync_fscrypt_cli_metadata(MountRef src, MountRef dst, int src_dir_fd) {
+  struct fscrypt_policy_v2 policy;
+  memset(&policy, 0, sizeof(policy));
+  int r = ceph_get_fscrypt_policy_v2(src, src_dir_fd, &policy);
+  if (r == -ENODATA || r == -EOPNOTSUPP || r == -ENOENT || r == -ENOTSUP) {
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+  if (policy.version != 2) {
+    return 0;
+  }
+
+  const std::string policy_id = fscrypt_key_id_hex(
+      policy.master_key_identifier, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  const std::string policy_path =
+      std::string(FSCRYPT_CLI_POLICIES) + "/" + policy_id;
+
+  std::vector<uint8_t> policy_blob;
+  mode_t policy_mode = 0600;
+  r = read_fscrypt_cli_file(src, policy_path, &policy_blob, &policy_mode);
+  if (r == -ENOENT) {
+    generic_dout(10) << "cephfs::mirror: no fscrypt CLI policy at "
+                     << policy_path << "; skipping metadata sync" << dendl;
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  mode_t meta_mode = 0755;
+  struct ceph_statx bstx;
+  if (ceph_statx(src, FSCRYPT_CLI_BASE, &bstx, CEPH_STATX_MODE,
+                 AT_SYMLINK_NOFOLLOW) == 0) {
+    meta_mode = bstx.stx_mode & 07777;
+  }
+
+  r = ceph_mkdirs(dst, FSCRYPT_CLI_POLICIES, meta_mode);
+  if (r < 0 && r != -EEXIST) {
+    return r;
+  }
+  r = ceph_mkdirs(dst, FSCRYPT_CLI_PROTECTORS, meta_mode);
+  if (r < 0 && r != -EEXIST) {
+    return r;
+  }
+
+  r = write_fscrypt_cli_file(dst, policy_path, policy_blob.data(),
+                             policy_blob.size(), policy_mode);
+  if (r < 0) {
+    generic_derr << "cephfs::mirror: failed to sync fscrypt CLI policy "
+                 << policy_path << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  generic_dout(10) << "cephfs::mirror: synced fscrypt CLI policy "
+                   << policy_id << dendl;
+
+  std::vector<std::string> protector_ids;
+  fscrypt_policy_protector_ids(policy_blob.data(), policy_blob.size(),
+                               &protector_ids);
+  for (const auto &pid : protector_ids) {
+    if (pid.empty()) {
+      continue;
+    }
+    // Prefer the real protector; fall back to a cross-fs link file.
+    const std::string ppath =
+        std::string(FSCRYPT_CLI_PROTECTORS) + "/" + pid;
+    const std::string lpath = ppath + ".link";
+    r = copy_fscrypt_cli_file(src, dst, ppath);
+    if (r == -ENOENT) {
+      r = copy_fscrypt_cli_file(src, dst, lpath);
+    }
+    if (r == -ENOENT) {
+      generic_dout(5) << "cephfs::mirror: fscrypt protector " << pid
+                      << " not present on source; skipped" << dendl;
+      continue;
+    }
+    if (r < 0) {
+      generic_derr << "cephfs::mirror: failed to sync fscrypt CLI protector "
+                   << pid << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    generic_dout(10) << "cephfs::mirror: synced fscrypt CLI protector "
+                     << pid << dendl;
+  }
+  return 0;
+}
+#else
+int sync_fscrypt_cli_metadata(MountRef, MountRef, int) {
+  return 0;
+}
+#endif
+
+int sync_fscrypt_dir_root(MountRef src, int src_fd, MountRef dst, int dst_fd) {
+  int r = sync_fscrypt_xattrs(src, src_fd, dst, dst_fd);
+  if (r < 0) {
+    return r;
+  }
+  return sync_fscrypt_cli_metadata(src, dst, src_fd);
+}
 
 std::string entry_path(const std::string &dir, const std::string &name) {
   return dir + "/" + name;
@@ -1693,7 +2066,8 @@ int PeerReplayer::propagate_snap_renames(
   return 0;
 }
 
-int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx) {
+int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
+                                              bool is_fscrypt) {
   dout(10) << ": remote epath=" << epath << dendl;
 
   int r = ceph_mkdirat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFDIR);
@@ -1701,6 +2075,16 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
     derr << ": failed to create remote directory=" << epath << ": " << cpp_strerror(r)
          << dendl;
     return r;
+  }
+
+  if (is_fscrypt) {
+    r = sync_fscrypt_xattrs_at(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root, epath,
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt xattrs for remote directory=" << epath << ": "
+           << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
@@ -1735,7 +2119,7 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
 #define IOVEC_SIZE (8 * 1024 * 1024) // buffer size for each iovec
 int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string &epath,
                                  const struct ceph_statx &stx, const FHandles &fh,
-                                 uint64_t num_blocks, struct cblock *b) {
+                                 uint64_t num_blocks, struct cblock *b, bool is_fscrypt) {
   dout(10) << ": dir_root=" << dir_root << ", epath=" << epath << ", num_blocks="
            << num_blocks << dendl;
   int l_fd;
@@ -1767,6 +2151,16 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   r_fd = r;
+  // Stamp source fscrypt identity before writing ciphertext.
+  if (is_fscrypt) {
+    r = sync_fscrypt_xattrs(m_local_mount, l_fd, m_remote_mount, r_fd);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt xattrs for remote file path=" << epath << ": "
+           << cpp_strerror(r) << dendl;
+      goto close_remote_fd;
+    }
+  }
+
   ptr = malloc(NR_IOVECS * IOVEC_SIZE);
   if (!ptr) {
     r = -ENOMEM;
@@ -1894,16 +2288,18 @@ close_local_fd:
 
 int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                                  const std::string &epath, const struct ceph_statx &stx,
-                                 bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync) {
+                                 bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync,
+                                 bool is_fscrypt) {
   dout(10) << ": dir_root=" << dir_root << ", epath=" << epath << ", need_data_sync=" << need_data_sync
-           << ", need_attr_sync=" << need_attr_sync << dendl;
+           << ", need_attr_sync=" << need_attr_sync << ", is_fscrypt=" << is_fscrypt << dendl;
 
   int r;
   if (need_data_sync) {
     if (S_ISREG(stx.stx_mode)) {
       r = syncm->get_changed_blocks(epath, stx, sync_check,
-                                    [this, &dir_root, &epath, &stx, &fh](uint64_t num_blocks, struct cblock *b) {
-                                      int ret = copy_to_remote(dir_root, epath, stx, fh, num_blocks, b);
+                                    [this, &dir_root, &epath, &stx, &fh, is_fscrypt](uint64_t num_blocks, struct cblock *b) {
+                                      int ret = copy_to_remote(dir_root, epath, stx, fh, num_blocks, b,
+                                                               is_fscrypt);
                                       if (ret < 0) {
                                         derr << ": failed to copy path=" << epath << ": " << ret << dendl;
                                       }
@@ -1938,6 +2334,15 @@ int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const st
              << ": " << cpp_strerror(r) << dendl;
         return r;
       }
+      if (is_fscrypt) {
+        r = sync_fscrypt_xattrs_at(m_local_mount, fh.c_fd, m_remote_mount, fh.r_fd_dir_root,
+                                   epath, fscrypt_open_flags_for_mode(stx.stx_mode));
+        if (r < 0) {
+          derr << ": failed to sync fscrypt xattrs for remote symlink=" << epath << ": "
+               << cpp_strerror(r) << dendl;
+          return r;
+        }
+      }
     } else {
       dout(5) << ": skipping entry=" << epath << ": unsupported mode=" << stx.stx_mode
               << dendl;
@@ -1969,6 +2374,16 @@ int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const st
       derr << ": failed to change [am]time on remote directory=" << epath << ": "
            << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    if (is_fscrypt) {
+      r = sync_fscrypt_xattrs_at(m_local_mount, fh.c_fd, m_remote_mount, fh.r_fd_dir_root,
+                                 epath, fscrypt_open_flags_for_mode(stx.stx_mode));
+      if (r < 0) {
+        derr << ": failed to sync fscrypt xattrs for path=" << epath << ": "
+             << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
   }
 
@@ -2572,7 +2987,19 @@ int PeerReplayer::SnapDiffSync::init_sync() {
     return r;
   }
 
-  m_sync_stack.emplace(SyncEntry(".", info, tstx));
+  SyncEntry root(".", info, tstx);
+  root.is_fscrypt = fd_has_fscrypt_auth(m_local, m_fh->c_fd);
+  if (root.is_fscrypt) {
+    // Mirrored root itself may be the policy directory; stamp it once.
+    r = sync_fscrypt_dir_root(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt metadata for dir_root=" << m_dir_root
+           << ": " << cpp_strerror(r) << dendl;
+      ceph_close_snapdiff(&info);
+      return r;
+    }
+  }
+  m_sync_stack.emplace(std::move(root));
   return 0;
 }
 
@@ -2796,9 +3223,18 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
             se.set_purged_or_itype_changed();
           }
 
+          r = resolve_dir_is_fscrypt(m_local, m_fh->c_fd, _epath, entry.is_fscrypt,
+                                     &se.is_fscrypt);
+          if (r < 0) {
+            derr << ": failed to probe fscrypt auth for directory=" << _epath << ": "
+                 << cpp_strerror(r) << dendl;
+            fini_directory(se);
+            return r;
+          }
+
           m_sync_stack.emplace(se);
           dout(20) << ": Added directory to stack =" << _epath << dendl;
-          r = remote_mkdir(_epath, estx);
+          r = remote_mkdir(_epath, estx, se.is_fscrypt);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
@@ -2809,7 +3245,9 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
           *stx = estx;
           return r; // New directory added to stack
         } else {
-          push_dataq_entry(SyncEntry(_epath, estx, !pic));
+          SyncEntry fe(_epath, estx, !pic);
+          fe.is_fscrypt = entry.is_fscrypt;
+          push_dataq_entry(std::move(fe));
           dout(10) << ": sync_check=" << *sync_check << " for epath=" << _epath << dendl;
 	}
       }
@@ -2980,7 +3418,18 @@ int PeerReplayer::RemoteSync::init_sync() {
     return r;
   }
 
-  m_sync_stack.emplace(SyncEntry(".", tdirp, tstx));
+  SyncEntry root(".", tdirp, tstx);
+  root.is_fscrypt = fd_has_fscrypt_auth(m_local, m_fh->c_fd);
+  if (root.is_fscrypt) {
+    r = sync_fscrypt_dir_root(m_local, m_fh->c_fd, m_remote, m_fh->r_fd_dir_root);
+    if (r < 0) {
+      derr << ": failed to sync fscrypt metadata for dir_root=" << m_dir_root
+           << ": " << cpp_strerror(r) << dendl;
+      ceph_closedir(m_local, tdirp);
+      return r;
+    }
+  }
+  m_sync_stack.emplace(std::move(root));
   return 0;
 }
 
@@ -3048,9 +3497,19 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
             return r;
           }
 
-          m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
+          SyncEntry se(_epath, dirp, cstx);
+          r = resolve_dir_is_fscrypt(m_local, m_fh->c_fd, _epath, entry.is_fscrypt,
+                                     &se.is_fscrypt);
+          if (r < 0) {
+            derr << ": failed to probe fscrypt auth for directory=" << _epath << ": "
+                 << cpp_strerror(r) << dendl;
+            ceph_closedir(m_local, dirp);
+            return r;
+          }
+
+          m_sync_stack.emplace(se);
           dout(20) << ": Added directory to stack =" << _epath << dendl;
-          r = remote_mkdir(_epath, cstx);
+          r = remote_mkdir(_epath, cstx, se.is_fscrypt);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
@@ -3061,7 +3520,9 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
           *stx = cstx;
           return r; // New directory added to stack
         } else {
-          push_dataq_entry(SyncEntry(_epath, cstx));
+          SyncEntry fe(_epath, cstx);
+          fe.is_fscrypt = entry.is_fscrypt;
+          push_dataq_entry(std::move(fe));
         }
       }
     }
@@ -3715,7 +4176,7 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       if (need_data_sync || need_attr_sync) {
         r = remote_file_op(syncm, std::string(syncm->get_m_dir_root()),
                            entry.epath, entry.stx, entry.sync_check, fh,
-                           need_data_sync, need_attr_sync);
+                           need_data_sync, need_attr_sync, entry.is_fscrypt);
         if (r < 0) {
           dout(5) << ": remote_file_op failed, cannot proceed sync: " << cpp_strerror(r)
                   << " dir_root=" << syncm->get_m_dir_root() << " epath=" << entry.epath << dendl;

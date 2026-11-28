@@ -753,10 +753,12 @@ class FSSnapshotMirror:
         """create a bootstrap token for this peer filesystem"""
         try:
             with self.lock:
+                # mds allow * is required so the peer can set ceph.fscrypt.*
+                # (Server::handle_client_setattr requires auth_caps.allow_all()).
                 cmd = {'prefix': 'fs authorize',
                        'filesystem': fs_name,
                        'entity': client_name,
-                       'caps': ['/', 'rwps']}
+                       'caps': ['/', '*']}
                 r, outs, err = self.mgr.mon_command(cmd)
                 if r < 0:
                     log.error(f'mon command to create peer user failed: {err}')
