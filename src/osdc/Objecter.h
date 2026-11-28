@@ -581,6 +581,33 @@ struct ObjectOperation {
       }
     }
   };
+
+  struct CB_ObjectOperation_mapext {
+    std::map<uint64_t,uint64_t>* extents;
+    int* prval;
+    CB_ObjectOperation_mapext(std::map<uint64_t,uint64_t>* extents, int* prval)
+      : extents(extents), prval(prval) {}
+    void operator()(boost::system::error_code ec, int r,
+                    const ceph::buffer::list& bl) {
+      auto iter = bl.cbegin();
+      if (r >= 0) {
+        // NOTE: it's possible the sub-op has not been executed but the result
+        // code remains zeroed. Avoid the costly exception handling on a
+        // potential IO path.
+        if (bl.length() > 0) {
+          try {
+            decode(*extents, iter);
+          } catch (const ceph::buffer::error& e) {
+            if (prval)
+              *prval = -EIO;
+          }
+        } else if (prval) {
+          *prval = -EIO;
+        }
+      }
+    }
+  };
+
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t, uint64_t>* m,
 		   ceph::buffer::list* data_bl, int* prval,
 		   uint64_t truncate_size = 0, uint32_t truncate_seq = 0) {
@@ -648,6 +675,13 @@ struct ObjectOperation {
   void mapext(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+  }
+  void mapext(uint64_t off, uint64_t len,
+              std::map<uint64_t,uint64_t>* m, int* prval) {
+    ceph::buffer::list bl;
+    add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+    set_handler(CB_ObjectOperation_mapext(m, prval));
+    out_rval.back() = prval;
   }
   void sparse_read(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
@@ -1137,6 +1171,7 @@ struct ObjectOperation {
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
     std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers;
+    std::map<uint64_t, uint64_t> *out_extent_map;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -1154,6 +1189,7 @@ struct ObjectOperation {
 			      uint64_t *otseq,
 			      uint64_t *otsize,
                               std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *owatchers,
+                              std::map<uint64_t, uint64_t> *oextent_map,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
@@ -1165,6 +1201,7 @@ struct ObjectOperation {
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
         out_watchers(owatchers),
+        out_extent_map(oextent_map),
 	prval(r) {}
     void finish(int r) override {
       using ceph::decode;
@@ -1212,6 +1249,8 @@ struct ObjectOperation {
 	  *out_truncate_size = copy_reply.truncate_size;
         if (out_watchers)
           *out_watchers = copy_reply.watchers;
+	if (out_extent_map)
+	  *out_extent_map = std::move(copy_reply.extent_map);
 	*cursor = copy_reply.cursor;
       } catch (const ceph::buffer::error& e) {
 	if (prval)
@@ -1238,6 +1277,7 @@ struct ObjectOperation {
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
                 std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers,
+                std::map<uint64_t, uint64_t> *out_extent_map,
 		int *prval) {
     using ceph::encode;
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
@@ -1254,7 +1294,7 @@ struct ObjectOperation {
 				    out_omap_digest, out_reqids,
 				    out_reqid_return_codes, truncate_seq,
 				    truncate_size, out_watchers,
-                                    prval);
+                                    out_extent_map, prval);
     out_bl[p] = &h->bl;
     set_handler(h);
   }

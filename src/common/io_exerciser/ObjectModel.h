@@ -5,9 +5,10 @@
 #include "include/interval_set.h"
 #include "include/random.h"
 
+#include <map>
+#include <random>
 #include <string>
 #include <vector>
-#include <random>
 #include <unordered_map>
 
 /* Overview
@@ -27,10 +28,18 @@ namespace io_exerciser {
 
 class ObjectModel : public Model {
  private:
+  enum class AllocationMode {
+    Replicated,
+    ErasureCoded,
+  };
+
   bool primary_created;
   bool secondary_created;
   std::vector<int> primary_contents;
   std::vector<int> secondary_contents;
+  std::vector<bool> primary_allocated;
+  std::vector<bool> secondary_allocated;
+  AllocationMode allocation_mode;
   std::mt19937_64 rng;
   std::unordered_map<uint64_t, int> write_seeds;
 
@@ -48,10 +57,14 @@ class ObjectModel : public Model {
 
  public:
   ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
-              uint64_t block_size, int seed, bool delete_objects = true);
+              uint64_t block_size, int seed, bool is_replicated_pool,
+              bool delete_objects = true);
 
   int get_seed(uint64_t offset) const;
   std::vector<int> get_seed_offsets(int seed) const;
+  uint64_t get_primary_size() const;
+
+  std::map<uint64_t, uint64_t> get_expected_extent_map() const;
 
   std::string to_string(int mask = -1) const;
 

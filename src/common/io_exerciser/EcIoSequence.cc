@@ -51,12 +51,24 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
     case Sequence::SEQUENCE_SEQ16:
       [[fallthrough]];
     case Sequence::SEQUENCE_SEQ17:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ18:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ20:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ21:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ22:
+      [[fallthrough]];
+    case Sequence::SEQUENCE_SEQ23:
       return std::make_unique<ReadInjectSequence>(obj_size_range, seed,
                                                   sequence, km, mappinglayers, check_consistency);
     case Sequence::SEQUENCE_SEQ10:
       return std::make_unique<Seq10>(obj_size_range, seed, km, mappinglayers, check_consistency);
     case Sequence::SEQUENCE_SEQ19:
       return std::make_unique<Seq19>(obj_size_range, seed, km, mappinglayers, check_consistency);
+    case Sequence::SEQUENCE_SEQ24:
+      return std::make_unique<Seq24>(obj_size_range, seed, check_consistency);
     default:
       ceph_abort_msg("Unrecognised sequence");
   }
@@ -66,7 +78,11 @@ EcIoSequence::EcIoSequence(std::pair<int, int> obj_size_range, int seed, bool ch
     : IoSequence(obj_size_range, seed, check_consistency),
       setup_inject(false),
       clear_inject(false),
-      shard_to_inject(std::nullopt) {}
+      shard_to_inject(std::nullopt) {
+  // EC sequences issue reads (or FailedWrite+read pairs) against a pre-existing
+  // object, so an explicit CreateOp must always be emitted first.
+  create = true;
+}
 
 void EcIoSequence::select_random_data_shard_to_inject_read_error(
     std::optional<std::pair<int, int>> km,
@@ -410,7 +426,7 @@ ceph::io_exerciser::Seq19::Seq19(
 }
 
 Sequence ceph::io_exerciser::Seq19::get_id() const {
-  return Sequence::SEQUENCE_SEQ18;
+  return Sequence::SEQUENCE_SEQ19;
 }
 
 std::string ceph::io_exerciser::Seq19::get_name() const {
