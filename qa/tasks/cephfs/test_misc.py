@@ -622,6 +622,63 @@ class TestMisc(CephFSTestCase):
             "The client stripped CEPH_SETATTR_ATIME from the mask, "
             "causing the MDS to skip advancing ctime during value-equality matches.")
 
+    def test_closed_reader_drops_wanted(self):
+        """
+        That a file being written on one client gets its buffered writes
+        back once another client has read it with tail and closed it.
+
+        The reader must tell the MDS that it no longer wants Fr, else the
+        filelock stays in MIX for as long as the reader keeps the inode
+        cached and every write goes to the OSDs synchronously.
+        """
+        path = os.path.join(self.mount_a.hostfs_mntpt, "solver.log")
+        writer = self.mount_a._run_python(dedent(f"""
+            import fcntl
+            import os
+            import sys
+            import time
+
+            fcntl.fcntl(sys.stdin, fcntl.F_SETFL,
+                        fcntl.fcntl(sys.stdin, fcntl.F_GETFL) | os.O_NONBLOCK)
+            fd = os.open("{path}", os.O_WRONLY | os.O_CREAT, 0o644)
+            n = 0
+            while True:
+                os.write(fd, b"iteration %08d\\n" % n)
+                n += 1
+                if n % 100 == 0:
+                    try:
+                        if os.read(0, 4096) == b"":
+                            break
+                    except BlockingIOError:
+                        pass
+                time.sleep(0.01)
+            os.close(fd)
+            """))
+        self.mount_a.background_procs.append(writer)
+        self.mount_a.wait_for_visible("solver.log")
+        ino = self.mount_a.path_to_ino("solver.log")
+        writer_id = self.mount_a.get_global_id()
+
+        def loner():
+            info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+            caps = [(c['client_id'], c['issued'], c['wanted'])
+                    for c in info['client_caps']]
+            log.info(f"filelock {info['filelock']} loner {info['loner']} "
+                     f"caps {caps}")
+            return info['loner']
+
+        self.wait_until_equal(loner, writer_id, timeout=30, period=1)
+
+        # one read from the other client takes the writer's loner status
+        self.mount_b.run_shell(["tail", "solver.log"])
+        self.assertNotEqual(loner(), writer_id)
+
+        # a few seconds after closing the file the reader tells the MDS
+        # it no longer wants Fr, and the writer is the loner again
+        self.wait_until_equal(loner, writer_id, timeout=30, period=1)
+
+        self.mount_a.kill_background(writer)
+
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
     CLIENTS_REQUIRED = 3
