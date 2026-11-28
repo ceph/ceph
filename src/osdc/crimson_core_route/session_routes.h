@@ -234,16 +234,18 @@ using for_each_op_fn_t = std::function<void(const op_visitor_t&)>;
 struct hint_followed_t {
   enum class what_t {
     unchanged,       ///< the PG was hinted to this core already
-    invalid,         ///< ignored: the routing is off, or no port (or the
-                     ///< main connection's), or no OSD address to use it on
+    invalid,         ///< ignored: the routing is off, or the main
+                     ///< connection's port, or no OSD address to use it on
     blocked,         ///< ignored: connecting to the core's host is blocked
     connect_failed,  ///< ignored: the connection could not be opened
     too_many_cores,  ///< ignored: a new core, with the session's core
                      ///< connections at their limit (config_t::max_core_cons)
     changed,         ///< the PG is hinted to a new core
+    to_main,         ///< the PG's core takes no direct connections for now
+                     ///< (a hint without a port): back to the main connection
   };
   what_t what = what_t::unchanged;
-  /// changed: the core hinted before
+  /// changed, to_main: the core hinted before
   std::optional<core_id_t> prev_core;
   /// changed: the connection opened to the core (null: it was open
   /// already). Not routed to until connected (admit_core_con())
@@ -418,7 +420,11 @@ public:
   /// limit (config_t::max_core_cons). With the routing off
   /// (config_t::enabled), hints are ignored: no connection would be used.
   /// The first hint followed activates the session: the ops for_each_op()
-  /// visits are then accounted for as in flight on the main connection
+  /// visits are then accounted for as in flight on the main connection.
+  /// A hint without a port (the OSD's core is too busy to take direct
+  /// connections for now) sends a PG hinted to a core back to the main
+  /// connection, as a hint of another core would move it (once its ops
+  /// drain). The core's connection is kept: it may be hinted again
   hint_followed_t follow_hint(const spg_t& pgid,
                               const osd_core_hint_t& hint,
                               const ConnectionRef& main_con,

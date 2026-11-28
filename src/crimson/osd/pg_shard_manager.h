@@ -143,6 +143,10 @@ public:
 
   seastar::future<> set_up_epoch(epoch_t e);
 
+  /// set each core's client routing hint; core_addrs is indexed by core,
+  /// and is empty if there are no per-core listeners
+  seastar::future<> set_core_hints(std::vector<entity_addrvec_t> core_addrs);
+
   seastar::future<> set_superblock(OSDSuperblock superblock);
 
   template <typename F>

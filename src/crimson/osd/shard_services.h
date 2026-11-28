@@ -95,6 +95,19 @@ class PerShardState {
   seastar::future<> dump_ops_in_flight(Formatter *f) const;
 
   epoch_t up_epoch = 0;
+
+  /// sent to clients in op replies: this core, and the port of its
+  /// client listener. Unset unless crimson_osd_core_listeners.
+  std::optional<osd_core_hint_t> core_hint;
+  void set_core_hint(std::optional<osd_core_hint_t> hint) {
+    assert_core();
+    core_hint = std::move(hint);
+  }
+  /// this core is too busy to take direct connections for now
+  /// (crimson_osd_core_hint_withhold): its replies hint it without a port,
+  /// sending its clients back to the main connection
+  bool core_hint_withheld = false;
+
   OSDMapService::cached_map_t osdmap;
   const auto &get_osdmap() const {
     assert_core();
@@ -422,6 +435,24 @@ class ShardServices : public OSDMapService,
   seastar::gate scrub_gate;
   ScrubScheduler scrub_scheduler;
 
+  /// withholding this core's hint while the core is too busy
+  /// (crimson_osd_core_hint_withhold): see core_hint_tick()
+  seastar::timer<seastar::lowres_clock> core_hint_timer;
+  struct core_hint_control_t {
+    std::chrono::steady_clock::time_point last_tick{};
+    std::chrono::steady_clock::duration last_busy{};
+    /// consecutive ticks at or above crimson_osd_core_hint_withhold_busy
+    unsigned busy_ticks = 0;
+    /// withheld: consecutive ticks at or below crimson_osd_core_hint_rehint_busy
+    unsigned quiet_ticks = 0;
+    /// how many crimson_osd_core_hint_rehint_secs to wait before hinting
+    /// again: doubled when withheld again soon after (up to 16)
+    unsigned dwell_mult = 1;
+    std::optional<std::chrono::steady_clock::time_point> last_withheld;
+  } core_hint_control;
+  /// once a second: withhold or restore the hint, by this core's load
+  void core_hint_tick();
+
   std::array<uint64_t,
     static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_local{};
   std::array<uint64_t,
@@ -564,8 +595,10 @@ public:
         }
         scrub_timer.arm(std::chrono::seconds(SCRUB_TICK_INTERVAL));
       }},
-      scrub_scheduler(*this) {
+      scrub_scheduler(*this),
+      core_hint_timer{[this] { core_hint_tick(); }} {
         scrub_timer.arm(std::chrono::seconds(SCRUB_TICK_INTERVAL));
+        core_hint_timer.arm_periodic(std::chrono::seconds(1));
         register_metrics();
   }
   /// Called by seastar::sharded<ShardServices>::stop() before the instances
@@ -573,10 +606,12 @@ public:
   /// destroyed ShardServices.
   seastar::future<> stop() {
     scrub_timer.cancel();
+    core_hint_timer.cancel();
     return scrub_gate.close();
   }
   ~ShardServices() {
     scrub_timer.cancel();
+    core_hint_timer.cancel();
   }
   ScrubScheduler &get_scrub_scheduler() {
     return scrub_scheduler;
@@ -773,6 +808,15 @@ public:
   // OSDMapService
   cached_map_t get_map() const final { return local_state.get_osdmap(); }
   epoch_t get_up_epoch() const final { return local_state.up_epoch; }
+  /// the hint for op replies: this core, and the port of its listener -
+  /// without the port while the core is too busy for direct connections
+  std::optional<osd_core_hint_t> get_core_hint() const {
+    auto hint = local_state.core_hint;
+    if (hint && local_state.core_hint_withheld) {
+      hint->port = 0;
+    }
+    return hint;
+  }
   seastar::future<cached_map_t> get_map(epoch_t e) final {
     return with_singleton(
       [](auto &sstate, epoch_t e) {

@@ -117,6 +117,15 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
+seastar::future<> ClientRequest::send_reply(MURef<MOSDOpReply> reply)
+{
+  ceph_assert(shard_services);
+  if (const auto& hint = shard_services->get_core_hint(); hint) {
+    reply->set_core_hint(*hint);
+  }
+  return get_foreign_connection().send_with_throttling(std::move(reply));
+}
+
 ClientRequest::interruptible_future<>
 ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 {
@@ -145,8 +154,7 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
   return interruptor::make_interruptible(
     std::move(share_map)
   ).then_interruptible([this, reply = std::move(reply)]() mutable {
-    return interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply)));
+    return interruptor::make_interruptible(send_reply(std::move(reply)));
   });
 }
 
@@ -378,7 +386,7 @@ ClientRequest::process_pg_op(
   auto reply = co_await pg->do_pg_ops(m);
   // TODO: gate the crosscore sending
   co_await interruptor::make_interruptible(
-    get_foreign_connection().send_with_throttling(std::move(reply)));
+    send_reply(std::move(reply)));
 }
 
 ClientRequest::interruptible_future<>
@@ -466,7 +474,7 @@ ClientRequest::process_op(
     reply->set_reply_versions(completed->version, completed->user_version);
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply))
+      send_reply(std::move(reply))
     );
     co_return;
   }
@@ -670,7 +678,7 @@ ClientRequest::do_process(
     
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply)));
+      send_reply(std::move(reply)));
   } else {
     int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
     if (op_info.may_read() && result >= 0) {
@@ -707,7 +715,7 @@ ClientRequest::do_process(
 	     *pg, *this, this_instance_id, *m);
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply))
+      send_reply(std::move(reply))
     );
   }
 }

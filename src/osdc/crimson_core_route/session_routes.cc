@@ -34,13 +34,27 @@ hint_followed_t SessionRoutes::follow_hint(const spg_t& pgid,
     return hint_followed_t{.what = hint_followed_t::what_t::invalid};
   }
   const auto existing = pg_routes.find(pgid);
+  if (hint.port == 0) {
+    // the core takes no direct connections for now: back to the main
+    // connection (desired_core() of a route hinted to no core), once the
+    // PG's ops drain
+    if (existing == pg_routes.end() || !existing->second.hinted_core) {
+      return hint_followed_t{.what = hint_followed_t::what_t::unchanged};
+    }
+    auto& route = existing->second;
+    route.last_used = now;
+    hint_followed_t out{.what = hint_followed_t::what_t::to_main};
+    out.prev_core = route.hinted_core;
+    route.hinted_core.reset();
+    return out;
+  }
   if (existing != pg_routes.end() &&
       existing->second.hinted_core == hint.core) {
     // the common case
     return hint_followed_t{.what = hint_followed_t::what_t::unchanged};
   }
 
-  if (hint.port == 0 || !main_con) {
+  if (!main_con) {
     return hint_followed_t{.what = hint_followed_t::what_t::invalid};
   }
   // the core's listener: the OSD instance's address we already use (as

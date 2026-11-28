@@ -159,6 +159,75 @@ options:
   default: 0
   desc: Report OSD status periodically in seconds, 0 to disable
 
+- name: crimson_osd_core_listeners
+  type: bool
+  level: advanced
+  default: false
+  desc: Listen for client connections on an additional port per reactor core
+  long_desc: The public messenger binds one more port (from the
+             ms_bind_port_min..ms_bind_port_max range) per reactor core.
+             A connection accepted on a core's port is served on that core.
+             Replies to client ops name the core owning the PG and its
+             port, so that clients running Vampire or later can send ops
+             directly to that core.
+  see_also:
+  - ms_bind_port_min
+  - ms_bind_port_max
+  flags:
+  - startup
+
+- name: crimson_osd_core_hint_withhold
+  type: bool
+  level: advanced
+  default: false
+  desc: Stop hinting a reactor core to clients while it is too busy
+  long_desc: With crimson_osd_core_listeners, a core busy at least
+    crimson_osd_core_hint_withhold_busy of the time for
+    crimson_osd_core_hint_withhold_secs seconds hints itself without a port
+    in its op replies, sending its clients back to the OSD's main
+    connection - which then also sends the replies of its PGs. It is
+    hinted again after crimson_osd_core_hint_rehint_secs seconds at
+    crimson_osd_core_hint_rehint_busy or less (twice as long each time it
+    is withheld again within 10 minutes, up to 16 times as long).
+    Experimental.
+  see_also:
+  - crimson_osd_core_listeners
+- name: crimson_osd_core_hint_withhold_busy
+  type: float
+  level: dev
+  default: 0.98
+  desc: The busy fraction from which a core's hint is withheld
+  min: 0
+  max: 1
+  see_also:
+  - crimson_osd_core_hint_withhold
+- name: crimson_osd_core_hint_withhold_secs
+  type: uint
+  level: dev
+  default: 5
+  desc: Seconds a core must stay that busy before its hint is withheld
+  min: 1
+  see_also:
+  - crimson_osd_core_hint_withhold
+- name: crimson_osd_core_hint_rehint_busy
+  type: float
+  level: dev
+  default: 0.85
+  desc: The busy fraction up to which a withheld core counts as quiet
+  min: 0
+  max: 1
+  see_also:
+  - crimson_osd_core_hint_withhold
+- name: crimson_osd_core_hint_rehint_secs
+  type: uint
+  level: dev
+  default: 30
+  desc: Seconds a withheld core must stay quiet before it is hinted again
+    (doubled each time it is withheld again soon)
+  min: 1
+  see_also:
+  - crimson_osd_core_hint_withhold
+
 - name: crimson_poll_mode
   type: bool
   level: advanced
