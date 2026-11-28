@@ -179,6 +179,7 @@ if(WITH_RADOSGW_LANCEDB)
     rgw_rest_vector_bucket.cc
     rgw_s3vector.cc
     rgw_s3vector_filter.cc
+    rgw_s3vector_parse.cc
     rgw_s3vector_background.cc)
 endif()
 
@@ -635,6 +636,8 @@ if(WITH_RADOSGW_LANCEDB)
     ${CMAKE_SOURCE_DIR}/src/rgw
     ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store/include
   )
+  target_include_directories(rgw_common SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/glaze/include)
   add_dependencies(rgw_common rgw-lancedb)
 
   if(WITH_RADOSGW_STANDALONE)
@@ -649,6 +652,8 @@ if(WITH_RADOSGW_LANCEDB)
       ${CMAKE_SOURCE_DIR}/src/rgw
       ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store/include
     )
+    target_include_directories(rgw_common_standalone SYSTEM PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/glaze/include)
     add_dependencies(rgw_common_standalone rgw-lancedb)
   endif()
 endif()

@@ -15,6 +15,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/spawn.hpp>
+#include <filesystem>
+#include <map>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -187,6 +189,8 @@ TEST_F(S3VectorConnectionTest, CreateVectorBucketUsesResolvedBackend) {
 TEST_F(S3VectorConnectionTest, PutVectorsUsesResolvedBackend) {
   auto configuration = config<put_vectors_t>();
   configuration.backend_config = BackendConfig{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  ASSERT_EQ(0, parse_put_vectors(&dpp, R"({"vectorBucketName": "bucket", "indexName": "index",
+    "vectors": [{"key": "k1", "data": {"float32": [1]}}]})", configuration.rest_config));
   std::vector<validation_error_t> errors;
   EXPECT_EQ(-EIO, put_vectors(configuration, &driver, ns, &dpp, null_yield, errors));
   EXPECT_EQ(0, driver.reads);
@@ -252,7 +256,7 @@ template<typename Configuration>
 class S3VectorConfigurationTest : public ::testing::Test {};
 using S3VectorConfigurations = ::testing::Types<
     create_index_t, create_vector_bucket_t, delete_index_t,
-    delete_vector_bucket_t, put_vectors_t, get_vectors_t, list_vectors_t,
+    delete_vector_bucket_t, get_vectors_t, list_vectors_t,
     get_index_t, list_indexes_t, delete_vectors_t, query_vectors_t,
     delete_vector_bucket_policy_t, list_vector_buckets_t, get_vector_bucket_t,
     put_vector_bucket_policy_t, get_vector_bucket_policy_t>;
@@ -292,6 +296,412 @@ TYPED_TEST(S3VectorConfigurationTest, BackendSettingsAreSeparateFromRequest) {
   EXPECT_EQ(std::string::npos, output.str().find("storageMode"));
   EXPECT_EQ(std::string::npos, output.str().find("storage_mode"));
   EXPECT_EQ(std::string::npos, output.str().find("backend"));
+}
+
+// the payload of PutVectors is parsed directly into arrow arrays
+class S3VectorPutVectorsParseTest : public ::testing::Test {
+protected:
+  NoDoutPrefix dpp{g_ceph_context, dout_subsys};
+
+  int parse(const std::string& json, put_vectors_t& request) {
+    // std::string is null terminated, as needed by the parser
+    return parse_put_vectors(&dpp, json, request);
+  }
+
+  int parse(const std::string& json) {
+    put_vectors_t request;
+    return parse(json, request);
+  }
+
+  // parse a request whose structure is valid
+  put_vectors_data_t info(const std::string& vectors) {
+    put_vectors_t request;
+    const auto json = R"({"vectorBucketName": "bucket", "indexName": "index", "vectors": )" + vectors + "}";
+    EXPECT_EQ(0, parse(json, request)) << json;
+    return request.data;
+  }
+
+  void expect_error(const std::string& vectors, size_t num_rows, const std::string& path) {
+    const auto result = info(vectors);
+    EXPECT_EQ(num_rows, result.num_rows) << vectors;
+    ASSERT_EQ(1U, result.errors.size()) << vectors;
+    EXPECT_EQ(path, result.errors[0].path) << vectors;
+  }
+};
+
+TEST_F(S3VectorPutVectorsParseTest, Names) {
+  put_vectors_t request;
+  ASSERT_EQ(0, parse(R"({
+    "vectorBucketName": "bucket", "indexName": "index",
+    "vectors": [{"key": "k1", "data": {"float32": [1, 2.5, -3e-1]}}]
+  })", request));
+  EXPECT_EQ("bucket", request.vector_bucket_name);
+  EXPECT_EQ("index", request.index_name);
+  EXPECT_FALSE(request.index_arn);
+  ASSERT_TRUE(request.data.keys);
+  EXPECT_EQ(1, request.data.keys->length());
+  EXPECT_EQ(3, request.data.values->length());
+  EXPECT_EQ(1, request.data.metadata->null_count());
+
+  // the fields may come in any order
+  put_vectors_t by_arn;
+  ASSERT_EQ(0, parse(R"({
+    "vectors": [{"data": {"float32": [1]}, "key": "k1"}],
+    "indexArn": "arn:aws:s3vectors:region:account:bucket/my-bucket/index/my-index"
+  })", by_arn));
+  EXPECT_EQ("my-bucket", by_arn.vector_bucket_name);
+  EXPECT_EQ("my-index", by_arn.index_name);
+  ASSERT_TRUE(by_arn.index_arn);
+  EXPECT_EQ("account", by_arn.index_arn->account);
+
+  const std::string vectors = R"("vectors": [{"key": "k1", "data": {"float32": [1]}}])";
+  // no index
+  EXPECT_EQ(-EINVAL, parse(R"({"vectorBucketName": "bucket", )" + vectors + "}"));
+  // no vector bucket
+  EXPECT_EQ(-EINVAL, parse(R"({"indexName": "index", )" + vectors + "}"));
+  // both name and ARN
+  EXPECT_EQ(-EINVAL, parse(R"({"indexName": "index", "vectorBucketName": "bucket",
+    "indexArn": "arn:aws:s3vectors:region:account:bucket/my-bucket/index/my-index", )" + vectors + "}"));
+  // invalid ARN
+  EXPECT_EQ(-EINVAL, parse(R"({"indexArn": "arn:aws:s3vectors:region:account:my-bucket", )" + vectors + "}"));
+  // name is too short
+  EXPECT_EQ(-EINVAL, parse(R"({"indexName": "ix", "vectorBucketName": "bucket", )" + vectors + "}"));
+}
+
+TEST_F(S3VectorPutVectorsParseTest, Vectors) {
+  auto result = info(R"([
+    {"key": "k1", "data": {"float32": [1, 2, 3]}},
+    {"key": "k\u0032", "data": {"float32": [4.5, 5e2, -6]}, "metadata": {"genre": "rock", "info": {"year": null}}},
+    {"metadata": "{\"genre\": \"jazz\"}", "data": {"float32": [7, 8, 9]}, "key": "k3"},
+    {"key": "k4", "data": {"float32": [7, 8, 9]}, "metadata": ""}
+  ])");
+  EXPECT_EQ(4U, result.num_vectors);
+  EXPECT_EQ(4U, result.num_rows);
+  EXPECT_EQ(3U, result.dimension);
+  EXPECT_FALSE(result.dimension_mismatch);
+  EXPECT_TRUE(result.errors.empty());
+  // the arrays that are written to the index
+  const auto& keys = static_cast<const arrow::StringArray&>(*result.keys);
+  ASSERT_EQ(4, keys.length());
+  EXPECT_EQ("k2", keys.GetView(1));
+  const auto& values = static_cast<const arrow::FloatArray&>(*result.values);
+  ASSERT_EQ(12, values.length());
+  EXPECT_EQ(500, values.Value(4));
+  const auto& metadata = static_cast<const arrow::StringArray&>(*result.metadata);
+  ASSERT_EQ(4, metadata.length());
+  EXPECT_TRUE(metadata.IsNull(0));
+  EXPECT_EQ(R"({"genre": "rock", "info": {"year": null}})", metadata.GetView(1));
+  EXPECT_EQ(R"({"genre": "jazz"})", metadata.GetView(2));
+  EXPECT_TRUE(metadata.IsNull(3));
+
+  // conversion stops at the first vector of a different dimension
+  result = info(R"([
+    {"key": "k1", "data": {"float32": [1, 2, 3]}},
+    {"key": "k2", "data": {"float32": [1, 2]}},
+    {"key": "k3", "data": {"float32": [1, 2, 3, 4]}}
+  ])");
+  EXPECT_EQ(3U, result.num_vectors);
+  EXPECT_EQ(1U, result.num_rows);
+  EXPECT_EQ(3U, result.dimension);
+  ASSERT_TRUE(result.dimension_mismatch);
+  EXPECT_EQ(1U, result.dimension_mismatch->first);
+  result = info(R"([
+    {"key": "k1", "data": {"float32": [1, 2, 3]}},
+    {"key": "k2", "data": {"float32": [1, 2, 3, 4]}}
+  ])");
+  ASSERT_TRUE(result.dimension_mismatch);
+  EXPECT_EQ(1U, result.dimension_mismatch->first);
+}
+
+TEST_F(S3VectorPutVectorsParseTest, InvalidRequest) {
+  const std::string names = R"({"vectorBucketName": "bucket", "indexName": "index")";
+  const auto expect_request_error = [&](const std::string& fields, size_t num_vectors, const std::string& path) {
+    put_vectors_t request;
+    ASSERT_EQ(0, parse(names + fields + "}", request)) << fields;
+    EXPECT_EQ(num_vectors, request.data.num_vectors) << fields;
+    ASSERT_EQ(1U, request.data.errors.size()) << fields;
+    EXPECT_EQ(path, request.data.errors[0].path) << fields;
+  };
+  const std::string vectors = R"(, "vectors": [{"key": "k1", "data": {"float32": [1]}}])";
+  expect_request_error(R"(, "vectors": {})", 0, "vectors");
+  expect_request_error(R"(, "vectors": "vectors")", 0, "vectors");
+  expect_request_error(vectors + vectors, 1, "vectors");
+  expect_request_error(vectors + R"(, "other": {"a": 1})", 1, "other");
+  // the vectors after the error are counted, and not converted
+  expect_request_error(R"(, "other": 1)" + vectors, 1, "other");
+  // no vectors is not an error of the parsing
+  put_vectors_t request;
+  EXPECT_EQ(0, parse(names + "}", request));
+  EXPECT_EQ(0U, request.data.num_vectors);
+  EXPECT_TRUE(request.data.errors.empty());
+  EXPECT_EQ(0, parse(names + R"(, "vectors": [])" + "}", request));
+  EXPECT_EQ(0U, request.data.num_vectors);
+  EXPECT_TRUE(request.data.errors.empty());
+}
+
+TEST_F(S3VectorPutVectorsParseTest, MaxVectors) {
+  const size_t max_vectors = g_ceph_context->_conf->rgw_s3vector_max_put_vectors;
+  std::string vectors = "[";
+  for (size_t i = 0; i <= max_vectors; ++i) {
+    vectors += fmt::format(R"({}{{"key": "k{}", "data": {{"float32": [1]}}}})", i ? "," : "", i);
+  }
+  vectors += "]";
+  // the vectors over the maximum are counted, and not converted
+  const auto result = info(vectors);
+  EXPECT_EQ(max_vectors + 1, result.num_vectors);
+  EXPECT_EQ(max_vectors, result.num_rows);
+}
+
+TEST_F(S3VectorPutVectorsParseTest, InvalidVectors) {
+  const std::string valid = R"({"key": "k1", "data": {"float32": [1, 2]}},)";
+  expect_error("[" + valid + R"({"key": "", "data": {"float32": [1, 2]}}])", 1, "vectors[1].key");
+  // missing fields
+  expect_error(R"([{}])", 0, "vectors[0].key");
+  expect_error("[" + valid + R"({"data": {"float32": [1, 2]}}])", 1, "vectors[1].key");
+  expect_error("[" + valid + R"({"key": "k2"}])", 1, "vectors[1].data");
+  expect_error("[" + valid + R"({"key": "k2", "data": {}}])", 1, "vectors[1].data");
+  expect_error("[" + valid + R"({"key": "k2", "data": {"float64": [1, 2]}}])", 1, "vectors[1].data.float64");
+  // wrong types
+  expect_error("[" + valid + "1]", 1, "vectors[1]");
+  expect_error(R"([[]])", 0, "vectors[0]");
+  expect_error(R"([{"key": 1, "data": {"float32": [1]}}])", 0, "vectors[0].key");
+  expect_error(R"([{"key": "k1", "data": [1]}])", 0, "vectors[0].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": 1}}])", 0, "vectors[0].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": []}}])", 0, "vectors[0].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": ["1"]}}])", 0, "vectors[0].data");
+  expect_error("[" + valid + R"({"key": "k2", "data": {"float32": [1, null]}}])", 1, "vectors[1].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1e99]}}])", 0, "vectors[0].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": [[1]]}}])", 0, "vectors[0].data");
+  // unknown and duplicate fields
+  expect_error(R"([{"key": "k1", "data": {"float32": [1]}, "other": {"a": [1]}}])", 0, "vectors[0].other");
+  expect_error(R"([{"key": "k1", "key": "k2", "data": {"float32": [1]}}])", 0, "vectors[0].key");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1]}, "data": {"float32": [1]}}])", 0, "vectors[0].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1], "float32": [1]}}])", 0, "vectors[0].data.float32");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1]}, "metadata": {}, "metadata": {}}])", 0, "vectors[0].metadata");
+  // only the first error is reported
+  expect_error(R"([{"key": 1, "data": {"float32": []}, "other": 1}, {}])", 0, "vectors[0].key");
+  // malformed metadata that is passed as a string
+  expect_error("[" + valid + R"({"key": "k2", "data": {"float32": [1, 2]}, "metadata": "{\"info\": {\"value\": \"missing end quote}}"}])",
+      1, "vectors[1].metadata");
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": "{} trailing"}])", 0, "vectors[0].metadata");
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": "[1]"}])", 0, "vectors[0].metadata");
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": 5}])", 0, "vectors[0].metadata");
+  // null values, in both forms of the metadata. the vectors after the invalid one are skipped
+  expect_error("[" + valid + R"({"key": "k2", "metadata": {"genre": "rock", "year": null}, "data": {"float32": [1, 2]}},)" + valid.substr(0, valid.size() - 1) + "]",
+      1, "vectors[1].metadata.year");
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": "{\"color\": null}"}])", 0, "vectors[0].metadata.color");
+  // duplicate fields
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": {"color": "red", "color": "blue"}}])", 0, "vectors[0].metadata.color");
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": "{\"color\": \"red\", \"color\": \"blue\"}"}])", 0, "vectors[0].metadata.color");
+  // invalid field name
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": {"": 1}}])", 0, "vectors[0].metadata.");
+  // too many fields. nested fields are not counted
+  std::string fields;
+  for (int i = 0; i < 50; ++i) {
+    fields += fmt::format(R"({}"key-{}": {{"a": 1, "b": [1, 2]}})", i ? "," : "", i);
+  }
+  EXPECT_TRUE(info(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": {)" + fields + "}}]").errors.empty());
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": {)" + fields + R"(, "one-more": 1}}])", 0, "vectors[0].metadata");
+  // metadata is too large
+  expect_error(R"([{"key": "k2", "data": {"float32": [1, 2]}, "metadata": {"big": ")" + std::string(40*1024, 'x') + R"("}}])", 0, "vectors[0].metadata");
+}
+
+TEST_F(S3VectorPutVectorsParseTest, InvalidStructure) {
+  const std::string prefix = R"({"vectorBucketName": "bucket", "indexName": "index", "vectors": )";
+  // only a payload that is not valid JSON fails the parsing
+  for (const std::string vectors : {
+      R"([{"key": "k1", "data": {"float32": [1,]}}])",
+      R"([{"key": "k1", "data": {"float32": [1 2]}}])",
+      R"([{"key": "k1" "data": {"float32": [1]}}])",
+      R"([{"key": "k1", "data": {"float32": [1]}, "other": {"a": }}])",
+      R"([{"key": "k1", "data": {"other": [1}}])",
+      R"([{"key": k1, "data": {"float32": [1]}}])",
+      R"([{"key": "k1", "data": {"float32": [1]}, "metadata": {"a": }}])",
+      R"([{"key": "k1", "data": {"float32": [1]}, "metadata": {"a": {"b": "missing end quote}}}])",
+      R"([{"key": "k1", "data": {"float32": [1]}},])",
+      R"([{"key": "k1", "data": {"float32": [1]}})",
+      R"([{"key": "k1", "data": {"float32": [1]})",
+      // also after an invalid vector, when the vectors are skipped
+      R"([{"key": "", "data": {"float32": [1]}}, {"key": "k1", "data": {"float32": [1})",
+    }) {
+    EXPECT_EQ(-EINVAL, parse(prefix + vectors + "}")) << vectors;
+  }
+  EXPECT_EQ(-EINVAL, parse(""));
+  // also outside of the vectors
+  EXPECT_EQ(-EINVAL, parse(R"({"vectorBucketName": "bucket", "indexName": "index", "vectors": {"a": })"));
+  EXPECT_EQ(-EINVAL, parse(R"({"vectorBucketName": "bucket", "indexName": "index", "other": [1,]})"));
+  EXPECT_EQ(-EINVAL, parse("[]"));
+}
+
+// write the parsed vectors to an index of the local backend, and read them back
+class S3VectorPutVectorsLocalTest : public ::testing::Test {
+protected:
+  rgw::sal::FilterDriver driver{nullptr};
+  NoDoutPrefix dpp{g_ceph_context, dout_subsys};
+  const bucket_namespace_t ns{"tenant", ""};
+  const BackendConfig backend{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  std::string old_local_path;
+  std::string local_path;
+
+  void SetUp() override {
+    old_local_path = g_ceph_context->_conf.get_val<std::string>("rgw_s3vector_local_path");
+    char path[] = "/tmp/unittest_rgw_s3vector.XXXXXX";
+    ASSERT_NE(nullptr, mkdtemp(path));
+    local_path = path;
+    ASSERT_EQ(0, g_ceph_context->_conf.set_val("rgw_s3vector_local_path", local_path));
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+
+  void TearDown() override {
+    g_ceph_context->_conf.set_val("rgw_s3vector_local_path", old_local_path.c_str());
+    g_ceph_context->_conf.apply_changes(nullptr);
+    std::error_code ec;
+    std::filesystem::remove_all(local_path, ec);
+  }
+
+  template<typename RestConfig>
+  VectorBucketConfig<RestConfig> decode(const std::string& json) {
+    VectorBucketConfig<RestConfig> configuration{};
+    JSONParser parser;
+    EXPECT_TRUE(parser.parse(json.c_str(), json.size()));
+    decode_json_obj(configuration.rest_config, &parser);
+    configuration.backend_config = backend;
+    return configuration;
+  }
+
+  void create(const std::string& metadata_configuration = "") {
+    ASSERT_EQ(0, create_vector_bucket(
+          decode<create_vector_bucket_t>(R"({"vectorBucketName": "bucket"})"),
+          &driver, ns, &dpp, null_yield));
+    std::vector<validation_error_t> errors;
+    ASSERT_EQ(0, create_index(
+          decode<create_index_t>(R"({"vectorBucketName": "bucket", "indexName": "index",
+            "dataType": "float32", "dimension": 3, "distanceMetric": "cosine")" + metadata_configuration + "}"),
+          &driver, ns, &dpp, null_yield, errors));
+  }
+
+  int put(const std::string& vectors, std::vector<validation_error_t>& errors) {
+    VectorBucketConfig<put_vectors_t> configuration{};
+    const auto json = R"({"vectorBucketName": "bucket", "indexName": "index", "vectors": )" + vectors + "}";
+    EXPECT_EQ(0, parse_put_vectors(&dpp, json, configuration.rest_config));
+    configuration.backend_config = backend;
+    return put_vectors(configuration, &driver, ns, &dpp, null_yield, errors);
+  }
+
+  int put(const std::string& vectors) {
+    std::vector<validation_error_t> errors;
+    const int ret = put(vectors, errors);
+    EXPECT_TRUE(errors.empty());
+    return ret;
+  }
+
+  void expect_error(const std::string& vectors, const std::string& path) {
+    std::vector<validation_error_t> errors;
+    EXPECT_EQ(-EINVAL, put(vectors, errors)) << vectors;
+    ASSERT_EQ(1U, errors.size()) << vectors;
+    EXPECT_EQ(path, errors[0].path) << vectors;
+  }
+
+  std::map<std::string, vector_item_t> get(const std::string& keys) {
+    get_vectors_reply_t reply;
+    EXPECT_EQ(0, get_vectors(
+          decode<get_vectors_t>(R"({"vectorBucketName": "bucket", "indexName": "index",
+            "returnData": true, "returnMetadata": true, "keys": )" + keys + "}"),
+          &driver, ns, &dpp, null_yield, reply));
+    std::map<std::string, vector_item_t> result;
+    for (auto& vector : reply.vectors) {
+      result[vector.key] = std::move(vector);
+    }
+    return result;
+  }
+};
+
+TEST_F(S3VectorPutVectorsLocalTest, PutAndGet) {
+  create();
+  ASSERT_EQ(0, put(R"([
+    {"key": "k1", "data": {"float32": [1, 2, 3]}},
+    {"key": "k2", "data": {"float32": [4.5, 5e2, -6]}, "metadata": {"genre": "rock", "info": {"year": 1970}}},
+    {"key": "k3", "data": {"float32": [7, 8, 9]}, "metadata": "{\"genre\": \"jazz\"}"}
+  ])"));
+  auto vectors = get(R"(["k1", "k2", "k3", "k4"])");
+  ASSERT_EQ(3U, vectors.size());
+  EXPECT_EQ(VectorData({1, 2, 3}), vectors["k1"].data);
+  EXPECT_TRUE(vectors["k1"].metadata.empty());
+  EXPECT_EQ(VectorData({4.5, 500, -6}), vectors["k2"].data);
+  EXPECT_EQ(R"({"genre": "rock", "info": {"year": 1970}})", vectors["k2"].metadata);
+  EXPECT_EQ(VectorData({7, 8, 9}), vectors["k3"].data);
+  EXPECT_EQ(R"({"genre": "jazz"})", vectors["k3"].metadata);
+
+  // existing vectors are updated
+  ASSERT_EQ(0, put(R"([
+    {"key": "k1", "data": {"float32": [3, 2, 1]}, "metadata": {"genre": "pop"}},
+    {"key": "k4", "data": {"float32": [0, 0, 1]}}
+  ])"));
+  vectors = get(R"(["k1", "k2", "k3", "k4"])");
+  ASSERT_EQ(4U, vectors.size());
+  EXPECT_EQ(VectorData({3, 2, 1}), vectors["k1"].data);
+  EXPECT_EQ(R"({"genre": "pop"})", vectors["k1"].metadata);
+  EXPECT_EQ(VectorData({4.5, 500, -6}), vectors["k2"].data);
+  EXPECT_EQ(VectorData({0, 0, 1}), vectors["k4"].data);
+}
+
+TEST_F(S3VectorPutVectorsLocalTest, InvalidVectors) {
+  create();
+  // none of the vectors match the dimension of the index
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2]}}, {"key": "k2", "data": {"float32": [1, 2]}}])",
+      "vectors[0].data");
+  // some of the vectors do not match the dimension of the index
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}}, {"key": "k2", "data": {"float32": [1, 2]}}])",
+      "vectors[1].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}}, {"key": "k2", "data": {"float32": [1, 2, 3, 4]}}])",
+      "vectors[1].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}}, {"key": "k2", "data": {"float32": [1, 2, 3]}, "metadata": {"year": null}}])",
+      "vectors[1].metadata.year");
+  // missing fields
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}}, {"data": {"float32": [1, 2, 3]}}])",
+      "vectors[1].key");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}}, {"key": "k2"}])",
+      "vectors[1].data");
+  expect_error(R"([{"key": "k1"}])", "vectors[0].data");
+  // invalid structure
+  expect_error(R"([])", "vectors");
+  expect_error(R"({})", "vectors");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, "3"]}}])", "vectors[0].data");
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}, "other": 1}])", "vectors[0].other");
+  // an unknown field of the request, that comes after valid vectors
+  expect_error(R"([{"key": "k1", "data": {"float32": [1, 2, 3]}}], "other": 1)", "other");
+  // too many vectors
+  const size_t max_vectors = g_ceph_context->_conf->rgw_s3vector_max_put_vectors;
+  std::string vectors = "[";
+  for (size_t i = 0; i <= max_vectors; ++i) {
+    vectors += fmt::format(R"({}{{"key": "k{}", "data": {{"float32": [1, 2, 3]}}}})", i ? "," : "", i);
+  }
+  expect_error(vectors + "]", "vectors");
+  // nothing was written
+  EXPECT_TRUE(get(R"(["k1", "k2", "k0"])").empty());
+}
+
+TEST_F(S3VectorPutVectorsLocalTest, FilterableMetadata) {
+  create(R"(, "metadataConfiguration": {"filterableMetadataKeys": [
+    {"name": "genre"}, {"name": "year", "type": "Number", "mustExist": true}, {"name": "tags", "type": "StringList"}]})");
+  ASSERT_EQ(0, put(R"([
+    {"key": "k1", "data": {"float32": [1, 2, 3]}, "metadata": {"genre": "rock", "year": 1970, "tags": ["a", "b"]}},
+    {"key": "k2", "data": {"float32": [4, 5, 6]}, "metadata": "{\"year\": 1980, \"other\": true}"}
+  ])"));
+  auto vectors = get(R"(["k1", "k2"])");
+  ASSERT_EQ(2U, vectors.size());
+  EXPECT_EQ(VectorData({4, 5, 6}), vectors["k2"].data);
+  // a required field is missing
+  expect_error(R"([{"key": "k3", "data": {"float32": [1, 2, 3]}, "metadata": {"year": 1}}, {"key": "k4", "data": {"float32": [1, 2, 3]}}])",
+      "vectors[1].metadata.year");
+  expect_error(R"([{"key": "k3", "data": {"float32": [1, 2, 3]}, "metadata": {"genre": "rock"}}])",
+      "vectors[0].metadata.year");
+  // wrong types
+  expect_error(R"([{"key": "k3", "data": {"float32": [1, 2, 3]}, "metadata": {"year": "abc"}}])",
+      "vectors[0].metadata.year");
+  expect_error(R"([{"key": "k3", "data": {"float32": [1, 2, 3]}, "metadata": {"year": 1, "tags": "a"}}])",
+      "vectors[0].metadata.tags");
+  EXPECT_TRUE(get(R"(["k3", "k4"])").empty());
 }
 
 class S3VectorFilterTest : public ::testing::Test {

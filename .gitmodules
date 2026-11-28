@@ -91,3 +91,6 @@
 [submodule "src/rgw/lancedb-c"]
 	path = src/rgw/lancedb-c
 	url = https://github.com/lancedb/lancedb-c.git
+[submodule "src/glaze"]
+	path = src/glaze
+	url = https://github.com/stephenberry/glaze.git
