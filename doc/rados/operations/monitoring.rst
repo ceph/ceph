@@ -145,9 +145,82 @@ added. For example:
   2026-10-22T08:15:14.258143+0000 mon.a [INF] Activating manager daemon x
   2026-10-22T08:15:15.446025+0000 mon.a [INF] Manager daemon x is now available
 
-Instead of printing log lines as they are added, you might want to print only
-the most recent lines. Run ``ceph log last [n]`` to see the most recent ``n``
-lines from the cluster log.
+.. _rados-monitoring-log-last:
+
+Viewing Recent Cluster Log Entries
+----------------------------------
+
+Instead of following the cluster log as entries are added, you can print the
+most recent entries, which the Monitors keep for each channel. Run a command of
+the following form:
+
+.. prompt:: bash #
+
+   ceph log last [<num>] [<level>] [<channel>]
+
+``<num>``
+   How many of the most recent entries in ``<channel>`` to read. The default
+   is ``20``. This is not the number of lines printed: Ceph reads these
+   entries first and then prints only those that match ``<level>``.
+
+``<level>``
+   The lowest severity level to print. From lowest to highest, the levels are
+   ``debug``, ``info``, ``sec`` (security), ``warn``, and ``error``. The
+   default is ``info``, which prints every entry except ``debug`` entries.
+
+``<channel>``
+   The channel to read: ``cluster`` (the default), ``audit``, ``cephadm``, or
+   ``*`` for all channels. With ``*``, Ceph reads the ``<num>`` most recent
+   entries across all channels, in time order.
+
+Each argument is optional, but those given must be in this order. For example,
+``ceph log last warn`` checks the last 20 entries of the ``cluster`` channel
+and prints any warnings and errors among them.
+
+Because ``<num>`` counts entries of every level, a small ``<num>`` can print
+nothing even though the channel holds older warnings. The Manager adds a
+``debug`` entry that summarizes the PGs (``pgmap``) to the ``cluster`` channel
+every few seconds, so on a quiet cluster the most recent entries are mostly
+``debug`` entries. If a command prints nothing, raise ``<num>``. The Monitors
+keep about :confval:`mon_log_max` entries per channel (10,000 by default), and
+a larger ``<num>`` reads all of them.
+
+To print warnings and errors from the last 1,000 entries of the ``cluster``
+channel, run the following command:
+
+.. prompt:: bash #
+
+   ceph log last 1000 warn
+
+To print the state-changing commands among the last 500 entries of the
+``audit`` channel, run the following command. Read-only commands are logged at
+the ``debug`` level, so they are not printed, but they count toward ``<num>``:
+
+.. prompt:: bash #
+
+   ceph log last 500 audit
+
+To print the last 100 entries of the ``cephadm`` channel, including ``debug``
+entries, run the following command:
+
+.. prompt:: bash #
+
+   ceph log last 100 debug cephadm
+
+To print the last 50 entries across all channels, run the following command.
+Quote the ``*`` so that the shell does not expand it:
+
+.. prompt:: bash #
+
+   ceph log last 50 debug '*'
+
+To get the entries as JSON, for example for a script, add ``--format json`` or
+``--format json-pretty``. Each entry has the fields ``name``, ``rank``,
+``addrs``, ``stamp``, ``seq``, ``channel``, ``priority``, and ``message``:
+
+.. prompt:: bash #
+
+   ceph log last 1000 warn --format json-pretty
 
 Monitoring Health Checks
 ========================
