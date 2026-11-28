@@ -217,10 +217,10 @@ class Module(MgrModule):
                     'clients': client_count,
                 })
             else:
-                output += "{0} - {1} clients\n".format(
+                output += "\n{0} - {1} clients\n".format(
                     mdsmap['fs_name'], client_count)
                 output += "=" * len(mdsmap['fs_name']) + "\n"
-                output += rank_table.get_string()
+                output += rank_table.get_string() + "\n"
                 output += "\n" + pools_table.get_string() + "\n"
 
         if not output and not json_output and fs_filter is not None:
