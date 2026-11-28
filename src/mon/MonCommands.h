@@ -218,6 +218,7 @@ COMMAND("fs authorize"
 	" name=caps,type=CephString,n=N"
         " --"
 	" name=key_type,type=CephString,req=false"
+	" name=yes_i_really_mean_it,type=CephBool,req=false"
         ,
 	"add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs",
 	"auth", "rwx")

@@ -369,6 +369,12 @@ Beginning with the Reef release of Ceph, ``fs authorize`` can be used to add
 new caps to an existing client (for another CephFS or another path in the same
 file system).
 
+.. note::
+
+   Since changing the capabilities of ``client.admin`` can lock the
+   administrator out of the cluster, ``fs authorize`` refuses to change
+   them unless the ``--yes-i-really-mean-it`` flag is provided.
+
 The following example demonstrates the behavior that results from running the command ``ceph fs authorize a client.x / rw`` twice.
 
 #. Create a new client:
