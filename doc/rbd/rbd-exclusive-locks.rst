@@ -8,10 +8,9 @@
 
 Exclusive locks are mechanisms designed to prevent multiple processes from
 accessing the same Rados Block Device (RBD) in an uncoordinated fashion.
-Exclusive locks are used heavily in virtualization (where they prevent VMs from
-clobbering each other's writes) and in `RBD mirroring`_ (where they are a
-prerequisite for journaling in journal-based mirroring and fast generation of
-incremental diffs in snapshot-based mirroring).
+Exclusive locks are used heavily in virtualization and in `RBD mirroring`_
+(where they are a prerequisite for journaling in journal-based mirroring and
+fast generation of incremental diffs in snapshot-based mirroring).
 
 The ``exclusive-lock`` feature is enabled on newly created images. This default
 can be overridden via the ``rbd_default_features`` configuration option or the
