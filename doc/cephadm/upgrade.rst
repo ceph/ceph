@@ -112,6 +112,11 @@ For example, to upgrade to v20.2.3, run the following command:
 
 .. note::
 
+   Upgrade to the latest point release of the target major release, and read
+   its `release notes <https://docs.ceph.com/en/latest/releases/>`_ first.
+
+.. note::
+
     Since version v16.2.6 the Docker Hub registry is no longer used, so if you
     use Docker you have to point it to the image in the quay.io registry:
 
