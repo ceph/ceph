@@ -16,6 +16,10 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   @Input() group!: string;
   @Input() nqn: string = '';
   @Input() listeners: any[] = [];
+  @Input() listenerMode: string = '';
+  @Input() useGroupNetworkMask = false;
+  @Input() subnetMask: string = '';
+  @Input() groupNetworkMasks: string[] = [];
   @Input() hostType: string = HOST_TYPE.SPECIFIC;
   @Input() addedHosts: string[] = [];
   @Input() authType: string = AUTHENTICATION.Unidirectional;
@@ -25,6 +29,7 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   formGroup: CdFormGroup;
   HOST_TYPE = HOST_TYPE;
   AUTHENTICATION = AUTHENTICATION;
+  private readonly AUTO_FETCH = 'auto-fetch';
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -37,6 +42,25 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
 
   get listenerCount(): number {
     return this.listeners?.length || 0;
+  }
+
+  get listenersSummary(): string {
+    if (this.listenerCount > 0) {
+      return $localize`${this.listenerCount} listener(s) added`;
+    }
+    if (this.listenerMode === this.AUTO_FETCH) {
+      if (this.useGroupNetworkMask) {
+        const masks = (this.groupNetworkMasks || []).filter((mask) => !!mask?.trim());
+        return masks.length
+          ? $localize`Auto-fetched using gateway group discovery networks (${masks.join(', ')})`
+          : $localize`Auto-fetched using gateway group discovery networks`;
+      }
+      if (this.subnetMask?.trim()) {
+        return $localize`Auto-fetched using network mask ${this.subnetMask.trim()}`;
+      }
+      return $localize`Auto-fetched listeners`;
+    }
+    return $localize`None selected`;
   }
 
   get hostAccessLabel(): string {

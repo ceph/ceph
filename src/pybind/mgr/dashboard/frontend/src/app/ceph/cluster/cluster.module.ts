@@ -108,6 +108,7 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-details/multi-cluster-details.component';
 import { CertificateAuthorityFormComponent } from '~/app/shared/components/certificate-authority-form/certificate-authority-form.component';
 import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
+import { TextInputListComponent } from '~/app/shared/components/text-input-list/text-input-list.component';
 
 @NgModule({
   imports: [
@@ -146,6 +147,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     TagModule,
     TabsModule,
     TextLabelListComponent,
+    TextInputListComponent,
     CertificateAuthorityFormComponent,
     SelectModule,
     LayoutModule,

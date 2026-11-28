@@ -129,6 +129,42 @@ describe('CdValidators', () => {
     });
   });
 
+  describe('cidrNetwork validator', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.cidrNetwork());
+    });
+
+    it('should accept empty value', () => {
+      expectValid('');
+    });
+
+    it('should accept a valid CIDR network', () => {
+      expectValid('192.168.1.0/24');
+    });
+
+    it('should reject an invalid CIDR network', () => {
+      formHelper.expectErrorChange('x', '192.168.1.0/2888', 'cidrNetwork');
+    });
+  });
+
+  describe('cidrNetworkList validator', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.cidrNetworkList());
+    });
+
+    it('should accept empty list', () => {
+      expectValid([]);
+    });
+
+    it('should accept valid CIDR networks', () => {
+      expectValid(['192.168.1.0/24', '10.0.0.0/8']);
+    });
+
+    it('should reject invalid CIDR networks', () => {
+      formHelper.expectErrorChange('x', ['192.168.1.0/2888'], 'cidrNetworkList');
+    });
+  });
+
   describe('uuid validator', () => {
     const expectUuidError = (value: string) =>
       formHelper.expectErrorChange('x', value, 'invalidUuid', true);

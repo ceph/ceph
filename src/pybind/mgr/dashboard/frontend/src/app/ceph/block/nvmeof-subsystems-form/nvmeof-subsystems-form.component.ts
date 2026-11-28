@@ -31,6 +31,8 @@ export type SubsystemPayload = {
   hostDchapKeyList: Array<{ dhchap_key: string; host_nqn: string }>;
   listenerMode?: string;
   subnetMask?: string;
+  useGroupNetworkMask?: boolean;
+  groupNetworkMasks?: string[];
 };
 
 type StepResult = { step: string; success: boolean; error?: string };
@@ -40,6 +42,7 @@ type CreateSubsystemRequest = {
   gw_group: string;
   dhchap_key: string;
   network_mask?: string[];
+  use_group_config_network_masks?: boolean;
 };
 
 type SequentialStep = { step: string; call: () => Observable<unknown> };
@@ -78,6 +81,10 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   // Review step data
   reviewNqn: string = '';
   reviewListeners: any[] = [];
+  reviewListenerMode: string = '';
+  reviewUseGroupNetworkMask = false;
+  reviewSubnetMask: string = '';
+  reviewGroupNetworkMasks: string[] = [];
   reviewHostType: string = HOST_TYPE.SPECIFIC;
   reviewAddedHosts: string[] = [];
   reviewAuthType: string = AUTHENTICATION.Unidirectional;
@@ -124,6 +131,10 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     if (step1) {
       this.reviewNqn = step1.nqn ?? '';
       this.reviewListeners = step1.listeners ?? [];
+      this.reviewListenerMode = step1.listenerMode ?? '';
+      this.reviewUseGroupNetworkMask = !!step1.useGroupNetworkMask;
+      this.reviewSubnetMask = step1.subnetMask ?? '';
+      this.reviewGroupNetworkMasks = step1.groupNetworkMasks ?? [];
     }
 
     if (step2) {
@@ -189,8 +200,14 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       dhchap_key: payload.subsystemDchapKey
     };
 
-    if (payload.listenerMode === LISTENER_MODE.AUTO_FETCH && payload.subnetMask) {
-      createSubsystemRequest.network_mask = [payload.subnetMask];
+    if (payload.listenerMode === LISTENER_MODE.AUTO_FETCH) {
+      if (payload.useGroupNetworkMask) {
+        // Keep the subsystem linked to the gateway group's masks so later
+        // group updates stay in sync (do not snapshot masks into network_mask).
+        createSubsystemRequest.use_group_config_network_masks = true;
+      } else if (payload.subnetMask) {
+        createSubsystemRequest.network_mask = [payload.subnetMask];
+      }
     }
 
     this.nvmeofService.createSubsystem(createSubsystemRequest).subscribe({
