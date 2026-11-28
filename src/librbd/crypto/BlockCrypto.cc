@@ -59,29 +59,13 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
   auto sg = make_scope_guard([&] {
       m_data_cryptor->return_context(ctx, mode); });
 
-  auto sector_number = image_offset / 512;
   auto appender = data->get_contiguous_appender(src.length());
-  unsigned char* out_buf_ptr = nullptr;
   unsigned char* leftover_block = (unsigned char*)alloca(m_block_size);
   uint32_t leftover_size = 0;
   for (auto buf = src.buffers().begin(); buf != src.buffers().end(); ++buf) {
     auto in_buf_ptr = reinterpret_cast<const unsigned char*>(buf->c_str());
     auto remaining_buf_bytes = buf->length();
     while (remaining_buf_bytes > 0) {
-      if (leftover_size == 0) {
-        auto block_offset_le = ceph_le64(sector_number);
-        memcpy(iv, &block_offset_le, sizeof(block_offset_le));
-        auto r = m_data_cryptor->init_context(ctx, iv, m_iv_size);
-        if (r != 0) {
-          lderr(m_cct) << "unable to init cipher's IV" << dendl;
-          return r;
-        }
-
-        out_buf_ptr = reinterpret_cast<unsigned char*>(
-                appender.get_pos_add(m_block_size));
-        sector_number += m_block_size / 512;
-      }
-
       if (leftover_size > 0 || remaining_buf_bytes < m_block_size) {
         auto copy_size = std::min(
                 (uint32_t)m_block_size - leftover_size, remaining_buf_bytes);
@@ -91,25 +75,47 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
         remaining_buf_bytes -= copy_size;
       }
 
-      int crypto_output_length = 0;
+      const unsigned char* crypto_in_ptr = nullptr;
       if (leftover_size == 0) {
-        crypto_output_length = m_data_cryptor->update_context(
-              ctx, in_buf_ptr, out_buf_ptr, m_block_size);
-
+        crypto_in_ptr = in_buf_ptr;
         in_buf_ptr += m_block_size;
         remaining_buf_bytes -= m_block_size;
       } else if (leftover_size == m_block_size) {
-        crypto_output_length = m_data_cryptor->update_context(
-              ctx, leftover_block, out_buf_ptr, m_block_size);
+        crypto_in_ptr = leftover_block;
         leftover_size = 0;
+      } else {
+        continue;
       }
 
-      if (crypto_output_length < 0) {
-        lderr(m_cct) << "crypt update failed" << dendl;
-        return crypto_output_length;
+      unsigned char* out_buf_ptr = reinterpret_cast<unsigned char*>(
+              appender.get_pos_add(m_block_size));
+
+      if (mode == CIPHER_MODE_DEC &&
+        mem_is_zero(reinterpret_cast<const char*>(crypto_in_ptr),
+                    m_block_size)) {
+        // input is already plaintext (zeros), so don't decrypt
+        memset(out_buf_ptr, 0, m_block_size);
+      } else {
+        uint64_t sector_number = image_offset / 512;
+        auto block_offset_le = ceph_le64(sector_number);
+        memcpy(iv, &block_offset_le, sizeof(block_offset_le));
+        auto r = m_data_cryptor->init_context(ctx, iv, m_iv_size);
+        if (r != 0) {
+          lderr(m_cct) << "unable to init cipher's IV" << dendl;
+          return r;
+        }
+
+        int crypto_output_length = m_data_cryptor->update_context(
+                ctx, crypto_in_ptr, out_buf_ptr, m_block_size);
+        if (crypto_output_length < 0) {
+          lderr(m_cct) << "crypt update failed" << dendl;
+          return crypto_output_length;
+        }
+
+        ceph_assert(crypto_output_length == static_cast<int>(m_block_size));
       }
 
-      out_buf_ptr += crypto_output_length;
+      image_offset += m_block_size;
     }
   }
 
