@@ -138,6 +138,7 @@ bool Throttle::wait(int64_t m)
 int64_t Throttle::take(int64_t c)
 {
   if (0 == max) {
+    count += c;
     return 0;
   }
   ceph_assert(c >= 0);
