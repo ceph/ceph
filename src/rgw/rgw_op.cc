@@ -10337,6 +10337,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
   } catch (RGWXMLDecoder::err &err) {
     ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
+    s->err.message = err.what();
     return;
   }
 
