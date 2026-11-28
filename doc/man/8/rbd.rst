@@ -629,6 +629,9 @@ Commands
   Initialize pool for use by RBD. Newly created pools must be initialized
   prior to use.
 
+:command:`pool stats` [*pool-name*] [--format *format*]
+  Display pool statistics. Note: legacy v1 images are not included in stats.
+
 :command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] [--encryption-format *encryption-format* --encryption-passphrase-file *passphrase-file*]... *image-spec*
   Resize rbd image. The size parameter also needs to be specified.
   The --allow-shrink option lets the size be reduced.
