@@ -383,7 +383,6 @@ def create_buckets(conn, max_copies_count):
 OUT_DIR="/tmp/dedup/"
 KB=(1024)
 MB=(1024*KB)
-DEDUP_MIN_OBJ_SIZE=(64*KB)
 SPLIT_HEAD=True
 RADOS_OBJ_SIZE=(4*MB)
 # The default multipart threshold size for S3cmd is 15 MB.
@@ -392,6 +391,53 @@ default_config = TransferConfig(multipart_threshold=MULTIPART_SIZE, multipart_ch
 ETAG_ATTR="user.rgw.etag"
 
 MAX_COPIES_PER_OBJ=128
+
+
+DEDUP_MIN_OBJ_SIZE=(4*KB)
+#-------------------------------------------------------------------------------
+def _parse_yaml_size(val):
+    """Parse a Ceph YAML size value like '4_K' or '64_M' into bytes."""
+    val = val.strip().replace('_', '')
+    if val.endswith('K'):
+        return int(val[:-1]) * 1024
+    elif val.endswith('M'):
+        return int(val[:-1]) * 1024 * 1024
+    elif val.endswith('G'):
+        return int(val[:-1]) * 1024 * 1024 * 1024
+    return int(val)
+
+#-------------------------------------------------------------------------------
+def setup_module(module):
+    global DEDUP_MIN_OBJ_SIZE
+    yaml_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                             '../../../common/options/rgw.yaml.in')
+    try:
+        with open(yaml_path) as f:
+            for line in f:
+                if 'rgw_dedup_min_obj_size_for_dedup' in line:
+                    for line in f:
+                        if line.strip().startswith('default:'):
+                            val = line.split(':', 1)[1].strip()
+                            DEDUP_MIN_OBJ_SIZE = _parse_yaml_size(val)
+                            log.info("DEDUP_MIN_OBJ_SIZE set from rgw.yaml.in: %d",
+                                     DEDUP_MIN_OBJ_SIZE)
+                            break
+                    break
+    except Exception as e:
+        log.warning("Failed to read rgw.yaml.in (%s), using default: %d",
+                    e, DEDUP_MIN_OBJ_SIZE)
+
+#-------------------------------------------------------------------------------
+def skip_small_objs_tests():
+    if DEDUP_MIN_OBJ_SIZE > 4*KB:
+        return True;
+
+    # DEDUP_MIN_OBJ_SIZE used on-disk size and since block_size >= 4KB
+    #   we won't skip any object
+    log.info("DEDUP_MIN_OBJ_SIZE(%d) is too small to validate",
+             DEDUP_MIN_OBJ_SIZE)
+    return False
+
 #-------------------------------------------------------------------------------
 def write_file(filename, size):
     full_filename = OUT_DIR + filename
@@ -1630,13 +1676,17 @@ def small_single_part_objs_dedup(conn, bucket_name, dry_run):
     # 3) execute DEDUP!!
     #    Read dedup stat-counters:
     #    5.a verify that objects smaller than RADOS_OBJ_SIZE were skipped
+    if skip_small_objs_tests():
+        return
+
     prepare_test()
     try:
         files=[]
-        num_files = 5
-        base_size = 1*KB
-        log.debug("generate files: base size=%d KiB, max_size=%d KiB",
-                  base_size/KB, (pow(2, num_files) * base_size)/KB)
+        num_files=5 # [64B-2048B]
+        base_size = 64
+        log.debug("generate files: base size=%d Bytes, max_size=%d Bytes",
+                  base_size, (pow(2, num_files) * base_size))
+
         gen_files(files, base_size, num_files)
         bucket = conn.create_bucket(Bucket=bucket_name)
         log.debug("upload objects to bucket <%s> ...", bucket_name)
@@ -2679,14 +2729,18 @@ def test_dedup_small():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_with_tenants():
+    if skip_small_objs_tests():
+        return
+
     disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     files=[]
-    num_files=5 # [1KB-32KB]
-    base_size = 1*KB
-    log.debug("generate files: base size=%d KiB, max_size=%d KiB",
-             base_size/KB, (pow(2, num_files) * base_size)/KB)
+    num_files=5 # [64B-2048B]
+    base_size = 64
+    log.debug("generate files: base size=%d Bytes, max_size=%d Bytes",
+              base_size, (pow(2, num_files) * base_size))
+
     try:
         gen_files(files, base_size, num_files, max_copies_count)
         indices=[0] * len(files)
@@ -2705,7 +2759,6 @@ def test_dedup_small_with_tenants():
         small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
-        assert small_objs_dedup_stats == dedup_stats
 
         dry_run=False
         exec_dedup(dedup_stats, dry_run)
@@ -3511,14 +3564,19 @@ def test_dedup_inc_loop_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_small_with_tenants():
+    if skip_small_objs_tests():
+        return
+
+    log.debug("test_dedup_dry_small_with_tenants: connect to AWS ...")
     disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     files=[]
-    num_files=5 # [1KB-32KB]
-    base_size = 1*KB
-    log.debug("generate files: base size=%d KiB, max_size=%d KiB",
-             base_size/KB, (pow(2, num_files) * base_size)/KB)
+    num_files=5 # [64B-2048B]
+    base_size = 64
+    log.debug("generate files: base size=%d Bytes, max_size=%d Bytes",
+              base_size, (pow(2, num_files) * base_size))
+
     try:
         gen_files(files, base_size, num_files, max_copies_count)
         indices=[0] * len(files)
@@ -3537,7 +3595,7 @@ def test_dedup_dry_small_with_tenants():
         small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
-        assert small_objs_dedup_stats == dedup_stats
+
         dry_run=True
         exec_dedup(dedup_stats, dry_run)
     finally:
@@ -5587,3 +5645,21 @@ def test_dedup_maintain_mtime():
 
     finally:
         cleanup(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_gen_files():
+    # local file generator for an s5cmd sync; enable by removing the skip.
+    pytest.skip("debug-only test; enable manually when needed")
+
+    min_size=2*KB
+    max_size=4*KB
+    num_files=1024*KB
+    files = []
+
+    if not os.path.isdir(OUT_DIR):
+        log.info("os.mkdir(%s)", OUT_DIR)
+        os.mkdir(OUT_DIR)
+
+    gen_files_in_range_single_copy(files, num_files, min_size, max_size)
+

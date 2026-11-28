@@ -258,30 +258,47 @@ be deduplicated.
 Memory Usage
 ============
 
- +------------------+----------+
- | RGW Object Count |  Memory  |
- +==================+==========+
- |      1M          |    8 MB  |
- +------------------+----------+
- |      4M          |   16 MB  |
- +------------------+----------+
- |     16M          |   32 MB  |
- +------------------+----------+
- |     64M          |   64 MB  |
- +------------------+----------+
- |    256M          |  128 MB  |
- +------------------+----------+
- |   1024M   (1G)   |  256 MB  |
- +------------------+----------+
- |   4096M   (4G)   |  512 MB  |
- +------------------+----------+
- |  16384M  (16G)   | 1024 MB  |
- +------------------+----------+
- |  65536M  (64G)   | 2048 MB  |
- +------------------+----------+
- | 262144M (256G)   | 4096 MB  |
- +------------------+----------+
+A single memory buffer is allocated per dedup cycle. It is used first for
+ingress output streams (``B = allocation / 2 MiB`` concurrent buffers) and
+then repurposed as the per-shard hash table (``Slots = allocation / 32``).
 
- .. note::
-     Pools with more than ~213 billion user objects (256B with headroom) exceed the
-     dedup system's maximum capacity and will be rejected at startup.
+When the object count fits in ``B`` shards (single-pass), only one ingress
+pass is needed. When more shards are required, a two-pass fan-out model is
+used with up to ``min(B², 32K)`` shards. If the object count requires more
+memory than the configured minimum, the allocation is doubled until that many
+shards suffice or the 2048 MB cap is reached.
+
+The minimum allocation is controlled by:
+
+.. confval:: rgw_dedup_min_mem_allocation_mb
+
+ +------+-----------+------+-----------+--------+------------+
+ | MB   | Slots     | B    | Single-   | Max    | Two-pass   |
+ |      |           |      | pass max  | shards | max obj    |
+ +======+===========+======+===========+========+============+
+ | 8    | 256K      | 4    | 1M        | 16     | 4M         |
+ +------+-----------+------+-----------+--------+------------+
+ | 16   | 512K      | 8    | 4M        | 64     | 32M        |
+ +------+-----------+------+-----------+--------+------------+
+ | 32   | 1M        | 16   | 16M       | 256    | 256M       |
+ +------+-----------+------+-----------+--------+------------+
+ | 64   | 2M        | 32   | 64M       | 1K     | 2G         |
+ +------+-----------+------+-----------+--------+------------+
+ | 128  | 4M        | 64   | 256M      | 4K     | 16G        |
+ +------+-----------+------+-----------+--------+------------+
+ | 256  | 8M        | 128  | 1G        | 16K    | 128G       |
+ +------+-----------+------+-----------+--------+------------+
+ | 512  | 16M       | 256  | 4G        | 32K    | 512G       |
+ +------+-----------+------+-----------+--------+------------+
+ | 1024 | 32M       | 512  | 16G       | 32K    | 1T         |
+ +------+-----------+------+-----------+--------+------------+
+ | 2048 | 64M       | 1024 | 64G       | 32K    | 2T         |
+ +------+-----------+------+-----------+--------+------------+
+
+All units use strict power-of-2 math (K = 1024, M = 1 Mi, G = 1 Gi,
+T = 1 Ti). Max shards is ``min(B², 32K)``; ``B²`` alone would exceed 32K
+from the 512 MB row up. The object counts above are raw capacities; the
+actual object count plus the 1.25x headroom must fit within them.
+
+Dedup supports up to 1 Ti (1T) objects. Systems with more objects are
+rejected.
