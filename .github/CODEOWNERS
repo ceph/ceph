@@ -272,7 +272,6 @@ README*                                         @ceph/doc-writers
 /src/mstop.sh                                   @ceph/rgw
 /src/pybind/mgr/rgw                             @ceph/rgw
 /src/rgw                                        @ceph/rgw
-/src/s3select                                   @ceph/rgw
 /src/test/cls_2pc_queue                         @ceph/rgw
 /src/test/cls_cmpomap                           @ceph/rgw
 /src/test/cls_queue                             @ceph/rgw

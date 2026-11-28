@@ -13,15 +13,8 @@ if(WITH_RADOSGW_BACKTRACE_LOGGING)
   add_definitions(-D_BACKTRACE_LOGGING)
 endif(WITH_RADOSGW_BACKTRACE_LOGGING)
 
-if(WITH_RADOSGW_SELECT_PARQUET)
-  set(ARROW_LIBRARIES Arrow::Arrow Arrow::Parquet)
-  add_definitions(-D_ARROW_EXIST)
-  message("-- arrow is installed, radosgw/s3select-op is able to process parquet objects")
-endif(WITH_RADOSGW_SELECT_PARQUET)
-
 if(WITH_RADOSGW_ARROW_FLIGHT)
   set(ARROW_FLIGHT_LIBRARIES Arrow::Arrow Arrow::Parquet Arrow::Flight utf8proc::utf8proc) # order is important
-  add_definitions(-D_ARROW_EXIST)
   message("-- arrow flight is installed")
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
@@ -122,7 +115,6 @@ set(librgw_common_srcs
   rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
-  rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_filter.cc
@@ -862,7 +854,6 @@ target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
   PRIVATE "${LUA_INCLUDE_DIR}")
 
 target_link_libraries(radosgw PRIVATE
@@ -913,7 +904,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
     PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-    PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
     PRIVATE "${LUA_INCLUDE_DIR}")
 
   target_link_libraries(rgw-standalone PRIVATE
@@ -1058,7 +1048,6 @@ target_include_directories(rgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
   PRIVATE "${LUA_INCLUDE_DIR}")
 
 target_link_libraries(rgw

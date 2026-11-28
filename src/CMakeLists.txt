@@ -426,11 +426,14 @@ add_subdirectory(json_spirit)
 
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 
-# use the rapidjson headers from s3select's submodule
+# RapidJSON is header-only; vendored as the src/rapidjson submodule
 if(NOT TARGET RapidJSON::RapidJSON)
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rapidjson/include/rapidjson/rapidjson.h")
+    message(FATAL_ERROR "src/rapidjson submodule missing; run 'git submodule update --init src/rapidjson'")
+  endif()
   add_library(RapidJSON::RapidJSON INTERFACE IMPORTED)
   set_target_properties(RapidJSON::RapidJSON PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/s3select/rapidjson/include")
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/rapidjson/include")
 endif()
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
@@ -1184,11 +1187,11 @@ endif(WITH_RBD)
 
 # RadosGW
 if(WITH_RADOSGW)
-  # s3select parquet, arrow flight and s3vectors (lancedb) use the Arrow C++ API
-  if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
+  # arrow flight and s3vectors (lancedb) use the Arrow C++ API
+  if(WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
     if(WITH_SYSTEM_ARROW)
       find_package(Arrow 9 REQUIRED QUIET)
-      if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+      if(WITH_RADOSGW_ARROW_FLIGHT)
         find_package(Parquet 9 REQUIRED QUIET)
       endif()
     else()
@@ -1204,7 +1207,7 @@ if(WITH_RADOSGW)
       include(BuildArrow)
       build_arrow()
     endif(WITH_SYSTEM_ARROW)
-  endif(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
+  endif(WITH_RADOSGW_ARROW_FLIGHT OR WITH_RADOSGW_LANCEDB)
 
   add_subdirectory(crypto)
   add_subdirectory(libkmip)

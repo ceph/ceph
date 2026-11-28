@@ -1022,7 +1022,7 @@ struct rgw_usage_log_entry {
   uint64_t epoch;
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
   std::map<std::string, rgw_usage_data> usage_map;
-  rgw_s3select_usage_data s3select_usage;
+  rgw_s3select_usage_data s3select_usage; // unused since s3select removal; kept for v4 encoding compat
 
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(std::string& o, std::string& b) : owner(o), bucket(b), epoch(0) {}

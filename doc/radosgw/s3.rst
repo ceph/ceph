@@ -13,7 +13,6 @@ Ceph supports a RESTful API that is compatible with the basic data access model 
    Bucket Logging <bucket_logging>
    Cloud Transition <cloud-transition>
    Cloud Restore <cloud-restore>
-   S3-select <s3select>
    Server-Side Encryption <encryption>
 
 API

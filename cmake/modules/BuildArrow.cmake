@@ -1,4 +1,4 @@
-# apache arrow and its parquet library are used in radosgw for s3 select
+# apache arrow and its parquet library are used in radosgw by s3vectors (lancedb) and arrow flight
 
 function(build_arrow)
   # only enable the parquet component

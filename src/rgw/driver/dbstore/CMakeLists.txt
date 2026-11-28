@@ -40,11 +40,10 @@ target_include_directories(dbstore_lib
     PUBLIC
     ${dbstore_include_dirs}
     "${CMAKE_SOURCE_DIR}/src/rgw"
-    "${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include"
     PRIVATE
     "${LUA_INCLUDE_DIR}")
 
-set(link_targets Boost::context)
+set(link_targets Boost::context RapidJSON::RapidJSON)
 if(WITH_JAEGER)
   list(APPEND link_targets jaeger_base)
 endif()

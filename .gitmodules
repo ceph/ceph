@@ -50,9 +50,6 @@
 [submodule "src/pybind/mgr/rook/rook-client-python"]
 	path = src/pybind/mgr/rook/rook-client-python
 	url = https://github.com/ceph/rook-client-python.git
-[submodule "s3select"]
-	path = src/s3select
-	url = https://github.com/ceph/s3select.git
 [submodule "src/libkmip"]
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
@@ -91,3 +88,6 @@
 [submodule "src/rgw/lancedb-c"]
 	path = src/rgw/lancedb-c
 	url = https://github.com/lancedb/lancedb-c.git
+[submodule "src/rapidjson"]
+	path = src/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
