@@ -602,6 +602,11 @@ option(WITH_RADOSGW_BEAST_OPENSSL "RADOS Gateway's Beast frontend uses OpenSSL" 
 option(WITH_RADOSGW_AMQP_ENDPOINT "RADOS Gateway's pubsub support for AMQP push endpoint" ON)
 option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_SYSTEM_RDKAFKA "build against system librdkafka instead of the bundled submodule" OFF)
+# Kafka endpoint for CephFS change notification (links librdkafka into
+# ceph-mds). Off by default: the notifier core and its file endpoint are
+# always built and tested, and putting a network client library into the MDS
+# is left to packagers who ship the feature.
+option(WITH_MDS_KAFKA_ENDPOINT "CephFS change notification: Kafka endpoint in the MDS" OFF)
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
@@ -612,6 +617,47 @@ endif(WITH_RADOSGW_DAOS)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
 option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
 cmake_dependent_option(WITH_RADOSGW_STANDALONE "Standalone RADOS Gateway" ON WITH_RADOSGW_POSIX OFF)
+
+# librdkafka is an optional dependency of all Kafka endpoints (RGW bucket
+# notifications, MDS change notification). It is discovered once, here, so that
+# components that need it use the same target, and only when one of them is
+# built. The discovery runs in a function so that the settings it passes to
+# the librdkafka submodule (WITH_SSL, WITH_SASL, ...) stay out of the
+# top-level scope.
+function(ceph_add_rdkafka)
+  set(rdkafka_min_version 2.11)
+  if(WITH_SYSTEM_RDKAFKA)
+    find_package(RDKafka ${rdkafka_min_version} REQUIRED)
+  elseif(EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+    message(STATUS "Building librdkafka as submodule")
+    set(WITH_SSL ON)
+    set(WITH_SASL ON)
+    set(RDKAFKA_BUILD_EXAMPLES OFF)
+    set(RDKAFKA_BUILD_TESTS OFF)
+    set(RDKAFKA_BUILD_STATIC ON)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/src/librdkafka
+                     ${CMAKE_BINARY_DIR}/src/librdkafka
+                     EXCLUDE_FROM_ALL)
+    target_compile_options(rdkafka PRIVATE -w)
+    if(NOT TARGET RDKafka::RDKafka)
+      add_library(RDKafka::RDKafka ALIAS rdkafka)
+    endif()
+    # create a compatibility symlink, so that consumers can include
+    # <librdkafka/rdkafka.h> both for the submodule and system librdkafka
+    set(rdkafka_compat_dir "${CMAKE_BINARY_DIR}/src/librdkafka-compat")
+    file(MAKE_DIRECTORY "${rdkafka_compat_dir}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+      "${CMAKE_SOURCE_DIR}/src/librdkafka/src"
+      "${rdkafka_compat_dir}/librdkafka")
+    target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${rdkafka_compat_dir}>")
+  else()
+    message(STATUS "src/librdkafka submodule not present; falling back to system librdkafka")
+    find_package(RDKafka ${rdkafka_min_version} REQUIRED)
+  endif()
+endfunction()
+if((WITH_RADOSGW AND WITH_RADOSGW_KAFKA_ENDPOINT) OR WITH_MDS_KAFKA_ENDPOINT)
+  ceph_add_rdkafka()
+endif()
 option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)

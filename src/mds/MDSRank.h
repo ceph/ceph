@@ -28,6 +28,7 @@
 
 #include "msg/Connection.h" // for ConnectionRef
 
+#include "ChangeNotifier.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "MDSPhaseTracker.h"
@@ -434,6 +435,9 @@ class MDSRank {
     MDLog *mdlog = nullptr;
     MDBalancer *balancer = nullptr;
     ScrubStack *scrubstack = nullptr;
+    /// CephFS change notification; always present, idle unless
+    /// mds_notify_enable is set
+    std::unique_ptr<ChangeNotifier> change_notifier;
     DamageTable damage_table;
 
     InoTable *inotable = nullptr;

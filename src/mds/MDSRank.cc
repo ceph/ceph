@@ -531,6 +531,8 @@ MDSRank::MDSRank(
 
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
+  change_notifier = std::make_unique<ChangeNotifier>(
+      cct, whoami, std::string(mdsmap->get_fs_name()));
 
   quiesce_db_manager.reset(new QuiesceDbManager());
 
@@ -567,6 +569,7 @@ MDSRank::~MDSRank()
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
+  change_notifier.reset();
   if (mds_dmclock_scheduler) { delete mds_dmclock_scheduler; mds_dmclock_scheduler = 0; }
 
   if (logger) {
@@ -826,6 +829,10 @@ void MDSRankDispatcher::shutdown()
   stopping = true;
 
   dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
+
+  // drain queued change notification events and give the endpoint a short,
+  // bounded flush; nothing new is journaled from here on
+  change_notifier->shutdown(500);
 
   g_conf().remove_observer(this);
 
@@ -2334,6 +2341,11 @@ void MDSRankDispatcher::handle_mds_map(
   if (state != oldstate) {
     last_state = oldstate;
     incarnation = mdsmap->get_inc_gid(mds_gid);
+    // the incarnation is the epoch of the change-notification stream: it is
+    // set here, on the transition into the rank, before any client request
+    // can be served, and it grows every time a daemon takes the rank
+    if (incarnation > 0)
+      change_notifier->set_epoch(incarnation);
   }
 
   version_t epoch = m->get_epoch();
@@ -3055,6 +3067,8 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
     command_export_dir(f, path, (mds_rank_t)rank);
+  } else if (command == "notify status") {
+    change_notifier->dump_status(f);
   } else if (command == "dump cache") {
     std::lock_guard l(mds_lock);
     int64_t timeout = 0;
@@ -4246,6 +4260,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_snaps_per_dir",
+    "mds_notify_enable",
+    "mds_notify_root",
     "mds_op_complaint_time",
     "mds_op_history_duration",
     "mds_op_history_size",
@@ -4336,6 +4352,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   }
   if (changed.count("mds_inject_journal_corrupt_dentry_first")) {
     inject_journal_corrupt_dentry_first = g_conf().get_val<double>("mds_inject_journal_corrupt_dentry_first");
+  }
+  if (changed.count("mds_notify_enable") || changed.count("mds_notify_root")) {
+    change_notifier->handle_conf_change(conf, changed);
   }
 
   finisher->queue(new LambdaContext([this, changed](int) {
