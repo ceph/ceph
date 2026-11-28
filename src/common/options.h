@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 #include <iostream> // for std::cerr
 #include <string>
 #include <variant>
@@ -199,13 +200,11 @@ struct Option {
   std::vector<const char*> enum_allowed;
 
   /**
-   * Return nonzero and set second argument to error string if the
-   * value is invalid.
-   *
-   * These callbacks are more than just validators, as they can also
-   * modify the value as it passes through.
+   * Validate a parsed value, returning nonzero and setting the error string
+   * to reject it. The callback may normalize the value without changing its
+   * type. Min, max and enum checks apply to the resulting value.
    */
-  typedef std::function<int(std::string *, std::string *)> validator_fn_t;
+  using validator_fn_t = std::function<int(value_t&, std::string*)>;
   validator_fn_t validator;
 
   Option(std::string &&name, type_t t, level_t l)
@@ -244,11 +243,8 @@ struct Option {
 
   void dump_value(const char *field_name, const value_t &v, ceph::Formatter *f) const;
 
-  // Validate and potentially modify incoming string value
-  int pre_validate(std::string *new_value, std::string *err) const;
-
-  // Validate properly typed value against bounds
-  int validate(const Option::value_t &new_value, std::string *err) const;
+  // Validate and potentially normalize a properly typed value
+  int validate(value_t &new_value, std::string *err) const;
 
   // const char * must be explicit to avoid it being treated as an int
   Option& set_value(value_t& v, const char *new_value) {
@@ -374,7 +370,7 @@ struct Option {
     return *this;
   }
 
-  Option &set_validator(const validator_fn_t  &validator_)
+  Option &set_validator(const validator_fn_t &validator_)
   {
     validator = validator_;
     return *this;

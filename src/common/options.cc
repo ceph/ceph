@@ -89,17 +89,14 @@ void Option::dump_value(const char *field_name,
   }
 }
 
-int Option::pre_validate(std::string *new_value, std::string *err) const
+int Option::validate(value_t &new_value, std::string *err) const
 {
   if (validator) {
-    return validator(new_value, err);
-  } else {
-    return 0;
+    if (int r = validator(new_value, err); r != 0) {
+      return r;
+    }
   }
-}
 
-int Option::validate(const Option::value_t &new_value, std::string *err) const
-{
   // Generic validation: min
   if (min != value_t{}) {
     if (new_value < min) {
@@ -139,18 +136,11 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
 }
 
 int Option::parse_value(
-  const std::string& raw_val,
+  const std::string& val,
   value_t *out,
   std::string *error_message,
   std::string *normalized_value) const
 {
-  std::string val = raw_val;
-
-  int r = pre_validate(&val, error_message);
-  if (r != 0) {
-    return r;
-  }
-
   if (type == Option::TYPE_INT) {
     int64_t f = strict_si_cast<int64_t>(val, error_message);
     if (!error_message->empty()) {
@@ -221,7 +211,7 @@ int Option::parse_value(
     ceph_abort();
   }
 
-  r = validate(*out, error_message);
+  int r = validate(*out, error_message);
   if (r != 0) {
     return r;
   }
