@@ -894,7 +894,8 @@ public:
                             std::ostream *out = nullptr) const;
 
   /// Whether up keeps each zone block of an erasure coded pool over zones in
-  /// one zone of its own, as peering needs.
+  /// one zone of its own, and puts no more than a zone's share of a
+  /// replicated pool's PG in one zone, as peering needs.
   bool keeps_zone_blocks(const pg_pool_t& pool, int crush_rule,
                          const std::vector<int>& up) const;
 
@@ -995,6 +996,12 @@ public:
                                      int limit, // how many
                                      std::set<int> skip,
                                      std::set<int> *want) const;
+
+  /// the first release whose clients can all follow a pool migration:
+  /// set-require-min-compat-client sets require_pool_migration from it.
+  /// A backport names its own release.
+  static constexpr ceph_release_t POOL_MIGRATION_MIN_COMPAT_CLIENT =
+    ceph_release_t::vampire;
 
   /**
    * get feature bits required by the current structure
