@@ -3633,6 +3633,15 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_version)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_version);
 
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_time_range)(
+  rados_write_op_t write_op,
+  struct timespec after,
+  struct timespec before)
+{
+  to_object_operation(write_op)->assert_time_range(after, before);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_time_range);
+
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_exists)(
   rados_write_op_t write_op)
 {
@@ -4113,6 +4122,15 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_version)(
   tracepoint(librados, rados_read_op_assert_version_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_assert_version);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_time_range)(
+  rados_read_op_t read_op,
+  struct timespec after,
+  struct timespec before)
+{
+  to_object_operation(read_op)->assert_time_range(after, before);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_assert_time_range);
 
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_assert_exists)(
   rados_read_op_t read_op)
