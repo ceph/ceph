@@ -1,5 +1,7 @@
 import { And, Then } from 'cypress-cucumber-preprocessor/steps';
 
+import { HostsPageHelper } from '../cluster/hosts.po';
+
 /**
  * Fills in the given field using the value provided
  * @param field ID of the field that needs to be filled out.
@@ -57,19 +59,7 @@ And('select options {string}', (labels: string) => {
 
 And('{string} option {string}', (action: string, labels: string) => {
   if (labels) {
-    cy.get('cds-modal').find('input[id=labels]').click();
-    if (action === 'add') {
-      for (const label of labels.split(', ')) {
-        cy.get('input[id=labels]').clear().type(`${label}`);
-
-        cy.get('cds-dropdown-list').find('li').should('have.attr', 'title', label).click();
-      }
-    } else {
-      for (const label of labels.split(', ')) {
-        cy.get('input[id=labels]').clear().type(`${label}`);
-        cy.get('cds-dropdown-list').find('li').should('have.attr', 'title', label).click();
-      }
-    }
+    new HostsPageHelper().selectLabels(labels.split(', '), action === 'add');
   }
 });
 

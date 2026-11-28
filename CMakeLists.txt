@@ -178,7 +178,6 @@ if(FREEBSD)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
 
-
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -215,6 +214,24 @@ include(CheckCxxAtomic)
 if(NOT HAVE_CXX11_ATOMIC)
   string(APPEND CMAKE_CXX_STANDARD_LIBRARIES
     " ${LIBATOMIC_LINK_FLAGS}")
+endif()
+
+set(CPM_DONT_UPDATE_MODULE_PATH ON)
+include(CPM)
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/glaze/CMakeLists.txt")
+  CPMAddPackage(
+    NAME glaze
+    VERSION 7.6.0
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/glaze"
+    EXCLUDE_FROM_ALL YES
+    SYSTEM YES)
+else()
+  CPMAddPackage("gh:stephenberry/glaze@7.6.0#v7.6.0")
+endif()
+
+if(NOT TARGET glaze::glaze)
+  message(FATAL_ERROR "Glaze is required to build ceph-json")
 endif()
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
@@ -563,8 +580,6 @@ option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
 option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
 
 if(WITH_CATCH2)
-  include(CPM)
-
   # Save pre-existing definitions (if any):
   set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_LOCAL_PACKAGES_ONLY})
 
@@ -583,7 +598,7 @@ if(WITH_CATCH2)
     message(WARNING "Catch2 unavailable, disabling Catch2 tests")
     set(WITH_CATCH2 OFF)
   else()
-    message("-- Enabled Catch2 support")
+    message(STATUS "Enabled Catch2 support")
   endif()
 endif()
 

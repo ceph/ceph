@@ -4,6 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
+ * Copyright (C) 2026 IBM
  * Copyright (C) 2018 Red Hat Inc.
  *
  *  This library is free software; you can redistribute it and/or
@@ -18,9 +19,23 @@
 
 #include "common/ceph_json.h"
 
+#include <map>
 #include <sstream>
 
 using namespace std;
+
+const JSONFormattable* missing_formattable_from_other_file(const JSONFormattable& value);
+
+TEST(formattable, shared_missing_value)
+{
+  JSONFormattable value;
+  const JSONFormattable& const_value = value;
+  const auto* missing = missing_formattable_from_other_file(value);
+  EXPECT_EQ(missing, &value["missing"]);
+  EXPECT_EQ(missing, &const_value["missing"]);
+  EXPECT_EQ(missing, &value[0]);
+  EXPECT_EQ(missing, &const_value[0]);
+}
 
 
 static void get_jf(const string& s, JSONFormattable *f)
@@ -38,7 +53,7 @@ static void get_jf(const string& s, JSONFormattable *f)
   }
 }
 
-TEST(formatable, str) {
+TEST(formattable, str) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"bar\" }", &f);
   ASSERT_EQ((string)f["foo"], "bar");
@@ -46,7 +61,7 @@ TEST(formatable, str) {
   ASSERT_EQ((string)f["fooz"]("lala"), "lala");
 }
 
-TEST(formatable, str2) {
+TEST(formattable, str2) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"bar\" }", &f);
   ASSERT_EQ((string)f["foo"], "bar");
@@ -62,13 +77,33 @@ TEST(formatable, str2) {
 
 }
 
-TEST(formatable, str3) {
+TEST(formattable, str3) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"1234bar56\" }", &f);
   ASSERT_EQ((string)f["foo"], "1234bar56");
 }
 
-TEST(formatable, int) {
+TEST(formattable, object_and_value_access)
+{
+  const string value(256, 'x');
+  const string key = "foo";
+  JSONFormattable f;
+  get_jf("{\"foo\":\"" + value + "\"}", &f);
+  const map<string, JSONFormattable> members = f.object();
+  EXPECT_EQ(value, members.at(key).val());
+  EXPECT_EQ(value, static_cast<string>(f[key]));
+
+  string output;
+  EXPECT_TRUE(f.find(key, &output));
+  EXPECT_EQ(value, output);
+
+  // Allocating operations must propagate allocation failures:
+  static_assert(!noexcept(f.object()));
+  static_assert(!noexcept(static_cast<string>(f)));
+  static_assert(!noexcept(f.find(key, &output)));
+}
+
+TEST(formattable, int) {
   JSONFormattable f;
   get_jf("{ \"foo\": 1 }", &f);
   ASSERT_EQ((int)f["foo"], 1);
@@ -83,7 +118,7 @@ TEST(formatable, int) {
   ASSERT_EQ((int)f2["fooz"](111), 123);
 }
 
-TEST(formatable, bool) {
+TEST(formattable, bool) {
   JSONFormattable f;
   get_jf("{ \"foo\": \"true\" }", &f);
   ASSERT_EQ((bool)f["foo"], true);
@@ -95,7 +130,7 @@ TEST(formatable, bool) {
   ASSERT_EQ((bool)f["foo"], false);
 }
 
-TEST(formatable, nested) {
+TEST(formattable, nested) {
   JSONFormattable f;
   get_jf("{ \"obj\": { \"foo\": 1, \"inobj\": { \"foo\": 2 } } }", &f);
   ASSERT_EQ((int)f["foo"], 0);
@@ -103,7 +138,7 @@ TEST(formatable, nested) {
   ASSERT_EQ((int)f["obj"]["inobj"]["foo"], 2);
 }
 
-TEST(formatable, array) {
+TEST(formattable, array) {
   JSONFormattable f;
   get_jf("{ \"arr\": [ { \"foo\": 1, \"inobj\": { \"foo\": 2 } }," 
          "{ \"foo\": 2 } ] }", &f);
@@ -124,7 +159,7 @@ TEST(formatable, array) {
   }
 }
 
-TEST(formatable, bin_encode) {
+TEST(formattable, bin_encode) {
   JSONFormattable f, f2;
   get_jf("{ \"arr\": [ { \"foo\": 1, \"bar\": \"aaa\", \"inobj\": { \"foo\": 2 } }," 
          "{ \"foo\": 2, \"inobj\": { \"foo\": 3 } } ] }", &f);
@@ -156,7 +191,7 @@ TEST(formatable, bin_encode) {
 
 }
 
-TEST(formatable, json_encode) {
+TEST(formattable, json_encode) {
   JSONFormattable f, f2;
   get_jf("{ \"arr\": [ { \"foo\": 1, \"bar\": \"aaa\", \"inobj\": { \"foo\": 2 } }," 
          "{ \"foo\": 2, \"inobj\": { \"foo\": 3 } } ] }", &f);
@@ -181,7 +216,7 @@ TEST(formatable, json_encode) {
 
 }
 
-TEST(formatable, set) {
+TEST(formattable, set) {
   JSONFormattable f, f2;
 
   f.set("", "{ \"abc\": \"xyz\"}");
@@ -200,13 +235,16 @@ TEST(formatable, set) {
   ASSERT_EQ((int)f["obj"]["c"], 30);
 }
 
-TEST(formatable, set2) {
+TEST(formattable, set2) {
   JSONFormattable f;
   f.set("foo", "1234bar56");
   ASSERT_EQ((string)f["foo"], "1234bar56");
+
+  f.set("endpoint", "http://fluffymarmot.example:8001/");
+  ASSERT_EQ((string)f["endpoint"], "http://fluffymarmot.example:8001/");
 }
 
-TEST(formatable, erase) {
+TEST(formattable, erase) {
   JSONFormattable f, f2;
 
   f.set("", "{ \"abc\": \"xyz\"}");
@@ -240,7 +278,7 @@ static void dumpf(const JSONFormattable& f) {
   dumpt(f, "f");
 }
 
-TEST(formatable, set_array) {
+TEST(formattable, set_array) {
   JSONFormattable f, f2;
 
   f.set("asd[0]", "\"xyz\"");
@@ -272,7 +310,30 @@ TEST(formatable, set_array) {
   ASSERT_EQ((string)f2[0]["field"], "xyz");
 }
 
-TEST(formatable, erase_array) {
+TEST(formattable, nested_array_paths) {
+  JSONFormattable f;
+  ASSERT_EQ(0, f.set("root[0]child[1]", "42"));
+  ASSERT_EQ(42, static_cast<int>(f["root"][0]["child"][1]));
+  ASSERT_EQ(0, f.erase("root[0]child[1]"));
+  ASSERT_FALSE(f["root"][0]["child"].exists(1));
+
+  ASSERT_EQ(0, f.set("root[+1]", "43"));
+  ASSERT_EQ(43, static_cast<int>(f["root"][1]));
+  ASSERT_EQ(0, f.set("root[ 0]", "44"));
+  ASSERT_EQ(44, static_cast<int>(f["root"][0]));
+}
+
+TEST(formattable, invalid_array_paths) {
+  for (const auto* path : {"root[bad]", "root[1bad]", "root[2147483648]",
+                           "root[999999999999999999999]", "root[0", "root[0]tail"}) {
+    SCOPED_TRACE(path);
+    JSONFormattable f;
+    ASSERT_EQ(-EINVAL, f.set(path, "42"));
+    ASSERT_EQ(-EINVAL, f.erase(path));
+  }
+}
+
+TEST(formattable, erase_array) {
   JSONFormattable f;
 
   f.set("asd[0]", "\"xyz\"");
@@ -315,13 +376,12 @@ void formatter_convert(JSONFormatter& formatter, JSONFormattable *dest)
   get_jf(ss.str(), dest);
 }
 
-TEST(formatable, encode_simple) {
+TEST(formattable, encode_simple) {
   JSONFormattable f;
 
   encode_json("foo", "bar", &f);
 
   ASSERT_EQ((string)f["foo"], "bar");
-
 
   JSONFormatter formatter;
   {
@@ -422,7 +482,7 @@ struct struct2 {
 };
 
 
-TEST(formatable, encode_struct) {
+TEST(formattable, encode_struct) {
   JSONFormattable f;
 
   struct2 s2;
@@ -488,4 +548,3 @@ TEST(JSONObj, NonStringNodeKeepsUtf8)
   ASSERT_NE(n, nullptr);
   EXPECT_EQ(n->get_data(), "1");
 }
-

@@ -3,7 +3,7 @@ import {
   HttpTestingController,
   TestRequest
 } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -44,6 +44,14 @@ describe('RbdTrashRestoreModalComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('focuses the image name instead of the restore button', fakeAsync(() => {
+    component.open = true;
+    fixture.detectChanges();
+    tick(100);
+
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('#name'));
+  }));
 
   describe('should call restore', () => {
     let httpTesting: HttpTestingController;

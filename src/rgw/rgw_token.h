@@ -82,13 +82,13 @@ namespace rgw {
 
     explicit RGWToken(const string& json) {
       JSONParser p;
-      p.parse(json.c_str(), json.length());
+      p.parse(json);
       JSONDecoder::decode_json(RGWToken::type_name, *this, &p);
     }
 
     RGWToken& operator=(const std::string& json) {
       JSONParser p;
-      p.parse(json.c_str(), json.length());
+      p.parse(json);
       JSONDecoder::decode_json(RGWToken::type_name, *this, &p);
       return *this;
     }

@@ -85,6 +85,7 @@ target_link_libraries(unittest_str_map ceph-common)
 # unittest_json_formattable
 add_executable(unittest_json_formattable
   test_json_formattable.cc
+  test_json_formattable_helpers.cc
   )
 add_ceph_unittest(unittest_json_formattable ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formattable)
 # add_dependencies(unittest_json_formattable ceph-common)

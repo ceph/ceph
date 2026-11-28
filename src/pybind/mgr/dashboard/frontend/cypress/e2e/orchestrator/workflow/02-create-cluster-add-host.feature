@@ -59,12 +59,12 @@ Feature: Cluster expansion host addition
     When I select a row "<hostname>"
     And I click on "Edit" button from the table actions
     And "add" option "<labels>"
-    And I click on "Edit Host" button
+    And I submit the carbon modal with "Save changes"
     Then I should see row "<hostname>" have "<labels>"
     When I select a row "<hostname>"
     And I click on "Edit" button from the table actions
     And "remove" option "<labels>"
-    And I click on "Edit Host" button
+    And I submit the carbon modal with "Save changes"
     Then I should see row "<hostname>" does not have "<labels>"
 
     Examples:

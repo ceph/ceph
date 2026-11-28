@@ -286,7 +286,6 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       this.osdService.getDeploymentOptions().subscribe((options) => {
         this.deploymentOptions = options;
         if (!this.osdService.selectedFormValues) {
-          this.form.get('deploymentMode').setValue('automatic', { emitEvent: false });
           this.form.get('deploymentOption').setValue(this.deploymentOptions?.recommended_option);
         }
 

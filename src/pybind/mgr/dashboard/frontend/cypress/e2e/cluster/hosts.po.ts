@@ -9,10 +9,17 @@ export class HostsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    hostname: 2,
-    labels: 3,
-    status: 4
+    hostname: 1,
+    labels: 2,
+    status: 3
   };
+
+  clickHostTab(hostname: string, tabName: 'Service instances' | 'Storage Devices') {
+    this.navigateTo();
+    this.getResourcePage(hostname).click();
+    cy.contains('cd-host-sidebar cds-sidenav a.cds--side-nav__link', tabName).click();
+    cy.get('cd-host-resource-page').should('exist');
+  }
 
   check_for_host() {
     this.getTableCount('total').should('not.be.eq', 0);
@@ -30,7 +37,7 @@ export class HostsPageHelper extends PageHelper {
     });
 
     if (labels.length) {
-      this.selectPredefinedLabels(labels);
+      this.selectLabels(labels);
     }
 
     cy.get('cd-submit-button').click();
@@ -39,11 +46,17 @@ export class HostsPageHelper extends PageHelper {
     cy.get(`${this.pages.index.id}`);
   }
 
-  selectPredefinedLabels(labels: string[]) {
-    cy.get('a[data-testid=select-menu-edit]').click();
+  selectLabels(labels: string[], add = true) {
     for (const label of labels) {
-      cy.get('.popover-body div.select-menu-item-content').contains(label).click();
+      cy.get('cds-modal input#labels').clear().type(label);
+      cy.get('cds-dropdown-list li')
+        .should('have.length', 1)
+        .and('have.attr', 'title', label)
+        .and('have.attr', 'aria-selected', String(!add));
+      cy.get('cds-modal input#labels').type('{downarrow}');
+      cy.get('cds-dropdown-list [role="listbox"]').should('be.focused').type('{enter}');
     }
+    cy.get('cds-modal cds-modal-header h3').click();
   }
 
   checkExist(hostname: string, exist: boolean, shouldReload = false) {
@@ -70,30 +83,16 @@ export class HostsPageHelper extends PageHelper {
   // Add or remove labels on a host, then verify labels in the table
   editLabels(hostname: string, labels: string[], add: boolean) {
     this.clickRowActionButton(hostname, 'edit');
-
-    // add or remove label badges
-    if (add) {
-      cy.get('cd-modal').find('.select-menu-edit').click();
-      for (const label of labels) {
-        cy.contains('cd-modal .tag', new RegExp(`^${label}$`)).should('not.exist');
-        cy.get('.popover-body input').type(`${label}{enter}`);
-      }
-    } else {
-      for (const label of labels) {
-        cy.contains('cd-modal .tag', new RegExp(`^${label}$`))
-          .find('.tags-remove')
-          .click();
-      }
-    }
-    cy.get('cd-modal cd-submit-button').click();
+    this.selectLabels(labels, add);
+    cy.get('cds-modal button[aria-label="Save changes"]').click();
+    cy.get('cds-modal').should('not.exist');
     this.checkLabelExists(hostname, labels, add);
   }
 
   checkLabelExists(hostname: string, labels: string[], add: boolean) {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
-    this.getTableCell(this.columnIndex.hostname, hostname, true).as('row').click();
-    cy.get('@row')
+    this.getTableCell(this.columnIndex.hostname, hostname, true)
       .parent()
       .find(`[cdstabledata]:nth-child(${this.columnIndex.labels}) cds-tag span`)
       .should(($ele) => {
@@ -128,7 +127,6 @@ export class HostsPageHelper extends PageHelper {
     }
     if (exit) {
       this.getTableCell(this.columnIndex.hostname, hostname, true)
-        .click()
         .parent()
         .find(`[cdstabledata]:nth-child(${this.columnIndex.status})`)
         .then(($ele) => {
@@ -150,7 +148,7 @@ export class HostsPageHelper extends PageHelper {
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .tag`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.include('maintenance');
@@ -164,10 +162,11 @@ export class HostsPageHelper extends PageHelper {
     cy.wait(1000);
     this.checkLabelExists(hostname, ['_no_schedule'], true);
 
-    this.clickTab('cd-host-details', hostname, 'Daemons');
-    cy.get('cd-host-details').within(() => {
+    this.clickHostTab(hostname, 'Service instances');
+    cy.get('cd-host-resource-page cd-service-daemon-list').within(() => {
       cy.wait(20000);
       this.expectTableCount('total', 0);
     });
+    this.navigateTo();
   }
 }

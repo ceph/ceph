@@ -15,14 +15,12 @@ describe('Host Page', () => {
   });
 
   describe('should have all host details', () => {
-    (it('should have hostname'),
-      () => {
-        cy.get('[data-testid="hostname"]').should('not.be.empty');
-      });
-    (it('should have IP address'),
-      () => {
-        cy.get('[data-testid="ip-address"]').should('not.be.empty');
-      });
+    it('should have hostname', () => {
+      cy.get('[data-testid="hostname"]').should('not.be.empty');
+    });
+    it('should have IP address', () => {
+      cy.get('[data-testid="ip-address"]').should('not.be.empty');
+    });
   });
 
   // rgw is needed for testing the force maintenance
@@ -35,8 +33,8 @@ describe('Host Page', () => {
 
   it('should check if rgw daemon is running on all hosts', () => {
     for (const hostname of hostnames) {
-      hosts.clickTab('cd-host-details', hostname, 'Daemons');
-      cy.get('cd-host-details').within(() => {
+      hosts.clickHostTab(hostname, 'Service instances');
+      cy.get('cd-host-resource-page').within(() => {
         services.checkServiceStatus('rgw');
       });
     }

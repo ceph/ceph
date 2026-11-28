@@ -34,6 +34,7 @@ add_executable(ceph_test_neorados_handler_error
   )
 target_link_libraries(ceph_test_neorados_handler_error
   libneorados
+  ceph-json-headers
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}

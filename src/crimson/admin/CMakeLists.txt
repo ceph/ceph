@@ -4,5 +4,6 @@ add_library(crimson-admin STATIC
   pg_commands.cc)
 target_link_libraries(crimson-admin
   legacy-option-headers
+  ceph-json-headers
   crimson::cflags
   Boost::MPL)
