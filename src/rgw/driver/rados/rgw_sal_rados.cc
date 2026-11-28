@@ -6171,14 +6171,20 @@ int RadosLuaManager::reload_packages(const DoutPrefixProvider *dpp, optional_yie
   }
   bufferlist empty_bl;
   bufferlist reply_bl;
-  const uint64_t timeout_ms = 0;
+  // installing packages may take longer than the default notify timeout
+  const auto timeout = dpp->get_cct()->_conf.get_val<std::chrono::seconds>(
+      "rgw_lua_packages_reload_timeout");
+  const uint64_t timeout_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count();
   auto r = rgw_rados_notify(dpp,
       ioctx,
       PACKAGE_LIST_OBJECT_NAME,
       empty_bl, timeout_ms, &reply_bl, y);
   if (r < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify reload on " << PACKAGE_LIST_OBJECT_NAME
-        << ". error: " << cpp_strerror(r) << dendl;
+        << ". error: " << cpp_strerror(r)
+        << (r == -ETIMEDOUT ? ". consider increasing rgw_lua_packages_reload_timeout" : "")
+        << dendl;
     return r;
   }
 
@@ -6187,7 +6193,7 @@ int RadosLuaManager::reload_packages(const DoutPrefixProvider *dpp, optional_yie
   ioctx.decode_notify_response(reply_bl, &acks, &timeouts);
   if (timeouts.size() > 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify reload on " << PACKAGE_LIST_OBJECT_NAME
-      << ". error: timeout" << dendl;
+      << ". error: timeout. consider increasing rgw_lua_packages_reload_timeout" << dendl;
     return -EAGAIN;
   }
   for (auto& ack : acks) {

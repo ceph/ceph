@@ -4658,6 +4658,19 @@ options:
   - rgw
   flags:
   - startup
+- name: rgw_lua_packages_reload_timeout
+  type: secs
+  level: advanced
+  desc: Timeout for reloading Lua packages from the allowlist
+  long_desc: How long "radosgw-admin script-package reload" waits for all RGWs
+    to install the packages from the allowlist. Installing packages (especially
+    ones that need compilation) can take longer than the default notify timeout.
+    If set to zero, client_notify_timeout is used.
+  default: 120
+  services:
+  - rgw
+  see_also:
+  - rgw_luarocks_location
 - name: rgwlc_auto_session_clear
   type: bool
   level: advanced
