@@ -10,6 +10,12 @@
   }
 }
 
+.cd-overview-footer {
+  border-top: 1px solid var(--cds-border-subtle-01);
+  margin-top: var(--cds-spacing-04);
+  padding-top: var(--cds-spacing-04);
+}
+
 .cd-overview-grid {
   row-gap: layout.$spacing-05;
   column-gap: layout.$spacing-05;

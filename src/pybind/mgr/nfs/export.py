@@ -1405,6 +1405,11 @@ class ExportMgr:
                 export_dict_qos_bw_ops_checks(
                     cluster_id, self.mgr,
                     dict(new_export_dict.get('qos_block', {})), old_qos)
+            elif old_export.qos_block:
+                # Dashboard export updates omit qos_block; keep existing limits
+                # so a later failed QoS PATCH cannot leave the export without them.
+                new_export_dict['qos_block'] = old_export.qos_block.to_dict(
+                    ret_bw_in_bytes=True)
 
         new_export = self.create_export_from_dict(
             cluster_id,

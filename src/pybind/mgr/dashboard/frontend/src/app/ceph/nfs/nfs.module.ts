@@ -10,7 +10,6 @@ import { NfsDetailsComponent } from './nfs-details/nfs-details.component';
 import { NfsFormClientComponent } from './nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from './nfs-form/nfs-form.component';
 import { NfsListComponent } from './nfs-list/nfs-list.component';
-import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -30,6 +29,8 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
+import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
+import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component';
 import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
 import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
 
@@ -54,7 +55,8 @@ import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sideb
     IconModule,
     LinkModule,
     TabsModule,
-    ClusterModule
+    ClusterModule,
+    NfsRateLimitComponent
   ],
   exports: [
     NfsListComponent,
@@ -62,6 +64,7 @@ import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sideb
     NfsDetailsComponent,
     NfsClusterComponent,
     NfsClusterFormComponent,
+    NfsRateLimitComponent,
     NfsClusterResourcePageComponent,
     NfsClusterResourceSidebarComponent
   ],
