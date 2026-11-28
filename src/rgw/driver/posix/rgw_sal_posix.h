@@ -102,7 +102,11 @@ class Directory;
 class FSEnt {
 protected:
   std::string fname;
+  std::string long_name;
   Directory* parent;
+
+  void set_name(std::string name);
+  int write_long_name(const DoutPrefixProvider* dpp, const std::string& name);
   int fd{-1};
   bool exist{false};
   struct statx stx;
@@ -114,10 +118,11 @@ public:
   static constexpr uint32_t FLAG_CURRENT =   0x2;
   static constexpr uint32_t FLAG_DELETE_MARKER =   0x4;
 
-  FSEnt(std::string _name, Directory* _parent, CephContext* _ctx) : fname(_name), parent(_parent), ctx(_ctx) {}
-  FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : fname(_name), parent(_parent), exist(true), stx(_stx), stat_done(true), ctx(_ctx) {}
+  FSEnt(std::string name, Directory* parent, CephContext* ctx);
+  FSEnt(std::string name, Directory* parent, struct statx& stx, CephContext* ctx);
   FSEnt(const FSEnt& _e) :
     fname(_e.fname),
+    long_name(_e.long_name),
     parent(_e.parent),
     exist(_e.exist),
     stx(_e.stx),
@@ -129,6 +134,8 @@ public:
 
   int get_fd() { return fd; };
   std::string& get_name() { return fname; }
+  int get_logical_name(const DoutPrefixProvider* dpp, std::string* name);
+  int get_object_key(const DoutPrefixProvider* dpp, rgw_obj_key* key);
   Directory* get_parent() { return parent; }
   bool exists() { return exist; }
   struct statx& get_stx() { return stx; }
@@ -147,7 +154,7 @@ public:
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
-  virtual std::string get_cur_version() { return ""; };
+  virtual int get_cur_version(const DoutPrefixProvider*, std::string*) { return 0; }
 };
 
 class File : public FSEnt {
@@ -335,7 +342,7 @@ public:
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
-  virtual std::string get_cur_version() override;
+  int get_cur_version(const DoutPrefixProvider* dpp, std::string* instance) override;
   std::string get_new_instance();
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
@@ -355,7 +362,7 @@ public:
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
 };
 
-std::string get_key_fname(rgw_obj_key& key, bool use_version);
+std::string get_key_fname(const rgw_obj_key& key, bool use_version);
 
 class POSIXZoneGroup : public StoreZoneGroup {
   POSIXDriver* store;
@@ -804,6 +811,8 @@ public:
 
   /* called by BucketCache layer when a new object is discovered
    * by inotify or similar */
+  static bool listing_name_needs_rescan(std::string_view name);
+  static rgw_obj_index_key listing_key_from_filename(std::string_view name);
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
 
@@ -1192,7 +1201,7 @@ struct POSIXMPObj {
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
-    } else if (!from_meta(_oid, _owner)) {
+    } else {
       init_gen(driver, _oid, _owner);
     }
   }
@@ -1209,16 +1218,6 @@ struct POSIXMPObj {
       meta += "." + upload_id;
   }
   void init_gen(POSIXDriver* driver, const std::string& _oid, ACLOwner& _owner);
-  bool from_meta(const std::string& meta, ACLOwner& _owner) {
-    int end_pos = meta.length();
-    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
-    if (mid_pos < 0)
-      return false;
-    oid = meta.substr(0, mid_pos);
-    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
-    init(oid, upload_id, _owner);
-    return true;
-  }
   void clear() {
     oid = "";
     meta = "";
