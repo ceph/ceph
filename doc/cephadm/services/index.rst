@@ -22,6 +22,7 @@ for details on individual services:
     smb
     mgmt-gateway
     oauth2-proxy
+    agent
 
 
 Service Status

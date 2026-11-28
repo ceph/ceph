@@ -1,10 +1,7 @@
 import json
 from unittest.mock import patch
 
-from ceph.deployment.service_spec import (
-    PlacementSpec,
-    ServiceSpec,
-)
+from cephadm.agent import CephadmAgentHelpers
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.module import CephadmOrchestrator
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
@@ -28,7 +25,10 @@ class TestAgent:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_deploy_cephadm_agent(self, _run_cephadm, _get_ceph_volume_image, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        agent_spec = ServiceSpec(service_type="agent", placement=PlacementSpec(count=1))
+        # the agent service is owned by use_agent: 'orch apply' accepts only
+        # the default spec, and 'orch rm' is refused while use_agent is true
+        cephadm_module.use_agent = True
+        agent_spec = CephadmAgentHelpers.agent_spec()
         agent_config = {
             "agent.json": (
                 "{\"target_ip\": \"::1\", "
@@ -45,7 +45,8 @@ class TestAgent:
             "listener.key": f"{ceph_generated_key}",
         }
 
-        with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test'), \
+                patch('cephadm.agent.CephadmAgentHelpers.check_agent_service_remove'):
             with with_service(cephadm_module, agent_spec):
                 _run_cephadm.assert_called_with(
                     "test",
