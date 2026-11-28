@@ -17,7 +17,10 @@ import {
   PublicAddress,
   SMBCluster,
   CLIENT_COMPAT,
-  ClientCompat
+  ClientCompat,
+  DEBUG_LEVEL,
+  DEBUG_LEVEL_TIERS,
+  SMBDebugLevel
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
@@ -55,8 +58,10 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   hasOrchestrator: boolean;
   orchStatus$: Observable<any>;
   allClustering: string[] = [];
+  allDebugLevels: string[] = Object.values(DEBUG_LEVEL);
   CLUSTERING = CLUSTERING;
   AUTHMODE = AUTHMODE;
+  DEBUG_LEVEL = DEBUG_LEVEL;
   selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   action: string;
@@ -161,6 +166,11 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         if (this.clusterResponse.placement.count) {
           this.smbForm.get('count').setValue(this.clusterResponse.placement.count);
         }
+        if (this.clusterResponse.debug_level?.samba) {
+          this.smbForm
+            .get('debug_level')
+            .setValue(this.normalizeDebugLevel(this.clusterResponse.debug_level.samba));
+        }
         if (pubAddresses?.length) {
           pubAddresses.forEach((pubAddress: PublicAddress) => {
             publicAddrsFormArray.push(
@@ -219,7 +229,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
       ),
       public_addrs: new FormArray([]),
-      client_compat: [false]
+      client_compat: [false],
+      debug_level: [DEBUG_LEVEL.Error]
     });
 
     this.orchService.status().subscribe((status) => {
@@ -396,11 +407,47 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       : CLIENT_COMPAT.Default;
     requestModel.cluster_resource.client_compat = clientCompat;
 
+    const debugLevel = this.buildDebugLevel(rawFormValue.debug_level);
+    if (debugLevel) {
+      requestModel.cluster_resource.debug_level = debugLevel;
+    }
+
     if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
     }
 
     return requestModel;
+  }
+
+  private buildDebugLevel(sambaLevel?: string): SMBDebugLevel | undefined {
+    const debugLevel: SMBDebugLevel = {};
+    if (sambaLevel) {
+      debugLevel.samba = sambaLevel;
+    }
+    // Preserve an existing CTDB level set outside the dashboard (e.g. CLI).
+    if (this.isEdit && this.clusterResponse?.debug_level?.ctdb) {
+      debugLevel.ctdb = this.clusterResponse.debug_level.ctdb;
+    }
+    return Object.keys(debugLevel).length ? debugLevel : undefined;
+  }
+
+  private normalizeDebugLevel(value?: string): string {
+    if (!value) {
+      return DEBUG_LEVEL.Error;
+    }
+    const upper = value.toUpperCase();
+    if (this.allDebugLevels.includes(upper)) {
+      return upper;
+    }
+    if (/^\d+$/.test(value)) {
+      const numeric = Number(value);
+      for (const [name, low, high] of DEBUG_LEVEL_TIERS) {
+        if (numeric >= low && numeric <= high) {
+          return name;
+        }
+      }
+    }
+    return DEBUG_LEVEL.Error;
   }
 
   getPlacementSpec(values: CephServicePlacement) {

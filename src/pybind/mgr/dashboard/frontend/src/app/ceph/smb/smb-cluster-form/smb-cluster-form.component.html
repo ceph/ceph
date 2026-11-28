@@ -433,6 +433,24 @@
               }
             </cds-select>
           </div>
+          <!-- Debug Level -->
+          <div class="form-item">
+            <cds-select
+              formControlName="debug_level"
+              for="debug_level"
+              label="Debug level"
+              id="debug_level"
+              helperText="Samba logging level."
+              i18n-helperText
+              i18n-label
+            >
+              @for (level of allDebugLevels; track level) {
+                <option [value]="level">
+                  {{ level | titlecase }}
+                </option>
+              }
+            </cds-select>
+          </div>
           @if (
             (smbForm.get('count').value > 1 &&
               smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Default) ||
