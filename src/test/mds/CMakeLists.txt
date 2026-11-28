@@ -1,3 +1,11 @@
+# unittest_mds_client_snap
+add_executable(unittest_mds_client_snap
+  TestClientSnap.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mds_client_snap)
+target_link_libraries(unittest_mds_client_snap ceph-common global)
+
 # unittest_mds_authcap
 add_executable(unittest_mds_authcap
   TestMDSAuthCaps.cc
