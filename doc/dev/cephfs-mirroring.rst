@@ -59,6 +59,13 @@ Spawn a mirror daemon by using `systemctl(1)` unit files:
    systemctl enable cephfs-mirror@mirror
    systemctl start cephfs-mirror@mirror
 
+For clusters managed via `cephadm`:
+
+.. prompt:: bash $
+
+   ceph orch apply cephfs-mirror
+   ceph orch rm cephfs-mirror
+
 Run the `cephfs-mirror` daemon in the foreground by running the following
 command with the ``-f`` option:
 
@@ -108,11 +115,11 @@ Mirroring Module and Interface
 ------------------------------
 
 The mirroring module provides an interface for managing directory snapshot
-mirroring. The module is implemented as a Ceph Manager plugin. The mirroring
-module does not manage the spawning of (and terminating of) the mirror
-daemons. `systemctl(1)` is the preferred way to start and stop mirror daemons.
-In the future, mirror daemons will be deployed and managed by `cephadm`
-(Tracker: http://tracker.ceph.com/issues/47261).
+mirroring. The module is implemented as a Ceph Manager plugin.
+
+.. note:: The mirroring module does not manage the spawning of (and terminating
+   of) the mirror daemons. That is managed via `systemctl(1)` or `cephadm`. See
+   `Starting Mirror Daemon`_.
 
 The manager module is responsible for assigning directories to mirror daemons
 for synchronization. Multiple mirror daemons can be spawned to achieve
