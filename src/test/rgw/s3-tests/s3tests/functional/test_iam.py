@@ -1581,6 +1581,52 @@ def test_account_group_update(iam_root):
     assert new_name == groups[0]['GroupName']
     assert group_id == groups[0]['GroupId']
 
+@pytest.mark.group
+@pytest.mark.iam_account
+def test_account_group_user_update(iam_root):
+    path = get_iam_path_prefix()
+    name = make_iam_name('G1')
+    response = iam_root.create_group(GroupName=name, Path=path)
+    group_id = response['Group']['GroupId']
+
+    username = make_iam_name('U1')
+    iam_root.create_user(UserName=username, Path=path)
+
+    iam_root.add_user_to_group(GroupName=name, UserName=username)
+
+    response = iam_root.get_group(GroupName=name)
+    users = response['Users']
+    assert len(users) == 1
+    assert username == users[0]['UserName']
+    assert path == users[0]['Path']
+    arn = users[0]['Arn']
+    assert arn.startswith('arn:aws:iam:')
+    assert arn.endswith(f':user{path}{username}')
+
+    new_username = make_iam_name('U2')
+    iam_root.update_user(UserName=username, NewUserName=new_username)
+
+    response = iam_root.get_group(GroupName=name)
+    users = response['Users']
+    assert len(users) == 1
+    assert new_username == users[0]['UserName']
+    assert path == users[0]['Path']
+    arn = users[0]['Arn']
+    assert arn.startswith('arn:aws:iam:')
+    assert arn.endswith(f':user{path}{new_username}')
+
+    new_path = path + 'new/'
+    iam_root.update_user(UserName=new_username, NewPath=new_path)
+
+    response = iam_root.get_group(GroupName=name)
+    users = response['Users']
+    assert len(users) == 1
+    assert new_username == users[0]['UserName']
+    assert new_path == users[0]['Path']
+    arn = users[0]['Arn']
+    assert arn.startswith('arn:aws:iam:')
+    assert arn.endswith(f':user{new_path}{new_username}')
+
 
 # IAM GroupPolicy apis
 @pytest.mark.group_policy
