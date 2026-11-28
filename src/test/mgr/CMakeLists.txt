@@ -34,6 +34,20 @@ target_link_libraries(unittest_mgr_daemonstate
   Python3::Python
 )
 
+# unittest_mgr_perfcounterinstance
+# Scaffolding (test_perfcounterinstance.cc and this target) cherry-picked from
+# PR https://github.com/ceph/ceph/pull/71237 as a temporary measure until it
+# merges; reconcile when the PR lands.
+add_executable(unittest_mgr_perfcounterinstance
+  test_perfcounterinstance.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc
+)
+add_ceph_unittest(unittest_mgr_perfcounterinstance)
+target_link_libraries(unittest_mgr_perfcounterinstance
+  ceph-common
+  Python3::Python
+)
+
 # unittest_mgr_mgrcap
 add_executable(unittest_mgr_mgrcap
   test_mgrcap.cc
@@ -92,6 +106,20 @@ if(WITH_LTTNG)
   add_dependencies(unittest_mgr_mgroprequest mgr_op_tp)
 endif()
 target_link_libraries(unittest_mgr_mgroprequest
+  ceph-common
+  global
+  Python3::Python
+)
+
+# unittest_mgr_mgrclient
+add_executable(unittest_mgr_mgrclient
+  test_mgrclient.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrClient.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+)
+add_ceph_unittest(unittest_mgr_mgrclient)
+target_link_libraries(unittest_mgr_mgrclient
   ceph-common
   global
   Python3::Python
