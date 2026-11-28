@@ -20,6 +20,17 @@ target_link_libraries(unittest_mgr_daemonkey
   ceph-common
 )
 
+# unittest_mgr_daemonhealthmetriccollector
+add_executable(unittest_mgr_daemonhealthmetriccollector
+  test_daemonhealthmetriccollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+)
+add_ceph_unittest(unittest_mgr_daemonhealthmetriccollector)
+target_link_libraries(unittest_mgr_daemonhealthmetriccollector
+  ceph-common
+)
+
 # unittest_mgr_daemonstate
 add_executable(unittest_mgr_daemonstate
   test_daemonstate.cc
