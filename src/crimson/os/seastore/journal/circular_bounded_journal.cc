@@ -136,7 +136,8 @@ CircularBoundedJournal::submit_record(
   if (is_trim_transaction(t_src)) {
     co_await update_journal_tail(
       trimmer.get_dirty_tail(),
-      trimmer.get_alloc_tail());
+      trimmer.get_alloc_tail(),
+      trimmer.get_log_tail());
   }
 }
 
@@ -342,8 +343,10 @@ Journal::replay_ret CircularBoundedJournal::replay(
   DEBUG("header : {}", cjs.get_cbj_header());
   cjs.set_initialized(true);
   std::map<paddr_t, std::pair<CachedExtentRef, uint32_t>> crc_info;
-  auto tail = get_dirty_tail() <= get_alloc_tail() ?
-    get_dirty_tail() : get_alloc_tail();
+  auto tail = std::min(get_dirty_tail(), get_alloc_tail());
+  if (get_log_tail() != JOURNAL_SEQ_NULL) {
+    tail = std::min(tail, get_log_tail());
+  }
   set_written_to(tail);
   // the first pass to find the real journal tail.
   auto find_tail = [this](
@@ -354,7 +357,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
       journal_tail_delta_t tails;
       decode(tails, e.bl);
       cjs.update_journal_tail_on_startup(
-        tails.dirty_tail, tails.alloc_tail);
+        tails.dirty_tail, tails.alloc_tail, tails.log_tail);
     }
     return replay_ertr::make_ready_future<bool>(true);
   };
@@ -374,6 +377,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
         e,
         get_dirty_tail(),
         get_alloc_tail(),
+	get_log_tail(),
         modify_time
       ).safe_then([&e, &crc_info](auto ret) {
         auto [applied, ext] = ret;
@@ -402,7 +406,8 @@ Journal::replay_ret CircularBoundedJournal::replay(
   }
   trimmer.update_journal_tails(
     get_dirty_tail(),
-    get_alloc_tail());
+    get_alloc_tail(),
+    get_log_tail());
 }
 
 void CircularBoundedJournal::register_metrics()

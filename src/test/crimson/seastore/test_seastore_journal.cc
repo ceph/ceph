@@ -104,7 +104,9 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   journal_seq_t get_alloc_tail() const final { return dummy_tail; }
 
-  void update_journal_tails(journal_seq_t, journal_seq_t) final {}
+  journal_seq_t get_log_tail() const final { return dummy_tail; }
+
+  void update_journal_tails(journal_seq_t, journal_seq_t, journal_seq_t) final {}
 
   bool try_reserve_inline_usage(std::size_t) final { return true; }
 
@@ -212,6 +214,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
        &delta_checker]
       (const auto &offsets,
        const auto &di,
+       const journal_seq_t &,
        const journal_seq_t &,
        const journal_seq_t &,
        auto t) mutable {

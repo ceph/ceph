@@ -766,6 +766,18 @@ public:
     return background_process.get_cold_device_id();
   }
 
+  using post_trim_callback_t =
+    std::function<base_ertr::future<>(journal_seq_t target)>;
+  void set_post_trim_callback(post_trim_callback_t cb)
+  {
+    background_process.set_post_trim_callback(std::move(cb));
+  }
+
+  base_ertr::future<> post_trim_callback(journal_seq_t target)
+  {
+    return background_process.post_trim_callback(target);
+  }
+
 private:
   rewrite_gen_t adjust_generation(
       data_category_t category,
@@ -1128,6 +1140,14 @@ private:
 
     bool is_no_background() const {
       return !trimmer || !main_cleaner;
+    }
+    
+    void set_post_trim_callback(post_trim_callback_t cb) {
+      trimmer->set_post_trim_callback(cb);
+    }
+
+    base_ertr::future<> post_trim_callback(journal_seq_t target) {
+      return trimmer->post_trim_callback(target);
     }
 
     bool is_full() const {

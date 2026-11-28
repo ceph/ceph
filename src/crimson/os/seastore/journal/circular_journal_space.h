@@ -122,12 +122,16 @@ class CircularJournalSpace : public JournalAllocator {
     // start offset of CircularBoundedJournal in the device
     journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
+    journal_seq_t log_tail;
     segment_nonce_t magic;
 
     DENC(cbj_header_t, v, p) {
-      DENC_START(1, 1, p);
+      DENC_START(2, 1, p);
       denc(v.dirty_tail, p);
       denc(v.alloc_tail, p);
+      if (struct_v >= 2) {
+	denc(v.log_tail, p);
+      }
       denc(v.magic, p);
       DENC_FINISH(p);
     }
@@ -163,6 +167,16 @@ class CircularJournalSpace : public JournalAllocator {
   journal_seq_t get_alloc_tail() const {
     return header.alloc_tail;
   }
+  journal_seq_t get_log_tail() const {
+    return header.log_tail;
+  }
+  journal_seq_t get_reclaim_tail() const {
+    auto log_tail = get_log_tail();
+    if (log_tail == JOURNAL_SEQ_NULL) {
+      return get_dirty_tail();
+    }
+    return std::min(get_dirty_tail(), get_log_tail());
+  }
 
   /* 
     Size-related interfaces
@@ -179,7 +193,7 @@ class CircularJournalSpace : public JournalAllocator {
 
   size_t get_records_used_size() const {
     auto rbm_written_to = get_rbm_addr(get_written_to());
-    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    auto rbm_tail = get_rbm_addr(get_reclaim_tail());
     return rbm_written_to >= rbm_tail ?
       rbm_written_to - rbm_tail :
       rbm_written_to + get_records_total_size() + get_block_size()
@@ -199,7 +213,7 @@ class CircularJournalSpace : public JournalAllocator {
   }
   bool is_available_size(uint64_t size) {
     auto rbm_written_to = get_rbm_addr(get_written_to());
-    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    auto rbm_tail = get_rbm_addr(get_reclaim_tail());
     if (rbm_written_to > rbm_tail && 
 	(get_journal_end() - rbm_written_to) < size &&
 	size > (get_records_used_size() - 
@@ -222,11 +236,12 @@ class CircularJournalSpace : public JournalAllocator {
 
   void update_journal_tail_on_startup(
     journal_seq_t dirty,
-    journal_seq_t alloc) {
+    journal_seq_t alloc,
+    journal_seq_t log) {
     LOG_PREFIX(CircularJournalSpace);
     SUBDEBUG(seastore_journal,
-      "update tail during replay: dirty={} alloc={}",
-      dirty, alloc);
+      "update tail during replay: dirty={} alloc={} log={}",
+      dirty, alloc, log);
     if (dirty > header.dirty_tail ||
         header.dirty_tail == JOURNAL_SEQ_NULL) {
       header.dirty_tail = dirty;
@@ -235,13 +250,20 @@ class CircularJournalSpace : public JournalAllocator {
         header.alloc_tail == JOURNAL_SEQ_NULL) {
       header.alloc_tail = alloc;
     }
+    if (log != JOURNAL_SEQ_NULL &&
+	(header.log_tail == JOURNAL_SEQ_NULL ||
+	 log > header.log_tail)) {
+      header.log_tail = log;
+    }
   }
 
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
-    journal_seq_t alloc) {
+    journal_seq_t alloc,
+    journal_seq_t log) {
     header.dirty_tail = dirty;
     header.alloc_tail = alloc;
+    header.log_tail = log;
     return write_header(
     ).handle_error(
       crimson::ct_error::assert_all(
