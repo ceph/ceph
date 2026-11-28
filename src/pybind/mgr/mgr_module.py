@@ -246,6 +246,17 @@ class OSDMap(ceph_module.BasePyOSDMap):
             inc,
             max_deviation, max_iterations, pools)
 
+    def try_pg_upmap(self,
+                     pool_id: int,
+                     ps: int,
+                     overfull: List[int],
+                     underfull: List[int],
+                     more_underfull: Optional[List[int]] = None) -> Optional[Dict[str, List[int]]]:
+        """Return {'orig': [...], 'out': [...]} if a CRUSH-legal remap exists, else None."""
+        return self._try_pg_upmap(
+            pool_id, ps, overfull, underfull,
+            [] if more_underfull is None else more_underfull)
+
     def balance_primaries(self, pool_id: int,
                           inc: 'OSDMapIncremental') -> int:
         return self._balance_primaries(pool_id, inc)
@@ -292,6 +303,13 @@ class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
         { 0: 3.4, 1: 3.3, 2: 3.334 }
         """
         return self._set_crush_compat_weight_set_weights(weightmap)
+
+    def set_pg_upmap_items(self, items: Dict[str, List[List[int]]]) -> None:
+        """
+        items maps pgid string -> list of [from_osd, to_osd] remapping pairs.
+        e.g. { '1.0': [[0, 2], [1, 3]] }
+        """
+        return self._set_pg_upmap_items(items)
 
 
 class CRUSHMap(ceph_module.BasePyCRUSH):

@@ -60,7 +60,8 @@ function TEST_balancer() {
     test "$PLANS" = "[]" || return 1
     ceph balancer eval || return 1
     EVAL="$(ceph balancer eval)"
-    test "$EVAL" = "current cluster score 0.000000 (lower is better)"
+    # Score line is stable; later lines may include read_balance_scores.
+    echo "$EVAL" | grep -q '^current cluster score 0.000000 (lower is better)$' || return 1
     ceph balancer eval-verbose || return 1
 
     ceph balancer pool add $TEST_POOL1 || return 1
@@ -104,7 +105,8 @@ function TEST_balancer() {
     ! ceph balancer optimize plan_upmap $TEST_POOL || return 1
     ceph balancer status || return 1
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
-    test "$RESULT" = "Unable to find further optimization, or pool(s) pg_num is decreasing, or distribution is already perfect" || return 1
+    # Message updated when upmap began deferring on unsettled pg_num (splits and merges).
+    test "$RESULT" = "Unable to find further optimization, or pool(s) pg_num is still settling, or distribution is already perfect" || return 1
 
     ceph balancer on || return 1
     ACTIVE=$(ceph balancer status | jq '.active')
@@ -213,6 +215,71 @@ function TEST_balancer2() {
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[4].pgs')
     test $PGS -ge $MIN -a $PGS -le $MAX || return 1
 
+    teardown $dir || return 1
+}
+
+function TEST_balancer_upmap_utilization() {
+    local dir=$1
+
+    # Keep PG count stable so the utilization planner is not racing the autoscaler.
+    CEPH_ARGS+="--osd_pool_default_pg_autoscale_mode=off "
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    run_osd $dir 3 || return 1
+    create_pool $TEST_POOL1 8
+
+    wait_for_clean || return 1
+
+    ceph osd set-require-min-compat-client luminous || return 1
+    ceph balancer off || return 1
+    ceph balancer mode upmap-utilization || return 1
+    eval MODE=$(ceph balancer status | jq '.mode')
+    test "$MODE" = "upmap-utilization" || return 1
+
+    # Empty/even cluster: already within the stop gate (distinct EALREADY text).
+    ! ceph balancer optimize plan_util_empty $TEST_POOL1 || return 1
+    ceph balancer status || return 1
+    eval RESULT=$(ceph balancer status | jq '.optimize_result')
+    echo "$RESULT" | grep -q "configured deviation" || return 1
+
+    # Unsettled pg_num settle-deferral is covered by
+    # src/pybind/mgr/balancer/tests/test_utilization.py::test_pool_pg_num_unsettled
+
+    # Create byte skew: write, take one OSD out, write more, bring it back underfilled.
+    timeout 60 rados -p $TEST_POOL1 bench 10 write -b 1048576 --no-cleanup || return 1
+    wait_for_clean || return 1
+    ceph osd out 3 || return 1
+    wait_for_clean || return 1
+    timeout 60 rados -p $TEST_POOL1 bench 15 write -b 1048576 --no-cleanup || return 1
+    wait_for_clean || return 1
+    ceph osd in 3 || return 1
+    # Allow optimize while remapped: rejoined OSD is still low on used bytes.
+    ceph config set global target_max_misplaced_ratio 1.0 || return 1
+    ceph config set mgr mgr/balancer/upmap_utilization_max_deviation 0.01 || return 1
+    ceph config set mgr mgr/balancer/upmap_utilization_deviation_mode minmax || return 1
+    ceph config set mgr mgr/balancer/upmap_utilization_max_optimizations 25 || return 1
+
+    OK=no
+    for i in $(seq 1 30)
+    do
+      if ceph balancer optimize plan_util $TEST_POOL1
+      then
+        OK=yes
+        break
+      fi
+      sleep 2
+    done
+    test "$OK" = "yes" || return 1
+    ceph balancer execute plan_util || return 1
+
+    ITEMS=$(ceph osd dump -f json | jq '.pg_upmap_items | length')
+    test "$ITEMS" -gt 0 || return 1
+
+    ceph balancer mode upmap || return 1
     teardown $dir || return 1
 }
 
