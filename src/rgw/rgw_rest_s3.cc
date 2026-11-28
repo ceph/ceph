@@ -679,7 +679,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       if (auto i = attrs.find(RGW_ATTR_CKSUM); i != attrs.end()) {
 	try {
 	  rgw::cksum::Cksum cksum;
-	  decode(cksum, i->second);
+	  // decode through an iterator: the whole-bufferlist decode() asserts
+	  // that every byte was consumed, and a failed assert is not a
+	  // buffer::error that the handler below can turn into "no checksum"
+	  auto bliter = i->second.cbegin();
+	  cksum.decode(bliter);
 	  rgw::cksum::ChecksumTypeResult cksum_type;
 	  if (multipart_part_num) {
 	    cksum_type = rgw::cksum::get_part_checksum_type(cksum);
