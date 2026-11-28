@@ -97,6 +97,8 @@ def with_cephadm_module(module_options=None, store=None):
             mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn'), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1'), \
+            mock.patch("cephadm.module.CephadmOrchestrator._ceph_get_metadata",
+                       lambda *_: None, create=True), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._request_agent_acks"), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._apply_agent", return_value=False), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._agent_down", return_value=False), \
