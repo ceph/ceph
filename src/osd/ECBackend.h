@@ -111,6 +111,8 @@ class ECBackend : public ECCommon {
   void clear_recovery_state();
   void cancel_recovery_op(const hobject_t &soid);
 
+  void assert_idle() const;
+
   void dump_recovery_info(ceph::Formatter *f) const;
 
   void call_write_ordered(std::function<void(void)> &&cb) {
