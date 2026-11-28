@@ -9,28 +9,41 @@ and rgw_client from [DEFAULT], and user_id, access_key and secret_key from
 [s3 main]. There are no defaults for them.
 
 Phases, in order:
-  1. PutVectors   - s3vtest creates one vector bucket and one index and loads an
-                    ann-benchmarks dataset into it (create_vector_bucket,
-                    create_index, insert_vectors).
+  1. PutVectors   - s3vtest creates one vector bucket with --indexes indexes and
+                    loads --vectors vectors into each of them (create_vector_bucket,
+                    create_index, insert_vectors). The vectors come from an
+                    ann-benchmarks dataset (--source dataset, every index gets the
+                    same rows) or from s3vtest's synthetic generator (--source
+                    random: --dim dimensions, --centroids clusters with Gaussian
+                    noise, derived from --seed). s3vtest sends the insert batches
+                    round-robin over the indexes, so with more than one index the
+                    in-flight PutVectors are spread over them.
   2. wait         - poll the RGW admin API (GET /admin/vectorbucket/rebuild) until
-                    the background index rebuild of that index is finished: no
-                    active build, at least one "finish" event, and no new event for
-                    --rebuild-quiet seconds. The admin API needs the main user to
-                    have the buckets=read cap, which is granted with radosgw-admin
-                    first, as the pytest suite does.
-  3. QueryVectors - s3vtest runs --queries queries against the built index
-                    (query_vectors step, no recall measurement).
-  4. GetVectors   - s3vtest fetches --get-percent of the inserted keys in batches
-                    of --get-batch keys, with data and metadata (get_vectors step).
-  5. cleanup      - s3vtest deletes the vector bucket, index and backing bucket
+                    the background index rebuilds of the bucket are finished: no
+                    active build, and no new rebuild event for --rebuild-quiet
+                    seconds. The admin API needs the main user to have the
+                    buckets=read cap, which is granted with radosgw-admin first,
+                    as the pytest suite does.
+  3. QueryVectors - s3vtest runs --queries queries against every index
+                    (query_vectors step, no recall measurement). The query vectors
+                    are the dataset's test set, or fresh synthetic vectors.
+  4. GetVectors   - s3vtest fetches --get-percent of the keys of every index in
+                    batches of --get-batch keys, with data and metadata
+                    (get_vectors step).
+  5. cleanup      - s3vtest deletes the vector bucket, indexes and backing bucket
                     (skipped with --keep).
+
+With many indexes the run is long: 100 indexes of 50000 fashion-mnist vectors
+upload about 16 GB, which is 10000 PutVectors calls.
 
 s3vtest is run with `podman run --rm -i --network host <image> run - --report json`,
 the job configuration is passed on standard input. Dataset files are kept in a
 named podman volume (default s3vtest-datasets), or in --datasets-dir on the host.
 
-Example:
+Examples:
   S3VTESTS_CONF=s3vtests.conf.SAMPLE ./s3vtest-basic-benchmark.py --threads 16
+  S3VTESTS_CONF=s3vtests.conf.SAMPLE ./s3vtest-basic-benchmark.py --indexes 100 --vectors 50000
+  S3VTESTS_CONF=s3vtests.conf.SAMPLE ./s3vtest-basic-benchmark.py --source random --dim 128 --vectors 500000
 """
 
 import argparse
@@ -76,14 +89,23 @@ def parse_args():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     w = p.add_argument_group("workload")
+    w.add_argument("--source", default="dataset", choices=["dataset", "random"],
+                   help="where the vectors come from (default %(default)s)")
     w.add_argument("--dataset", default="fashion-mnist-784-euclidean", choices=sorted(DATASETS),
-                   help="ann-benchmarks dataset (default %(default)s)")
-    w.add_argument("--vectors", type=int, help="vectors to insert (default: the whole dataset)")
+                   help="ann-benchmarks dataset, with --source dataset (default %(default)s)")
+    w.add_argument("--dim", type=int, default=128, help="dimension of random vectors (default %(default)s)")
+    w.add_argument("--metric", default="euclidean", choices=["euclidean", "cosine"],
+                   help="distance metric of random vectors (default %(default)s)")
+    w.add_argument("--centroids", type=int, default=16,
+                   help="clusters of the random vectors; stddev 0.1 around centroids in [-1, 1] (default %(default)s)")
+    w.add_argument("--indexes", type=int, default=1, help="indexes in the vector bucket (default %(default)s)")
+    w.add_argument("--vectors", type=int,
+                   help="vectors to insert into every index (default: the whole dataset; required with --source random)")
     w.add_argument("--batch-size", type=int, default=500, help="vectors per PutVectors (default %(default)s)")
     w.add_argument("--threads", type=int, default=16, help="in-flight requests in every phase (default %(default)s)")
-    w.add_argument("--queries", type=int, default=1000, help="QueryVectors calls (default %(default)s)")
+    w.add_argument("--queries", type=int, default=1000, help="QueryVectors calls per index (default %(default)s)")
     w.add_argument("--top-k", type=int, default=10)
-    w.add_argument("--get-percent", type=float, default=50, help="percent of inserted keys fetched (default %(default)s)")
+    w.add_argument("--get-percent", type=float, default=50, help="percent of the keys of every index fetched (default %(default)s)")
     w.add_argument("--get-batch", type=int, default=100, help="keys per GetVectors (default %(default)s)")
     w.add_argument("--prefix", default="s3vt-basic-", help="vector bucket prefix (default %(default)s)")
     w.add_argument("--key-prefix", default="vec-")
@@ -91,7 +113,7 @@ def parse_args():
 
     r = p.add_argument_group("rebuild wait")
     r.add_argument("--rebuild-quiet", type=float, default=15,
-                   help="seconds without new rebuild events before the index counts as built (default %(default)s)")
+                   help="seconds without new rebuild events before the indexes count as built (default %(default)s)")
     r.add_argument("--rebuild-timeout", type=float, default=1800, help="seconds (default %(default)s)")
     r.add_argument("--no-wait", action="store_true", help="skip the rebuild wait")
 
@@ -171,8 +193,18 @@ def podman_cmd(args, extra):
     return cmd + [args.image] + extra
 
 
-def job_config(args, zone, flow):
+def vector_source(args):
+    """(label, dimension, metric, s3vtest `vectors.source`) of the configured source."""
+    if args.source == "random":
+        spec = {"centroids": args.centroids, "centroid_range": [-1.0, 1.0], "mean": 0.0, "stddev": 0.1,
+                "normalize": args.metric == "cosine"}
+        return f"random ({args.centroids} centroids)", args.dim, args.metric, {"random": spec}
     dim, metric, _ = DATASETS[args.dataset]
+    return args.dataset, dim, metric, {"dataset": args.dataset}
+
+
+def job_config(args, zone, flow):
+    _, dim, metric, source = vector_source(args)
     return {
         "connection": {
             "endpoint": zone.endpoint,
@@ -183,12 +215,12 @@ def job_config(args, zone, flow):
         },
         "entities": {
             "vector_buckets": {"count": 1, "prefix": args.prefix, "create_backing_bucket": zone.backing_bucket},
-            "indexes_per_bucket": {"count": 1, "prefix": "idx-"},
+            "indexes_per_bucket": {"count": args.indexes, "prefix": "idx-"},
             "index": {"dimension": dim, "metric": metric},
             "vectors_per_index": args.vectors,
             "insert_batch_size": args.batch_size,
             "key_prefix": args.key_prefix,
-            "vectors": {"source": {"dataset": args.dataset}},
+            "vectors": {"source": source},
         },
         "flow": flow,
         "execution": {"threads": args.threads, "repeat": 1, "seed": args.seed,
@@ -224,9 +256,9 @@ def s3vtest_cleanup(args, zone):
 
 # ---------------------------------------------------------------- rebuild wait
 
-def wait_for_rebuild(args, zone, bucket, index, since):
-    """Poll the admin API until the index has no active build, at least one finish
-    event was recorded since `since`, and no event arrived for --rebuild-quiet seconds."""
+def wait_for_rebuild(args, zone, bucket, since):
+    """Poll the admin API until no index of the bucket has an active build and no
+    rebuild event arrived for --rebuild-quiet seconds. Events since `since` count."""
     params = {"vectorbucket": bucket, "since": str(since)}
     deadline = time.monotonic() + args.rebuild_timeout
     last_count, last_change = -1, time.monotonic()
@@ -237,27 +269,27 @@ def wait_for_rebuild(args, zone, bucket, index, since):
         except urllib.error.HTTPError as e:
             sys.exit(f"admin API GET /admin/vectorbucket/rebuild: HTTP {e.code} {e.read()[:200]!r} "
                      f"(user {zone.user_id} needs the buckets=read cap)")
-        active = sum(1 for b in st.get("active_builds", []) if b.get("index") == index)
-        finishes, results, count = 0, {}, 0
+        active = len(st.get("active_builds", []))
+        finishes, results, built, count = 0, {}, set(), 0
         for ev in st.get("rebuild_events", []):
-            if ev.get("index") != index:
-                continue
             count += 1
             if ev["type"] == "finish":
                 finishes += 1
+                built.add(ev.get("index"))
                 results[ev.get("result", "?")] = results.get(ev.get("result", "?"), 0) + 1
         if count != last_count:
             last_count, last_change = count, time.monotonic()
-            log(f"rebuild: events={count} finishes={finishes} results={results} active={active}")
+            log(f"rebuild: events={count} finishes={finishes} indexes={len(built)} results={results} active={active}")
         quiet = time.monotonic() - last_change
         if active == 0 and quiet >= args.rebuild_quiet:
             if finishes == 0:
                 log(f"rebuild: no rebuild event in {quiet:.0f}s; assuming none was needed")
             else:
-                log(f"rebuild: done, {finishes} build(s) {results}, quiet for {quiet:.0f}s")
-            return {"finishes": finishes, "results": results, "wait_secs": time.monotonic() - t0}
+                log(f"rebuild: done, {finishes} build(s) of {len(built)} index(es) {results}, quiet for {quiet:.0f}s")
+            return {"finishes": finishes, "indexes": len(built), "results": results,
+                    "wait_secs": time.monotonic() - t0}
         if time.monotonic() > deadline:
-            sys.exit(f"rebuild of {bucket}/{index} not finished after {args.rebuild_timeout}s "
+            sys.exit(f"rebuilds of {bucket} not finished after {args.rebuild_timeout}s "
                      f"(active={active}, finishes={finishes}, results={results})")
         time.sleep(2)
 
@@ -292,26 +324,31 @@ def main():
         sys.exit("point the S3VTESTS_CONF environment variable to a configuration file "
                  "(see s3vtests.conf.SAMPLE)")
     zone = Zone()
-    dim, metric, size = DATASETS[args.dataset]
-    if args.vectors is None:
-        args.vectors = size
-    if args.vectors > size:
-        sys.exit(f"{args.dataset} has only {size} vectors")
-    bucket, index = f"{args.prefix}0", "idx-0"
-    log(f"{args.dataset}: {args.vectors} vectors, dim {dim}, {metric}; bucket {bucket} index {index}; "
-        f"{args.threads} threads; endpoint {zone.endpoint} user {zone.user_id}; "
+    label, dim, metric, _ = vector_source(args)
+    if args.source == "random":
+        if args.vectors is None:
+            sys.exit("--vectors is required with --source random")
+    else:
+        size = DATASETS[args.dataset][2]
+        if args.vectors is None:
+            args.vectors = size
+        if args.vectors > size:
+            sys.exit(f"{args.dataset} has only {size} vectors")
+    bucket = f"{args.prefix}0"
+    log(f"{label}: {args.vectors} vectors per index, dim {dim}, {metric}; bucket {bucket} with "
+        f"{args.indexes} index(es); {args.threads} threads; endpoint {zone.endpoint} user {zone.user_id}; "
         f"backing bucket {zone.backing_bucket}")
     if not args.no_wait:
         zone.grant_admin_caps()
 
     since = int(time.time()) - 5          # admin API filter, epoch seconds
-    results = {"dataset": args.dataset, "vectors": args.vectors, "dim": dim, "metric": metric,
-               "threads": args.threads, "endpoint": zone.endpoint, "steps": []}
+    results = {"source": label, "indexes": args.indexes, "vectors": args.vectors, "dim": dim,
+               "metric": metric, "threads": args.threads, "endpoint": zone.endpoint, "steps": []}
 
     put = run_s3vtest(args, zone, "put_vectors", ["create_vector_bucket", "create_index", "insert_vectors"])
     for s in put:
         if s["step"] == "insert_vectors":
-            s["vectors"] = args.vectors
+            s["vectors"] = args.vectors * args.indexes
     results["steps"] += put
     if any(s["errors"] for s in put):
         print_table(put, "put_vectors phase failed; not continuing")
@@ -320,7 +357,7 @@ def main():
     if args.no_wait:
         log("rebuild: wait skipped")
     else:
-        results["rebuild"] = wait_for_rebuild(args, zone, bucket, index, since)
+        results["rebuild"] = wait_for_rebuild(args, zone, bucket, since)
 
     results["steps"] += run_s3vtest(args, zone, "query_vectors", [
         {"query_vectors": {"count": args.queries, "top_k": args.top_k, "source": "auto",
@@ -330,7 +367,7 @@ def main():
         {"get_vectors": {"percent": args.get_percent, "batch_size": args.get_batch,
                          "return_data": True, "return_metadata": True}}])
     for s in get:
-        s["vectors"] = int(args.vectors * args.get_percent / 100)
+        s["vectors"] = int(args.vectors * args.get_percent / 100) * args.indexes
     results["steps"] += get
 
     if not args.keep:
@@ -338,12 +375,13 @@ def main():
 
     print()
     print_table(results["steps"],
-                f"{args.dataset}: {args.vectors} vectors x {dim} dims ({metric}), "
+                f"{label}: {args.indexes} index(es) x {args.vectors} vectors x {dim} dims ({metric}), "
                 f"PutVectors batch {args.batch_size}, QueryVectors top_k {args.top_k}, "
                 f"GetVectors batch {args.get_batch}, {args.threads} threads")
     if "rebuild" in results:
         r = results["rebuild"]
-        print(f"index rebuild: {r['finishes']} build(s) {r['results']}, waited {r['wait_secs']:.0f}s")
+        print(f"index rebuild: {r['finishes']} build(s) of {r['indexes']} index(es) {r['results']}, "
+              f"waited {r['wait_secs']:.0f}s")
     if args.json_out:
         with open(args.json_out, "w") as f:
             json.dump(results, f, indent=1)
