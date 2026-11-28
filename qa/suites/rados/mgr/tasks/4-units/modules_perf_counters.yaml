@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MGR_DOWN
+tasks:
+  - workunit:
+      clients:
+        client.0:
+          - mgr/test_mgr_modules_perf_counters.sh
