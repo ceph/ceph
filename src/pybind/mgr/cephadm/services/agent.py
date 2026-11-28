@@ -90,6 +90,14 @@ class CephadmAgent(CephService):
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
         tls_creds = self.get_certificates(daemon_spec)
+        if not tls_creds.cert or not tls_creds.key:
+            # An agent without listener credentials keeps reporting but
+            # can't be reached by the mgr, so don't deploy one.
+            raise OrchestratorError(
+                f'Cannot generate the agent config for host {daemon_spec.host}: '
+                'no TLS certificate/key for the agent listener. Check that the '
+                'agent spec uses ssl: true and certificate_source: cephadm-signed '
+                "('ceph orch ls agent --export')")
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
