@@ -4,6 +4,7 @@ import os
 from ..exception import VolumeException
 from .template import GroupTemplate
 
+
 class Index(GroupTemplate):
     GROUP_NAME = "_index"
 
