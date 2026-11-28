@@ -295,10 +295,12 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "umbrella" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "cephx_auth_aes256k")'
     jq_success "$jqinput" "$jqfilter" "cephx_auth_aes256k" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "config_history_trim")'
+    jq_success "$jqinput" "$jqfilter" "config_history_trim" || return 1
     jqfilter='.monmap.features.persistent | length == 15'
     jqfilter='.monmap.features.persistent[]|select(. == "vampire")'
     jq_success "$jqinput" "$jqfilter" "vampire" || return 1
-    jqfilter='.monmap.features.persistent | length == 16'
+    jqfilter='.monmap.features.persistent | length == 17'
     jq_success "$jqinput" "$jqfilter" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig

@@ -1,5 +1,24 @@
 >=22.0.0
 
+* mon: A new setting, mon_config_history_max_changesets, bounds the number of
+  configuration changesets retained in the Monitor central config store. Each
+  'ceph config set', 'ceph config rm', 'ceph config assimilate-conf' and 'ceph
+  config reset' records one changeset. Older changesets are now trimmed in
+  their entirety, which prevents the unbounded growth that triggers
+  MON_DISK_BIG on clusters where an autotuner rewrites options such as
+  osd_memory_target continuously. Trimming starts only once all Monitors have
+  been upgraded to a release that includes this change. 'ceph config log' no
+  longer reports trimmed changesets, and 'ceph config reset' now fails with
+  EINVAL when asked to revert to a changeset that has been trimmed, instead of
+  silently applying only the part of the history that still remains. Trimming
+  is bounded per monitor tick, so on a cluster that has already accumulated a
+  large backlog the initial trim runs in the background over a period of
+  hours. The space is only reclaimed once RocksDB compacts the monitor store;
+  run 'ceph tell mon.\* compact' after the initial trim completes to clear
+  MON_DISK_BIG promptly.
+  Related trackers:
+  - https://tracker.ceph.com/issues/67453
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
