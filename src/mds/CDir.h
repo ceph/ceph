@@ -690,6 +690,7 @@ protected:
   // -- commit --
   void _commit(version_t want, int op_prio);
   void _omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
+			bufferlist &header, snapid_t snap_purged_thru,
 			std::vector<dentry_commit_item> &to_set, bufferlist &dfts,
 			std::vector<std::string> &to_remove,
 			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
@@ -698,7 +699,7 @@ protected:
   void _omap_commit(int op_prio);
   void _parse_dentry(CDentry *dn, dentry_commit_item &item,
                      const std::set<snapid_t> *snaps, bufferlist &bl);
-  void _committed(int r, version_t v);
+  void _committed(int r, version_t v, snapid_t snap_purged_thru);
 
   static fnode_const_ptr empty_fnode;
   // fnode is a pointer to constant fnode_t, the constant fnode_t can be shared
@@ -729,6 +730,8 @@ protected:
   version_t committed_version = 0;
 
   mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
+  // Keep purge progress out of journaled fnodes until the removals reach disk.
+  snapid_t pending_snap_purge_target = 0;
 
   // lock nesting, freeze
   static int num_frozen_trees;
