@@ -888,6 +888,44 @@ function TEST_pool_migrate_changes_profile_contents() {
     ! ceph osd erasure-code-profile ls | grep -q '^mundo-k2-m1.migrate' || return 1
 }
 
+function wait_for_pool_field() {
+    local pool=$1
+    local field=$2
+    local value=$3
+    for i in $(seq 1 120); do
+        test "$(pool_field $pool $field)" = "$value" && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# Nothing changes the pg counts of a migration source, also once its migration
+# has completed: one started while pgp_num is still catching up with pg_num, as
+# after a pg_num increase, must not leave it with pg_num > pgp_num for good
+function TEST_pool_migrate_while_pgp_num_changes() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    ceph osd pool create mrep 4 4 replicated || return 1
+    ceph osd pool set mrep size 1 --yes-i-really-mean-it || return 1
+    ceph osd pool set mrep pgp_num 2 || return 1
+    wait_for_pool_field mrep pg_placement_num 2 || return 1
+
+    # without the mgr, pgp_num stays behind its target
+    kill_daemons $dir TERM mgr || return 1
+    ceph osd pool set mrep pgp_num 4 || return 1
+    test "$(pool_field mrep pg_placement_num)" = 2 || return 1
+
+    ceph osd pool migrate mrep --pool_type replicated --size 2 || return 1
+    test "$(pool_field .migrate-1 pg_placement_num_target)" = 4 || return 1
+    run_mgr $dir x || return 1
+    wait_for_pool_field mrep migration_src null || return 1
+    test "$(pool_field .migrate-1 pg_placement_num)" = 4 || return 1
+    test "$(pool_field .migrate-1 pg_placement_num_target)" = 4 || return 1
+}
+
 # The monitors run a command again after an election: a migration of a pool
 # that is being migrated to the layout it asks for changes nothing, also when
 # its options give the target its own rule and erasure code profile
