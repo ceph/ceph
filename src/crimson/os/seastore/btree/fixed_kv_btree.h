@@ -342,13 +342,21 @@ public:
       // Read and write must not be concurrent in the same transaction,
       // otherwise the nodes tracked here can become outdated unexpectedly.
       if (i.node.get()) {
+        // the nodes are not in the read_set, so they may have been
+        // invalidated by a concurrent commit.
+        c.cache.maybe_throw_lazy_read_stale(c.trans, *i.node);
         assert(i.node->is_valid());
-        assert(c.trans.is_weak() ||
+        // a valid stable node is always viewable for a lazy READ
+        // (READ never mutates)
+        assert(c.trans.is_weak() || c.trans.is_lazy_read() ||
           i.node->is_viewable_by_trans(c.trans).first);
         return ensure_internal_iertr::now();
       }
 
       auto get_parent = [c](auto &node) {
+        // an INVALID child has its parent_tracker reset -- guard before
+        // navigating up (lazy readers only)
+        c.cache.maybe_throw_lazy_read_stale(c.trans, *node);
         return node->get_parent_node(c.trans, c.cache
         ).si_then([node](auto parent) {
           auto child_meta = node->get_node_meta();
@@ -362,9 +370,12 @@ public:
 
       return fut.si_then([FNAME, c, depth, this, &i](auto p) {
         auto [child_meta, parent] = std::move(p);
+        // parent ref crossed a continuation boundary
+        c.cache.maybe_throw_lazy_read_stale(c.trans, *parent);
         assert(parent->is_valid());
         assert(parent->get_node_meta().is_parent_of(child_meta));
-        assert(parent->is_viewable_by_trans(c.trans).first);
+        assert(c.trans.is_lazy_read() ||
+               parent->is_viewable_by_trans(c.trans).first);
         std::ignore = c;
         std::ignore = this;
         auto iter = parent->upper_bound(child_meta.begin);
@@ -519,7 +530,10 @@ public:
               seastar::stop_iteration>(seastar::stop_iteration::yes);
           }
           return ensure_internal(c, start_from
-          ).si_then([&stop_f, &start_from] {
+          ).si_then([this, c, &stop_f, &start_from] {
+            // ensure_internal's checks ran in a prior continuation
+            c.cache.maybe_throw_lazy_read_stale(
+              c.trans, *get_internal(start_from).node);
             return seastar::futurize_invoke(stop_f, start_from);
           }).si_then([&start_from](bool stop) {
             if (stop) {
@@ -787,6 +801,8 @@ public:
     node_key_t addr)
   {
     LOG_PREFIX(FixedKVBtree::lower_bound_sync);
+    // commit-path only; lazy READ transactions never take this route
+    assert(!c.trans.is_lazy_read());
     auto depth = get_root().get_depth();
 #ifndef NDEBUG
     iterator iter{depth, iterator::state_t::FULL};
@@ -1999,8 +2015,10 @@ private:
     node_key_t key,
     uint16_t pos)
   {
+    c.cache.maybe_throw_lazy_read_stale(c.trans, *leaf);
     assert(leaf->is_valid());
-    assert(leaf->is_viewable_by_trans(c.trans).first);
+    assert(c.trans.is_lazy_read() ||
+           leaf->is_viewable_by_trans(c.trans).first);
 
     auto depth = get_root().get_depth();
 #ifndef NDEBUG
@@ -2233,7 +2251,9 @@ private:
     auto [found, fut] = get_root_node(c);
 
     auto on_found_internal =
-      [this, visitor, &iter](InternalNodeRef &root_node) {
+      [this, c, visitor, &iter](InternalNodeRef &root_node) {
+      // the root node ref may have crossed a continuation boundary
+      c.cache.maybe_throw_lazy_read_stale(c.trans, *root_node);
       iter.get_internal(get_root().get_depth()).node = root_node;
       if (visitor) (*visitor)(
         root_node->get_paddr(),
@@ -2245,7 +2265,9 @@ private:
       return lookup_root_iertr::now();
     };
     auto on_found_leaf =
-      [visitor, &iter, this](LeafNodeRef root_node) {
+      [c, visitor, &iter, this](LeafNodeRef root_node) {
+      // the root node ref may have crossed a continuation boundary
+      c.cache.maybe_throw_lazy_read_stale(c.trans, *root_node);
       iter.leaf.node = root_node;
       if (visitor) (*visitor)(
         root_node->get_paddr(),
@@ -2328,6 +2350,9 @@ private:
     assert(depth > 1);
     auto &parent_entry = iter.get_internal(depth + 1);
     auto parent = parent_entry.node;
+    // Load-bearing lazy-read guard: get_child on an INVALID parent would
+    // dereference a children[] slot already handed to the successor node.
+    c.cache.maybe_throw_lazy_read_stale(c.trans, *parent);
     auto node_iter = parent->iter_idx(parent_entry.pos);
 
     auto on_found = [depth, visitor, &iter, &f](InternalNodeRef node) {
@@ -2356,6 +2381,9 @@ private:
       ).si_then([on_found=std::move(on_found), node_iter, c,
                 parent_entry](auto child) {
         LOG_PREFIX(FixedKVBtree::lookup_internal_level);
+        // child ref was held across an await (wait_io); re-check for
+        // lazy readers before storing it into the iterator
+        c.cache.maybe_throw_lazy_read_stale(c.trans, *child);
         SUBTRACET(seastore_fixedkv_tree,
           "got child on {}, pos: {}, res: {}",
           c.trans,
@@ -2385,7 +2413,8 @@ private:
       std::make_optional<node_position_t<internal_node_t>>(
         child_pos.get_parent(),
         child_pos.get_pos())
-    ).si_then([on_found=std::move(on_found)](InternalNodeRef node) {
+    ).si_then([on_found=std::move(on_found), c](InternalNodeRef node) {
+      c.cache.maybe_throw_lazy_read_stale(c.trans, *node);
       return on_found(node);
     });
   }
@@ -2407,6 +2436,8 @@ private:
     auto &parent_entry = iter.get_internal(2);
     auto parent = parent_entry.node;
     assert(parent);
+    // see lookup_internal_level: guard children[] deref for lazy readers
+    c.cache.maybe_throw_lazy_read_stale(c.trans, *parent);
     auto node_iter = parent->iter_idx(parent_entry.pos);
 
     auto on_found = [visitor, &iter, &f](LeafNodeRef node) {
@@ -2433,6 +2464,9 @@ private:
       ).si_then([on_found=std::move(on_found), node_iter, c,
                 parent_entry](auto child) {
         LOG_PREFIX(FixedKVBtree::lookup_leaf);
+        // child ref was held across an await (wait_io); re-check for
+        // lazy readers before storing it into the iterator
+        c.cache.maybe_throw_lazy_read_stale(c.trans, *child);
         SUBTRACET(seastore_fixedkv_tree,
           "got child on {}, pos: {}, res: {}",
           c.trans,
@@ -2462,7 +2496,8 @@ private:
       std::make_optional<node_position_t<internal_node_t>>(
         child_pos.get_parent(),
         child_pos.get_pos())
-    ).si_then([on_found=std::move(on_found)](LeafNodeRef node) {
+    ).si_then([on_found=std::move(on_found), c](LeafNodeRef node) {
+      c.cache.maybe_throw_lazy_read_stale(c.trans, *node);
       return on_found(node);
     });
   }
@@ -2572,9 +2607,11 @@ private:
 	).si_then([FNAME, this, visitor, c, &iter, &li, &ll, min_depth] {
 	  if (iter.get_depth() > 1) {
 	    auto &root_entry = *(iter.internal.rbegin());
+	    c.cache.maybe_throw_lazy_read_stale(c.trans, *root_entry.node);
 	    root_entry.pos = li(*(root_entry.node)).get_offset();
 	  } else {
 	    auto &root_entry = iter.leaf;
+	    c.cache.maybe_throw_lazy_read_stale(c.trans, *root_entry.node);
 	    auto riter = ll(*(root_entry.node));
 	    root_entry.pos = riter->get_offset();
 	  }
