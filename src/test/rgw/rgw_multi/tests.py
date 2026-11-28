@@ -4489,6 +4489,53 @@ def test_topic_notification_sync():
         topic_list = conn.list_topics()
         assert_equal(len(topic_list), 0)
 
+def get_topic_shards(zone, topic_name):
+    cmd = ['topic', 'stats', '--topic', topic_name,
+           '--account-id', user.account] + zone.zone_args()
+    stats_json, _ = zone.cluster.admin(cmd, read_only=True)
+    return [s['Name'] for s in json.loads(stats_json)['Topic Stats']['Shards']]
+
+def test_topic_persistent_shards_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    master = zonegroup_conns.master_zone
+
+    # create a persistent topic and a notification on the master zone only,
+    # so that other zones get them through metadata sync
+    topic_name = gen_topic_name()
+    topic_arn = master.create_topic(topic_name, {
+        "push-endpoint": "http://kaboom:9999",
+        "persistent": "true",
+    })
+    bucket = None
+    try:
+        bucket = master.create_bucket(gen_bucket_name())
+        master.create_notification(bucket.name, [{
+            'Id': 'bn-shards-' + run_prefix,
+            'TopicArn': topic_arn,
+            'Events': ['s3:ObjectCreated:*'],
+        }])
+        zonegroup_meta_checkpoint(zonegroup)
+
+        master_shards = get_topic_shards(master.zone, topic_name)
+        log.debug('topic=%s shards on master=%s', topic_name, master_shards)
+        for conn in zonegroup_conns.rw_zones:
+            # topic stats fails if any of the queue shards is missing
+            assert_equal(get_topic_shards(conn.zone, topic_name), master_shards)
+            # the target shard is a hash of the bucket and key. writing many
+            # keys hits most shards, and fails if a shard queue is missing
+            for i in range(20):
+                conn.s3_client.put_object(Bucket=bucket.name,
+                                          Key='{}-obj-{}'.format(conn.name, i),
+                                          Body='data')
+    finally:
+        # other topic tests expect no leftover topics
+        if bucket is not None:
+            master.delete_notifications(bucket.name)
+        master.delete_topic(topic_arn)
+        zonegroup_meta_checkpoint(zonegroup)
+
 def test_account_metadata_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)

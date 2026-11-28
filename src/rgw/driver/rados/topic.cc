@@ -356,13 +356,21 @@ class MetadataHandler : public RGWMetadataHandler {
         !info.dest.persistent_queue.empty()) {
       librados::IoCtx ioctx;
       r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
-      if (r >= 0) {
-        r = rgw::notify::add_persistent_topic(dpp, ioctx, info.dest.persistent_queue, y);
-      }
       if (r < 0) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to create queue for persistent topic "
+        ldpp_dout(dpp, 1) << "ERROR: failed to init ioctx for persistent topic "
             << info.dest.persistent_queue << " with: " << cpp_strerror(r) << dendl;
         return r;
+      }
+      // create all the queue shards, as CreateTopic does on the zone where
+      // the topic was created
+      for (const auto& q : info.dest.get_shard_names()) {
+        r = rgw::notify::add_persistent_topic(dpp, ioctx, q, y);
+        if (r < 0) {
+          ldpp_dout(dpp, 1) << "ERROR: failed to create queue shard " << q
+              << " for persistent topic " << info.dest.persistent_queue
+              << " with: " << cpp_strerror(r) << dendl;
+          return r;
+        }
       }
     }
     return STATUS_APPLIED;
@@ -391,16 +399,23 @@ class MetadataHandler : public RGWMetadataHandler {
     const rgw_pubsub_dest& dest = info.dest;
     if (!dest.push_endpoint.empty() && dest.persistent &&
         !dest.persistent_queue.empty()) {
-      // delete persistent topic queue
+      // delete all the persistent topic queue shards
       librados::IoCtx ioctx;
       r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
-      if (r >= 0) {
-        r = rgw::notify::remove_persistent_topic(dpp, ioctx, dest.persistent_queue, y);
+      if (r < 0) {
+        ldpp_dout(dpp, 1) << "Failed to init ioctx to delete queue for "
+                          << "persistent topic: " << name
+                          << " with error: " << r << dendl;
+        return 0; // not fatal
       }
-      if (r < 0 && r != -ENOENT) {
-        ldpp_dout(dpp, 1) << "Failed to delete queue for persistent topic: "
-                          << name << " with error: " << r << dendl;
-      } // not fatal
+      for (const auto& q : dest.get_shard_names()) {
+        r = rgw::notify::remove_persistent_topic(dpp, ioctx, q, y);
+        if (r < 0 && r != -ENOENT) {
+          ldpp_dout(dpp, 1) << "Failed to delete queue shard " << q
+                            << " for persistent topic: " << name
+                            << " with error: " << r << dendl;
+        } // not fatal
+      }
     }
     return 0;
   }
