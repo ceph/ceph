@@ -2091,6 +2091,22 @@ TEST(pg_pool_t_test, get_ec_data_shard_count_multi_zone_fallback) {
   EXPECT_EQ(k, p.get_ec_data_shard_count());
 }
 
+// A default-constructed pg_pool_t (size == 0, get_zone_size() == 0) must not
+// divide by zero in get_relative_shard(), get_shard_zone(), or
+// is_nonprimary_shard().
+TEST(pg_pool_t_test, get_relative_shard_zero_zone_size) {
+  pg_pool_t p;
+  p.nonprimary_shards.insert_range(shard_id_t(1), 3);
+  EXPECT_EQ(0, p.get_zone_size());
+  EXPECT_EQ(shard_id_t::NO_SHARD, p.get_relative_shard(shard_id_t::NO_SHARD));
+  EXPECT_EQ(shard_id_t(0), p.get_relative_shard(shard_id_t(0)));
+  EXPECT_EQ(shard_id_t(2), p.get_relative_shard(shard_id_t(2)));
+  EXPECT_EQ(0, p.get_shard_zone(shard_id_t(0)));
+  EXPECT_EQ(0, p.get_shard_zone(shard_id_t(2)));
+  EXPECT_FALSE(p.is_nonprimary_shard(shard_id_t(0)));
+  EXPECT_TRUE(p.is_nonprimary_shard(shard_id_t(2)));
+}
+
 TEST(shard_id_t, iostream) {
     set<shard_id_t> shards;
     shards.insert(shard_id_t(0));
