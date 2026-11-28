@@ -1,0 +1,11 @@
+# All clients at once create and remove files in one directory that
+# ceph.dir.pin.distributed spreads over two active MDSs, while looking it up.
+overrides:
+  ceph:
+    cephfs:
+      max_mds: 2
+tasks:
+- workunit:
+    clients:
+      all:
+        - fs/misc/shared_dir_unlink.sh
