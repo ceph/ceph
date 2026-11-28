@@ -3,7 +3,7 @@
 import logging as log
 import json
 import botocore
-from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects
+from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects, index_key_name
 from botocore.config import Config
 
 """
@@ -50,8 +50,9 @@ def main():
 
     connection.BucketVersioning(BUCKET_NAME).enable()
 
-    ok_keys = ['a', 'b', 'c', 'd']
-    unlinked_keys = ['c', 'd', 'e', 'f']
+    # '_c' and '_e' start with '_', which the bucket index escapes
+    ok_keys = ['a', 'b', '_c', 'd']
+    unlinked_keys = ['_c', 'd', '_e', 'f']
     ok_objs = put_objects(bucket, ok_keys)
     
     # TESTCASE 'recalculated bucket check stats are correct'
@@ -74,7 +75,7 @@ def main():
     log.debug('TEST: bucket check unlinked finds unlistable entries\n')
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --min-age-hours 0 --dump-keys')
     json_out = json.loads(out)
-    assert len(json_out) == len(unlinked_keys)
+    assert sorted((o['name'], o['instance']) for o in json_out) == sorted(unlinked_objs)
 
     # TESTCASE 'unlinked entries are not listable'
     log.debug('TEST: unlinked entries are not listable\n')
@@ -128,7 +129,7 @@ def main():
         connection.ObjectVersion(bucket.name, o[0], o[1]).delete()
 
     for key in leftover_pending_xattr_keys:
-        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {index_key_name(key)}')
         idx_entries = json.loads(out.replace(b'\x80', b'0x80'))
         assert len(idx_entries) > 0, 'failed to create leftover OLH entries for key {key}'
         
@@ -136,7 +137,7 @@ def main():
     log.debug('TEST: bucket check olh finds leftover OLH entries\n')
     out = exec_cmd(f'radosgw-admin bucket check olh --bucket {BUCKET_NAME} --dump-keys')
     json_out = json.loads(out)
-    assert len(json_out) == len(leftover_pending_xattr_keys)
+    assert sorted(json_out) == sorted(leftover_pending_xattr_keys)
 
     # TESTCASE 'bucket check olh fixes leftover OLH entries'
     log.debug('TEST: bucket check olh fixes leftover OLH entries\n')
@@ -145,7 +146,7 @@ def main():
     assert len(json_out) == len(leftover_pending_xattr_keys)
     
     for key in leftover_pending_xattr_keys:
-        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {index_key_name(key)}')
         idx_entries = json.loads(out.replace(b'\x80', b'0x80'))
         assert len(idx_entries) == 0, 'index entries still exist for key={key} after olh fix'
 
