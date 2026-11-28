@@ -146,6 +146,7 @@ CephFS Concepts
     POSIX compatibility <posix>
     MDS Journaling <mds-journaling>
     File layouts <file-layouts>
+    Recursive statistics <recursive-stats>
     Distributed Metadata Cache <mdcache>
     Dynamic Metadata Management in CephFS <dynamic-metadata-management>
     CephFS I/O Path <cephfs-io-path>
