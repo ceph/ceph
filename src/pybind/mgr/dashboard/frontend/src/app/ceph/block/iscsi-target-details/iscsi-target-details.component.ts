@@ -33,7 +33,9 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   set content(content: TableComponent) {
     this.detailTable = content;
     if (content) {
-      content.updateColumns();
+      // Defer so the table's header is refreshed after the current change detection pass,
+      // avoiding ExpressionChangedAfterItHasBeenChecked (NG0100) on the parent's view.
+      Promise.resolve().then(() => content.updateColumns());
     }
   }
 

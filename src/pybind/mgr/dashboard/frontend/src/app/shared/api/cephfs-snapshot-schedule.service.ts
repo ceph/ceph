@@ -1,10 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs/internal/Observable';
+import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { intersection, isEqual, uniqWith } from 'lodash';
 import { SnapshotSchedule } from '../models/snapshot-schedule';
-import { of } from 'rxjs';
 import {
   RepeaFrequencyPlural,
   RepeaFrequencySingular,
