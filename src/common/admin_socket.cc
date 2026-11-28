@@ -37,6 +37,7 @@ typedef void* timer_t;
 #include "common/JSONFormatterFile.h"
 #include "common/safe_io.h"
 #include "common/Thread.h"
+#include "common/livepatch.h"
 #include "common/version.h"
 #include "common/ceph_mutex.h"
 
@@ -727,6 +728,7 @@ public:
 	f->dump_string("version", ceph_version_to_str());
 	f->dump_string("release", ceph_release_to_str());
 	f->dump_string("release_type", ceph_release_type());
+	ceph::livepatch::dump(f);
       } else if (command == "git_version") {
 	f->dump_string("git_version", git_version_to_str());
       }

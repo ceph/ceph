@@ -6,6 +6,11 @@
   ``next_scheduled_time``. Scripts or tools that parse this output
   must be updated accordingly.
 
+* Build: the new, experimental cmake option ``WITH_LIVEPATCH`` builds daemons
+  that can have single functions replaced while they run, with libpulp. The
+  ``version`` command of such a daemon lists the live patches applied to it.
+  See doc/dev/livepatch.rst, including its limits, before trying it.
+
 * libcephsqlite: concurrent readers is now supported. The VFS implements the
   full sqlite3 locking protocol.
 

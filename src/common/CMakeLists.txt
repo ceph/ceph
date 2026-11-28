@@ -58,6 +58,7 @@ set(common_srcs
   WorkQueue.cc
   XMLFormatter.cc
   admin_socket.cc
+  livepatch.cc
   admin_socket_client.cc
   assert.cc
   bit_str.cc
@@ -123,6 +124,11 @@ set(common_srcs
   version.cc
   mclock_common.cc
   tcp_info.cc)
+
+if(WITH_LIVEPATCH)
+  set_source_files_properties(livepatch.cc
+    PROPERTIES COMPILE_DEFINITIONS WITH_LIVEPATCH)
+endif()
 
 if(WITH_CPUTRACE)
   list(APPEND common_srcs

@@ -842,6 +842,26 @@ if(WITH_FRAME_POINTERS)
 endif()
 message(STATUS "frame pointers: ${WITH_FRAME_POINTERS}")
 
+# Userspace live patching (libpulp): every function gets a 16-byte nop pad,
+# 14 bytes before its entry and a 2-byte nop at it, which a live patch
+# overwrites with a jump to the replacement function.
+option(WITH_LIVEPATCH "build with patchable function entries for userspace live patching" OFF)
+if(WITH_LIVEPATCH)
+  # the pad size and its split are what libpulp expects on x86_64
+  if(NOT (LINUX AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64"))
+    message(FATAL_ERROR "WITH_LIVEPATCH is only supported on Linux x86_64")
+  endif()
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-fpatchable-function-entry=16,14"
+    HAVE_PATCHABLE_FUNCTION_ENTRY)
+  if(NOT HAVE_PATCHABLE_FUNCTION_ENTRY)
+    message(FATAL_ERROR
+      "WITH_LIVEPATCH needs a compiler with -fpatchable-function-entry")
+  endif()
+  add_compile_options(
+    $<$<COMPILE_LANGUAGE:C,CXX>:-fpatchable-function-entry=16,14>)
+endif()
+
 # Jerasure & GF-Complete
 option(WITH_SYSTEM_JERASURE "require and build with system jerasure and gf-complete" OFF)
 if(WITH_SYSTEM_JERASURE)
