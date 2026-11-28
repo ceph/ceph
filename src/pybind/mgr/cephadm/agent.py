@@ -1,4 +1,5 @@
 import cherrypy
+import cephadm.cherrypy_compression_in  # noqa: F401
 import json
 import socket
 import ssl
@@ -58,7 +59,15 @@ def _agent_stats_request_end(mgr: "CephadmOrchestrator", endpoint: str) -> None:
         return
     stats = getattr(mgr, 'agent_metadata_stats', None)
     if stats:
-        stats.finish_agent_request()
+        stats.finish_agent_request(error=_response_is_error())
+
+
+def _response_is_error() -> bool:
+    """True when the /data response is not a 2xx (e.g. 413/415/500)."""
+    try:
+        return not 200 <= int(str(cherrypy.response.status).split()[0]) < 300
+    except Exception:
+        return False
 
 
 # These tools are enabled only on the /data and /node-proxy mounts below.
@@ -73,6 +82,12 @@ cherrypy.tools.cephadm_agent_stats_end = cherrypy.Tool(
 
 
 class AgentEndpoint:
+
+    DEFAULT_AGENT_TASK_DURATION_SECONDS = 2
+    # Upper bound on how long an agent waits for the reply to a report. Keeps
+    # an agent stuck on a hung mgr from waiting a whole (possibly long)
+    # report period before it can notice a new target.
+    MAX_REPORT_TIMEOUT_SECONDS = 120
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -143,6 +158,103 @@ class AgentEndpoint:
             except PortAlreadyInUse:
                 self.server_port += 1
         self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
+
+    def compute_agents_avg_concurrency(self) -> int:
+        """
+        Compute the average number of agents allowed to report metadata per second (M).
+
+        - If user-specified value is -1, use an adaptive formula: sqrt(N)/2 (capped at 20).
+        - Ensures a minimum of 2 agents/sec to avoid unnecessary serialization.
+        - This helps spread load while avoiding bursts, especially on small clusters.
+        """
+        if self.mgr.agent_avg_concurrency == -1:  # auto-concurrency mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_concurrency = min(20, int(num_agents ** 0.5 / 2))
+        else:
+            agents_concurrency = self.mgr.agent_avg_concurrency
+        # We force a minimum of 2 agents per seconds
+        return max(2, agents_concurrency)
+
+    def compute_agents_refrsh_rate(self) -> int:
+        """
+        Compute the refresh rate (in seconds) for agent metadata reporting.
+
+        - If the user has specified a fixed `agent_refresh_rate`, use that.
+        - If `agent_refresh_rate` is set to -1 (auto mode), compute it dynamically as:
+            refresh_rate = (num_agents × task_duration) // avg_concurrency
+            where:
+              - num_agents = total number of agents in the cluster
+              - avg_concurrency = average number of agents allowed to report per second,
+                computed using a separate heuristic (sqrt(N)/2, capped).
+        - This ensures that agent updates are spread evenly and that the manager is not overwhelmed.
+
+        Notes:
+        - A minimum refresh rate of 20 seconds is enforced to avoid excessive agent churn and load.
+        - The dynamic mode adapts automatically as the cluster grows.
+
+        Returns:
+            int: The agent refresh rate in seconds.
+        """
+        if self.mgr.agent_refresh_rate == -1:  # auto-refresh rate
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            refresh_rate = (num_agents * self.DEFAULT_AGENT_TASK_DURATION_SECONDS) // agents_avg_concurrency
+        else:
+            refresh_rate = self.mgr.agent_refresh_rate
+
+        return max(20, refresh_rate)
+
+    def get_initial_delay(self) -> int:
+        """
+        Compute the maximum initial random startup delay (in seconds) before an agent starts reporting.
+
+        - If agent_initial_startup_delay_max is -1 (auto), compute as:
+            delay = num_agents / avg_concurrency (M)
+        - This prevents bursts of all agents from reporting immediately at startup.
+        - Enforces a minimum of 10s to avoid early tight clustering.
+        """
+        if self.mgr.agent_initial_startup_delay_max == -1:  # auto-delay mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            return max(10, num_agents // agents_avg_concurrency)
+        else:
+            return self.mgr.agent_initial_startup_delay_max
+
+    def get_jitter(self) -> int:
+        """
+        Compute the jitter window (in seconds) applied before agents send metadata.
+
+        - If agent_jitter_seconds is -1 (auto), compute it as:
+            jitter = num_agents / avg_concurrency (M)
+        - This spreads agent reports evenly across the window.
+        - Uses a min jitter of 2s to prevent tight clustering in very small clusters.
+        """
+        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
+            agents_refresh_rate = self.compute_agents_refrsh_rate()
+            return max(2, int(agents_refresh_rate * 0.5))
+        else:
+            return self.mgr.agent_jitter_seconds
+
+    def get_agent_down_threshold(self) -> float:
+        """
+        Seconds without a report after which an agent is considered down:
+        agent_down_multiplier (at least 1.5) times the longest interval an
+        agent can wait between reports (refresh period + jitter).
+        """
+        down_mult = max(self.mgr.agent_down_multiplier, 1.5)
+        return down_mult * float(self.compute_agents_refrsh_rate() + self.get_jitter())
+
+    def get_report_timeout(self) -> int:
+        """
+        How long (in seconds) an agent waits for the reply to a metadata report.
+
+        The agent sends one report per refresh period and waits for the reply
+        before starting its next cycle. Waiting up to the refresh period keeps
+        at most one report per agent in flight: when the mgr is slow, agents
+        report less often instead of giving up and queueing another report
+        behind the one still waiting. Capped at MAX_REPORT_TIMEOUT_SECONDS.
+        """
+        return min(self.compute_agents_refrsh_rate(), self.MAX_REPORT_TIMEOUT_SECONDS)
 
     def configure(self) -> Tuple[Dict, Dict, List[tuple], tuple]:
         self.host_data = HostData(self.mgr)
@@ -744,14 +856,31 @@ class HostData:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
 
+    def get_data(self) -> Optional[dict]:
+        try:
+            remote_ip = cherrypy.request.remote.ip
+            content_encoding = cherrypy.request.headers.get('Content-Encoding', 'identity')
+            raw_body = cherrypy.request.body.read()
+            self.mgr.log.debug(f">>> Received payload from {remote_ip}, Content-Encoding: {content_encoding}")
+            return json.loads(raw_body.decode('utf-8'))
+        except Exception as e:
+            self.mgr.log.error(f"Failed to read request body: {e}")
+            return None
+
     @cherrypy.tools.allow(methods=['POST'])
-    @cherrypy.tools.json_in()
+    @cherrypy.tools.compression_in()
     @cherrypy.tools.json_out()
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = cherrypy.request.json
-        results: Dict[str, Any] = {}
         stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        data: Optional[Dict[str, Any]] = self.get_data()
+        if data is None:
+            # Unreadable body / invalid JSON. Keep the existing response but
+            # account for it as a failed request.
+            if stats:
+                stats.record_bad_metadata()
+            return {}
+        results: Dict[str, Any] = {}
         if stats:
             stats.record_report_shape(data)
         try:
@@ -765,6 +894,14 @@ class HostData:
             host = data['host']
             counter = self.mgr.agent_cache.agent_counter.get(host)
             if stats:
+                agent_sent_at = None
+                try:
+                    value = cherrypy.request.headers.get('X-Cephadm-Agent-Sent-At')
+                    if value is not None:
+                        agent_sent_at = float(value)
+                except (TypeError, ValueError):
+                    pass
+                stats.record_valid_report(host, agent_sent_at)
                 stats.record_report_state(
                     first_contact=counter is None,
                     stale_ack=counter is not None and int(data['ack']) != counter,
@@ -773,6 +910,22 @@ class HostData:
             # host agent is reporting on is marked offline, it shouldn't be any more
             self.mgr.offline_hosts_remove(host)
             results['result'] = self.handle_metadata(data)
+            # Auto-derived pacing values are runtime policy, not daemon
+            # dependencies. Return the current values on normal reports so
+            # agents adopt host-count changes without a config fan-out.
+            refresh_period = self.mgr.http_server.agent.compute_agents_refrsh_rate()
+            jitter_seconds = self.mgr.http_server.agent.get_jitter()
+            results['refresh_period'] = refresh_period
+            results['jitter_seconds'] = jitter_seconds
+            results['report_timeout'] = self.mgr.http_server.agent.get_report_timeout()
+            if stats:
+                stats.record_pacing(
+                    host_count=len(self.mgr.cache.get_hosts()),
+                    avg_concurrency=self.mgr.http_server.agent.compute_agents_avg_concurrency(),
+                    refresh_period_s=refresh_period,
+                    initial_startup_delay_max_s=self.mgr.http_server.agent.get_initial_delay(),
+                    jitter_seconds=jitter_seconds,
+                )
         return results
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
@@ -980,7 +1133,11 @@ class CephadmAgentHelpers:
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         stats = getattr(self.mgr, 'agent_metadata_stats', None)
         if stats and hosts:
-            stats.record_ack_fanout(len(hosts))
+            stats.record_ack_fanout(
+                len(hosts),
+                increment=increment,
+                config_push=daemon_spec is not None,
+            )
         for host in hosts:
             if increment:
                 self.mgr.cache.metadata_up_to_date[host] = False
@@ -1016,10 +1173,9 @@ class CephadmAgentHelpers:
             if host in self.mgr.offline_hosts:
                 return False
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
-        # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
-        down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+        # agent hasn't reported in: down_multiplier * (refresh rate + jitter). Something is likely wrong with it.
         time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
-        if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
+        if time_diff.total_seconds() > self.agent.get_agent_down_threshold():
             return True
         return False
 
@@ -1027,10 +1183,10 @@ class CephadmAgentHelpers:
         self.mgr.remove_health_warning('CEPHADM_AGENT_DOWN')
         if down_agent_hosts:
             detail: List[str] = []
-            down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
+            threshold = int(self.agent.get_agent_down_threshold())
             for agent in down_agent_hosts:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{down_mult * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
+                              f'{threshold} seconds. Agent is assumed '
                                'down and host may be offline.'))
             for dd in [d for d in self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE) if d.hostname in down_agent_hosts]:
                 dd.status = DaemonDescriptionStatus.error

@@ -256,6 +256,7 @@ def test_pull_conf_settings(_update_func, _shutdown, cephadm_fs):
             'target_ip': target_ip,
             'target_port': target_port,
             'refresh_period': refresh_period,
+            'report_timeout': 18,
             'listener_port': listener_port,
             'host': host,
             'device_enhanced_scan': device_enhanced_scan
@@ -276,6 +277,7 @@ def test_pull_conf_settings(_update_func, _shutdown, cephadm_fs):
         assert agent.target_ip == target_ip
         assert agent.target_port == target_port
         assert agent.loop_interval == refresh_period
+        assert agent.report_timeout == 18
         assert agent.starting_port == listener_port
         assert agent.device_enhanced_scan == True
         assert agent.keyring == 'keyring'
@@ -559,7 +561,8 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("cephadm.AgentGatherer.start")
 @mock.patch("cephadm.port_in_use")
 @mock.patch("cephadm.CephadmAgent.pull_conf_settings")
-def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
+@mock.patch("cephadm.time.time", return_value=1234.5)
+def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
                    _listener_start, _is_alive, _load_verify_locations,
                     _HF_dump, _list_networks, _urlopen, _RQ_init, _wait, _clear):
     target_ip = '192.168.0.0'
@@ -614,7 +617,12 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
             pass
 
         def read(self):
-            return json.dumps({'valid': 'output', 'result': '400'})
+            return json.dumps({
+                'valid': 'output',
+                'result': '400',
+                'refresh_period': 60,
+                'jitter_seconds': 15,
+            })
 
     _port_in_use.side_effect = _fake_port_in_use
     _is_alive.return_value = False
@@ -666,11 +674,16 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
         _RQ_init.assert_called_with(
             f'https://{target_ip}:{target_port}/data',
             json.dumps(expected_data).encode('ascii'),
-            {'Content-Type': 'application/json'}
+            {
+                'X-Cephadm-Agent-Sent-At': '1234.5',
+                'Content-Type': 'application/json',
+            }
         )
         _listener_start.assert_called()
         _gatherer_start.assert_called()
         _urlopen.assert_called()
+        assert agent.loop_interval == 60
+        assert agent.jitter_seconds == 15
 
         # agent should not go down if connections fail
         _urlopen.side_effect = Exception()
@@ -682,6 +695,51 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
         agent.listener_port = None
         with pytest.raises(Exception, match='Failed to pick port for agent to listen on: All 1000 ports starting at 7770 taken.'):
             agent.run()
+
+
+@mock.patch("threading.Event.clear")
+@mock.patch("threading.Event.wait")
+@mock.patch("cephadm.http_query")
+@mock.patch("cephadm.list_networks", return_value={})
+@mock.patch("cephadm.HostFacts.dump", return_value='Host Facts')
+@mock.patch("cephadm.HostFacts.__init__", lambda _, __: None)
+@mock.patch("ssl.SSLContext.load_verify_locations")
+@mock.patch("threading.Thread.is_alive", return_value=True)
+@mock.patch("cephadm.port_in_use", return_value=False)
+@mock.patch("cephadm.CephadmAgent.pull_conf_settings")
+def test_agent_run_uses_mgr_report_timeout(_pull_conf_settings, _port_in_use, _is_alive,
+                                           _load_verify_locations, _HF_dump, _list_networks,
+                                           _http_query, _wait, _clear):
+    _http_query.side_effect = [
+        (200, json.dumps({'result': 'ok', 'refresh_period': 76,
+                          'jitter_seconds': 38, 'report_timeout': 76})),
+        (200, json.dumps({'result': 'ok'})),
+    ]
+
+    class Done(Exception):
+        pass
+
+    _clear.side_effect = [None, Done()]
+
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent.keyring = 'agent keyring'
+        agent.target_ip = '192.168.0.1'
+        agent.target_port = '7150'
+        agent.host = AGENT_ID
+        agent.loop_interval = 20
+        agent.report_timeout = 20
+        agent.metadata_compresion_enabled = False
+        agent.initial_startup_delay_max = 0
+        agent.jitter_seconds = 0
+        with pytest.raises(Done):
+            agent.run()
+
+    # the first report uses the timeout from agent.json, the next one the
+    # timeout from the mgr reply
+    timeouts = [c.kwargs['timeout'] for c in _http_query.call_args_list]
+    assert timeouts == [20, 76]
+    assert agent.report_timeout == 76
 
 
 @mock.patch("cephadm.CephadmAgent.pull_conf_settings")

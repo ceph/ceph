@@ -1,6 +1,10 @@
+import datetime
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import pytest
+import io
+import json
 
 from cephadm.agent import (
     AgentEndpoint,
@@ -11,10 +15,27 @@ from cephadm.agent_metrics import AgentMetadataStats
 from cephadm.http_server import CephadmHttpServer
 
 
+def _clock(monotonic, wall=None):
+    """Fake the clock seen by cephadm.agent_metrics only.
+
+    Patching 'cephadm.agent_metrics.time.monotonic' would replace
+    time.monotonic for the whole process. Any other thread, or a finalizer
+    run by the garbage collector (e.g. a leaked ThreadPool from an earlier
+    test joining its workers), would then consume the side_effect values or
+    block on them, and the test run can hang.
+    """
+    fake = SimpleNamespace(monotonic=MagicMock(side_effect=monotonic), time=time.time)
+    if isinstance(wall, list):
+        fake.time = MagicMock(side_effect=wall)
+    elif wall is not None:
+        fake.time = MagicMock(return_value=wall)
+    return patch('cephadm.agent_metrics.time', fake)
+
+
 def test_agent_request_store_attribution_and_shape() -> None:
     stats = AgentMetadataStats()
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.4]):
+    with _clock(monotonic=[10.0, 10.1, 10.2, 10.3, 10.4]):
         stats.begin_agent_request()
         stats.record_report_shape({'ls': '[{}]', 'volume': '[{}]'})
         stats.record_report_state(first_contact=False, stale_ack=True)
@@ -53,7 +74,7 @@ def test_request_hooks_count_node_proxy_and_finish_data_request() -> None:
     mgr.http_server._sample_agent_pool.assert_called_once_with()
 
     mgr.http_server._sample_agent_pool.reset_mock()
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.2]):
+    with _clock(monotonic=[10.0, 10.1, 10.2]):
         _agent_stats_request_start(mgr, 'data')
         stats.record_store('agent', 0.020)
         _agent_stats_request_end(mgr, 'data')
@@ -113,7 +134,7 @@ def test_pool_fanout_and_reset() -> None:
     stats.record_pool(0, 12)
     stats.record_pool(9, 0)
     stats.record_node_proxy_request()
-    stats.record_ack_fanout(123)
+    stats.record_ack_fanout(123, increment=True, config_push=True)
 
     result = stats.snapshot('mgr.a')
     assert result['http_pool']['idle_min'] == 0
@@ -123,12 +144,96 @@ def test_pool_fanout_and_reset() -> None:
     assert result['ack_fanout']['max_hosts'] == 123
     assert result['ack_fanout']['multi_host_events'] == 1
     assert result['ack_fanout']['last_multi_host_hosts'] == 123
+    assert result['ack_fanout']['increment_events'] == 1
+    assert result['ack_fanout']['increment_hosts_total'] == 123
+    assert result['ack_fanout']['max_increment_hosts'] == 123
+    assert result['ack_fanout']['config_push_events'] == 1
+    assert result['ack_fanout']['config_push_hosts_total'] == 123
 
     stats.reset()
     result = stats.snapshot('mgr.a')
     assert result['reports']['total'] == 0
     assert result['http_pool']['samples'] == 0
     assert result['ack_fanout']['events'] == 0
+
+
+def test_recent_rates_intervals_and_pacing() -> None:
+    stats = AgentMetadataStats()
+    stats._since_monotonic = 99.0
+    stats._since = datetime.datetime.fromtimestamp(999.0, tz=datetime.timezone.utc)
+
+    with _clock(monotonic=[100.0, 100.2, 100.3, 100.4, 101.0, 101.2, 101.3, 101.4, 101.5],
+                wall=[1000.1, 1001.1, 1001.5]):
+        stats.begin_agent_request()
+        stats.record_valid_report('host1', 1000.0)
+        stats.record_store('host', 0.010)
+        stats.record_store('devices', 0.020)
+        stats.finish_agent_request()
+
+        stats.begin_agent_request()
+        stats.record_valid_report('host1', 1001.0)
+        stats.record_store('agent', 0.030)
+        stats.finish_agent_request()
+
+        # Background writes must contribute to total MON/store call rate.
+        stats.record_store('host', 0.040)
+
+        stats.record_pacing(
+            host_count=305,
+            avg_concurrency=8,
+            refresh_period_s=76,
+            initial_startup_delay_max_s=38,
+            jitter_seconds=38,
+        )
+        result = stats.snapshot('mgr.a')
+
+    assert result['reports']['valid'] == 2
+    assert result['reports']['unique_hosts'] == 1
+    assert result['reports']['sent_timestamped'] == 2
+    assert result['reports']['recent_processed_rate']['total'] == 2
+    assert result['reports']['send_interval']['count'] == 1
+    assert result['reports']['send_interval']['avg_s'] == pytest.approx(1.0)
+    assert result['reports']['send_interval']['histogram']['<10s'] == 1
+    assert result['reports']['agent_to_worker_delay']['count'] == 2
+    assert result['reports']['agent_to_worker_delay']['avg_ms'] == pytest.approx(100.0)
+    assert result['reports']['clock_skew_samples'] == 0
+    assert result['persistence']['recent_call_rate']['total'] == 4
+    assert result['persistence']['recent_agent_call_rate']['total'] == 3
+    assert result['persistence']['recent_background_call_rate']['total'] == 1
+    assert result['pacing'] == {
+        'host_count': 305,
+        'avg_concurrency': 8,
+        'refresh_period_s': 76,
+        'initial_startup_delay_max_s': 38,
+        'jitter_seconds': 38,
+    }
+
+
+def test_agent_to_worker_delay_uses_backlog_scale_buckets() -> None:
+    stats = AgentMetadataStats()
+
+    delays = [
+        (1000.0, 1000.5, '<1s'),
+        (1000.0, 1005.0, '1-10s'),
+        (1000.0, 1020.0, '10-30s'),
+        (1000.0, 1045.0, '30-60s'),
+        (1000.0, 1120.0, '1-5min'),
+        (1000.0, 1600.0, '5-15min'),
+        (1000.0, 2800.0, '15-60min'),
+        (1000.0, 5800.0, '>60min'),
+    ]
+
+    for sent_at, worker_at, expected_bucket in delays:
+        stats._local.agent_request_start = 1.0
+        stats._local.agent_request_start_wall = worker_at
+        stats.record_valid_report('host1', sent_at)
+        result = stats.snapshot('mgr.a')
+        assert result['reports']['agent_to_worker_delay']['histogram'][expected_bucket] >= 1
+
+    result = stats.snapshot('mgr.a')
+    delay = result['reports']['agent_to_worker_delay']
+    assert delay['count'] == len(delays)
+    assert delay['max_ms'] == pytest.approx(4800.0 * 1000.0)
 
 
 def test_host_data_store_writes_are_attributed_to_agent_request() -> None:
@@ -160,18 +265,32 @@ def test_host_data_store_writes_are_attributed_to_agent_request() -> None:
         def save_host_from_ls(hostname, _data):
             mgr.cache.save_host(hostname)
 
+        request = SimpleNamespace(
+            remote=SimpleNamespace(ip='127.0.0.1'),
+            headers={'X-Cephadm-Agent-Sent-At': '1000.0'},
+            body=io.BytesIO(json.dumps(data).encode('utf-8')),
+        )
+
         with patch.object(mgr, '_process_ls_output', side_effect=save_host_from_ls), \
                 patch.object(mgr, 'update_failed_daemon_health_check'), \
                 patch.object(mgr, '_kick_serve_loop'), \
-                patch('cephadm.agent.cherrypy.request', SimpleNamespace(json=data)):
+                patch('cephadm.agent.cherrypy.request', request):
             _agent_stats_request_start(mgr, 'data')
             try:
-                HostData(mgr).index()
+                response = HostData(mgr).index()
             finally:
                 _agent_stats_request_end(mgr, 'data')
 
+        # the reply carries the pacing values the agent adopts
+        agent = mgr.http_server.agent
+        assert response['refresh_period'] == agent.compute_agents_refrsh_rate()
+        assert response['jitter_seconds'] == agent.get_jitter()
+        assert response['report_timeout'] == agent.get_report_timeout()
+
         result = mgr.agent_metadata_stats.snapshot('mgr.a')
         assert result['reports']['total'] == 1
+        assert result['reports']['valid'] == 1
+        assert result['reports']['unique_hosts'] == 1
         assert result['persistence']['agent_request']['host']['count'] == 1
         assert result['persistence']['agent_request']['agent']['count'] == 1
         assert result['persistence']['background']['host']['count'] == 0
@@ -208,7 +327,7 @@ def test_slow_agent_request_logs_debug_per_request_store_breakdown() -> None:
     logger = MagicMock()
     stats = AgentMetadataStats(logger)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 11.5]):
+    with _clock(monotonic=[10.0, 10.1, 10.2, 10.3, 10.4, 11.5]):
         stats.begin_agent_request()
         stats.record_request_pool_start(0, 12)
         stats.record_report_shape({'host': 'node1', 'ls': [{}], 'volume': '[{}]'})
@@ -238,7 +357,7 @@ def test_fast_agent_request_does_not_log_slow_breakdown() -> None:
     logger = MagicMock()
     stats = AgentMetadataStats(logger)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 10.5]):
+    with _clock(monotonic=[10.0, 10.1, 10.5]):
         stats.begin_agent_request()
         stats.record_report_shape({'host': 'node1'})
         stats.record_store('agent', 0.100)
@@ -252,7 +371,7 @@ def test_very_slow_agent_request_logs_at_info() -> None:
     logger = MagicMock()
     stats = AgentMetadataStats(logger)
 
-    with patch('cephadm.agent_metrics.time.monotonic', side_effect=[10.0, 15.1]):
+    with _clock(monotonic=[10.0, 10.1, 15.1]):
         stats.begin_agent_request()
         stats.record_report_shape({'host': 'node1'})
         stats.record_store('agent', 5.0)
@@ -275,3 +394,135 @@ def test_empty_ack_fanout_is_not_recorded() -> None:
 
     result = stats.snapshot('mgr.a')
     assert result['ack_fanout']['events'] == 0
+
+
+def test_request_errors_are_flagged_in_service_time() -> None:
+    stats = AgentMetadataStats()
+
+    # Bad metadata and handler errors raised while handling the request.
+    with _clock(monotonic=[1.0, 1.1]):
+        stats.begin_agent_request()
+        stats.record_bad_metadata()
+        stats.finish_agent_request()
+    with _clock(monotonic=[2.0, 2.1]):
+        stats.begin_agent_request()
+        stats.record_handler_error()
+        stats.finish_agent_request()
+    # Non-2xx response reported by the end-of-request hook.
+    with _clock(monotonic=[3.0, 3.1]):
+        stats.begin_agent_request()
+        stats.finish_agent_request(error=True)
+    # The error flag must not leak into the next request on the same thread.
+    with _clock(monotonic=[4.0, 4.1]):
+        stats.begin_agent_request()
+        stats.finish_agent_request()
+
+    req = stats.snapshot('mgr.a')['request_latency']
+    assert req['count'] == 4
+    assert req['errors'] == 3
+
+
+def test_request_end_hook_flags_non_2xx_response() -> None:
+    stats = AgentMetadataStats()
+    mgr = SimpleNamespace(agent_metadata_stats=stats, http_server=None)
+
+    for status, expected_errors in (('200 OK', 0), (415, 1), ('500 Internal Server Error', 2)):
+        stats.begin_agent_request()
+        with patch('cephadm.agent.cherrypy.response', SimpleNamespace(status=status)):
+            _agent_stats_request_end(mgr, 'data')
+        assert stats.snapshot('mgr.a')['request_latency']['errors'] == expected_errors
+
+
+def test_service_time_max_start_timestamp_and_p99() -> None:
+    stats = AgentMetadataStats()
+
+    # 99 fast requests (100-500ms) and one slow outlier (2-3s).
+    for i in range(99):
+        with _clock(monotonic=[float(i), i + 0.2]):
+            stats.begin_agent_request()
+            stats.finish_agent_request()
+    with _clock(monotonic=[200.0, 202.5], wall=1760000000.0):
+        stats.begin_agent_request()
+        stats.finish_agent_request()
+
+    req = stats.snapshot('mgr.a')['request_latency']
+    assert req['max_ms'] == pytest.approx(2500.0)
+    # The timestamp is the request start, not its completion.
+    assert req['max_started_at'] == datetime.datetime.fromtimestamp(
+        1760000000.0, tz=datetime.timezone.utc).isoformat()
+    assert req['histogram']['2-3s'] == 1
+    assert req['p99_bucket_upper_ms'] == 500.0
+
+    # A faster request must not move the max timestamp.
+    with _clock(monotonic=[300.0, 300.1]):
+        stats.begin_agent_request()
+        stats.finish_agent_request()
+    assert stats.snapshot('mgr.a')['request_latency']['max_started_at'] == req['max_started_at']
+
+    # Store latency stats do not carry request timestamps.
+    stats.record_store('host', 0.010)
+    assert 'max_started_at' not in stats.snapshot('mgr.a')['persistence']['background']['host']
+
+
+def test_p99_without_samples_and_in_open_bucket() -> None:
+    stats = AgentMetadataStats()
+    assert stats.snapshot('mgr.a')['request_latency']['p99_bucket_upper_ms'] is None
+
+    with _clock(monotonic=[0.0, 12.0]):
+        stats.begin_agent_request()
+        stats.finish_agent_request()
+    assert stats.snapshot('mgr.a')['request_latency']['p99_bucket_upper_ms'] == pytest.approx(12000.0)
+
+
+def test_queue_peak_timestamp() -> None:
+    stats = AgentMetadataStats()
+    assert stats.snapshot('mgr.a')['http_pool']['queue_max_observed_at'] is None
+
+    stats.record_pool(5, 10)
+    first_at = stats.snapshot('mgr.a')['http_pool']['queue_max_observed_at']
+    assert first_at is not None
+
+    # Equal or lower depth keeps the original peak timestamp.
+    stats.record_pool(5, 10)
+    stats.record_pool(5, 3)
+    pool = stats.snapshot('mgr.a')['http_pool']
+    assert pool['queue_max_observed'] == 10
+    assert pool['queue_max_observed_at'] == first_at
+
+    stats.reset()
+    assert stats.snapshot('mgr.a')['http_pool']['queue_max_observed_at'] is None
+
+
+def test_format_plain_shows_service_time_and_peak_timestamps() -> None:
+    stats = AgentMetadataStats()
+    stats.record_pool(0, 7)
+    with _clock(monotonic=[1.0, 2.5]):
+        stats.begin_agent_request()
+        stats.finish_agent_request(error=True)
+
+    text = stats.format_plain('mgr.a')
+    assert 'Request service time (excludes HTTP queue wait):' in text
+    assert 'errors:             1' in text
+    assert 'p99 bucket upper:   2000.000 ms' in text
+    assert 'max started at:' in text
+    assert 'max queued at:' in text
+    assert '(sampled)' in text
+
+
+def test_unreadable_body_counts_as_failed_request() -> None:
+    from cephadm.agent import HostData
+
+    stats = AgentMetadataStats()
+    mgr = MagicMock()
+    mgr.agent_metadata_stats = stats
+    host_data = HostData(mgr)
+
+    stats.begin_agent_request()
+    with patch.object(HostData, 'get_data', return_value=None):
+        # CherryPy tool decorators only attach config; the response is unchanged.
+        assert host_data.index() == {}
+    stats.finish_agent_request()
+
+    result = stats.snapshot('mgr.a')
+    assert result['reports']['bad_metadata'] == 1
+    assert result['request_latency']['errors'] == 1
