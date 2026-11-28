@@ -48,57 +48,15 @@ function detect_ceph_dev_pkgs() {
     echo "$cmake_opts"
 }
 
-function get_llvm() {
-    if ! in_jenkins; then
-        return 0
-    fi
-
-    source /etc/os-release
-    if [ "${VERSION_ID}" = "26.04" ]; then
-        ci_debug "Skipping LLVM install script. Can use distro LLVM/clang."
-        return 10  # indicates distro too new
-    fi
-
-    wrap_sudo
-    # require clang-19. uninstall previous versions to work around package conflicts
-    local v=19
-    local remove_from=13
-    local remove_to=$(($v-1))
-    ci_debug "Removing clang package versions from $remove_from-$remove_to"
-    for i in $(seq $remove_from $remove_to); do
-        $DRY_RUN $SUDO apt-get purge --auto-remove clang-$i lldb-$i lld-$i clangd-$i python3-lldb-$i -y || true
-    done
-
-    if ! type clang-$v > /dev/null 2>&1 ; then
-        ci_debug "Getting clang-$v"
-        wget https://download.ceph.com/qa/llvm.sh
-        chmod +x llvm.sh
-        $DRY_RUN $SUDO ./llvm.sh $v
-        rm llvm.sh
-    fi
-}
-
 function prepare() {
     local which_pkg="which"
-    local distro_llvm=
     if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
-
-        # get_llvm's nonzero "use distro clang" return (10) must not trip
-        # errexit before we can inspect it
-        sts=0
-        get_llvm || sts=$?
-        if [ $sts -eq 10 ]; then
-            distro_llvm=clang
-        elif [ $sts -ne 0 ]; then
-            echo "error: get_llvm function failed"
-            return 1
-        fi
     fi
 
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg lvm2 ${distro_llvm}"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg lvm2"
         # We need to add extra packages in case of ppc64 arch because python wheels are not available
         # and these dependencies are required for building the wheels from scratch.
         if [ "$(uname -m)" == "ppc64le" ]; then
