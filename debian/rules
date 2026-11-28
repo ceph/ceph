@@ -13,6 +13,13 @@ ifeq ($(shell expr $(shell gcc -dumpversion | cut -d. -f1) \>= 15),1)
   export DEB_BUILD_MAINT_OPTIONS += optimize=-lto
 endif
 
+# Ubuntu's dpkg maps the build dir to /usr/src/<source>-<version> in DWARF,
+# which puts the git sha into a compiler argument and defeats the compiler
+# cache; CI builds (CEPH_BUILD_NORMALIZE_PATHS) use a version-free target.
+ifeq ($(CEPH_BUILD_NORMALIZE_PATHS),true)
+  export DEB_BUILD_DEBUGPATH = /usr/src/ceph
+endif
+
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
   # which makes the application aborts when the shared library throws
