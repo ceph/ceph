@@ -211,6 +211,8 @@ void usage()
   cout << "  object stat                      stat an object for its metadata\n";
   cout << "  object manifest                  display the manifest of an object, producing a list of RADOS objects containing the data\n";
   cout << "  object unlink                    unlink object from bucket index\n";
+  cout << "  olh get                          get OLH (object logical head) state\n";
+  cout << "  olh readlog                      read OLH change log\n";
   cout << "  object rewrite                   rewrite the specified object\n";
   cout << "  object reindex                   reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
   cout << "  objects expire                   run expired objects cleanup\n";
