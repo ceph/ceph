@@ -318,9 +318,7 @@ int RGWOrphanSearch::build_all_oids_index(const DoutPrefixProvider *dpp)
   cout << "logging all objects in the pool" << std::endl;
 
   for (; i != i_end; ++i) {
-    string nspace = i->get_nspace();
     string oid = i->get_oid();
-    string locator = i->get_locator();
 
     ssize_t pos = oid.find('_');
     if (pos < 0) {

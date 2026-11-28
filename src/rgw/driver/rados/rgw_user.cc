@@ -1426,7 +1426,6 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 		    optional_yield y)
 {
   int ret;
-  std::string subprocess_msg;
   rgw::sal::User* user = op_state.get_user();
 
   if (!driver) {

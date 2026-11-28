@@ -117,7 +117,6 @@ void RadosTestParamPPNS::SetUp()
 {
   if (!is_crimson_cluster() && strcmp(GetParam(), "cache") == 0 &&
       cache_pool_name.empty()) {
-    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd pool create\", \"pool\": \"" + cache_pool_name +
@@ -326,7 +325,6 @@ void RadosTestParamPP::SetUp()
 {
   if (!is_crimson_cluster() && strcmp(GetParam(), "cache") == 0 &&
       cache_pool_name.empty()) {
-    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd pool create\", \"pool\": \"" + cache_pool_name +

@@ -220,9 +220,6 @@ TEST_P(TestClsLog, test_log_add_different_time)
 
   vector<cls::log::entry>::iterator iter;
 
-  /* returned entries should be sorted by time */
-  map<int, cls::log::entry> check_ents;
-
   int i;
 
   for (i = 0, iter = entries.begin(); iter != entries.end(); ++iter, ++i) {

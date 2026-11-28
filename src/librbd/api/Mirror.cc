@@ -613,7 +613,6 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     librados::IoCtx child_io_ctx;
     int64_t child_pool_id = -1;
     for (auto &child_image : child_images){
-      std::string pool = child_image.pool_name;
       if (child_pool_id == -1 ||
           child_pool_id != child_image.pool_id ||
           child_io_ctx.get_namespace() != child_image.pool_namespace) {

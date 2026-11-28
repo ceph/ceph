@@ -13718,7 +13718,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    string args;
     vector<string> argvec;
     cmd_getval(cmdmap, "args", argvec);
     map<string,string> loc;
@@ -13786,7 +13785,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
 
-      string args;
       vector<string> argvec;
       cmd_getval(cmdmap, "args", argvec);
       map<string,string> loc;
@@ -14366,8 +14364,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
       }
     }
-
-    string plugin = profile_map["plugin"];
 
     // a profile being added, or removed with its last pool, is decided once
     // the pending changes are committed
@@ -16983,7 +16979,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool delete" ||
              prefix == "osd pool rm") {
     // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
-    string poolstr, poolstr2, sure;
+    string poolstr, poolstr2;
     cmd_getval(cmdmap, "pool", poolstr);
     cmd_getval(cmdmap, "pool2", poolstr2);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());

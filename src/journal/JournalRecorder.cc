@@ -289,7 +289,7 @@ bool JournalRecorder::close_object_set(uint64_t active_set) {
   // object recorders will invoke overflow handler as they complete
   // closing the object to ensure correct order of future appends
   uint8_t splay_width = m_journal_metadata->get_splay_width();
-  auto lockers{lock_object_recorders()};
+  [[maybe_unused]] auto lockers{lock_object_recorders()};
   for (const auto& p : m_object_ptrs) {
     const auto& object_recorder = p.second;
     if (object_recorder->get_object_number() / splay_width != active_set) {

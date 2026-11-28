@@ -523,10 +523,8 @@ int main(int argc, const char **argv)
     tmp_osd_map.deepish_copy_from(osdmap);
 
     // Gather BEFORE info
-    map<uint64_t,set<pg_t>> pgs_by_osd;
     map<uint64_t,set<pg_t>> prim_pgs_by_osd;
-    map<uint64_t,set<pg_t>> acting_prims_by_osd;
-    pgs_by_osd = tmp_osd_map.get_pgs_by_osd(g_ceph_context, pid, &prim_pgs_by_osd, &acting_prims_by_osd);
+    tmp_osd_map.get_pgs_by_osd(g_ceph_context, pid, &prim_pgs_by_osd);
     OSDMap::read_balance_info_t rb_info;
     tmp_osd_map.calc_read_balance_score(g_ceph_context, pid, &rb_info);
     float read_balance_score_before = rb_info.adjusted_score;
@@ -547,10 +545,8 @@ int main(int argc, const char **argv)
     }
 
     // Gather AFTER info
-    map<uint64_t,set<pg_t>> pgs_by_osd_2;
     map<uint64_t,set<pg_t>> prim_pgs_by_osd_2;
-    map<uint64_t,set<pg_t>> acting_prims_by_osd_2;
-    pgs_by_osd_2 = tmp_osd_map.get_pgs_by_osd(g_ceph_context, pid, &prim_pgs_by_osd_2, &acting_prims_by_osd_2);
+    tmp_osd_map.get_pgs_by_osd(g_ceph_context, pid, &prim_pgs_by_osd_2);
     tmp_osd_map.calc_read_balance_score(g_ceph_context, pid, &rb_info);
     float read_balance_score_after = rb_info.adjusted_score;
     ceph_assert(read_balance_score_after >= 0);

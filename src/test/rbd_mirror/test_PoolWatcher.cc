@@ -239,7 +239,7 @@ TEST_F(TestPoolWatcher, EmptyPool) {
 TEST_F(TestPoolWatcher, ReplicatedPools) {
   string uuid1 = "00000000-0000-0000-0000-000000000001";
   PeerSpec site1(uuid1, "site1", "mirror1");
-  string first_pool, local_pool, last_pool;
+  string first_pool;
   create_pool(true, site1, &first_pool);
   check_images();
   create_image(first_pool);

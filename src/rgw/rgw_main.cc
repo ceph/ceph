@@ -24,8 +24,6 @@ using namespace std;
 
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
-static sig_t sighandler_alrm;
-
 static void godown_alarm(int signum)
 {
   _exit(0);
@@ -148,7 +146,7 @@ int main(int argc, char *argv[])
   register_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGXFSZ, rgw::signal::sig_handler_noop);
-  sighandler_alrm = signal(SIGALRM, godown_alarm);
+  signal(SIGALRM, godown_alarm);
 
   main.init_perfcounters();
   main.init_heap_release();

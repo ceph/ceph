@@ -3658,7 +3658,6 @@ void BlueStore::_close_fm()
 int BlueStore::_write_out_fm_meta(uint64_t target_size)
 {
   int r = 0;
-  string p = path + "/block";
 
   std::vector<std::pair<string, string>> fm_meta;
   fm->get_meta(target_size, &fm_meta);
@@ -6958,7 +6957,6 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
     !o->onode.is_pgmeta_omap()) {
     dout(10) << "fsck converting " << o->oid << " omap to per-pg" << dendl;
     bufferlist header;
-    map<string, bufferlist> kv;
     {
       KeyValueDB::Transaction txn = db->get_transaction();
       uint64_t txn_cost = 0;

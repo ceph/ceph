@@ -759,7 +759,6 @@ TEST_P(KVTest, RocksDB_estimate_size) {
   if(string(GetParam()) != "rocksdb")
     GTEST_SKIP();
 
-  std::string cfs("cf1");
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout));

@@ -53,14 +53,8 @@ int RGWObjManifest::append(const DoutPrefixProvider *dpp, RGWObjManifest& m, con
     return 0;
   }
 
-  string override_prefix;
-
   if (prefix.empty()) {
     prefix = m.prefix;
-  }
-
-  if (prefix != m.prefix) {
-    override_prefix = m.prefix;
   }
 
   map<uint64_t, RGWObjManifestRule>::iterator miter = m.rules.begin();

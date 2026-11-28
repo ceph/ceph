@@ -1171,7 +1171,6 @@ int DB::Object::get_mp_parts_list(const DoutPrefixProvider *dpp,
 {
   int ret = 0;
   DBOpParams params = {};
-  std::map<std::string, bufferlist> omap;
 
   ret = get_object_impl(dpp, params);
 
@@ -1203,7 +1202,6 @@ int DB::Object::obj_omap_get_all(const DoutPrefixProvider *dpp,
 {
   int ret = 0;
   DBOpParams params = {};
-  std::map<std::string, bufferlist> omap;
 
   if (!m)
     return -1;
@@ -1887,7 +1885,6 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   DBOpParams params = {};
   int ret = 0;
   string etag;
-  string content_type;
   bufferlist acl_bl;
   string storage_class;
 
@@ -1956,8 +1953,6 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     if (name.compare(RGW_ATTR_ETAG) == 0) {
       etag = rgw_bl_str(bl);
       params.op.obj.etag = etag;
-    } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
-      content_type = rgw_bl_str(bl);
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
       acl_bl = bl;
     }
@@ -2141,10 +2136,7 @@ int DB::Object::Delete::create_dm(const DoutPrefixProvider *dpp,
   bool versioning_suspended = ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == BUCKET_VERSIONS_SUSPENDED); 
   int ret = -1;
   DBOpParams olh_params = {};
-  std::string version_id;
   DBOpParams next_params = del_params;
-
-  version_id = del_params.op.obj.state.obj.key.instance;
 
   DBOpParams dm_params = del_params;
 

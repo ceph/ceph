@@ -794,7 +794,6 @@ namespace rgw::dedup {
   {
     unsigned idx = 0;
     std::list<std::string> refs;
-    std::string wildcard_tag;
     int ret = cls_refcount_read(obj.ioctx, oid, &refs, true);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << "::ERR: manifest::failed cls_refcount_read()"

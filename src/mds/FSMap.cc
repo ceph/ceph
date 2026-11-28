@@ -885,7 +885,6 @@ mds_gid_t FSMap::find_mds_gid_by_name(std::string_view s) const
 
 const MDSMap::mds_info_t* FSMap::find_by_name(std::string_view name) const
 {
-  std::map<mds_gid_t, mds_info_t> result;
   for (const auto &i : standby_daemons) {
     if (i.second.name == name) {
       return &(i.second);

@@ -3099,8 +3099,6 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
     return ret;
   }
 
-  string oid;
-
   ret = store->svc.bi_rados->open_bucket_index_shard(dpp, *bucket_info_p, obj.get_hash_object(), &bucket_obj, &shard_id);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
@@ -4602,7 +4600,6 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   }
 
   RGWGetExtraDataCB cb;
-  map<string, string> req_headers;
   real_time set_mtime;
 
   const real_time *pmod = mod_ptr;
@@ -5389,8 +5386,6 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (ret < 0) {
     return ret;
   }
-
-  vector<rgw_raw_obj> ref_objs;
 
   if (remote_dest) {
     /* dest is in a different zonegroup, copy it there */
@@ -9017,7 +9012,6 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
 {
   ObjectReadOperation op;
   struct get_obj_data* d = static_cast<struct get_obj_data*>(arg);
-  string oid, key;
 
   if (is_head_obj) {
     /* only when reading from the head object do we need to do the atomic test */
@@ -10123,7 +10117,6 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   uint64_t link_epoch = 0;
   cls_rgw_obj_key key;
   bool delete_marker = false;
-  std::string link_op_tag;  // op_tag of the LINK_OLH entry
   set<cls_rgw_obj_key> remove_instances;
   bool need_to_remove = false;
 
@@ -10179,7 +10172,6 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
           key = entry.key;
           link_epoch = entry.epoch;
           delete_marker = entry.delete_marker;
-          link_op_tag = entry.op_tag;
         } else {
           ldpp_dout(dpp, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
               << " before current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;

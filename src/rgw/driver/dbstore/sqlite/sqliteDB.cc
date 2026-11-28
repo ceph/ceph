@@ -2337,7 +2337,6 @@ int SQLUpdateObject::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
   struct DBOpParams copy = *params;
-  string bucket_name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLUpdateObject - no db" << dendl;
