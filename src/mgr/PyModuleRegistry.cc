@@ -48,7 +48,6 @@ void PyModuleRegistry::init()
   std::lock_guard locker(lock);
 
   // Set up global python interpreter
-#define WCHAR(s) L ## #s
   PyConfig py_config;
   // do not enable isolated mode, otherwise we would not be able to have access
   // to the site packages. since we cannot import any module before initializing
@@ -69,8 +68,8 @@ void PyModuleRegistry::init()
   py_config.pathconfig_warnings = 0;
 
   PyStatus status;
-  status = PyConfig_SetString(&py_config, &py_config.program_name, WCHAR(MGR_PYTHON_EXECUTABLE));
-  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetString: %s:%s", status.func, status.err_msg);
+  status = PyConfig_SetBytesString(&py_config, &py_config.program_name, MGR_PYTHON_EXECUTABLE);
+  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetBytesString: %s:%s", status.func, status.err_msg);
   // Some python modules do not cope with an unpopulated argv, so lets
   // fake one.  This step also picks up site-packages into sys.path.
   const wchar_t* argv[] = {L"ceph-mgr"};
@@ -92,7 +91,6 @@ void PyModuleRegistry::init()
   dout(10) << "set PYTHONPATH to " << std::quoted(pythonpath_env) << dendl;
   status = Py_InitializeFromConfig(&py_config);
   ceph_assertf(!PyStatus_Exception(status), "Py_InitializeFromConfig: %s:%s", status.func, status.err_msg);
-#undef WCHAR
 
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
