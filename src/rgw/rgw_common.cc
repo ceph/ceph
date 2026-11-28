@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <iomanip>  // for std::setprecision, std::fixed
 #include <string>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "common/ceph_json.h"
@@ -1107,6 +1109,24 @@ bool rgw_transport_is_secure(CephContext *cct, const RGWEnv& env)
     return true;
   }
   return false;
+}
+
+boost::optional<std::string> rgw_get_remote_addr(CephContext *cct,
+                                                 const RGWEnv& env)
+{
+  const std::string param = cct->_conf->rgw_remote_addr_param;
+  const auto addr = env.get_optional(param.empty() ? "REMOTE_ADDR" : param);
+  if (!addr) {
+    return boost::none;
+  }
+  // env keys are case-insensitive, so compare the param the same way
+  if (!boost::algorithm::iequals(param, "HTTP_X_FORWARDED_FOR")) {
+    return *addr;
+  }
+  // X-Forwarded-For: <client>, <proxy1>, <proxy2>
+  std::string client = addr->substr(0, addr->find(','));
+  boost::algorithm::trim(client);
+  return client;
 }
 
 
