@@ -213,6 +213,7 @@ from cephadmlib.daemons import (
     CephIscsi,
     CephNvmeof,
     CustomContainer,
+    FcmDedup,
     HAproxy,
     Keepalived,
     Monitoring,
@@ -268,6 +269,7 @@ def get_supported_daemons():
     supported_daemons.append(CephIscsi.daemon_type)
     supported_daemons.append(CephNvmeof.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
+    supported_daemons.append(FcmDedup.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
     supported_daemons.append(CephadmAgent.daemon_type)
