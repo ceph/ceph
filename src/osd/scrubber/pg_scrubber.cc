@@ -431,6 +431,11 @@ void PgScrubber::on_new_interval()
 	   << dendl;
   m_after_repair_scrub_required = false;
   m_fsm->process_event(IntervalChanged{});
+  // pending requests must not resurface if we become the Primary again
+  if (!is_primary()) {
+    m_pending_shallow_request.reset();
+    m_pending_deep_request.reset();
+  }
   // the following asserts were added due to a past bug, where PG flags were
   // left set in some scenarios.
   ceph_assert(!is_queued_or_active());
@@ -498,6 +503,12 @@ void PgScrubber::schedule_scrub_with_osd()
 		  "{}: state at entry: {}", __func__, m_scrub_job->state_desc())
 	   << dendl;
   m_scrub_job->registered = true;
+  for (const auto lvl : {scrub_level_t::shallow, scrub_level_t::deep}) {
+    if (auto& req = pending_request(lvl); req) {
+      m_scrub_job->operator_forced(lvl, *req);
+      req.reset();
+    }
+  }
   update_scrub_job();
 }
 
@@ -579,14 +590,17 @@ scrub_level_t PgScrubber::scrub_requested(
 		  m_scrub_job->get_sched_time(), registration_state())
 	   << dendl;
 
-  // if we were marked as 'not registered' - do not try to push into
-  // the queue.
+  // not registered yet: hold the request until the PG registers
   if (!m_scrub_job->is_registered()) {
     dout(10) << fmt::format(
 		    "{}: pg[{}]: not registered for scrubbing on this OSD",
 		    __func__, m_pg_id)
 	     << dendl;
-    return scrub_level_t::shallow;
+    auto& req = pending_request(scrub_level);
+    if (!req || repair_requested) {
+      req = scrub_type;
+    }
+    return scrub_level;
   }
 
   // abort an ongoing scrub, if it's of the lowest priority
@@ -816,12 +830,18 @@ void PgScrubber::on_operator_abort_scrub(ceph::Formatter* f)
     f->dump_string("error", err_text);
 
   } else if (!m_scrub_job->is_registered()) {
-    const auto err_text = fmt::format(
-        "{}: pg[{}] is not registered for scrubbing", __func__, m_pg_id.pgid);
-    dout(5) << err_text << dendl;
-    f->dump_bool("applicable", false);
+    const bool applicable =
+        m_pending_shallow_request || m_pending_deep_request;
+    m_pending_shallow_request.reset();
+    m_pending_deep_request.reset();
+    f->dump_bool("applicable", applicable);
     f->dump_bool("active", false);
-    f->dump_string("error", err_text);
+    if (!applicable) {
+      const auto err_text = fmt::format(
+          "{}: pg[{}] is not registered for scrubbing", __func__, m_pg_id.pgid);
+      dout(5) << err_text << dendl;
+      f->dump_string("error", err_text);
+    }
 
   } else {
     // not scrubbing now. Remove any operator-requested priority from
@@ -2471,6 +2491,7 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f) const
         m_scrub_job->shallow_target.queued_element().schedule.not_before <=
             query_time);
     f->dump_bool("queued", m_scrub_job->shallow_target.queued);
+    f->dump_bool("pending_request", m_pending_shallow_request.has_value());
     f->dump_bool(
         "active",
         (m_active_target && m_active_target->is_shallow()) ? true : false);
@@ -2483,6 +2504,7 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f) const
         m_scrub_job->deep_target.queued_element().schedule.not_before <=
             query_time);
     f->dump_bool("queued", m_scrub_job->deep_target.queued);
+    f->dump_bool("pending_request", m_pending_deep_request.has_value());
     f->dump_bool(
         "active",
         (m_active_target && m_active_target->is_deep()) ? true : false);
