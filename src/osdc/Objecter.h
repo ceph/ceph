@@ -2835,6 +2835,13 @@ private:
     return op_budget;
   }
   int take_linger_budget(LingerOp *info);
+  // Takes budget without waiting for it, so it may exceed the throttle
+  // limits.
+  void take_op_budget_bytes(int op_budget) {
+    ceph_assert(op_budget >= 0);
+    op_throttle_bytes.take(op_budget);
+    op_throttle_ops.take(1);
+  }
   void put_op_budget_bytes(int op_budget) {
     ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
@@ -2848,6 +2855,11 @@ private:
 			   static_cast<int64_t>(
 			     cct->_conf->objecter_inflight_ops)};
  public:
+  /// The op throttle budget currently held, as (bytes, ops).
+  std::pair<int64_t, int64_t> get_op_budget_in_use() const {
+    return {op_throttle_bytes.get_current(), op_throttle_ops.get_current()};
+  }
+
   /// @param admin_socket_name Optional name for the admin socket command.
   ///        If empty (default), registers as "objecter_requests".
   ///        If non-empty, registers as "objecter_requests.<name>".
