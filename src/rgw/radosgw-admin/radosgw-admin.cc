@@ -278,6 +278,7 @@ void usage()
   cout << "  zone placement add               add a zone placement target\n";
   cout << "  zone placement modify            modify a zone placement target\n";
   cout << "  zone placement rm                remove a zone placement target\n";
+  cout << "  sync status                      get multisite syncing status\n";
   cout << "  metadata sync status             get metadata sync status\n";
   cout << "  metadata sync init               init metadata sync\n";
   cout << "  metadata sync run                run metadata sync\n";
