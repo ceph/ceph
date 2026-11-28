@@ -36,7 +36,23 @@ for col in ${KNOWN_COLLECTIONS[@]}; do
     fi
 done
 
-#Run preview commands
+# Verify that perf collection works when an OSD is destroyed
+# --- See https://tracker.ceph.com/issues/77384
+
+RANDOM_OSD=$(ceph osd ls -f json | jq -r '.[]' | shuf -n1)
+echo "Chose to stop osd.$RANDOM_OSD..."
+
+ceph mgr module enable selftest
+ceph mgr self-test eval 'mgr.get_perf_schema("osd", "")'
+ceph orch daemon stop osd."$RANDOM_OSD"
+ceph orch restart mgr
+sleep 10 # give mgr time to restart
+ceph mgr self-test eval 'mgr.get_perf_schema("osd", "")'
+ceph telemetry show perf
+ceph telemetry preview perf
+ceph orch daemon restart osd."$RANDOM_OSD"
+
+# Run preview commands
 ceph telemetry preview
 ceph telemetry preview-device
 ceph telemetry preview-all
