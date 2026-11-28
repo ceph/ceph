@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Observable, Subject, Subscription, of } from 'rxjs';
-import { catchError, finalize, tap } from 'rxjs/operators';
+import { catchError, finalize, takeUntil, tap } from 'rxjs/operators';
 
 import _ from 'lodash';
 
@@ -88,6 +88,10 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   HostStatus = HostStatus;
   private tableContext: CdTableFetchDataContext | undefined;
   private selectionInitialized = false;
+  private reloadEditHosts = false;
+  private restoringSelection = false;
+  private preservedHosts: Host[] = [];
+  private destroyed = false;
   count = 0;
   orchStatus: OrchestratorStatus | undefined;
   private destroy$ = new Subject<void>();
@@ -152,46 +156,97 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
     if (
       changes['preSelectedHostnames'] &&
       !changes['preSelectedHostnames'].firstChange &&
-      changes['preSelectedHostnames'].currentValue?.length > 0
+      this.preselectedNames().length > 0
     ) {
+
       this.selectionInitialized = false;
-      this.table.refreshBtn();
+      if (this.isLoadingHosts) {
+        this.reloadEditHosts = true;
+        return;
+      }
+      this.getHosts(this.tableContext);
     }
   }
 
+  private preselectedNames(): string[] {
+    return (this.preSelectedHostnames || [])
+      .map((host: any) => (typeof host === 'string' ? host : host?.hostname))
+      .filter((hostname: string) => !!hostname);
+  }
+
+  private hostnamesFrom(hosts: Host[] | undefined): string[] {
+    return (hosts || [])
+      .map((host: Host) => host?.hostname)
+      .filter((hostname: string) => !!hostname);
+  }
+
+  private placementHostnames(group: CephServiceSpec): string[] {
+    return (group.placement?.hosts || [])
+      .map((host: any) => (typeof host === 'string' ? host : host?.hostname))
+      .filter((hostname: string) => !!hostname);
+  }
+
+  private shouldLoadEditHosts(): boolean {
+    return this.mode === NvmeofGatewayNodeMode.SELECTOR && this.preselectedNames().length > 0;
+  }
+
   private applyPreSelection(): void {
-    if (!this.preSelectedHostnames?.length || !this.table) {
+    if (!this.preselectedNames().length || !this.table || this.selectionInitialized) {
       return;
     }
 
-    if (this.selectionInitialized) {
-      return;
-    }
+    const preselected = new Set(this.preselectedNames());
+    const hostsToSelect = this.hosts.filter((host) => preselected.has(host.hostname));
 
-    const hostsToSelect = this.hosts.filter((host) =>
-      this.preSelectedHostnames.includes(host.hostname)
+    const alreadySelected = new Set(this.hostnamesFrom(this.table.selection?.selected));
+    const extraSelected = this.hosts.filter(
+      (host) => alreadySelected.has(host.hostname) && !preselected.has(host.hostname)
     );
+    const combined = [...hostsToSelect, ...extraSelected];
 
-    if (hostsToSelect.length > 0) {
+    if (combined.length > 0) {
       this.selectionInitialized = true;
-      this.selection.selected = hostsToSelect;
+      this.preservedHosts = combined.slice();
+      this.restoringSelection = true;
+
+      this.table.selection.selected = this.preservedHosts.slice();
+      this.selection = this.table.selection;
       this.selectionChange.emit(this.selection);
 
-      setTimeout(() => {
-        hostsToSelect.forEach((host) => {
-          const rowIndex = this.table.model?.data?.findIndex(
-            (row: any) => _.get(row, [0, 'selected', 'hostname']) === host.hostname
-          );
-          if (rowIndex > -1) {
-            this.table.model.selectRow(rowIndex, true);
-          }
-        });
-        // Sync the table's internal selection so toggling a pre-selected row
-        // filters from the correct list instead of an empty one.
-        this.table.selection.selected = hostsToSelect;
-        this.table.updateSelection.emit(this.selection);
-      });
+      setTimeout(() => this.syncCheckboxSelection(this.preservedHosts));
     }
+  }
+
+  /**
+   * Check the preselected rows after the table builds its model.
+   * Keep any host the user already checked, and do not emit a stale
+   * empty selection over the table's own selection.
+   */
+  private syncCheckboxSelection(hostsToSelect: Host[]): void {
+    if (this.destroyed || !this.table?.model || !this.table.selection) {
+      this.restoringSelection = false;
+      return;
+    }
+
+    const selectedHosts =
+      this.table.selection.selected?.length > 0
+        ? this.table.selection.selected.slice()
+        : hostsToSelect.slice();
+
+    selectedHosts.forEach((host: Host) => {
+      const rowIndex = this.table.model?.data?.findIndex(
+        (row: any) => _.get(row, [0, 'selected', 'hostname']) === host.hostname
+      );
+      if (rowIndex > -1) {
+        this.table.model.selectRow(rowIndex, true);
+      }
+    });
+
+    this.table.selection.selected = selectedHosts;
+    this.selection = this.table.selection;
+    this.selectionChange.emit(this.selection);
+    this.table.updateSelection.emit(this.table.selection);
+    this.restoringSelection = false;
   }
 
   private setTableActions() {
@@ -293,6 +348,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.destroy$.next();
     this.destroy$.complete();
     if (this.sub) {
@@ -301,15 +357,32 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   updateSelection(selection: CdTableSelection): void {
+    const incoming = this.hostnamesFrom(selection?.selected);
+
+    if (this.restoringSelection && incoming.length === 0 && this.preservedHosts.length > 0) {
+      if (this.table?.selection) {
+        this.table.selection.selected = this.preservedHosts.slice();
+      }
+      return;
+    }
     this.selection = selection;
     this.selectionChange.emit(selection);
   }
 
   getSelectedHostnames(): string[] {
-    return this.selection.selected.map((host: Host) => host.hostname);
+    const tableHosts = this.hostnamesFrom(this.table?.selection?.selected);
+    const componentHosts = this.hostnamesFrom(this.selection?.selected);
+
+    if (this.selectionInitialized && this.table) {
+      return tableHosts;
+    }
+    return tableHosts.length > 0 ? tableHosts : componentHosts;
   }
 
   getHosts(context: CdTableFetchDataContext): void {
+    if (this.destroyed) {
+      return;
+    }
     this.tableContext =
       context || this.tableContext || new CdTableFetchDataContext(() => undefined);
     if (this.isLoadingHosts) {
@@ -321,8 +394,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       this.sub.unsubscribe();
     }
 
-    const useEditMode =
-      this.mode === NvmeofGatewayNodeMode.SELECTOR && this.preSelectedHostnames?.length > 0;
+    const useEditMode = this.shouldLoadEditHosts();
 
     const fetchData$: Observable<any> =
       this.mode === NvmeofGatewayNodeMode.DETAILS || useEditMode
@@ -331,12 +403,21 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
 
     this.sub = fetchData$
       .pipe(
+        takeUntil(this.destroy$),
         finalize(() => {
           this.isLoadingHosts = false;
+          if (this.reloadEditHosts && !this.destroyed) {
+            this.reloadEditHosts = false;
+            this.getHosts(this.tableContext);
+          }
         })
       )
       .subscribe({
         next: (result: any) => {
+
+          if (this.reloadEditHosts) {
+            return;
+          }
           if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
             this.processDetailsData(result.groups, result.hosts);
           } else if (useEditMode) {
@@ -347,19 +428,34 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
             this.hostsLoaded.emit(this.count);
           }
         },
-        error: () => context?.error()
+        error: () => {
+          if (!this.reloadEditHosts) {
+            context?.error();
+          }
+        }
       });
+  }
+
+  private isCurrentGatewayGroup(group: CephServiceSpec, preSelectedSet: Set<string>): boolean {
+    if (this.groupName) {
+      return group.spec?.group === this.groupName;
+    }
+    const hosts = this.placementHostnames(group);
+    return (
+      hosts.length > 0 &&
+      hosts.length === preSelectedSet.size &&
+      hosts.every((hostname: string) => preSelectedSet.has(hostname))
+    );
   }
 
   private processEditModeData(groups: any[][], hostList: Host[]) {
     const groupList = groups?.[0] ?? [];
-    const preSelectedSet = new Set(this.preSelectedHostnames);
+    const preSelectedSet = new Set(this.preselectedNames());
 
     const usedByOtherGroups = new Set<string>();
     groupList.forEach((group: CephServiceSpec) => {
-      const hosts = group.placement?.hosts || [];
-      const isCurrentGroup =
-        hosts.every((h: string) => preSelectedSet.has(h)) && hosts.length === preSelectedSet.size;
+      const hosts = this.placementHostnames(group);
+      const isCurrentGroup = this.isCurrentGatewayGroup(group, preSelectedSet);
 
       if (!isCurrentGroup) {
         hosts.forEach((hostname: string) => usedByOtherGroups.add(hostname));
@@ -405,7 +501,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
     });
     this.usedHostnames = allUsedHostnames;
 
-    // Check if there are any available hosts globally (not used by any group)
+
     this.hasAvailableHosts = (hostList || []).some(
       (host: Host) => !this.usedHostnames.has(host.hostname)
     );
