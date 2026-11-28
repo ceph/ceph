@@ -14,14 +14,17 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <random>
@@ -30,6 +33,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <time.h>
 #include <vector>
 
 #include "common/JSONFormatter.h"
@@ -152,6 +156,322 @@ struct RandomHelper {
   }
 };
 
+// fio-compatible random offset generator (lib/rand.h, io_u.c __get_next_rand_offset).
+// Uses tausworthe64 only; sufficient for all practical file sizes in this tool.
+struct FioRandomState {
+  uint64_t s1 = 0, s2 = 0, s3 = 0, s4 = 0, s5 = 0;
+
+  static uint64_t
+  seed_min(uint64_t x, uint64_t m)
+  {
+    return (x < m) ? x + m : x;
+  }
+
+  static uint64_t
+  next_rand(uint64_t& s1, uint64_t& s2, uint64_t& s3, uint64_t& s4, uint64_t& s5)
+  {
+    uint64_t xval;
+
+    xval = ((s1 << 1) ^ s1) >> 53;
+    s1 = ((s1 & 18446744073709551614ULL) << 10) ^ xval;
+
+    xval = ((s2 << 24) ^ s2) >> 50;
+    s2 = ((s2 & 18446744073709551104ULL) << 5) ^ xval;
+
+    xval = ((s3 << 3) ^ s3) >> 23;
+    s3 = ((s3 & 18446744073709547520ULL) << 29) ^ xval;
+
+    xval = ((s4 << 5) ^ s4) >> 24;
+    s4 = ((s4 & 18446744073709420544ULL) << 23) ^ xval;
+
+    xval = ((s5 << 3) ^ s5) >> 33;
+    s5 = ((s5 & 18446744073701163008ULL) << 8) ^ xval;
+
+    return (s1 ^ s2 ^ s3 ^ s4 ^ s5);
+  }
+
+  void
+  init(uint64_t seed)
+  {
+    int cranks = 6;
+
+#define LCG64(x, s) ((x) * 6906969069ULL ^ (s))
+    s1 = seed_min(LCG64((0x2 ^ 31) + (0x2 ^ 17) + (0x2 ^ 7), seed), 1);
+    s2 = seed_min(LCG64(s1, seed), 7);
+    s3 = seed_min(LCG64(s2, seed), 15);
+    s4 = seed_min(LCG64(s3, seed), 33);
+    s5 = seed_min(LCG64(s4, seed), 49);
+#undef LCG64
+
+    while (cranks--) {
+      next_rand(s1, s2, s3, s4, s5);
+    }
+  }
+
+  static uint64_t
+  last_block(uint64_t file_size, uint64_t block_size)
+  {
+    if (block_size == 0) {
+      return 0;
+    }
+    return file_size / block_size;
+  }
+
+  uint64_t
+  next_offset(uint64_t file_size, uint64_t block_size)
+  {
+    uint64_t lastb = last_block(file_size, block_size);
+    if (!lastb) {
+      return 0;
+    }
+
+    uint64_t r = next_rand(s1, s2, s3, s4, s5);
+    // 0x1p64 is exact 2^64; UINT64_MAX is not representable in double.
+    uint64_t b = static_cast<uint64_t>(
+        lastb * (static_cast<double>(r) / 0x1p64));
+    return b * block_size;
+  }
+
+  static uint64_t
+  io_size_at(uint64_t offset, uint64_t file_size, uint64_t block_size)
+  {
+    return std::min(block_size, file_size - offset);
+  }
+};
+
+// fio-compatible completion latency collector (fio stat.h / stat.c).
+// Uses the same logarithmic percentile histogram and default percentile list
+// as fio so JSON clat_ns fields are directly comparable.
+struct FioClatStats {
+  static constexpr unsigned PLAT_BITS = 6;
+  static constexpr unsigned PLAT_VAL = 1u << PLAT_BITS;
+  static constexpr unsigned PLAT_GROUP_NR = 29;
+  static constexpr unsigned PLAT_NR = PLAT_GROUP_NR * PLAT_VAL;
+
+  // fio options.c default for percentile_list
+  static constexpr std::array<double, 17> DEFAULT_PERCENTILES = {
+      1.0,  5.0,  10.0, 20.0, 30.0,  40.0,  50.0,   60.0,  70.0,
+      80.0, 90.0, 95.0, 99.0, 99.5,  99.9,  99.95,  99.99};
+
+  std::array<std::atomic<uint64_t>, PLAT_NR> plat{};
+  std::atomic<uint64_t> samples{0};
+  std::atomic<uint64_t> min_val{std::numeric_limits<uint64_t>::max()};
+  std::atomic<uint64_t> max_val{0};
+  std::atomic<uint64_t> sum_ns{0};
+
+  FioClatStats() = default;
+  FioClatStats(const FioClatStats&) = delete;
+  FioClatStats& operator=(const FioClatStats&) = delete;
+
+  void reset()
+  {
+    for (auto& p : plat) {
+      p.store(0, std::memory_order_relaxed);
+    }
+    samples.store(0, std::memory_order_relaxed);
+    min_val.store(std::numeric_limits<uint64_t>::max(),
+                  std::memory_order_relaxed);
+    max_val.store(0, std::memory_order_relaxed);
+    sum_ns.store(0, std::memory_order_relaxed);
+  }
+
+  // fio stat.c plat_val_to_idx()
+  static unsigned plat_val_to_idx(uint64_t val)
+  {
+    unsigned msb;
+    if (val == 0) {
+      msb = 0;
+    } else {
+      msb = static_cast<unsigned>(sizeof(val) * 8 - __builtin_clzll(val) - 1);
+    }
+
+    if (msb <= PLAT_BITS) {
+      return static_cast<unsigned>(val);
+    }
+
+    unsigned error_bits = msb - PLAT_BITS;
+    unsigned base = (error_bits + 1) << PLAT_BITS;
+    unsigned offset = (PLAT_VAL - 1) & static_cast<unsigned>(val >> error_bits);
+    unsigned idx = base + offset;
+    return (idx < PLAT_NR - 1) ? idx : (PLAT_NR - 1);
+  }
+
+  // fio stat.c plat_idx_to_val()
+  static uint64_t plat_idx_to_val(unsigned idx)
+  {
+    if (idx < (PLAT_VAL << 1)) {
+      return idx;
+    }
+    unsigned error_bits = (idx >> PLAT_BITS) - 1;
+    uint64_t base = uint64_t{1} << (error_bits + PLAT_BITS);
+    uint64_t k = idx % PLAT_VAL;
+    return base + static_cast<uint64_t>((k + 0.5) * (1u << error_bits));
+  }
+
+  void add_sample(uint64_t nsec)
+  {
+    plat[plat_val_to_idx(nsec)].fetch_add(1, std::memory_order_relaxed);
+    samples.fetch_add(1, std::memory_order_relaxed);
+    sum_ns.fetch_add(nsec, std::memory_order_relaxed);
+
+    uint64_t cur_min = min_val.load(std::memory_order_relaxed);
+    while (nsec < cur_min &&
+           !min_val.compare_exchange_weak(cur_min, nsec,
+                                          std::memory_order_relaxed)) {
+    }
+    uint64_t cur_max = max_val.load(std::memory_order_relaxed);
+    while (nsec > cur_max &&
+           !max_val.compare_exchange_weak(cur_max, nsec,
+                                          std::memory_order_relaxed)) {
+    }
+  }
+
+  struct Snapshot {
+    uint64_t samples = 0;
+    uint64_t min_val = 0;
+    uint64_t max_val = 0;
+    double mean = 0.0;
+    double stddev = 0.0;
+    std::array<uint64_t, PLAT_NR> plat{};
+    std::array<uint64_t, DEFAULT_PERCENTILES.size()> percentiles{};
+  };
+
+  Snapshot snapshot() const
+  {
+    Snapshot s;
+    s.samples = samples.load(std::memory_order_relaxed);
+    s.min_val = min_val.load(std::memory_order_relaxed);
+    s.max_val = max_val.load(std::memory_order_relaxed);
+    uint64_t sum = sum_ns.load(std::memory_order_relaxed);
+    for (unsigned i = 0; i < PLAT_NR; ++i) {
+      s.plat[i] = plat[i].load(std::memory_order_relaxed);
+    }
+
+    if (s.samples == 0 ||
+        s.min_val == std::numeric_limits<uint64_t>::max()) {
+      s.min_val = 0;
+      return s;
+    }
+
+    s.mean = static_cast<double>(sum) / static_cast<double>(s.samples);
+
+    // Approximate stddev from histogram bucket midpoints (fio uses Welford
+    // on exact samples; bucket error is bounded by ~1/2^(PLAT_BITS+1)).
+    if (s.samples > 1) {
+      double acc = 0.0;
+      for (unsigned i = 0; i < PLAT_NR; ++i) {
+        if (s.plat[i] == 0) {
+          continue;
+        }
+        double d = static_cast<double>(plat_idx_to_val(i)) - s.mean;
+        acc += static_cast<double>(s.plat[i]) * d * d;
+      }
+      s.stddev = std::sqrt(acc / static_cast<double>(s.samples - 1));
+    }
+
+    // fio calc_clat_percentiles()
+    uint64_t running = 0;
+    unsigned j = 0;
+    for (unsigned i = 0; i < PLAT_NR && j < DEFAULT_PERCENTILES.size(); ++i) {
+      running += s.plat[i];
+      while (j < DEFAULT_PERCENTILES.size() &&
+             running >= static_cast<uint64_t>(
+                 (DEFAULT_PERCENTILES[j] / 100.0) * s.samples)) {
+        s.percentiles[j] = plat_idx_to_val(i);
+        ++j;
+      }
+    }
+    return s;
+  }
+
+  void merge_from(const FioClatStats& other)
+  {
+    for (unsigned i = 0; i < PLAT_NR; ++i) {
+      uint64_t v = other.plat[i].load(std::memory_order_relaxed);
+      if (v) {
+        plat[i].fetch_add(v, std::memory_order_relaxed);
+      }
+    }
+    samples.fetch_add(other.samples.load(std::memory_order_relaxed),
+                      std::memory_order_relaxed);
+    sum_ns.fetch_add(other.sum_ns.load(std::memory_order_relaxed),
+                     std::memory_order_relaxed);
+
+    uint64_t omin = other.min_val.load(std::memory_order_relaxed);
+    uint64_t omax = other.max_val.load(std::memory_order_relaxed);
+    uint64_t cur_min = min_val.load(std::memory_order_relaxed);
+    while (omin < cur_min &&
+           !min_val.compare_exchange_weak(cur_min, omin,
+                                          std::memory_order_relaxed)) {
+    }
+    uint64_t cur_max = max_val.load(std::memory_order_relaxed);
+    while (omax > cur_max &&
+           !max_val.compare_exchange_weak(cur_max, omax,
+                                          std::memory_order_relaxed)) {
+    }
+  }
+};
+
+static inline uint64_t mono_ns_now()
+{
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL +
+         static_cast<uint64_t>(ts.tv_nsec);
+}
+
+static void dump_clat_ns(ceph::Formatter* f, const FioClatStats::Snapshot& s,
+                         const char* section_name = "clat_ns")
+{
+  if (!f || s.samples == 0) {
+    return;
+  }
+  f->open_object_section(section_name);
+  f->dump_unsigned("min", s.min_val);
+  f->dump_unsigned("max", s.max_val);
+  f->dump_float("mean", s.mean);
+  f->dump_float("stddev", s.stddev);
+  f->dump_unsigned("N", s.samples);
+  f->open_object_section("percentile");
+  for (size_t i = 0; i < FioClatStats::DEFAULT_PERCENTILES.size(); ++i) {
+    char key[32];
+    std::snprintf(key, sizeof(key), "%f",
+                  FioClatStats::DEFAULT_PERCENTILES[i]);
+    f->dump_unsigned(key, s.percentiles[i]);
+  }
+  f->close_section(); // percentile
+  f->open_object_section("bins");
+  for (unsigned i = 0; i < FioClatStats::PLAT_NR; ++i) {
+    if (s.plat[i] == 0) {
+      continue;
+    }
+    char key[32];
+    std::snprintf(key, sizeof(key), "%llu",
+                  static_cast<unsigned long long>(
+                      FioClatStats::plat_idx_to_val(i)));
+    f->dump_unsigned(key, s.plat[i]);
+  }
+  f->close_section(); // bins
+  f->close_section(); // section_name
+}
+
+static void print_clat_ns(const string& phase, const FioClatStats::Snapshot& s)
+{
+  if (s.samples == 0) {
+    return;
+  }
+  cout << "  " << phase << " clat_ns: mean=" << std::fixed
+       << std::setprecision(0) << s.mean << " min=" << s.min_val
+       << " max=" << s.max_val << " stddev=" << s.stddev
+       << " N=" << s.samples << std::endl;
+  cout << "    percentiles (ns):"
+       << " p50=" << s.percentiles[6]
+       << " p90=" << s.percentiles[10]
+       << " p99=" << s.percentiles[12]
+       << " p99.9=" << s.percentiles[14]
+       << std::endl;
+}
+
 // Configuration for the benchmark
 struct BenchConfig {
   int num_threads;
@@ -180,10 +500,13 @@ struct BenchConfig {
   int msgr_workers;          // --msgr-workers: override ms_async_op_threads (0 = ceph.conf default)
   bool show_progress;        // --progress: show live bandwidth, IOPS, and ETA during phases
   int progress_interval;     // --progress-interval: minimum % between progress line updates
-  bool async_io;             // --async-io: use ceph_ll_nonblocking_readv_writev instead of sync I/O
-  bool async_write_fsync;    // --async-write-fsync: carry fsync with each async write (Ganesha-style)
+  bool async_io = false;     // --async-io: use ceph_ll_nonblocking_readv_writev instead of sync I/O
+  bool zero_copy = false;    // --zero-copy: ceph_ll_async_read/write (bufferlist ZC API)
+  bool async_write_fsync;    // --async-write-fsync: carry fsync with each async/ZC write
   bool shared_file;          // --shared-file: use a single file for all threads
-  int queue_depth;           // --queue-depth: max outstanding async I/Os per worker thread
+  int queue_depth;           // --queue-depth: max outstanding async/ZC I/Os per worker thread
+  bool random_io = false;         // --random-io: random offsets within files (fio tausworthe)
+  bool measure_latencies = false; // --measure-latencies: collect per-op clat like fio
 #ifdef CEPH_LOCKSTAT
   string lockstat_dump_path; // --lockstat-dump: base path for per-phase lock contention dumps
   uint64_t lockstat_threshold_ns; // --lockstat-threshold: only record lock holds >= N ns (0 = all)
@@ -196,6 +519,7 @@ struct ThreadStats {
   std::atomic<uint64_t> ops{0}; // read/write calls
   std::atomic<uint64_t> files{0}; // files successfully opened/closed
   std::atomic<int> errors{0};
+  FioClatStats clat; // per-op completion latency (when --measure-latencies)
 };
 
 // Structure to track async I/O operations
@@ -211,6 +535,8 @@ struct AsyncIOContext {
   ThreadStats* stats_ptr;
   std::counting_semaphore<>* semaphore_ptr;
   std::atomic<int>* active_callbacks;
+  uint64_t issue_ns = 0;       // CLOCK_MONOTONIC stamp at submit (fio clat start)
+  bool measure_latencies = false;
 };
 
 // Callback for async I/O completion
@@ -221,6 +547,9 @@ static void async_io_callback(struct ceph_ll_io_info* cb_info) {
   if (cb_info->result > 0) {
     ctx->stats_ptr->bytes_transferred += cb_info->result;
     ctx->stats_ptr->ops++;
+    if (ctx->measure_latencies && ctx->issue_ns != 0) {
+      ctx->stats_ptr->clat.add_sample(mono_ns_now() - ctx->issue_ns);
+    }
   } else if (cb_info->result < 0) {
     ctx->stats_ptr->errors++;
     *(ctx->stop_signal_ptr) = true;
@@ -228,6 +557,72 @@ static void async_io_callback(struct ceph_ll_io_info* cb_info) {
 
   // Mark the slot free before releasing the semaphore so a waiter always
   // finds completed==true after acquire().
+  ctx->completed.store(true, std::memory_order_release);
+  if (ctx->semaphore_ptr) {
+    ctx->semaphore_ptr->release();
+  }
+  if (ctx->active_callbacks) {
+    ctx->active_callbacks->fetch_sub(1, std::memory_order_release);
+  }
+}
+
+static bool uses_async_ll(const BenchConfig& config)
+{
+  return config.async_io || config.zero_copy;
+}
+
+// Zero-copy async slot: write payload is wrap_static of write_buf (stable until
+// callback); read completion owns a ceph_bufferlist that we put after iovec touch.
+struct ZeroCopyIOContext {
+  struct ceph_io_completion comp{};
+  std::vector<char> write_buf;
+  Fh* fh = nullptr;
+  uint64_t offset = 0;
+  std::atomic<bool> completed{true};
+  int64_t result = 0;
+  std::atomic<bool>* stop_signal_ptr = nullptr;
+  ThreadStats* stats_ptr = nullptr;
+  std::counting_semaphore<>* semaphore_ptr = nullptr;
+  std::atomic<int>* active_callbacks = nullptr;
+  uint64_t issue_ns = 0;
+  bool measure_latencies = false;
+};
+
+static void zero_copy_io_callback(int64_t result, ceph_bufferlist* data,
+                                  void* priv)
+{
+  auto* ctx = static_cast<ZeroCopyIOContext*>(priv);
+  ctx->result = result;
+
+  if (result > 0) {
+    ctx->stats_ptr->bytes_transferred += result;
+    ctx->stats_ptr->ops++;
+    if (ctx->measure_latencies && ctx->issue_ns != 0) {
+      ctx->stats_ptr->clat.add_sample(mono_ns_now() - ctx->issue_ns);
+    }
+  } else if (result < 0) {
+    ctx->stats_ptr->errors++;
+    *(ctx->stop_signal_ptr) = true;
+  }
+
+  if (data) {
+    // Export segments without copying into a staging buffer (Ganesha-style).
+    struct iovec iov[64];
+    int n = ceph_bufferlist_to_iovec(data, iov, 64);
+    if (n > 0) {
+      volatile unsigned char sink = 0;
+      for (int i = 0; i < n; ++i) {
+        if (iov[i].iov_base && iov[i].iov_len > 0) {
+          sink ^= static_cast<unsigned char*>(iov[i].iov_base)[0];
+          sink ^=
+              static_cast<unsigned char*>(iov[i].iov_base)[iov[i].iov_len - 1];
+        }
+      }
+      (void)sink;
+    }
+    ceph_bufferlist_put(data);
+  }
+
   ctx->completed.store(true, std::memory_order_release);
   if (ctx->semaphore_ptr) {
     ctx->semaphore_ptr->release();
@@ -451,6 +846,12 @@ bench_write_worker(
   auto buffer = std::vector<char>(config.block_size);
   RandomHelper::fill_buffer(std::as_writable_bytes(std::span(buffer)));
 
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
   for (int i = 0;; ++i) {
     if (stop_signal) {
       break; // Check if we should stop
@@ -494,8 +895,24 @@ bench_write_worker(
         break;
       }
 
-      uint64_t to_write = std::min(config.block_size, config.file_size - written);
-      if (int rc = ceph_write(cmount, fd, buffer.data(), to_write, -1); rc < 0) {
+      uint64_t to_write;
+      int64_t write_offset;
+      if (config.random_io) {
+        write_offset = static_cast<int64_t>(
+            fio_rand.next_offset(config.file_size, config.block_size));
+        to_write = FioRandomState::io_size_at(
+            static_cast<uint64_t>(write_offset), config.file_size,
+            config.block_size);
+      } else {
+        write_offset = -1;
+        to_write = std::min(config.block_size, config.file_size - written);
+      }
+      uint64_t t0 = 0;
+      if (config.measure_latencies) {
+        t0 = mono_ns_now();
+      }
+      if (int rc = ceph_write(cmount, fd, buffer.data(), to_write, write_offset);
+          rc < 0) {
         ss << "Thread " << thread_id << " write error: " << strerror(-rc) << std::endl;
         stats.errors++;
         stop_signal = true;
@@ -505,17 +922,25 @@ bench_write_worker(
         written += rc;
         stats.bytes_transferred += rc;
         stats.ops++;
-      }
 
-      if (config.fsync_every_bytes > 0 && (written - last_sync) >= config.fsync_every_bytes) {
-        if (int rc = ceph_fsync(cmount, fd, 0); rc < 0) {
-          ss << "Thread " << thread_id << " fsync error: " << strerror(-rc) << std::endl;
-          stats.errors++;
-          stop_signal = true;
-          write_error = true;
-          break;
+        // Keep the clat timer open across a following fsync when --fsync-every
+        // triggers so write samples include durability cost.
+        if (config.fsync_every_bytes > 0 &&
+            (written - last_sync) >= config.fsync_every_bytes) {
+          if (int fsync_rc = ceph_fsync(cmount, fd, 0); fsync_rc < 0) {
+            ss << "Thread " << thread_id << " fsync error: " << strerror(-fsync_rc)
+               << std::endl;
+            stats.errors++;
+            stop_signal = true;
+            write_error = true;
+            break;
+          }
+          last_sync = written;
         }
-        last_sync = written;
+
+        if (config.measure_latencies) {
+          stats.clat.add_sample(mono_ns_now() - t0);
+        }
       }
     }
 
@@ -566,6 +991,12 @@ bench_async_write_worker(
   std::counting_semaphore<> queue_semaphore(config.queue_depth);
   std::atomic<int> active_callbacks{0};
 
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
   // Allocate queue of async contexts
   std::vector<std::unique_ptr<AsyncIOContext>> io_queue;
   for (int i = 0; i < config.queue_depth; ++i) {
@@ -575,13 +1006,14 @@ bench_async_write_worker(
     ctx->io_info.callback = async_io_callback;
     ctx->io_info.priv = ctx.get();
     ctx->io_info.write = true;
-    ctx->io_info.fsync = config.async_write_fsync;
+    ctx->io_info.fsync = false; // set per submit (--async-write-fsync / --fsync-every)
     ctx->io_info.syncdataonly = false;
     ctx->completed = true;
     ctx->stop_signal_ptr = &stop_signal;
     ctx->stats_ptr = &stats;
     ctx->semaphore_ptr = &queue_semaphore;
     ctx->active_callbacks = &active_callbacks;
+    ctx->measure_latencies = config.measure_latencies;
     io_queue.push_back(std::move(ctx));
   }
 
@@ -650,6 +1082,7 @@ bench_async_write_worker(
     }
 
     uint64_t written = 0;
+    uint64_t last_sync = 0;
     bool write_error = false;
 
     while (written < config.file_size) {
@@ -687,9 +1120,29 @@ bench_async_write_worker(
       }
 
       // Setup I/O operation
-      uint64_t to_write = std::min(config.block_size, config.file_size - written);
+      uint64_t io_offset;
+      uint64_t to_write;
+      if (config.random_io) {
+        io_offset = fio_rand.next_offset(config.file_size, config.block_size);
+        to_write = FioRandomState::io_size_at(
+            io_offset, config.file_size, config.block_size);
+      } else {
+        io_offset = written;
+        to_write = std::min(config.block_size, config.file_size - written);
+      }
+
+      // Mirror sync --fsync-every: attach fsync to this write when the
+      // submitted-byte threshold is crossed (--async-write-fsync => every write).
+      const uint64_t next_written = written + to_write;
+      bool do_fsync = config.async_write_fsync;
+      if (!do_fsync && config.fsync_every_bytes > 0 &&
+          (next_written - last_sync) >= config.fsync_every_bytes) {
+        do_fsync = true;
+        last_sync = next_written;
+      }
+
       available_ctx->fh = fh;
-      available_ctx->offset = written;
+      available_ctx->offset = io_offset;
       available_ctx->completed.store(false, std::memory_order_release);
       available_ctx->result = 0;
       
@@ -700,8 +1153,12 @@ bench_async_write_worker(
       available_ctx->io_info.fh = fh;
       available_ctx->io_info.iov = &available_ctx->iov;
       available_ctx->io_info.iovcnt = 1;
-      available_ctx->io_info.off = written;
+      available_ctx->io_info.off = io_offset;
       available_ctx->io_info.result = 0;
+      available_ctx->io_info.fsync = do_fsync;
+      if (config.measure_latencies) {
+        available_ctx->issue_ns = mono_ns_now();
+      }
 
       // Submit async I/O
       active_callbacks.fetch_add(1, std::memory_order_relaxed);
@@ -717,7 +1174,7 @@ bench_async_write_worker(
         break;
       }
 
-      written += to_write;
+      written = next_written;
     }
 
     // Wait for all outstanding I/Os to complete for this file
@@ -729,8 +1186,12 @@ bench_async_write_worker(
     }
 
     // Flush buffered data before close so files survive the post-write remount.
-    // Skip when each async write already carried fsync (Ganesha-style path).
-    if (!write_error && !stop_signal && !config.async_write_fsync) {
+    // Skip when every write already carried fsync, or --fsync-every covered
+    // the full file (no trailing unsynced bytes).
+    const bool need_final_fsync =
+        !config.async_write_fsync &&
+        (config.fsync_every_bytes == 0 || written > last_sync);
+    if (!write_error && !stop_signal && need_final_fsync) {
       if (int fsync_rc = ceph_ll_fsync(cmount, fh, 0); fsync_rc < 0) {
         ss << "Thread " << thread_id << " fsync error " << fname << ": "
            << strerror(-fsync_rc) << std::endl;
@@ -802,6 +1263,12 @@ bench_read_worker(
 
   std::vector<char> buffer(config.block_size);
 
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
   for (int i = 0;; ++i) {
     if (stop_signal) {
       break;
@@ -840,7 +1307,21 @@ bench_read_worker(
         break;
       }
 
-      int rc = ceph_read(cmount, fd, buffer.data(), config.block_size, -1);
+      int rc;
+      uint64_t t0 = 0;
+      if (config.measure_latencies) {
+        t0 = mono_ns_now();
+      }
+      if (config.random_io) {
+        int64_t read_offset = static_cast<int64_t>(
+            fio_rand.next_offset(config.file_size, config.block_size));
+        uint64_t to_read = FioRandomState::io_size_at(
+            static_cast<uint64_t>(read_offset), config.file_size,
+            config.block_size);
+        rc = ceph_read(cmount, fd, buffer.data(), to_read, read_offset);
+      } else {
+        rc = ceph_read(cmount, fd, buffer.data(), config.block_size, -1);
+      }
       if (rc < 0) {
         ss << "Thread " << thread_id << " read error: " << strerror(-rc) << std::endl;
         stats.errors++;
@@ -852,6 +1333,9 @@ bench_read_worker(
         break; // EOF
       }
 
+      if (config.measure_latencies) {
+        stats.clat.add_sample(mono_ns_now() - t0);
+      }
       total_read += rc;
       stats.bytes_transferred += rc;
       stats.ops++;
@@ -902,6 +1386,12 @@ bench_async_read_worker(
   std::counting_semaphore<> queue_semaphore(config.queue_depth);
   std::atomic<int> active_callbacks{0};
 
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
   // Allocate queue of async contexts
   std::vector<std::unique_ptr<AsyncIOContext>> io_queue;
   for (int i = 0; i < config.queue_depth; ++i) {
@@ -916,6 +1406,7 @@ bench_async_read_worker(
     ctx->stats_ptr = &stats;
     ctx->semaphore_ptr = &queue_semaphore;
     ctx->active_callbacks = &active_callbacks;
+    ctx->measure_latencies = config.measure_latencies;
     io_queue.push_back(std::move(ctx));
   }
 
@@ -1008,9 +1499,18 @@ bench_async_read_worker(
       }
 
       // Setup I/O operation
-      uint64_t to_read = std::min(config.block_size, config.file_size - total_read);
+      uint64_t io_offset;
+      uint64_t to_read;
+      if (config.random_io) {
+        io_offset = fio_rand.next_offset(config.file_size, config.block_size);
+        to_read = FioRandomState::io_size_at(
+            io_offset, config.file_size, config.block_size);
+      } else {
+        io_offset = total_read;
+        to_read = std::min(config.block_size, config.file_size - total_read);
+      }
       available_ctx->fh = fh;
-      available_ctx->offset = total_read;
+      available_ctx->offset = io_offset;
       available_ctx->completed.store(false, std::memory_order_release);
       available_ctx->result = 0;
       
@@ -1021,8 +1521,11 @@ bench_async_read_worker(
       available_ctx->io_info.fh = fh;
       available_ctx->io_info.iov = &available_ctx->iov;
       available_ctx->io_info.iovcnt = 1;
-      available_ctx->io_info.off = total_read;
+      available_ctx->io_info.off = io_offset;
       available_ctx->io_info.result = 0;
+      if (config.measure_latencies) {
+        available_ctx->issue_ns = mono_ns_now();
+      }
 
       // Submit async I/O
       active_callbacks.fetch_add(1, std::memory_order_relaxed);
@@ -1108,6 +1611,480 @@ bench_async_read_worker(
   }
 }
 
+// Zero-copy write worker: upper-layer style — ceph_bufferlist_alloc, fill via
+// to_iovec from a stable per-slot pattern buffer, ceph_ll_async_write consume.
+// (Matches Ganesha alloc path; claim/wrap are fallbacks only.)
+void
+bench_zerocopy_write_worker(
+    int thread_id,
+    int files_to_write,
+    BenchConfig config,
+    struct ceph_mount_info* cmount,
+    ThreadStats& stats,
+    std::atomic<bool>& stop_signal,
+    std::stringstream& ss,
+    steady_clock::time_point phase_start_time)
+{
+  ceph_pthread_setname(("zc-wr-" + std::to_string(thread_id)).c_str());
+  auto duration_limit = std::chrono::seconds(config.duration);
+
+  std::counting_semaphore<> queue_semaphore(config.queue_depth);
+  std::atomic<int> active_callbacks{0};
+
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
+  std::vector<std::unique_ptr<ZeroCopyIOContext>> io_queue;
+  for (int i = 0; i < config.queue_depth; ++i) {
+    auto ctx = std::make_unique<ZeroCopyIOContext>();
+    ctx->write_buf.resize(config.block_size);
+    RandomHelper::fill_buffer(std::as_writable_bytes(std::span(ctx->write_buf)));
+    ctx->comp.cb = zero_copy_io_callback;
+    ctx->comp.priv = ctx.get();
+    ctx->completed = true;
+    ctx->stop_signal_ptr = &stop_signal;
+    ctx->stats_ptr = &stats;
+    ctx->semaphore_ptr = &queue_semaphore;
+    ctx->active_callbacks = &active_callbacks;
+    ctx->measure_latencies = config.measure_latencies;
+    io_queue.push_back(std::move(ctx));
+  }
+
+  for (int file_iter = 0;; ++file_iter) {
+    if (stop_signal) {
+      break;
+    }
+
+    if (config.duration > 0) {
+      if ((steady_clock::now() - phase_start_time) >= duration_limit) {
+        break;
+      }
+    } else if (file_iter >= files_to_write) {
+      break;
+    }
+
+    int file_idx = config.shared_file ? 0 : (file_iter % files_to_write);
+    string fname = config.subdir + "/" + config.prefix;
+    if (config.shared_file) {
+      fname += "shared";
+    } else {
+      fname += std::to_string(thread_id) + "_" + std::to_string(file_idx);
+    }
+
+    size_t last_slash = fname.find_last_of('/');
+    string filename = (last_slash != string::npos)
+                          ? fname.substr(last_slash + 1)
+                          : fname;
+
+    Inode* parent_inode = nullptr;
+    struct ceph_statx parent_stx;
+    UserPerm* perms = ceph_userperm_new(config.uid, config.gid, 0, nullptr);
+
+    int rc = ceph_ll_walk(cmount, config.subdir.c_str(), &parent_inode,
+                          &parent_stx, CEPH_STATX_INO, 0, perms);
+    if (rc < 0) {
+      ss << "Thread " << thread_id << " walk parent dir failed "
+         << config.subdir << ": " << strerror(-rc) << std::endl;
+      stats.errors++;
+      stop_signal = true;
+      ceph_userperm_destroy(perms);
+      break;
+    }
+
+    Inode* inode = nullptr;
+    Fh* fh = nullptr;
+    struct ceph_statx stx;
+    rc = ceph_ll_create(cmount, parent_inode, filename.c_str(), 0644,
+                        O_WRONLY | O_CREAT | O_TRUNC, &inode, &fh, &stx,
+                        CEPH_STATX_INO, 0, perms);
+    ceph_userperm_destroy(perms);
+    if (rc < 0) {
+      ss << "Thread " << thread_id << " ll_create failed " << fname << ": "
+         << strerror(-rc) << std::endl;
+      stats.errors++;
+      stop_signal = true;
+      if (parent_inode) {
+        ceph_ll_forget(cmount, parent_inode, 1);
+      }
+      break;
+    }
+    if (parent_inode) {
+      ceph_ll_forget(cmount, parent_inode, 1);
+    }
+
+    uint64_t written = 0;
+    uint64_t last_sync = 0;
+    bool write_error = false;
+
+    while (written < config.file_size) {
+      if (stop_signal) {
+        break;
+      }
+      if (config.duration > 0 &&
+          (steady_clock::now() - phase_start_time) >= duration_limit) {
+        break;
+      }
+
+      queue_semaphore.acquire();
+      if (stop_signal) {
+        queue_semaphore.release();
+        break;
+      }
+
+      ZeroCopyIOContext* available_ctx = nullptr;
+      for (auto& ctx : io_queue) {
+        if (ctx->completed.load(std::memory_order_acquire)) {
+          available_ctx = ctx.get();
+          break;
+        }
+      }
+      if (!available_ctx) {
+        ss << "Thread " << thread_id
+           << " internal error: no available ZC context after semaphore acquire"
+           << std::endl;
+        queue_semaphore.release();
+        break;
+      }
+
+      uint64_t io_offset;
+      uint64_t to_write;
+      if (config.random_io) {
+        io_offset = fio_rand.next_offset(config.file_size, config.block_size);
+        to_write = FioRandomState::io_size_at(io_offset, config.file_size,
+                                              config.block_size);
+      } else {
+        io_offset = written;
+        to_write = std::min(config.block_size, config.file_size - written);
+      }
+
+      const uint64_t next_written = written + to_write;
+      bool do_fsync = config.async_write_fsync;
+      if (!do_fsync && config.fsync_every_bytes > 0 &&
+          (next_written - last_sync) >= config.fsync_every_bytes) {
+        do_fsync = true;
+        last_sync = next_written;
+      }
+
+      available_ctx->fh = fh;
+      available_ctx->offset = io_offset;
+      available_ctx->completed.store(false, std::memory_order_release);
+      available_ctx->result = 0;
+
+      ceph_bufferlist* wbl = ceph_bufferlist_alloc(to_write);
+      if (!wbl) {
+        ss << "Thread " << thread_id << " ceph_bufferlist_alloc failed"
+           << std::endl;
+        stats.errors++;
+        stop_signal = true;
+        write_error = true;
+        available_ctx->completed.store(true, std::memory_order_release);
+        queue_semaphore.release();
+        break;
+      }
+      {
+        struct iovec iov;
+        int n = ceph_bufferlist_to_iovec(wbl, &iov, 1);
+        if (n != 1 || iov.iov_len < to_write) {
+          ss << "Thread " << thread_id
+             << " ceph_bufferlist_to_iovec failed after alloc" << std::endl;
+          ceph_bufferlist_put(wbl);
+          stats.errors++;
+          stop_signal = true;
+          write_error = true;
+          available_ctx->completed.store(true, std::memory_order_release);
+          queue_semaphore.release();
+          break;
+        }
+        std::memcpy(iov.iov_base, available_ctx->write_buf.data(), to_write);
+      }
+
+      if (config.measure_latencies) {
+        available_ctx->issue_ns = mono_ns_now();
+      }
+
+      active_callbacks.fetch_add(1, std::memory_order_relaxed);
+      // ceph_ll_async_write consumes wbl at submit (even on early -errno).
+      const int write_flags = do_fsync ? CEPH_LL_WRITE_FSYNC : 0;
+      int submit_rc = ceph_ll_async_write(cmount, fh, io_offset, wbl,
+                                          write_flags, &available_ctx->comp);
+      if (submit_rc < 0) {
+        active_callbacks.fetch_sub(1, std::memory_order_relaxed);
+        ss << "Thread " << thread_id
+           << " zero-copy write submit error: " << strerror(-submit_rc)
+           << std::endl;
+        stats.errors++;
+        stop_signal = true;
+        write_error = true;
+        available_ctx->completed.store(true, std::memory_order_release);
+        queue_semaphore.release();
+        break;
+      }
+
+      written = next_written;
+    }
+
+    for (auto& ctx : io_queue) {
+      while (!ctx->completed.load(std::memory_order_acquire) && ctx->fh == fh &&
+             !stop_signal) {
+        std::this_thread::yield();
+      }
+    }
+
+    const bool need_final_fsync = !config.async_write_fsync &&
+                                  (config.fsync_every_bytes == 0 ||
+                                   written > last_sync);
+    if (!write_error && !stop_signal && need_final_fsync) {
+      if (int fsync_rc = ceph_ll_fsync(cmount, fh, 0); fsync_rc < 0) {
+        ss << "Thread " << thread_id << " fsync error " << fname << ": "
+           << strerror(-fsync_rc) << std::endl;
+        stats.errors++;
+        stop_signal = true;
+        write_error = true;
+      }
+    }
+
+    if (!write_error && !stop_signal) {
+      if (int close_rc = ceph_ll_close(cmount, fh); close_rc < 0) {
+        ss << "Thread " << thread_id << " close error " << fname << ": "
+           << strerror(-close_rc) << std::endl;
+        stats.errors++;
+        stop_signal = true;
+      } else if (stats.files < (uint64_t)files_to_write) {
+        stats.files++;
+      }
+    } else {
+      ceph_ll_close(cmount, fh);
+    }
+
+    if (inode) {
+      ceph_ll_forget(cmount, inode, 1);
+    }
+
+    if (write_error) {
+      break;
+    }
+  }
+
+  for (auto& ctx : io_queue) {
+    while (!ctx->completed.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+  }
+  while (active_callbacks.load(std::memory_order_acquire) > 0) {
+    std::this_thread::yield();
+  }
+}
+
+// Zero-copy read worker: ceph_ll_async_read; callback owns bufferlist until put
+// after bufferlist_to_iovec (no staging memcpy).
+void
+bench_zerocopy_read_worker(
+    int thread_id,
+    int files_to_read,
+    BenchConfig config,
+    struct ceph_mount_info* cmount,
+    ThreadStats& stats,
+    std::atomic<bool>& stop_signal,
+    std::stringstream& ss,
+    steady_clock::time_point phase_start_time)
+{
+  ceph_pthread_setname(("zc-rd-" + std::to_string(thread_id)).c_str());
+  auto duration_limit = std::chrono::seconds(config.duration);
+
+  std::counting_semaphore<> queue_semaphore(config.queue_depth);
+  std::atomic<int> active_callbacks{0};
+
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
+  std::vector<std::unique_ptr<ZeroCopyIOContext>> io_queue;
+  for (int i = 0; i < config.queue_depth; ++i) {
+    auto ctx = std::make_unique<ZeroCopyIOContext>();
+    ctx->comp.cb = zero_copy_io_callback;
+    ctx->comp.priv = ctx.get();
+    ctx->completed = true;
+    ctx->stop_signal_ptr = &stop_signal;
+    ctx->stats_ptr = &stats;
+    ctx->semaphore_ptr = &queue_semaphore;
+    ctx->active_callbacks = &active_callbacks;
+    ctx->measure_latencies = config.measure_latencies;
+    io_queue.push_back(std::move(ctx));
+  }
+
+  for (int file_iter = 0;; ++file_iter) {
+    if (stop_signal) {
+      break;
+    }
+
+    if (config.duration > 0) {
+      if ((steady_clock::now() - phase_start_time) >= duration_limit) {
+        break;
+      }
+    } else if (file_iter >= files_to_read) {
+      break;
+    }
+
+    int file_idx = file_iter % files_to_read;
+    string fname = config.subdir + "/" + config.prefix +
+                   std::to_string(thread_id) + "_" + std::to_string(file_idx);
+
+    Inode* inode = nullptr;
+    struct ceph_statx stx;
+    UserPerm* perms = ceph_userperm_new(config.uid, config.gid, 0, nullptr);
+
+    int rc = ceph_ll_walk(cmount, fname.c_str(), &inode, &stx, CEPH_STATX_INO,
+                          0, perms);
+    if (rc < 0) {
+      ss << "Thread " << thread_id << " walk failed " << fname << ": "
+         << strerror(-rc) << std::endl;
+      stats.errors++;
+      stop_signal = true;
+      ceph_userperm_destroy(perms);
+      break;
+    }
+
+    Fh* fh = nullptr;
+    rc = ceph_ll_open(cmount, inode, O_RDONLY, &fh, perms);
+    ceph_userperm_destroy(perms);
+    if (rc < 0) {
+      ss << "Thread " << thread_id << " ll_open failed " << fname << ": "
+         << strerror(-rc) << std::endl;
+      stats.errors++;
+      stop_signal = true;
+      if (inode) {
+        ceph_ll_forget(cmount, inode, 1);
+      }
+      break;
+    }
+
+    uint64_t total_read = 0;
+    bool read_error = false;
+
+    while (total_read < config.file_size) {
+      if (stop_signal) {
+        break;
+      }
+      if (config.duration > 0 &&
+          (steady_clock::now() - phase_start_time) >= duration_limit) {
+        break;
+      }
+
+      queue_semaphore.acquire();
+      if (stop_signal) {
+        queue_semaphore.release();
+        break;
+      }
+
+      ZeroCopyIOContext* available_ctx = nullptr;
+      for (auto& ctx : io_queue) {
+        if (ctx->completed.load(std::memory_order_acquire)) {
+          available_ctx = ctx.get();
+          break;
+        }
+      }
+      if (!available_ctx) {
+        ss << "Thread " << thread_id
+           << " internal error: no available ZC context after semaphore acquire"
+           << std::endl;
+        queue_semaphore.release();
+        break;
+      }
+
+      uint64_t io_offset;
+      uint64_t to_read;
+      if (config.random_io) {
+        io_offset = fio_rand.next_offset(config.file_size, config.block_size);
+        to_read = FioRandomState::io_size_at(io_offset, config.file_size,
+                                             config.block_size);
+      } else {
+        io_offset = total_read;
+        to_read = std::min(config.block_size, config.file_size - total_read);
+      }
+
+      available_ctx->fh = fh;
+      available_ctx->offset = io_offset;
+      available_ctx->completed.store(false, std::memory_order_release);
+      available_ctx->result = 0;
+      if (config.measure_latencies) {
+        available_ctx->issue_ns = mono_ns_now();
+      }
+
+      active_callbacks.fetch_add(1, std::memory_order_relaxed);
+      int submit_rc = ceph_ll_async_read(cmount, fh, io_offset, to_read,
+                                         &available_ctx->comp);
+      if (submit_rc < 0) {
+        active_callbacks.fetch_sub(1, std::memory_order_relaxed);
+        ss << "Thread " << thread_id
+           << " zero-copy read submit error: " << strerror(-submit_rc)
+           << std::endl;
+        stats.errors++;
+        stop_signal = true;
+        read_error = true;
+        available_ctx->completed.store(true, std::memory_order_release);
+        queue_semaphore.release();
+        break;
+      }
+
+      total_read += to_read;
+    }
+
+    for (auto& ctx : io_queue) {
+      while (!ctx->completed.load(std::memory_order_acquire) && ctx->fh == fh &&
+             !stop_signal) {
+        std::this_thread::yield();
+      }
+    }
+
+    if (!read_error && !stop_signal) {
+      if (int fsync_rc = ceph_ll_fsync(cmount, fh, 0); fsync_rc < 0) {
+        ss << "Thread " << thread_id << " fsync error " << fname << ": "
+           << strerror(-fsync_rc) << std::endl;
+        stats.errors++;
+        stop_signal = true;
+        read_error = true;
+      }
+    }
+
+    if (!read_error && !stop_signal) {
+      if (int close_rc = ceph_ll_close(cmount, fh); close_rc < 0) {
+        ss << "Thread " << thread_id << " close error " << fname << ": "
+           << strerror(-close_rc) << std::endl;
+        stats.errors++;
+        stop_signal = true;
+      } else if (stats.files < (uint64_t)files_to_read) {
+        stats.files++;
+      }
+    } else {
+      ceph_ll_close(cmount, fh);
+    }
+
+    // Forget after I/Os on this fh completed. ZC reads do not use ObjectCacher
+    // readahead, so there is no need to defer forget across the whole phase.
+    if (inode) {
+      ceph_ll_forget(cmount, inode, 1);
+    }
+
+    if (read_error) {
+      break;
+    }
+  }
+
+  for (auto& ctx : io_queue) {
+    while (!ctx->completed.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+  }
+  while (active_callbacks.load(std::memory_order_acquire) > 0) {
+    std::this_thread::yield();
+  }
+}
+
 // Dump libcephfs client perf counters (JSON) via ceph_get_perf_counters. Called
 // once at benchmark end while the mount is still active (--perf-dump).
 void
@@ -1118,6 +2095,8 @@ execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
   }
 
   char* perf_dump = nullptr;
+  // ceph_get_perf_counters returns the byte length; the buffer is not
+  // NUL-terminated (see do_out_buffer), so write exactly that many bytes.
   int rc = ceph_get_perf_counters(cmount, &perf_dump);
   if (rc < 0) {
     cerr << "Error: Failed to get performance counters: " << strerror(-rc)
@@ -1133,7 +2112,7 @@ execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
       free(perf_dump);
       return;
     }
-    ofs << perf_dump;
+    ofs.write(perf_dump, rc);
     free(perf_dump);
     cout << "Performance counters dumped to " << output_path << endl;
   }
@@ -1261,7 +2240,7 @@ static int fetch_statvfs(struct ceph_mount_info* cmount,
                          const BenchConfig& config,
                          struct statvfs* stbuf)
 {
-  if (config.async_io) {
+  if (uses_async_ll(config)) {
     Inode* root = nullptr;
     int rc = ceph_ll_lookup_root(cmount, &root);
     if (rc < 0) {
@@ -1392,11 +2371,14 @@ int do_bench(BenchConfig& config) {
       }
     }
     json_formatter->dump_bool("async_io", config.async_io);
-    if (config.async_io) {
+    json_formatter->dump_bool("zero_copy", config.zero_copy);
+    if (uses_async_ll(config)) {
       json_formatter->dump_int("queue_depth", config.queue_depth);
       json_formatter->dump_bool("async_write_fsync", config.async_write_fsync);
       json_formatter->dump_bool("shared_file", config.shared_file);
     }
+    json_formatter->dump_bool("random_io", config.random_io);
+    json_formatter->dump_bool("measure_latencies", config.measure_latencies);
     json_formatter->close_section(); // configuration
     json_formatter->open_array_section("iterations");
   }
@@ -1432,13 +2414,18 @@ int do_bench(BenchConfig& config) {
     }
   }
   cout << "  Async I/O: " << (config.async_io ? "enabled" : "disabled") << std::endl;
-  if (config.async_io) {
+  cout << "  Zero-copy I/O: " << (config.zero_copy ? "enabled" : "disabled")
+       << std::endl;
+  if (uses_async_ll(config)) {
     cout << "  Queue Depth: " << config.queue_depth << std::endl;
     cout << "  Async write+fsync: "
          << (config.async_write_fsync ? "enabled" : "disabled") << std::endl;
     cout << "  Shared file (all threads): "
          << (config.shared_file ? "yes" : "no") << std::endl;
   }
+  cout << "  Random I/O: " << (config.random_io ? "enabled" : "disabled") << std::endl;
+  cout << "  Measure latencies: "
+       << (config.measure_latencies ? "enabled" : "disabled") << std::endl;
 
   if (int rc = ceph_mkdir(shared_cmount, config.subdir.c_str(), 0755); rc < 0) {
     cerr << "Failed to create bench directory '" << config.subdir << "': " << strerror(-rc) << std::endl;
@@ -1457,6 +2444,8 @@ int do_bench(BenchConfig& config) {
   std::vector<double> write_fps;
   std::vector<double> read_mbps;
   std::vector<double> read_fps;
+  FioClatStats write_clat_total;
+  FioClatStats read_clat_total;
 
   std::atomic<bool> stop_signal{false};
   std::vector<ThreadStats> write_stats(config.num_threads);
@@ -1486,6 +2475,9 @@ int do_bench(BenchConfig& config) {
       s.ops = 0;
       s.files = 0;
       s.errors = 0;
+      if (config.measure_latencies) {
+        s.clat.reset();
+      }
     }
     auto thread_outputs = std::vector<std::stringstream>(config.num_threads);
 
@@ -1502,7 +2494,12 @@ int do_bench(BenchConfig& config) {
     for (int i = 0; i < config.num_threads; ++i) {
       int f_count = files_per_thread + (i < remainder ? 1 : 0);
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
-      if (config.async_io) {
+      if (config.zero_copy) {
+        threads.emplace_back(bench_zerocopy_write_worker, i, f_count, config,
+                             worker_mount, std::ref(write_stats[i]),
+                             std::ref(stop_signal), std::ref(thread_outputs[i]),
+                             start_time);
+      } else if (config.async_io) {
         // Async path uses the low-level ll API with a per-thread I/O queue.
         threads.emplace_back(
             bench_async_write_worker, i, f_count, config, worker_mount,
@@ -1575,6 +2572,17 @@ int do_bench(BenchConfig& config) {
     }
     cout << w_fps << " files/s (" << elapsed_sec << "s)" << std::endl;
 
+    FioClatStats::Snapshot write_clat_snap;
+    if (config.measure_latencies) {
+      FioClatStats write_clat_iter;
+      for (const auto& s : write_stats) {
+        write_clat_iter.merge_from(s.clat);
+      }
+      write_clat_total.merge_from(write_clat_iter);
+      write_clat_snap = write_clat_iter.snapshot();
+      print_clat_ns("Write", write_clat_snap);
+    }
+
     if (json_formatter) {
       json_formatter->open_object_section("write");
       if (config.file_size > 0) {
@@ -1582,6 +2590,9 @@ int do_bench(BenchConfig& config) {
       }
       json_formatter->dump_float("files_per_sec", w_fps);
       json_formatter->dump_float("duration_sec", elapsed_sec);
+      if (config.measure_latencies) {
+        dump_clat_ns(json_formatter.get(), write_clat_snap);
+      }
       json_formatter->close_section(); // write
     }
 
@@ -1619,6 +2630,11 @@ int do_bench(BenchConfig& config) {
     threads.clear();
     std::vector<ThreadStats> read_stats(config.num_threads);
     thread_outputs = std::vector<std::stringstream>(config.num_threads);
+    if (config.measure_latencies) {
+      for (auto& s : read_stats) {
+        s.clat.reset();
+      }
+    }
 
     start_time = steady_clock::now();
 
@@ -1633,7 +2649,12 @@ int do_bench(BenchConfig& config) {
     for (int i = 0; i < config.num_threads; ++i) {
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
       int files_to_read = (int)write_stats[i].files.load();
-      if (config.async_io) {
+      if (config.zero_copy) {
+        threads.emplace_back(bench_zerocopy_read_worker, i, files_to_read,
+                             config, worker_mount, std::ref(read_stats[i]),
+                             std::ref(stop_signal), std::ref(thread_outputs[i]),
+                             start_time);
+      } else if (config.async_io) {
         threads.emplace_back(
             bench_async_read_worker, i, files_to_read, config,
             worker_mount, std::ref(read_stats[i]), std::ref(stop_signal),
@@ -1687,6 +2708,17 @@ int do_bench(BenchConfig& config) {
     }
     cout << r_fps << " files/s (" << elapsed_sec << "s)" << std::endl;
 
+    FioClatStats::Snapshot read_clat_snap;
+    if (config.measure_latencies) {
+      FioClatStats read_clat_iter;
+      for (const auto& s : read_stats) {
+        read_clat_iter.merge_from(s.clat);
+      }
+      read_clat_total.merge_from(read_clat_iter);
+      read_clat_snap = read_clat_iter.snapshot();
+      print_clat_ns("Read", read_clat_snap);
+    }
+
     if (json_formatter) {
       json_formatter->open_object_section("read");
       if (config.file_size > 0) {
@@ -1694,6 +2726,9 @@ int do_bench(BenchConfig& config) {
       }
       json_formatter->dump_float("files_per_sec", r_fps);
       json_formatter->dump_float("duration_sec", elapsed_sec);
+      if (config.measure_latencies) {
+        dump_clat_ns(json_formatter.get(), read_clat_snap);
+      }
       json_formatter->close_section(); // read
       json_formatter->close_section(); // iteration
     }
@@ -1741,6 +2776,17 @@ int do_bench(BenchConfig& config) {
   }
 
   // Statistics Output
+  if (config.measure_latencies) {
+    auto write_snap = write_clat_total.snapshot();
+    auto read_snap = read_clat_total.snapshot();
+    print_clat_ns("Write (all iterations)", write_snap);
+    print_clat_ns("Read (all iterations)", read_snap);
+    if (json_formatter) {
+      dump_clat_ns(json_formatter.get(), write_snap, "Write clat_ns");
+      dump_clat_ns(json_formatter.get(), read_snap, "Read clat_ns");
+    }
+  }
+
   if (config.file_size > 0) {
     print_statistics(
         "Write Throughput", write_mbps, "MiB/s", json_formatter.get());
@@ -1842,7 +2888,8 @@ int main(int argc, char **argv) {
     ("files", po::value<int>(&config.num_files)->default_value(100), "Total number of files")
     ("size", po::value<string>(&size_str)->default_value("4MB"), "File size (e.g. 4MB, 0 for creates only)")
     ("block-size", po::value<string>(&block_size_str)->default_value("4MB"), "IO block size (e.g. 1MB)")
-    ("fsync-every", po::value<string>(&fsync_str)->default_value("0"), "Call fsync every N bytes")
+    ("fsync-every", po::value<string>(&fsync_str)->default_value("0"),
+     "Call fsync every N bytes (sync: after write; async/zero-copy: on threshold writes)")
     ("prefix", po::value<string>(&config.prefix)->default_value("benchmark_"), "Filename prefix")
     ("dir-prefix", po::value<string>(&config.dir_prefix)->default_value("bench_run_"), "Directory prefix")
     ("root-path", po::value<string>(&config.mount_root)->default_value("/"), "Root path in CephFS")
@@ -1854,14 +2901,22 @@ int main(int argc, char **argv) {
     ("progress", po::bool_switch(&config.show_progress), "Show progress and current bandwidth during benchmark")
     ("progress-interval", po::value<int>(&config.progress_interval)->default_value(10), "Progress update interval in percent (1-100)")
     ("async-io", po::bool_switch(&config.async_io), "Use asynchronous I/O with ceph_ll_nonblocking_readv_writev")
-    ("async-write-fsync", po::bool_switch(&config.async_write_fsync), "With async-io, fsync each write via io_info.fsync (Ganesha-style; needs async-io)")
-    ("shared-file", po::bool_switch(&config.shared_file), "With async-io, all threads write to one shared file (stress cap flush waiters)")
-    ("queue-depth", po::value<int>(&config.queue_depth)->default_value(16), "Queue depth for async I/O (number of outstanding I/Os per thread)")
+    ("zero-copy", po::bool_switch(&config.zero_copy),
+     "Use zero-copy async I/O (ceph_ll_async_read/write + bufferlist; exclusive with --async-io)")
+    ("async-write-fsync", po::bool_switch(&config.async_write_fsync),
+     "With async-io/zero-copy, fsync each write (Ganesha-style)")
+    ("shared-file", po::bool_switch(&config.shared_file),
+     "With async-io/zero-copy, all threads write to one shared file (stress cap flush waiters)")
+    ("queue-depth", po::value<int>(&config.queue_depth)->default_value(16),
+     "Queue depth for async/zero-copy I/O (outstanding I/Os per thread)")
+    ("random-io", po::bool_switch(&config.random_io), "Use random offsets within each file (fio tausworthe64 algorithm)")
+    ("measure-latencies", po::bool_switch(&config.measure_latencies),
+     "Collect per-op completion latency (fio-compatible clat_ns; write samples include --fsync-every)")
 #ifdef CEPH_LOCKSTAT
     ("lockstat-dump", po::value<string>(&config.lockstat_dump_path), "Base path for lockstat output files (iteration and phase will be appended)")
     ("lockstat-threshold", po::value<uint64_t>(&config.lockstat_threshold_ns)->default_value(0), "Lockstat threshold in nanoseconds (0 = collect all)")
 #endif
-    ;
+      ;
 
   // Hidden positional option for the sub-command
   po::options_description hidden("Hidden options");
@@ -1926,18 +2981,24 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    if (config.async_io && config.per_thread_mount) {
-      cerr << "Error: async-io is not compatible with per-thread-mount\n";
+    if (config.async_io && config.zero_copy) {
+      cerr << "Error: --async-io and --zero-copy are mutually exclusive\n";
       return 1;
     }
 
-    if (config.async_write_fsync && !config.async_io) {
-      cerr << "Error: async-write-fsync requires --async-io\n";
+    if (uses_async_ll(config) && config.per_thread_mount) {
+      cerr << "Error: async-io/zero-copy is not compatible with "
+              "per-thread-mount\n";
       return 1;
     }
 
-    if (config.shared_file && !config.async_io) {
-      cerr << "Error: shared-file requires --async-io\n";
+    if (config.async_write_fsync && !uses_async_ll(config)) {
+      cerr << "Error: async-write-fsync requires --async-io or --zero-copy\n";
+      return 1;
+    }
+
+    if (config.shared_file && !uses_async_ll(config)) {
+      cerr << "Error: shared-file requires --async-io or --zero-copy\n";
       return 1;
     }
 

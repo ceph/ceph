@@ -13,27 +13,31 @@
  *
  */
 
-#include "gtest/gtest.h"
+#include "client/FSCrypt.h"
+
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <unistd.h>
+
+#include <condition_variable>
+#include <cstring>
+#include <iostream>
+#include <mutex>
+#include <vector>
+
 #include "common/ceph_argparse.h"
+#include "gtest/gtest.h"
 #include "include/buffer.h"
-#include "include/stringify.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/fs_types.h"
 #include "include/rados/librados.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <sys/uio.h>
-#include <iostream>
-#include <vector>
+#include "include/stringify.h"
 #include "json_spirit/json_spirit.h"
 
-#include "include/fs_types.h"
-
-#include "client/FSCrypt.h"
 #include "fscrypt_conf.h"
 
 #ifdef __linux__
@@ -1209,6 +1213,196 @@ TEST(FSCrypt, FSCryptDummyEncryptionNoExistingRegularPolicy) {
   ASSERT_EQ(0, ceph_get_fscrypt_policy_v2(cmount, fd, &policy));
 
 
+  ceph_shutdown(cmount);
+}
+
+namespace {
+
+struct ZcWait {
+  std::mutex mtx;
+  std::condition_variable cv;
+  bool done = false;
+  int64_t result = 0;
+  ceph_bufferlist* data = nullptr;
+
+  int64_t wait()
+  {
+    std::unique_lock lock(mtx);
+    cv.wait(lock, [this] { return done; });
+    return result;
+  }
+};
+
+void zc_io_cb(int64_t result, ceph_bufferlist* data, void* priv)
+{
+  auto* w = static_cast<ZcWait*>(priv);
+  std::lock_guard lock(w->mtx);
+  w->result = result;
+  w->data = data;
+  w->done = true;
+  w->cv.notify_one();
+}
+
+/** Create empty dir under root, set fscrypt policy, return dir path. */
+string setup_fscrypt_dir(struct ceph_mount_info* cmount, UserPerm* perms)
+{
+  string dir_path = get_unique_dir_name();
+  Inode* root = nullptr;
+  EXPECT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+  Inode* dir = nullptr;
+  struct ceph_statx stx;
+  EXPECT_EQ(0, ceph_ll_mkdir(cmount, root, dir_path.c_str(), 0755, &dir, &stx,
+                             0, 0, perms));
+
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  EXPECT_EQ(0, ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key),
+                                    keyid, 0));
+  struct fscrypt_policy_v2 policy;
+  populate_policy(keyid, &policy);
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+  EXPECT_GE(fd, 0);
+  EXPECT_EQ(0, ceph_set_fscrypt_policy_v2(cmount, fd, &policy));
+  ceph_close(cmount, fd);
+  return dir_path;
+}
+
+void zc_compare_read(ceph_bufferlist* rbl, const string& expected)
+{
+  ASSERT_NE(nullptr, rbl);
+  ASSERT_EQ(expected.size(), ceph_bufferlist_length(rbl));
+  struct iovec riov[16];
+  int niov = ceph_bufferlist_to_iovec(rbl, riov, 16);
+  ASSERT_GT(niov, 0);
+  size_t pos = 0;
+  for (int i = 0; i < niov; ++i) {
+    ASSERT_LE(pos + riov[i].iov_len, expected.size());
+    EXPECT_EQ(0,
+              memcmp(expected.data() + pos, riov[i].iov_base, riov[i].iov_len));
+    pos += riov[i].iov_len;
+  }
+  EXPECT_EQ(expected.size(), pos);
+}
+
+} // namespace
+
+TEST(FSCrypt, ZeroCopyAsyncAlignedRoundTrip)
+{
+  // Plaintext alloc → async_write → async_read on an FSCrypt inode (4 KiB
+  // aligned; crypto still copies into ciphertext/plaintext lists).
+  // client_oc=false: ZC still bypasses ObjectCacher, so an OC-enabled mount
+  // would leave stale BH data for classic ll_read after a ZC write.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "false"));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+  UserPerm* perms = ceph_mount_perms(cmount);
+  string dir_path = setup_fscrypt_dir(cmount, perms);
+
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+  Inode* dir = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_lookup(cmount, root, dir_path.c_str(), &dir, &stx, 0, 0,
+                              perms));
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  ASSERT_EQ(0, ceph_ll_create(cmount, dir, "zc_aligned", 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  constexpr size_t len = 4096;
+  ceph_bufferlist* wbl = ceph_bufferlist_alloc(len);
+  ASSERT_NE(nullptr, wbl);
+  struct iovec wiov[1];
+  ASSERT_EQ(1, ceph_bufferlist_to_iovec(wbl, wiov, 1));
+  memset(wiov[0].iov_base, 0x3c, len);
+  string expected(static_cast<char*>(wiov[0].iov_base), len);
+
+  ZcWait wwait;
+  struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, 0, wbl, 0, &wcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
+
+  ZcWait rwait;
+  struct ceph_io_completion rcomp{zc_io_cb, &rwait};
+  ASSERT_EQ(0, ceph_ll_async_read(cmount, fh, 0, len, &rcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), rwait.wait());
+  zc_compare_read(rwait.data, expected);
+  ceph_bufferlist_put(rwait.data);
+
+  // Cross-check against the classic path.
+  char verify[len];
+  ASSERT_EQ(static_cast<int>(len), ceph_ll_read(cmount, fh, 0, len, verify));
+  EXPECT_EQ(0, memcmp(expected.data(), verify, len));
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, dir, "zc_aligned", perms));
+  ASSERT_EQ(0, ceph_ll_rmdir(cmount, root, dir_path.c_str(), perms));
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, ZeroCopyAsyncUnalignedRoundTrip)
+{
+  // Unaligned WRITE forces FSCrypt RMW; READ decrypts a block-aligned span.
+  struct ceph_mount_info* cmount = nullptr;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "false"));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+  UserPerm* perms = ceph_mount_perms(cmount);
+  string dir_path = setup_fscrypt_dir(cmount, perms);
+
+  Inode* root = nullptr;
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+  Inode* dir = nullptr;
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_ll_lookup(cmount, root, dir_path.c_str(), &dir, &stx, 0, 0,
+                              perms));
+
+  Inode* file = nullptr;
+  Fh* fh = nullptr;
+  ASSERT_EQ(0, ceph_ll_create(cmount, dir, "zc_unaligned", 0666,
+                              O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0,
+                              0, perms));
+
+  // Seed a full block via classic write so RMW has plaintext neighbors.
+  char seed[4096];
+  memset(seed, 0xaa, sizeof(seed));
+  ASSERT_EQ(static_cast<int>(sizeof(seed)),
+            ceph_ll_write(cmount, fh, 0, sizeof(seed), seed));
+
+  constexpr uint64_t off = 100;
+  constexpr size_t len = 200;
+  ceph_bufferlist* wbl = ceph_bufferlist_alloc(len);
+  ASSERT_NE(nullptr, wbl);
+  struct iovec wiov[1];
+  ASSERT_EQ(1, ceph_bufferlist_to_iovec(wbl, wiov, 1));
+  memset(wiov[0].iov_base, 0x5a, len);
+  string expected(static_cast<char*>(wiov[0].iov_base), len);
+
+  ZcWait wwait;
+  struct ceph_io_completion wcomp{zc_io_cb, &wwait};
+  ASSERT_EQ(0, ceph_ll_async_write(cmount, fh, off, wbl, 0, &wcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), wwait.wait());
+
+  ZcWait rwait;
+  struct ceph_io_completion rcomp{zc_io_cb, &rwait};
+  ASSERT_EQ(0, ceph_ll_async_read(cmount, fh, off, len, &rcomp));
+  ASSERT_EQ(static_cast<int64_t>(len), rwait.wait());
+  zc_compare_read(rwait.data, expected);
+  ceph_bufferlist_put(rwait.data);
+
+  char verify[len];
+  ASSERT_EQ(static_cast<int>(len), ceph_ll_read(cmount, fh, off, len, verify));
+  EXPECT_EQ(0, memcmp(expected.data(), verify, len));
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, dir, "zc_unaligned", perms));
+  ASSERT_EQ(0, ceph_ll_rmdir(cmount, root, dir_path.c_str(), perms));
   ceph_shutdown(cmount);
 }
 #endif

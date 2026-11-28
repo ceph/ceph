@@ -31,6 +31,7 @@ if(WITH_LIBCEPHFS)
     deleg.cc
     monconfig.cc
     client_cache.cc
+    zerocopy.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
