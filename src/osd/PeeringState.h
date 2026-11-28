@@ -1837,6 +1837,8 @@ public:
   std::set<pg_shard_t> peer_activated;
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  /// up osds kept out of backfill while they may be recovery sources
+  std::set<pg_shard_t> deferred_backfill_targets;
   shard_id_set backfill_target_shard_id_set;
   /// multi-zone EC: backfill targets complete and contiguous with the auth
   /// log, waiting for their zone block to move to them
@@ -2063,6 +2065,7 @@ private:
     const OSDMapRef osdmap) const;
 
   bool recoverable(const std::vector<int> &want) const;
+  void defer_backfill_of_recovery_sources();
   bool choose_acting(pg_shard_t &get_log_shard,
 		     bool restrict_to_up_acting,
 		     bool request_pg_temp_change_only = false,

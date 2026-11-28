@@ -1063,6 +1063,7 @@ void PeeringState::clear_recovery_state()
 {
   async_recovery_targets.clear();
   backfill_targets.clear();
+  deferred_backfill_targets.clear();
   backfill_target_shard_id_set.clear();
   usable_backfill_targets.clear();
 }
@@ -2823,6 +2824,97 @@ void PeeringState::choose_async_recovery_replicated(
 	     << " async_recovery=" << *async_recovery << dendl;
 }
 
+static shard_id_set shard_ids_of(const set<pg_shard_t> &shards)
+{
+  shard_id_set ids;
+  for (const auto &s : shards) {
+    if (s.shard != shard_id_t::NO_SHARD) {
+      ids.insert(s.shard);
+    }
+  }
+  return ids;
+}
+
+/**
+ * activate() restarts backfill from scratch on a backfill target that has
+ * fallen behind the log (or is complete), which forgets which objects it
+ * holds.  While such an OSD may hold an object that the rest of the acting
+ * set cannot recover, keep it out of backfill, as a stray that remains a
+ * recovery source.  Once recovery has completed, choose_acting() starts a
+ * new interval in which it is backfilled.
+ */
+void PeeringState::defer_backfill_of_recovery_sources()
+{
+  set<pg_shard_t> candidates;
+  for (const auto &s : backfill_targets) {
+    const pg_info_t &pi = peer_info.at(s);
+    if (!pi.is_empty() && pi.last_backfill != hobject_t() &&
+        (pi.last_backfill.is_max() || pi.last_update < pg_log.get_tail())) {
+      candidates.insert(s);
+    }
+  }
+  if (candidates.empty()) {
+    return;
+  }
+
+  set<pg_shard_t> sources;
+  for (const auto &s : acting_recovery_backfill) {
+    if (!backfill_targets.contains(s)) {
+      sources.insert(s);
+    }
+  }
+  auto missing_on = [&](pg_shard_t s) -> const pg_missing_const_i & {
+    if (s == pg_whoami) {
+      return pg_log.get_missing();
+    }
+    return peer_missing.at(s);
+  };
+
+  set<hobject_t> checked;
+  for (const auto &source : sources) {
+    if (candidates.empty()) {
+      break;
+    }
+    for (const auto &[soid, item] : missing_on(source).get_items()) {
+      if (item.is_delete() || !checked.insert(soid).second) {
+        continue;
+      }
+      set<pg_shard_t> have;
+      set<shard_id_t> have_shards;
+      for (const auto &s : sources) {
+        if (!missing_on(s).is_missing(soid)) {
+          have.insert(s);
+          have_shards.insert(s.shard);
+        }
+      }
+      if (missing_loc.get_recoverable_predicate()(have)) {
+        continue;
+      }
+      for (auto it = candidates.begin(); it != candidates.end();) {
+        const pg_info_t &pi = peer_info.at(*it);
+        if (item.need <= pi.last_update && soid < pi.last_backfill &&
+            !have_shards.contains(it->shard)) {
+          psdout(10) << "deferring backfill of " << *it << ", it may hold "
+                     << soid << " " << item.need << dendl;
+          backfill_targets.erase(*it);
+          acting_recovery_backfill.erase(*it);
+          // GetMissing cleared it; let discover_all_missing() fetch it
+          peer_missing.erase(*it);
+          deferred_backfill_targets.insert(*it);
+          it = candidates.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      if (candidates.empty()) {
+        break;
+      }
+    }
+  }
+  backfill_target_shard_id_set = shard_ids_of(backfill_targets);
+  acting_recovery_backfill_shard_id_set = shard_ids_of(acting_recovery_backfill);
+}
+
 /**
  * choose acting
  *
@@ -3031,14 +3123,18 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 
   if (request_pg_temp_change_only)
     return true;
+  if (!deferred_backfill_targets.empty()) {
+    // Deferred backfill targets can only start backfill in a new interval
+    psdout(10) << "deferred backfill " << deferred_backfill_targets
+               << ", reverting to up" << dendl;
+    want_acting = up;
+    vector<int> empty;
+    pl->queue_want_pg_temp(empty);
+    return false;
+  }
   want_acting.clear();
   acting_recovery_backfill = want_acting_backfill;
-  acting_recovery_backfill_shard_id_set.clear();
-  for (auto &ps : acting_recovery_backfill) {
-    if (ps.shard != shard_id_t::NO_SHARD) {
-      acting_recovery_backfill_shard_id_set.insert(ps.shard);
-    }
-  }
+  acting_recovery_backfill_shard_id_set = shard_ids_of(acting_recovery_backfill);
   psdout(10) << "acting_recovery_backfill is "
 	     << acting_recovery_backfill << dendl;
   ceph_assert(
@@ -7689,7 +7785,9 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
   // transit any async_recovery_targets back into acting
   // so pg won't have to stay undersized for long
   // as backfill might take a long time to complete..
-  if (!ps->async_recovery_targets.empty()) {
+  // Deferred backfill targets join the backfill in a new interval.
+  if (!ps->async_recovery_targets.empty() ||
+      !ps->deferred_backfill_targets.empty()) {
     pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(get_log_shard, true);
@@ -7710,7 +7808,8 @@ PeeringState::Recovering::react(const DoPoolMigration &evt)
   // transit any async_recovery_targets back into acting
   // so pg won't have to stay undersized for long
   // as pool migration might take a long time to complete..
-  if (!ps->async_recovery_targets.empty()) {
+  if (!ps->async_recovery_targets.empty() ||
+      !ps->deferred_backfill_targets.empty()) {
     pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(get_log_shard, true);
@@ -7815,7 +7914,8 @@ PeeringState::Recovered::Recovered(my_context ctx)
   }
 
   if (context< Active >().all_replicas_activated  &&
-      ps->async_recovery_targets.empty()) {
+      ps->async_recovery_targets.empty() &&
+      ps->deferred_backfill_targets.empty()) {
     if (context< Active >().pool_migration_target_reservation_requested) {
       post_event(StartTargetPoolMigration(
         context< Active >().pool_migration_target_reservation_num_bytes,
@@ -9425,6 +9525,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   }
 
   if (peer_missing_requested.empty()) {
+    ps->defer_backfill_of_recovery_sources();
     if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
 			 << dendl;
@@ -9450,6 +9551,7 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 		       logevt.from);
 
   if (peer_missing_requested.empty()) {
+    ps->defer_backfill_of_recovery_sources();
     if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
 			 << dendl;
