@@ -50,31 +50,18 @@ install(FILES
   DESTINATION ${PYTHON3_INSTDIR})
 
 if(WITH_MGR)
-  execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import ssl; print('.'.join(map(str,ssl.OPENSSL_VERSION_INFO[0:3])))"
-    RESULT_VARIABLE PYSSL_RESULT
-    OUTPUT_VARIABLE PYSSL_VER
-    ERROR_QUIET)
-  if (NOT ${PYSSL_RESULT})
-    # the ideal way to get the soversion is to parse the suffix of file name of
-    # `/lib/x86_64-linux-gnu/libssl.so.1.0.0`, but since we're lazy, and will just
-    # trust the version number here.
-    macro(get_openssl_soversion version prefix)
-      string(REPLACE "." ";" ssl_version_list ${version})
-      list(GET ssl_version_list 0 ssl_version_major)
-      list(GET ssl_version_list 1 ssl_version_minor)
-      set(${prefix}_SOVERSION ${ssl_version_major}.${ssl_version_minor})
-      unset(ssl_version_list)
-      unset(ssl_version_major)
-      unset(ssl_version_minor)
-    endmacro()
-    get_openssl_soversion(${OPENSSL_VERSION} OPENSSL)
-    get_openssl_soversion(${PYSSL_VER} PYSSL)
-    if(NOT (OPENSSL_SOVERSION VERSION_EQUAL PYSSL_SOVERSION))
-      message(FATAL_ERROR "Python and Ceph link to different OpenSSL versions: ${PYSSL_VER} vs ${OPENSSL_VERSION}")
+  # ceph-mgr loads libcrypto before embedded Python imports ssl.
+  if(NOT CMAKE_CROSSCOMPILING AND NOT OPENSSL_CRYPTO_LIBRARY MATCHES "\\.a$")
+    execute_process(
+      COMMAND ${Python3_EXECUTABLE} -S -c
+        "import ctypes, sys; ctypes.CDLL(sys.argv[1], mode=ctypes.RTLD_GLOBAL); import ssl; ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)"
+        "${OPENSSL_CRYPTO_LIBRARY}"
+      RESULT_VARIABLE PYSSL_RESULT
+      ERROR_VARIABLE PYSSL_ERROR
+      OUTPUT_QUIET)
+    if(NOT PYSSL_RESULT STREQUAL "0")
+      message(FATAL_ERROR "Python ssl cannot use Ceph's OpenSSL library ${OPENSSL_CRYPTO_LIBRARY}: ${PYSSL_ERROR}")
     endif()
-  else()
-    message(WARNING "could not determine ssl version of python crypto lib")
   endif()
   add_subdirectory(mgr)
 endif(WITH_MGR)
