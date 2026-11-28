@@ -1543,9 +1543,15 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
   auto name = _name ? std::string(_name) : std::string(self->this_module->get_name());
-  without_gil([&] {
-    self->py_modules->register_client(name, addrs, replace);
+  int r = without_gil([&] {
+    return self->py_modules->register_client(name, addrs, replace);
   });
+  if (r < 0) {
+    PyErr_Format(PyExc_RuntimeError,
+                 "failed to register client %s %s: %s",
+                 name.c_str(), addrs, cpp_strerror(r).c_str());
+    return nullptr;
+  }
   Py_RETURN_NONE;
 }
 
