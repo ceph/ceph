@@ -565,7 +565,7 @@ struct MirrorSnapshotNamespace {
     snapid_t primary_snap_id = CEPH_NOSNAP;
     snapid_t clean_since_snap_id;
   };
-  uint64_t last_copied_object_number = 0;
+  uint64_t last_copied_object_number = 0; // how many objects have been copied so far
   SnapSeqs snap_seqs;
 
   MirrorSnapshotNamespace() {

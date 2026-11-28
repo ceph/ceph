@@ -906,8 +906,102 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
 fi
 
+# Test sequence:
+# 1. Fill a standalone image with four nonzero 4 MiB objects and enable snapshot
+#    mirroring. Copy one object at a time and delay remote OSD messages.
+# 2. Kill the secondary daemon after it saves positive, incomplete copy progress.
+# 3. Confirm the snapshot remains incomplete with saved progress after SIGKILL,
+#    and the next data object is still absent on the secondary.
+# 4. Restore the primary client configuration, restart the secondary daemon,
+#    wait for the same mirror snapshot to complete and compare image data.
+# Expected: Resume includes the first unfinished object. Passing a completed
+#   object count as a last-completed index skips that object and comparison fails.
+test_snapshot_copy_resume()
+(
+  local primary_cluster=$1 secondary_cluster=$2 pool=$3
+  local image=copy-resume
+  local snapshot_id progress secondary_image_id object_name snapshots attempt
+  local config_file="${TEMPDIR}/${primary_cluster}.conf"
+  local config_backup="${TEMPDIR}/copy-resume-primary.conf"
+
+  if [ -n "${RBD_MIRROR_USE_RBD_MIRROR}" ] || [ -n "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
+    testlog "SKIP: snapshot copy resume requires test-managed clusters and daemons"
+    return 0
+  fi
+
+  testlog "TEST: resume snapshot copy at the first unfinished object"
+  stop_mirrors "${secondary_cluster}"
+  create_image "${primary_cluster}" "${pool}" "${image}" 16M --object-size 4M
+  rbd --cluster "${primary_cluster}" bench "${pool}/${image}" --io-type write \
+    --io-size 4194304 --io-total 16777216 --io-threads 1 --io-pattern seq --pattern-byte 66
+  rbd --cluster "${primary_cluster}" config image set "${pool}/${image}" rbd_concurrent_management_ops 1
+  enable_mirror "${primary_cluster}" "${pool}" "${image}" snapshot
+
+  # Delay the daemon's remote RADOS client, rather than changing copy progress.
+  # The configuration belongs to this test's temporary cluster. Restore it even
+  # if an assertion fails, without replacing the caller's cleanup trap.
+  cp "${config_file}" "${config_backup}"
+  trap 'cat "${config_backup}" > "${config_file}"; rm -f "${config_backup}"' EXIT
+  cat >> "${config_file}" <<EOF
+[client]
+ms_inject_delay_type = osd
+ms_inject_delay_probability = 1
+ms_inject_delay_max = 2
+EOF
+  start_mirrors "${secondary_cluster}"
+
+  for attempt in $(seq 1 600); do
+    if snapshots=$(get_snaps_json "${secondary_cluster}" "${pool}" "${image}"); then
+      snapshot_id=$(jq -r '[.[] | select(.namespace.type == "mirror" and
+        .namespace.complete == false and .namespace.last_copied_object_number > 0 and
+        .namespace.last_copied_object_number < 4)] | last | .id // empty' <<< "${snapshots}")
+      test -z "${snapshot_id}" || break
+    fi
+    sleep 0.1
+  done
+  stop_mirrors "${secondary_cluster}" -KILL
+  cat "${config_backup}" > "${config_file}"
+  test -n "${snapshot_id}" || { echo "no incomplete copy progress captured" >&2; return 1; }
+
+  snapshots=$(get_snaps_json "${secondary_cluster}" "${pool}" "${image}")
+  progress=$(jq -r --argjson id "${snapshot_id}" '[.[] | select(.id == $id and
+    .namespace.complete == false)] | last | .namespace.last_copied_object_number // empty' <<< "${snapshots}")
+  test -n "${progress}" && test "${progress}" -gt 0 && test "${progress}" -lt 4 || {
+    echo "incomplete copy progress was not preserved after stopping the daemon" >&2; return 1;
+  }
+  secondary_image_id=$(get_image_id "${secondary_cluster}" "${pool}" "${image}")
+  printf -v object_name 'rbd_data.%s.%016x' "${secondary_image_id}" "${progress}"
+  # The saved count identifies the next object. Reject a missed window where
+  # that object was already copied before the daemon stopped.
+  expect_failure "No such file or directory" rados --cluster "${secondary_cluster}" -p "${pool}" stat "${object_name}"
+  testlog "saved copy progress=${progress}, first unfinished object=${object_name}"
+
+  start_mirrors "${secondary_cluster}"
+  for attempt in $(seq 1 600); do
+    snapshots=$(get_snaps_json "${secondary_cluster}" "${pool}" "${image}")
+    if jq -e --argjson id "${snapshot_id}" 'any(.[]; .id == $id and
+      .namespace.complete == true)' <<< "${snapshots}" > /dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  jq -e --argjson id "${snapshot_id}" 'any(.[]; .id == $id and
+    .namespace.complete == true)' <<< "${snapshots}"
+  compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image}"
+
+  disable_mirror "${primary_cluster}" "${pool}" "${image}"
+  wait_for_image_present "${secondary_cluster}" "${pool}" "${image}" deleted
+  remove_image "${primary_cluster}" "${pool}" "${image}"
+  stop_mirrors "${secondary_cluster}"
+)
+
 if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    # Restart recovery can blocklist the killed daemon's client. Run this
+    # after the no-blocklists check, alongside the other restart tests.
+    test_snapshot_copy_resume "${CLUSTER2}" "${CLUSTER1}" "${POOL}"
+    start_mirrors "${CLUSTER1}"
+
     testlog "TEST: test partially synced demote snapshot sync after daemon restart"
     demote_image=test_demote_image
     create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${demote_image} ${RBD_MIRROR_MODE} 10G
