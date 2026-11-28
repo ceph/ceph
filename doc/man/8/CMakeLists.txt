@@ -26,11 +26,13 @@ set(osd_srcs
   ceph-osd.rst
   crushdiff.rst
   osdmaptool.rst
-  ceph-bluestore-tool.rst)
+  ceph-bluestore-tool.rst
+  ceph-objectstore-tool.rst)
 
 set(mon_srcs
   ceph-mon.rst
-  monmaptool.rst)
+  monmaptool.rst
+  ceph-monstore-tool.rst)
 
 list(APPEND man_srcs
   ${client_srcs}

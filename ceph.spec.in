@@ -2402,6 +2402,7 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
+%{_mandir}/man8/ceph-monstore-tool.8*
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
@@ -2701,6 +2702,7 @@ fi
 %{_bindir}/ceph-objectstore-tool
 %{_bindir}/ceph-osd-classic
 %{_mandir}/man8/ceph-bluestore-tool.8*
+%{_mandir}/man8/ceph-objectstore-tool.8*
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 
 %if 0%{with crimson}
