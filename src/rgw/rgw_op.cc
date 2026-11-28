@@ -4865,6 +4865,26 @@ int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
     s, this, rgw::lua::context::putData, *filter, cb);
 }
 
+// Content-MD5 is the standard base64 encoding of the object's 16-byte MD5
+// digest (RFC 1864). ceph_unarmor() also accepts the URL-safe alphabet and
+// stops at the first '='-padded group without rejecting any trailing
+// characters, so a decoded length of 16 is not enough: require the header to
+// match the digest's canonical base64 encoding as well.
+static bool decode_content_md5(std::string_view b64,
+                               char (&bin)[CEPH_CRYPTO_MD5_DIGESTSIZE + 1])
+{
+  if (ceph_unarmor(bin, std::end(bin), b64.data(), b64.data() + b64.size())
+          != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+    return false;
+  }
+  // base64 of a 16-byte digest is 24 characters, with no line break
+  constexpr int canonical_len = 4 * ((CEPH_CRYPTO_MD5_DIGESTSIZE + 2) / 3);
+  char canonical[canonical_len];
+  ceph_armor(canonical, std::end(canonical),
+             bin, bin + CEPH_CRYPTO_MD5_DIGESTSIZE);
+  return b64 == std::string_view(canonical, canonical_len);
+}
+
 void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
@@ -4913,10 +4933,7 @@ void RGWPutObj::execute(optional_yield y)
     need_calc_md5 = true;
 
     ldpp_dout(this, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
-    op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
-                       supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
-    ldpp_dout(this, 15) << "ceph_armor ret=" << op_ret << dendl;
-    if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+    if (!decode_content_md5(supplied_md5_b64, supplied_md5_bin)) {
       op_ret = -ERR_INVALID_DIGEST;
       return;
     }
@@ -5534,10 +5551,7 @@ void RGWPostObj::execute(optional_yield y)
     if (supplied_md5_b64) {
       char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
       ldpp_dout(this, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
-      op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
-                            supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
-      ldpp_dout(this, 15) << "ceph_armor ret=" << op_ret << dendl;
-      if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+      if (!decode_content_md5(supplied_md5_b64, supplied_md5_bin)) {
         op_ret = -ERR_INVALID_DIGEST;
         return;
       }

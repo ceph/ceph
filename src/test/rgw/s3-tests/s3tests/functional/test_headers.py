@@ -200,6 +200,37 @@ def test_object_create_bad_md5_bad():
     assert error_code == 'BadDigest'
 
 @pytest.mark.auth_common
+def test_object_create_bad_md5_trailing_data():
+    # the Content-MD5 of 'bar' with more characters after its '==' padding
+    e = _add_header_create_bad_object({'Content-MD5':'N7UdGUp1E+RbVvZSTy1R8g==AAAA'})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidDigest'
+
+@pytest.mark.auth_common
+def test_object_create_bad_md5_noncanonical_bits():
+    # the Content-MD5 of 'bar' with non-zero unused bits in the last character;
+    # it decodes to the same 16 bytes but is not the canonical base64 encoding
+    e = _add_header_create_bad_object({'Content-MD5':'N7UdGUp1E+RbVvZSTy1R8h=='})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidDigest'
+
+@pytest.mark.auth_common
+def test_object_create_bad_md5_urlsafe_alphabet():
+    # the Content-MD5 of 'bar' in the URL-safe alphabet; added after signing, as
+    # the SigV4 signature check already refuses '-' in a signed Content-MD5
+    bucket_name = get_new_bucket()
+    client = get_client()
+    def add_unsigned_md5(request, **kwargs):
+        request.headers['Content-MD5'] = 'N7UdGUp1E-RbVvZSTy1R8g=='
+    client.meta.events.register('before-send.s3.PutObject', add_unsigned_md5)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key='foo', Body='bar')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidDigest'
+
+@pytest.mark.auth_common
 def test_object_create_bad_md5_empty():
     e = _add_header_create_bad_object({'Content-MD5':''})
     status, error_code = _get_status_and_error_code(e.response)
