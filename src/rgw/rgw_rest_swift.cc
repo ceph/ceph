@@ -2194,7 +2194,7 @@ auto RGWFormPost::get_owner_info(const req_state* const s) const
 
   /* TempURL in Formpost only requires that bucket name is specified. */
   if (bucket_name.empty()) {
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   if (!s->account_name.empty()) {
@@ -2215,7 +2215,7 @@ auto RGWFormPost::get_owner_info(const req_state* const s) const
     if (!found) {
       user = driver->get_user(uid);
       if (user->load_user(s, s->yield) < 0) {
-	throw -EPERM;
+	throw boost::system::system_error(ceph::to_error_code(-EPERM));
       }
     }
 
@@ -2227,7 +2227,7 @@ auto RGWFormPost::get_owner_info(const req_state* const s) const
   int ret = driver->load_bucket(s, rgw_bucket(bucket_tenant, bucket_name),
                                 &bucket, s->yield);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   const rgw_owner& owner = bucket->get_owner();
@@ -2235,14 +2235,14 @@ auto RGWFormPost::get_owner_info(const req_state* const s) const
   if (!uid) {
     ldpp_dout(this, 20) << "bucket " << *bucket <<  " is not owned by a user "
         "so has no temp url keys" << dendl;
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   ldpp_dout(this, 20) << "temp url user (bucket owner): " << *uid << dendl;
 
   user = driver->get_user(*uid);
   if (user->load_user(s, s->yield) < 0) {
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   return user;

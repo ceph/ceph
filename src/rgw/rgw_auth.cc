@@ -475,8 +475,8 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
     result_t engine_result = result_t::deny();
     try {
       engine_result = engine.authenticate(dpp, s, y);
-    } catch (const int err) {
-      engine_result = result_t::deny(err);
+    } catch (const boost::system::system_error& e) {
+      engine_result = result_t::deny(ceph::from_error_code(e.code()));
     }
 
     bool try_next = true;
@@ -568,7 +568,8 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
       s->owner = s->auth.identity->get_aclowner();
 
       return 0;
-    } catch (const int err) {
+    } catch (const boost::system::system_error& e) {
+      const int err = ceph::from_error_code(e.code());
       ldpp_dout(dpp, 5) << "applier threw err=" << err << dendl;
       return err;
     } catch (const std::exception& e) {
@@ -576,7 +577,8 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
                         << dendl;
       return -EPERM;
     }
-  } catch (const int err) {
+  } catch (const boost::system::system_error& e) {
+    const int err = ceph::from_error_code(e.code());
     ldpp_dout(dpp, 5) << "auth engine threw err=" << err << dendl;
     return err;
   } catch (const std::exception& e) {
@@ -657,7 +659,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
   user_info = user->get_info();
 }
@@ -976,7 +978,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 }
 

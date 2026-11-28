@@ -336,7 +336,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   int res = openidc_req.process(dpp, y);
   if (res < 0) {
     ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   //Debug only

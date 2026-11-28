@@ -84,7 +84,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
   /* TempURL requires that bucket and object names are specified. */
   if (bucket_name.empty() || rgw::sal::Object::empty(s->object)) {
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   /* TempURL case is completely different than the Keystone auth - you may
@@ -109,7 +109,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     if (!found) {
       user = driver->get_user(uid);
       if (user->load_user(dpp, s->yield) < 0) {
-	throw -EPERM;
+	throw boost::system::system_error(ceph::to_error_code(-EPERM));
       }
     }
 
@@ -122,12 +122,12 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = driver->load_bucket(dpp, b, &bucket, s->yield);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   const rgw_user* uid = std::get_if<rgw_user>(&bucket->get_info().owner);
   if (!uid) {
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
@@ -136,7 +136,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   std::unique_ptr<rgw::sal::User> user;
   user = driver->get_user(*uid);
   if (user->load_user(dpp, s->yield) < 0) {
-    throw -EPERM;
+    throw boost::system::system_error(ceph::to_error_code(-EPERM));
   }
 
   owner_info = user->get_info();
@@ -482,7 +482,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   int ret = validator.process(dpp, y);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   std::string swift_user;
@@ -511,7 +511,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   ret = driver->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user" << dendl;
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   std::optional<RGWAccountInfo> account;
@@ -602,13 +602,13 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (etoken_len & 1) {
     ldpp_dout(dpp, 0) << "NOTICE: failed to verify token: odd token length="
 	          << etoken_len << dendl;
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   ceph::bufferptr p(etoken_len/2);
   int ret = hex_to_buf(etoken.c_str(), p.c_str(), etoken_len);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   ceph::bufferlist tok_bl;
@@ -627,7 +627,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     decode(expiration, iter);
   } catch (buffer::error& err) {
     ldpp_dout(dpp, 0) << "NOTICE: failed to decode token" << dendl;
-    throw -EINVAL;
+    throw boost::system::system_error(ceph::to_error_code(-EINVAL));
   }
 
   const utime_t now = ceph_clock_now();
@@ -641,7 +641,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   std::unique_ptr<rgw::sal::User> user;
   ret = driver->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   std::optional<RGWAccountInfo> account;
@@ -664,7 +664,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   bufferlist local_tok_bl;
   ret = build_token(swift_user, swift_key.key, nonce, expiration, local_tok_bl);
   if (ret < 0) {
-    throw ret;
+    throw boost::system::system_error(ceph::to_error_code(ret));
   }
 
   if (local_tok_bl.length() != tok_bl.length()) {
