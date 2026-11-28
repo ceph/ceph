@@ -23,6 +23,7 @@
 #include <condition_variable>
 #include <list>
 #include <mutex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -187,7 +188,7 @@ private:
   int m_wakeup_wr_fd = -1;
   bool m_shutdown = false;
 
-  bool in_hook = false;
+  std::multiset<const AdminSocketHook*> running_hooks;
   std::condition_variable in_hook_cond;
   std::mutex lock;  // protects `hooks`
   std::unique_ptr<AdminSocketHook> version_hook;
