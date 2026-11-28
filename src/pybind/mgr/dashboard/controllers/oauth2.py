@@ -2,6 +2,8 @@ import cherrypy
 
 from dashboard.exceptions import DashboardException
 from dashboard.services.auth.oauth2 import OAuth2
+from dashboard.services.auth.signals import LOGIN_METRIC
+from dashboard.services.telemetry import telemetry
 
 from . import Endpoint, RESTController, Router
 
@@ -10,6 +12,7 @@ from . import Endpoint, RESTController, Router
 class Oauth2(RESTController):
 
     @Endpoint(json_response=False, version=None)
+    @telemetry(LOGIN_METRIC, record_on_redirect=True)
     def login(self):
         if not OAuth2.enabled():
             raise DashboardException(500, msg='Failed to login: SSO OAuth2 is not enabled')

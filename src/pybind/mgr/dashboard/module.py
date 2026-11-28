@@ -38,10 +38,12 @@ from .controllers import Router, json_error_page, nvmeof  # noqa # pylint: disab
 from .grafana import push_local_dashboards
 from .services import nvmeof_cli, nvmeof_top_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, AuthType, JwtManager
+from .services.auth.signals import collect_authentication_user_signals
 from .services.exception import dashboard_exception_handler
 from .services.nvmeof_top_cli import NvmeofTopCollector
 from .services.service import RgwServiceManager
 from .services.sso import SSO_COMMANDS, handle_sso_command
+from .services.telemetry import TelemetryService
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
     configure_cors, prepare_url_prefix, str_to_bool
@@ -395,6 +397,7 @@ class Module(MgrModule, CherryPyConfig):
         PLUGIN_MANAGER.hook.setup()
 
         NotificationQueue.start_queue()
+        TelemetryService.start()
         TaskManager.init()
         logger.info('Engine started.')
         update_dashboards = str_to_bool(
@@ -411,6 +414,10 @@ class Module(MgrModule, CherryPyConfig):
         self.shutdown_event.wait()
         self.shutdown_event.clear()
         self.stop_adapter()
+        if not TelemetryService.stop():
+            logger.warning(
+                'Dashboard telemetry service could not flush all counters'
+            )
         NotificationQueue.stop()
         logger.info('Engine stopped')
 
@@ -597,6 +604,12 @@ class Module(MgrModule, CherryPyConfig):
             'OAuth2 SSO has been automatically disabled because '
             'oauth2-proxy is no longer running.'
         )
+
+    def gather_telemetry(self):
+        return {
+            'authentication_user_signals':
+                collect_authentication_user_signals()
+        }
 
     def notify(self, notify_type: NotifyType, notify_id):
         NotificationQueue.new_notification(str(notify_type), notify_id)
