@@ -6,6 +6,8 @@
 #include <sys/utsname.h>
 
 #include <cmath>
+#include <vector>
+#include <iterator>
 
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
@@ -246,7 +248,9 @@ seastar::future<> OSD::set_perf_queries(const ConfigPayload &config_payload) {
     osd_config_payload.config;
   DEBUG("setting {} queries", queries.size());
 
-  std::list<OSDPerfMetricQuery> supported_queries;
+  std::vector<OSDPerfMetricQuery> supported_queries;
+  supported_queries.reserve(std::size(queries));
+
   for (auto &it : queries) {
     auto &query = it.first;
     if (!query.key_descriptor.empty()) {

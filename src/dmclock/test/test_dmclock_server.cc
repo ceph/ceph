@@ -13,11 +13,11 @@
  */
 
 
-#include <memory>
+#include <deque>
 #include <chrono>
-#include <iostream>
-#include <list>
+#include <memory>
 #include <vector>
+#include <iostream>
 
 
 #include "dmclock_server.h"
@@ -472,7 +472,7 @@ namespace crimson {
 
       EXPECT_EQ(5u, pq.request_count());
 
-      std::list<MyReq> capture;
+      std::deque<MyReq> capture;
       pq.remove_by_req_filter(
 	[&capture] (MyReqRef&& r) -> bool {
 	  if (0 == r->id % 2) {
@@ -703,7 +703,7 @@ namespace crimson {
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
 
-      std::list<MyReq> removed;
+      std::deque<MyReq> removed;
 
       pq.remove_by_client(client1,
 			  true,
@@ -783,7 +783,7 @@ namespace crimson {
 
       EXPECT_EQ(3u, pq.request_count());
 
-      std::list<MyReq> capture;
+      std::deque<MyReq> capture;
       pq.remove_by_req_filter(
         [&capture] (MyReqRef&& r) -> bool {
           if (1 == r->id % 2) {
@@ -851,7 +851,7 @@ namespace crimson {
 
       EXPECT_EQ(2u, pq.request_count());
 
-      std::list<MyReq> capture;
+      std::deque<MyReq> capture;
       pq.remove_by_req_filter(
         [&capture] (MyReqRef&& r) -> bool {
           if (0 == r->id % 2) {

@@ -27,7 +27,7 @@ public:
    * Future will not resolve until all pins have resolved
    */
   using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<backref_mapping_list_t>;
+  using get_mappings_ret = get_mappings_iertr::future<backref_mappings_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     paddr_t offset,

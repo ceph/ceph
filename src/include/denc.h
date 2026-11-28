@@ -29,6 +29,7 @@
 #include <bit>
 #include <cstring>
 #include <concepts>
+#include <deque>
 #include <map>
 #include <optional>
 #include <set>
@@ -1089,6 +1090,14 @@ struct denc_traits<
   : public _denc::container_base<
       std::list<T, Ts...>,
       _denc::pushback_details<std::list<T, Ts...>>> {};
+
+template<typename T, typename ...Ts>
+struct denc_traits<
+  std::deque<T, Ts...>,
+  typename std::enable_if_t<denc_traits<T>::supported>>
+  : public _denc::container_base<
+      std::deque<T, Ts...>,
+      _denc::pushback_details<std::deque<T, Ts...>>> {};
 
 template<typename T, typename ...Ts>
 struct denc_traits<

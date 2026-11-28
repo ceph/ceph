@@ -17,6 +17,11 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
+#include <span>
+#include <array>
+#include <deque>
+#include <vector>
+
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
 #include "include/client_t.h"
@@ -250,7 +255,7 @@ public:
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
     OpRequestRef op;            ///< initiating op
-    std::list<OpRequestRef> dup_ops; ///< bandwagon jumpers
+    std::deque<OpRequestRef> dup_ops; ///< bandwagon jumpers
     version_t flushed_version;  ///< user version we are flushing
     ceph_tid_t objecter_tid;    ///< copy-from request tid
     int rval;                   ///< copy-from result
@@ -673,7 +678,7 @@ public:
   };
   void complete_disconnect_watches(
     ObjectContextRef obc,
-    const std::list<watch_disconnect_t> &to_disconnect);
+    std::span<const watch_disconnect_t> to_disconnect);
 
   struct OpFinisher {
     virtual ~OpFinisher() {
@@ -710,9 +715,9 @@ public:
     ObjectCleanRegions clean_regions;
 
     // side effects
-    std::list<std::pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
-    std::list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
-    std::list<notify_info_t> notifies;
+    std::vector<std::pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
+    std::vector<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
+    std::vector<notify_info_t> notifies;
     struct NotifyAck {
       std::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
@@ -723,7 +728,7 @@ public:
 	reply_bl = std::move(rbl);
       }
     };
-    std::list<NotifyAck> notify_acks;
+    std::vector<NotifyAck> notify_acks;
 
     uint64_t bytes_written, bytes_read;
 
@@ -759,10 +764,10 @@ public:
     mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > extra_reqids;
     mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
-    std::list<std::function<void()>> on_applied;
-    std::list<std::function<void()>> on_committed;
-    std::list<std::function<void()>> on_finish;
-    std::list<std::function<void()>> on_success;
+    std::vector<std::function<void()>> on_committed;
+    std::vector<std::function<void()>> on_finish;
+    std::vector<std::function<void()>> on_success;
+
     template <typename F>
     void register_on_finish(F &&f) {
       on_finish.emplace_back(std::forward<F>(f));
@@ -771,10 +776,7 @@ public:
     void register_on_success(F &&f) {
       on_success.emplace_back(std::forward<F>(f));
     }
-    template <typename F>
-    void register_on_applied(F &&f) {
-      on_applied.emplace_back(std::forward<F>(f));
-    }
+
     template <typename F>
     void register_on_commit(F &&f) {
       on_committed.emplace_back(std::forward<F>(f));
@@ -782,9 +784,7 @@ public:
 
     bool sent_reply = false;
 
-    // pending async reads <off, len, op_flags> -> <outbl, outr>
-    std::list<std::pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-	      std::pair<ceph::buffer::list*, Context*> > > pending_async_reads;
+    std::vector<PGBackend::async_read_request> pending_async_reads;
     int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(PrimaryLogPG *pg);
@@ -849,12 +849,9 @@ public:
       ceph_assert(!op_t);
       if (reply)
 	reply->put();
-      for (std::list<std::pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-		     std::pair<ceph::buffer::list*, Context*> > >::iterator i =
-	     pending_async_reads.begin();
-	   i != pending_async_reads.end();
-	   pending_async_reads.erase(i++)) {
-	delete i->second.second;
+
+      for (const auto& request : pending_async_reads) {
+	delete request.completion;
       }
     }
     uint64_t get_features() {
@@ -891,9 +888,9 @@ public:
 
     ObcLockManager lock_manager;
 
-    std::list<std::function<void()>> on_committed;
-    std::list<std::function<void()>> on_success;
-    std::list<std::function<void()>> on_finish;
+    std::vector<std::function<void()>> on_committed;
+    std::vector<std::function<void()>> on_success;
+    std::vector<std::function<void()>> on_finish;
 
     RepGather(
       OpContext *c, ceph_tid_t rt,
@@ -1087,8 +1084,7 @@ protected:
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blocklisted_obc_watchers(ObjectContextRef obc);
   void check_blocklisted_watchers() override;
-  void get_watchers(std::list<obj_watch_item_t> *ls) override;
-  void get_obc_watchers(ObjectContextRef obc, std::list<obj_watch_item_t> &pg_watchers);
+  void get_watchers(std::vector<obj_watch_item_t>& watchers) override;
 public:
   void handle_watch_timeout(WatchRef watch);
 protected:
@@ -1376,7 +1372,7 @@ protected:
   void do_cache_redirect(OpRequestRef op);
   /**
    * This function attempts to start a promote.  Either it succeeds,
-   * or places op on a wait std::list.  If op is null, failure means that
+   * or places op on a wait queue.  If op is null, failure means that
    * this is a noop.  If a future user wants to be able to distinguish
    * these cases, a return value should be added.
    */
@@ -1389,7 +1385,7 @@ protected:
     );
 
   int prepare_transaction(OpContext *ctx);
-  std::list<std::pair<OpRequestRef, OpContext*> > in_progress_async_reads;
+  std::deque<std::pair<OpRequestRef, OpContext*>> in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
 
   // pg on-disk content
@@ -1591,7 +1587,7 @@ protected:
   std::pair<int, std::unique_ptr<const PGLSFilter>> get_pgls_filter(
     ceph::buffer::list::const_iterator& iter);
 
-  std::map<hobject_t, std::list<OpRequestRef>> in_progress_proxy_ops;
+  std::map<hobject_t, std::vector<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
   void cancel_proxy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
@@ -2170,7 +2166,7 @@ public:
 
 public:
   void set_dynamic_perf_stats_queries(
-      const std::list<OSDPerfMetricQuery> &queries)  override;
+      const std::vector<OSDPerfMetricQuery>& queries) override;
   void get_dynamic_perf_stats(DynamicPerfStats *stats)  override;
 
 private:

@@ -475,8 +475,8 @@ struct btree_lba_manager_test : btree_test_base {
       *t.t,
       [this](auto &t) {
 	return seastar::do_with(
-	  std::list<LogicalChildNodeRef>(),
-	  std::list<CachedExtentRef>(),
+	  std::vector<LogicalChildNodeRef>(),
+	  std::vector<CachedExtentRef>(),
 	  [this, &t](auto &lextents, auto &pextents) {
 	  auto chksum_func = [&lextents, &pextents](auto &extent) {
 	    if (!extent->is_valid()) {

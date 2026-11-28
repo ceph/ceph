@@ -4,7 +4,6 @@
 #ifndef DYNAMIC_PERF_STATS_H
 #define DYNAMIC_PERF_STATS_H
 
-#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -16,10 +15,9 @@
 
 class DynamicPerfStats {
 public:
-  DynamicPerfStats() {
-  }
+  DynamicPerfStats() = default;
 
-  DynamicPerfStats(const std::list<OSDPerfMetricQuery> &queries) {
+  DynamicPerfStats(const std::vector<OSDPerfMetricQuery>& queries) {
     for (auto &query : queries) {
       data[query];
     }
@@ -45,7 +43,7 @@ public:
     }
   }
 
-  void set_queries(const std::list<OSDPerfMetricQuery> &queries) {
+  void set_queries(const std::vector<OSDPerfMetricQuery>& queries) {
     std::map<OSDPerfMetricQuery,
              std::map<OSDPerfMetricKey, PerformanceCounters>> new_data;
     for (auto &query : queries) {

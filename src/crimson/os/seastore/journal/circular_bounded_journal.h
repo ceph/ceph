@@ -20,7 +20,6 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include <algorithm>
 #include <limits>
-#include <list>
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/journal/circular_journal_space.h"
 #include "crimson/os/seastore/record_scanner.h"
@@ -242,4 +241,3 @@ private:
 };
 
 }
-

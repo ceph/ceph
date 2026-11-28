@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <vector>
 #include "HitSet.h"
 #include "common/bloom_filter.hpp"
 
@@ -78,8 +79,8 @@ public:
 	<< get_fpp() << ", target_size: " << target_size
 	<< ", seed: " << seed;
     }
-    static std::list<Params> generate_test_instances() {
-      std::list<Params> o;
+    static std::vector<Params> generate_test_instances() {
+      std::vector<Params> o;
       o.emplace_back();
       o.emplace_back();
       o.back().fpp_micro = 123456;
@@ -144,8 +145,8 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static std::list<BloomHitSet> generate_test_instances() {
-    std::list<BloomHitSet> o;
+  static std::vector<BloomHitSet> generate_test_instances() {
+    std::vector<BloomHitSet> o;
     o.emplace_back();
     o.push_back(BloomHitSet(10, .1, 1));
     o.back().insert(hobject_t());

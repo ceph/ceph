@@ -4,6 +4,8 @@
 #ifndef MOSDRECOVERYDELETEREPLY_H
 #define MOSDRECOVERYDELETEREPLY_H
 
+#include <vector>
+
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
@@ -15,7 +17,7 @@ public:
   spg_t pgid;
   epoch_t map_epoch = 0;
   epoch_t min_epoch = 0;
-  std::list<std::pair<hobject_t, eversion_t> > objects;
+  std::vector<std::pair<hobject_t, eversion_t>> objects;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;

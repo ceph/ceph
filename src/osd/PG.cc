@@ -69,14 +69,16 @@
 #define tracepoint(...)
 #endif
 
+#include <ranges>
 #include <sstream>
+#include <iterator>
+#include <algorithm>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-using std::list;
 using std::map;
 using std::ostringstream;
 using std::pair;
@@ -1222,12 +1224,14 @@ void PG::filter_snapc(vector<snapid_t> &snaps)
 }
 
 void PG::requeue_object_waiters(
-  map<hobject_t, list<OpRequestRef>>& m,
+  map<hobject_t, vector<OpRequestRef>>& waiters,
   OpWaitingList prev_queue)
 {
-  for (auto it = m.begin(); it != m.end(); ++it)
-    requeue_ops(it->second, prev_queue);
-  m.clear();
+  for (auto& waiter : waiters) {
+    requeue_ops(waiter.second, prev_queue);
+  }
+
+  waiters.clear();
 }
 
 void PG::requeue_op(OpRequestRef op, OpWaitingList prev_queue)
@@ -1272,16 +1276,25 @@ void PG::requeue_op(OpRequestRef op, OpWaitingList prev_queue)
   }
 }
 
-void PG::requeue_ops(list<OpRequestRef> &ls, OpWaitingList prev_queue)
+template <typename OperationsT>
+void PG::requeue_ops_impl(OperationsT& operations, OpWaitingList prev_queue)
 {
-  list<OpRequestRef> to_requeue;
-  to_requeue.swap(ls);
+  OperationsT to_requeue;
+  to_requeue.swap(operations);
 
-  for (list<OpRequestRef>::reverse_iterator i = to_requeue.rbegin();
-       i != to_requeue.rend();
-       ++i) {
+  for (auto i = std::rbegin(to_requeue); i != std::rend(to_requeue); ++i) {
     requeue_op(*i, prev_queue);
   }
+}
+
+void PG::requeue_ops(vector<OpRequestRef>& operations, OpWaitingList prev_queue)
+{
+  requeue_ops_impl(operations, prev_queue);
+}
+
+void PG::requeue_ops(std::deque<OpRequestRef>& operations, OpWaitingList prev_queue)
+{
+  requeue_ops_impl(operations, prev_queue);
 }
 
 void PG::requeue_map_waiters()

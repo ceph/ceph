@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include "common/dout.h"
 #include "ECUtil.h"
 #include "common/ceph_releases.h"
@@ -62,8 +64,8 @@ class WritePlanObj {
 };
 
 struct WritePlan {
-  bool want_read;
-  std::list<WritePlanObj> plans;
+  bool want_read = false;
+  std::deque<WritePlanObj> plans;
 
   void print(std::ostream &os) const {
     os << " plans: [";
@@ -90,7 +92,7 @@ void accumulate_omap_updates(
   const std::vector<std::pair<OmapUpdateType, ceph::buffer::list>>& updates,
   std::optional<ceph::buffer::list>& out_header,
   std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
-  std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges);
+  std::vector<std::pair<std::string, std::optional<std::string>>>& removed_ranges);
 
 /**
  * Apply accumulated omap updates to primary-capable shard transactions.
@@ -103,7 +105,7 @@ void apply_omap_to_transactions(
   bool clear_omap,
   const std::optional<ceph::buffer::list>& header,
   const std::map<std::string, std::optional<ceph::buffer::list>>& key_updates,
-  const std::list<std::pair<std::string, std::optional<std::string>>>& removed_ranges,
+  const std::vector<std::pair<std::string, std::optional<std::string>>>& removed_ranges,
   const DoutPrefixProvider* dpp);
 
 
@@ -129,7 +131,7 @@ private:
   bool has_clear_omap = false;
   std::optional<ceph::buffer::list> omap_header;
   std::map<std::string, std::optional<ceph::buffer::list>> omap_updates;
-  std::list<std::pair<std::string, std::optional<std::string>>> removed_ranges;
+  std::vector<std::pair<std::string, std::optional<std::string>>> removed_ranges;
 
 public:
   OmapCloneVisitor(

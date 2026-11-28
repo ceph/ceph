@@ -8,7 +8,6 @@
 #include "include/types.h"
 #include "aio/aio.h"
 
-#include <list>
 #include <memory>
 #include <vector>
 
@@ -20,8 +19,6 @@ struct ioring_queue_t final : public io_queue_t {
   bool hipri = false;
   bool sq_thread = false;
 
-  typedef std::list<aio_t>::iterator aio_iter;
-
   // Returns true if arch is x86-64 and kernel supports io_uring
   static bool supported();
 
@@ -31,7 +28,7 @@ struct ioring_queue_t final : public io_queue_t {
   int init(std::vector<int> &fds) final;
   void shutdown() final;
 
-  int submit_batch(aio_iter begin, aio_iter end,
+  int submit_batch(aio_iter first, aio_iter last,
                    void *priv, int *retries, int submit_retries, int initial_delay_us) final;
   int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
 };
