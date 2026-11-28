@@ -28,7 +28,9 @@ class RGWPolicyCondition;
 
 
 class RGWPolicy {
-  uint64_t expires;
+  // seconds since the epoch; signed, since an expiration before 1970 is
+  // negative and must still compare as already expired
+  int64_t expires;
   std::string expiration_str;
   std::list<RGWPolicyCondition *> conditions;
   std::list<std::pair<std::string, std::string> > var_checks;
