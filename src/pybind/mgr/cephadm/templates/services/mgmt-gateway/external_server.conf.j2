@@ -81,7 +81,11 @@ server {
 {% if dashboard_endpoints %}
     location / {
         proxy_pass {{ dashboard_scheme }}://dashboard_servers;
-        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        {# A 500 from the active mgr is an error of that request, not of the mgr.
+           Listing http_500 here would count it as a failed attempt, and with the
+           standbys answering 503 nginx would mark every dashboard upstream down
+           and return 502 for all requests until fail_timeout expires. #}
+        proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
         {% if enable_oauth2_proxy %}
         auth_request /oauth2/auth;
         error_page 401 = /oauth2/sign_in;
