@@ -10959,6 +10959,7 @@ def test_restore_object_permanent():
     # Put object
     client.put_object(Bucket=bucket, Key=key, Body=data)
     verify_object(client, bucket, key, data)
+    public_mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
 
     # Transition object to cloud storage class
     rules = [{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
@@ -10983,6 +10984,21 @@ def test_restore_object_permanent():
     response = client.head_object(Bucket=bucket, Key=key)
     assert response['ContentLength'] == len(data)
     verify_transition(client, bucket, key, 'STANDARD')
+    assert response['LastModified'] == public_mtime
+
+    # Restore advances the internal replication clock, not the public clock.
+    # Ordinary GET/HEAD date conditions must still use public Last-Modified.
+    for operation in (client.get_object, client.head_object):
+        error = assert_raises(ClientError, operation, Bucket=bucket, Key=key,
+                              IfModifiedSince=public_mtime)
+        assert error.response['ResponseMetadata']['HTTPStatusCode'] == 304
+        response = operation(Bucket=bucket, Key=key, IfUnmodifiedSince=public_mtime)
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+        if 'Body' in response:
+            try:
+                assert response['Body'].read() == data.encode()
+            finally:
+                response['Body'].close()
 
 @pytest.mark.cloud_restore
 @pytest.mark.fails_on_aws

@@ -4498,10 +4498,13 @@ struct obj_time_weight {
     pg_ver = _pg_ver;
   }
 
-  void init(RGWObjState *state) {
+  void init(RGWObjState *state, bool use_internal_mtime = true) {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+    if (!use_internal_mtime) {
+      return;
+    }
     bufferlist bl;
     if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
       try {
@@ -8535,7 +8538,9 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   /* Convert all times go GMT to make them compatible */
   if (conds.mod_ptr || conds.unmod_ptr) {
     obj_time_weight src_weight;
-    src_weight.init(astate);
+    // Multisite requests use the high-precision replication clock. Ordinary
+    // S3 date conditions continue to compare against public Last-Modified.
+    src_weight.init(astate, conds.high_precision_time);
     src_weight.high_precision = conds.high_precision_time;
 
     obj_time_weight dest_weight;
