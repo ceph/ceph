@@ -844,8 +844,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, 
     e.emplace(key,val);
 }
 
-static int rgw_iam_add_tags_from_bl(req_state* s, bufferlist& bl, bool has_existing_obj_tag=false, bool has_resource_tag=false){
-  RGWObjTags& tagset = s->tagset;
+static int rgw_iam_add_tags_from_bl(req_state* s, RGWObjTags& tagset, bufferlist& bl, bool has_existing_obj_tag=false, bool has_resource_tag=false){
   try {
     auto bliter = bl.cbegin();
     tagset.decode(bliter);
@@ -871,7 +870,7 @@ static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw:
   rgw::sal::Attrs attrs = object->get_attrs();
   auto tags = attrs.find(RGW_ATTR_TAGS);
   if (tags != attrs.end()){
-    return rgw_iam_add_tags_from_bl(s, tags->second, has_existing_obj_tag, has_resource_tag);
+    return rgw_iam_add_tags_from_bl(s, s->tagset, tags->second, has_existing_obj_tag, has_resource_tag);
   }
   return 0;
 }
@@ -887,7 +886,11 @@ static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s, r
   rgw::sal::Attrs attrs = bucket->get_attrs();
   auto tags = attrs.find(RGW_ATTR_TAGS);
   if (tags != attrs.end()) {
-    return rgw_iam_add_tags_from_bl(s, tags->second, false, true);
+    // s->tagset holds the object's tags, which the expiration header and
+    // notification events report; the bucket's tags only feed the policy
+    // environment, so decode them into a set of their own
+    RGWObjTags bucket_tags;
+    return rgw_iam_add_tags_from_bl(s, bucket_tags, tags->second, false, true);
   }
   return 0;
 }
