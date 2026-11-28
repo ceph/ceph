@@ -1,6 +1,0 @@
-#
-# the rados classes should NOT be stripped.
-#
-ceph: unstripped-binary-or-object ./usr/lib/rados-classes/libcls_rbd.so.1.0.0
-ceph: unstripped-binary-or-object ./usr/lib/rados-classes/libcls_rgw.so.1.0.0
-
