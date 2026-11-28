@@ -554,21 +554,27 @@ class SSHManager:
                 pass
 
     async def _reset_con(self, host: str) -> None:
-        conn = self.cons.get(host)
+        # pop() rather than get() + del: _reset_cons() may swap self.cons
+        # from a command thread in between.
+        conn = self.cons.pop(host, None)
         if conn:
             logger.debug(f'_reset_con close {host}')
             conn.close()
-            del self.cons[host]
 
     def reset_con(self, host: str) -> None:
         with self.mgr.async_timeout_handler(cmd=f'resetting ssh connection to {host}'):
             self.mgr.wait_async(self._reset_con(host))
 
     def _reset_cons(self) -> None:
-        for host, conn in self.cons.items():
+        # This runs on a command thread (e.g. "cephadm set-user") while the
+        # event loop thread keeps adding and dropping entries in self.cons,
+        # so iterating it in place can raise "dictionary changed size during
+        # iteration". Swap in an empty dict first, so new connections land
+        # in the new one, then close the ones we took out.
+        cons, self.cons = self.cons, {}
+        for host, conn in list(cons.items()):
             logger.debug(f'_reset_cons close {host}')
             conn.close()
-        self.cons = {}
 
     def _reconfig_ssh(self) -> None:
         temp_files = []  # type: list
