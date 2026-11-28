@@ -23,11 +23,15 @@ Syntax
 
 .. parsed-literal::
 
-    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] journal <inspect|import|export|reset>
-    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] header <get|set> <trimmed_pos|expire_pos|write_pos|pool_id> <value>
-    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] header recover [--force]
-    cephfs-journal-tool [:ref:`options<cephfs_journal_tool_options>`] event <get|splice|recover_dentries> [filter] <list|json|summary|binary>
+    cephfs-journal-tool --rank=<fs_name>:{<rank>|all} [:ref:`options<cephfs_journal_tool_options>`] journal <inspect|import|export|reset>
+    cephfs-journal-tool --rank=<fs_name>:{<rank>|all} [:ref:`options<cephfs_journal_tool_options>`] header <get|set> <trimmed_pos|expire_pos|write_pos|pool_id> <value>
+    cephfs-journal-tool --rank=<fs_name>:{<rank>|all} [:ref:`options<cephfs_journal_tool_options>`] header recover [--force]
+    cephfs-journal-tool --rank=<fs_name>:{<rank>|all} [:ref:`options<cephfs_journal_tool_options>`] event <get|splice|recover_dentries> [filter] <list|json|summary|binary>
 
+Every command requires ``--rank``. Give the file system and either an MDS rank,
+for example ``--rank=cephfs:0``, or ``all`` for every rank. A rank without a
+file system, such as ``--rank=0``, is refused even when there is only one file
+system.
 
 The tool operates in three modes: ``journal``, ``header`` and ``event``,
 meaning the whole journal, the header, and the events within the journal
@@ -58,7 +62,7 @@ Example: journal inspect
 
 ::
 
-    # cephfs-journal-tool journal inspect
+    # cephfs-journal-tool --rank=<fs_name>:0 journal inspect
     Overall journal integrity: DAMAGED
     Objects missing:
       0x1
@@ -70,7 +74,7 @@ Example: Journal import/export
 
 ::
 
-    # cephfs-journal-tool journal export myjournal.bin
+    # cephfs-journal-tool --rank=<fs_name>:0 journal export myjournal.bin
     journal is 4194304~80643
     read 80643 bytes at offset 4194304
     wrote 80643 bytes at offset 4194304 to myjournal.bin
@@ -78,7 +82,7 @@ Example: Journal import/export
         $ tar cSzf myjournal.bin.tgz myjournal.bin
           to efficiently compress it while preserving sparseness.
 
-    # cephfs-journal-tool journal import myjournal.bin
+    # cephfs-journal-tool --rank=<fs_name>:0 journal import myjournal.bin
     undump myjournal.bin
     start 4194304 len 80643
     writing header 200.00000000
@@ -133,7 +137,7 @@ Example: header get/set/recover
 
 ::
 
-    # cephfs-journal-tool header get
+    # cephfs-journal-tool --rank=<fs_name>:0 header get
     { "magic": "ceph fs volume v011",
       "write_pos": 4274947,
       "expire_pos": 4194304,
@@ -145,11 +149,11 @@ Example: header get/set/recover
           "pool_id": 2,
           "pool_ns": ""}}
 
-    # cephfs-journal-tool header set trimmed_pos 4194303
+    # cephfs-journal-tool --rank=<fs_name>:0 header set trimmed_pos 4194303
     Updating trimmed_pos 0x400000 -> 0x3fffff
     Successfully updated header.
 
-    # cephfs-journal-tool --rank a:0 header recover
+    # cephfs-journal-tool --rank=<fs_name>:0 header recover
     Proposed Journal Header Updates:
       trimmed_pos: 0x400000 -> 0x400000
       expire_pos:  0x415f74 -> 0x415f74
@@ -158,7 +162,7 @@ Example: header get/set/recover
       Target event type at proposed read_pos: EVENT_SUBTREEMAP
     Dry-run mode enabled. Header modifications skipped.
 
-    # cephfs-journal-tool --rank a:0 header recover --force
+    # cephfs-journal-tool --rank=<fs_name>:0 header recover --force
     Proposed Journal Header Updates:
       trimmed_pos: 0x400000 -> 0x400000
       expire_pos:  0x415f74 -> 0x415f74
@@ -217,10 +221,10 @@ Example: event mode
 
 ::
 
-    # cephfs-journal-tool event get json --path output.json
+    # cephfs-journal-tool --rank=<fs_name>:0 event get json --path output.json
     Wrote output to JSON file 'output.json'
 
-    # cephfs-journal-tool event get summary
+    # cephfs-journal-tool --rank=<fs_name>:0 event get summary
     Events by type:
       NOOP: 2
       OPEN: 2
@@ -228,7 +232,7 @@ Example: event mode
       SUBTREEMAP: 1
       UPDATE: 43
 
-    # cephfs-journal-tool event get list
+    # cephfs-journal-tool --rank=<fs_name>:0 event get list
     0x400000 SUBTREEMAP:  ()
     0x400308 SESSION:  ()
     0x4003de UPDATE:  (setattr)
@@ -252,24 +256,24 @@ Example: event mode
     0x404032 UPDATE:  (openc)
       dirbravo/.filebravo1.swpx
 
-    # cephfs-journal-tool event get --path filebravo1 list
+    # cephfs-journal-tool --rank=<fs_name>:0 event get --path filebravo1 list
     0x40785a UPDATE:  (openc)
       dirbravo/filebravo1
     0x4103ee UPDATE:  (cap update)
       dirbravo/filebravo1
 
-    # cephfs-journal-tool event splice --range 0x40f754..0x410bf1 summary
+    # cephfs-journal-tool --rank=<fs_name>:0 event splice --range 0x40f754..0x410bf1 summary
     Events by type:
       OPEN: 1
       UPDATE: 2
 
-    # cephfs-journal-tool event recover_dentries summary
+    # cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries summary
     Events by type:
       LID: 1
       SUBTREEMAP: 1
     Errors: 0
 
-    # cephfs-journal-tool event get --inode=1099511627776 list
+    # cephfs-journal-tool --rank=<fs_name>:0 event get --inode=1099511627776 list
     0x40068b UPDATE:  (mkdir)
       diralpha
     0x400d1b UPDATE:  (mkdir)
@@ -281,14 +285,14 @@ Example: event mode
       diralpha
       stray0/10000000000
 
-    # cephfs-journal-tool event get --frag=1099511627776 --dname=filealpha1 list
+    # cephfs-journal-tool --rank=<fs_name>:0 event get --frag=1099511627776 --dname=filealpha1 list
     0x400d1b UPDATE:  (mkdir)
       diralpha/filealpha1
     0x401666 UPDATE:  (unlink_local)
       stray0/10000000001
       diralpha/filealpha1
 
-    # cephfs-journal-tool event get binary --path bin_events
+    # cephfs-journal-tool --rank=<fs_name>:0 event get binary --path bin_events
     Wrote output to binary files in directory 'bin_events'
 
 .. _cephfs_journal_tool_options:
@@ -296,7 +300,10 @@ Example: event mode
 Options
 ~~~~~~~
 
-* ``--rank=<filesystem>:{mds-rank|all}`` Used to specify the filesystem, the MDS rank or all ranks.
+* ``--rank=<fs_name>:{<rank>|all}`` Required. The file system and the MDS rank
+  to operate on, or ``all`` for every rank. With ``all`` and more than one rank,
+  ``journal export`` writes one file per rank, named ``<file>.<rank>``.
+  ``journal import`` takes a single rank and refuses ``all``.
 * ``--journal=<mdlog|purge_queue>`` The journal type. The default value is ``mdlog``, which is the
   only option that supports event mode. When ``purge_queue`` is used, the journal scanner creates
   a PurgeItem object and adds it to EventMap for processing.

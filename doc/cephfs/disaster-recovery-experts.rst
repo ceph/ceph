@@ -26,20 +26,25 @@ Advanced: Metadata repair tools
 Journal export
 --------------
 
-Before attempting any dangerous operation, make a copy of the journal by
-running the following command:
+Before attempting any dangerous operation, make a copy of the journal of every
+MDS rank by running the following command:
 
 .. prompt:: bash #
 
-   cephfs-journal-tool journal export backup.bin
+   cephfs-journal-tool --rank=<fs_name>:all journal export backup.bin
+
+If the file system has more than one rank, this writes one file per rank,
+named ``backup.bin.<rank>``.
 
 The backed up journal will come in handy in case the recovery procedure does
 not go as expected. The MDS journal can be restored to its original state by
-importing from the backed up journal:
+importing from the backed up journal. Import takes one rank at a time:
 
 .. prompt:: bash #
 
-   cephfs-journal-tool journal import backup.bin
+   cephfs-journal-tool --rank=<fs_name>:<rank> journal import backup.bin.<rank>
+
+For a file system with a single rank, the file is ``backup.bin``.
 
 Dentry recovery from journal
 ----------------------------
@@ -49,11 +54,11 @@ attempt to recover file metadata by running the following command:
 
 .. prompt:: bash #
 
-   cephfs-journal-tool event recover_dentries summary
+   cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries summary
 
-By default, this command acts on MDS rank ``0``. Pass the option ``--rank=<n>``
-to the ``cephfs-journal-tool`` command to operate on other ranks or pass
-``--rank=all`` to operate on all MDS ranks.
+``cephfs-journal-tool`` has no default rank: ``--rank`` is required. Pass
+``--rank=<fs_name>:<rank>`` to operate on one MDS rank, or
+``--rank=<fs_name>:all`` to operate on all MDS ranks.
 
 This command writes all inodes and dentries recoverable from the journal into
 the backing store, but only if these inodes and dentries are higher-versioned
