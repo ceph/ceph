@@ -608,6 +608,56 @@ class TestStrays(CephFSTestCase):
         rpath = "/"+path
         self._wait_subtrees([(rpath, rank)], rank=rank, path=rpath)
 
+    def test_last_link_removed_on_other_rank(self):
+        """
+        That a file is purged when its primary link is removed on one rank
+        and its last link, a remote one, on another rank while a client has
+        the file open.
+
+        The rank that holds the stray is told of the second unlink by the
+        other rank. The file is still open then, so it has to look at the
+        stray again when the client lets go of its caps.
+        """
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+
+        # An empty subtree goes back to the rank that has its inode, so there
+        # is a file in each directory that stays.
+        self.mount_a.run_shell_payload(
+            "mkdir dir_0 dir_1 && touch dir_0/keep dir_1/keep")
+        self._force_migrate("dir_0", rank=0)
+        self._force_migrate("dir_1", rank=1)
+
+        p = self.mount_a.open_background("dir_1/file")
+        ino = self.mount_a.path_to_ino("dir_1/file")
+        size = len("content")
+        self.mount_a.run_shell(["ln", "dir_1/file", "dir_0/link"])
+        # The file needs an object for the purge to remove.
+        self.mount_a.run_shell(["sync"])
+        self.wait_until_true(lambda: self.fs.data_objects_present(ino, size),
+                             timeout=30, period=2)
+        # One process and no lookup in between: a lookup of the link on
+        # rank 0 would move the stray there before the unlink.
+        self.mount_a.run_python(dedent("""
+            import os
+            os.unlink("{0}/dir_1/file")
+            os.unlink("{0}/dir_0/link")
+            """.format(self.mount_a.hostfs_mntpt)))
+
+        # Rank 0 gives up its replica of the stray. Had it not done so by
+        # the time the caps go, that alone would make rank 1 look again.
+        def no_replicas():
+            try:
+                inode = self.fs.rank_asok(['dump', 'inode', hex(ino)], rank=1)
+            except CommandFailedError:
+                return True
+            return not inode or not inode['auth_state']['replicas']
+        self.wait_until_true(no_replicas, timeout=60, period=1)
+
+        self.mount_a.kill_background(p)
+        self.wait_until_true(lambda: self.fs.data_objects_absent(ino, size),
+                             timeout=60, period=2)
+
     def _is_stopped(self, rank):
         mds_map = self.fs.get_mds_map()
         return rank not in [i['rank'] for i in mds_map['info'].values()]
