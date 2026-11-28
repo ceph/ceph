@@ -28,6 +28,36 @@
 
 #define LARGE_SIZE 1024
 
+PyObject* get_readonly_dict_type()
+{
+  // copy/deepcopy return a plain, writable dict
+  // TODO: with Python 3.15, check if frozendict can replace ReadOnlyDict
+  // (needs to stay json-serializable and pass PyDict_Check)
+  static const char* src = R"(
+class ReadOnlyDict(dict):
+    def _ro(self, *args, **kwargs):
+        raise TypeError('read-only; use get(..., mutable=True)')
+    __setitem__ = __delitem__ = __ior__ = _ro
+    clear = pop = popitem = setdefault = update = _ro
+    def __reduce__(self):
+        return (dict, (dict(self),))
+)";
+  static PyObject* type = nullptr;
+  if (!type) {
+    PyObject* globals = Py_BuildValue("{sssO}", "__name__", "ceph_module",
+                                      "__builtins__", PyEval_GetBuiltins());
+    PyObject* res = globals ?
+      PyRun_String(src, Py_file_input, globals, globals) : nullptr;
+    if (res) {
+      type = PyDict_GetItemString(globals, "ReadOnlyDict");
+      Py_XINCREF(type);
+      Py_DECREF(res);
+    }
+    Py_XDECREF(globals);
+  }
+  return type;
+}
+
 
 void PyFormatter::open_array_section(std::string_view name)
 {
