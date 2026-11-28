@@ -160,8 +160,7 @@ public:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     bool whiteout,
-    int num_bytes,
-    ObjectContext::attr_cache_t& attr_cache);
+    int num_bytes);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -216,7 +215,6 @@ public:
     crimson::osd::ObjectContextRef head,
     crimson::osd::ObjectContextLoader& obc_loader,
     const SnapContext &snapc,
-    ObjectContext::attr_cache_t& attr_cache,
     crimson::osd::ObjectContextRef& rollback_to);
   write_iertr::future<> truncate(
     ObjectState& os,
@@ -277,20 +275,25 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
-    object_stat_sum_t& delta_stats,
-    ObjectContext::attr_cache_t& attr_cache);
+    object_stat_sum_t& delta_stats);
   using get_attr_errorator = crimson::os::FuturizedStore::Shard::get_attr_errorator;
   using get_attr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       get_attr_errorator>;
-  /// xattr reads of an obc use its attr_cache, not the store
+  /// xattr reads of an obc use its attr_cache, not the store. The ops of
+  /// a request do not change attr_cache (it changes when the request is
+  /// submitted), so these reads see the xattrs as they were before the
+  /// request, as on the classic OSD. exists is also the value from before
+  /// the request.
   get_attr_ierrorator::future<ceph::bufferlist> get_xattr_from_cache(
-    const ObjectState& os,
+    const hobject_t& soid,
+    bool exists,
     const ObjectContext::attr_cache_t& attr_cache,
     std::string&& name) const;
   get_attr_ierrorator::future<> getxattr(
-    const ObjectState& os,
+    const hobject_t& soid,
+    bool exists,
     const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
@@ -298,7 +301,8 @@ public:
     const hobject_t& soid,
     std::string&& key) const = 0;
   get_attr_ierrorator::future<> get_xattrs(
-    const ObjectState& os,
+    const hobject_t& soid,
+    bool exists,
     const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
@@ -310,7 +314,8 @@ public:
       ::crimson::osd::IOInterruptCondition,
       cmp_xattr_errorator>;
   cmp_xattr_ierrorator::future<> cmp_xattr(
-    const ObjectState& os,
+    const hobject_t& soid,
+    bool exists,
     const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
@@ -322,8 +327,7 @@ public:
   rm_xattr_iertr::future<> rm_xattr(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans,
-    ObjectContext::attr_cache_t& attr_cache);
+    ceph::os::Transaction& trans);
   using store_stat_ertr = crimson::os::FuturizedStore::Shard::stat_ertr;
   using store_stat_iertr =
     ::crimson::interruptible::interruptible_errorator<
@@ -440,15 +444,12 @@ public:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
 
-  /// sets oi and (for head) ss attrs in the store, and in attr_cache
-  /// on replicated pools
-  /// (on EC pools, ECTransaction updates attr_cache)
+  /// sets oi and (for head) ss attrs in trans
   void set_metadata(
     const hobject_t &obj,
     object_info_t &oi,
     const SnapSet *ss /* non-null iff head */,
-    ceph::os::Transaction& trans,
-    ObjectContext::attr_cache_t& attr_cache);
+    ceph::os::Transaction& trans);
 
   /// clone from->to and clear ss attribute on to
   void clone_for_write(
@@ -456,6 +457,8 @@ public:
     const hobject_t &to,
     ceph::os::Transaction& trans);
 
+  /// Also applies the xattr changes of txn to the attr_cache of obc,
+  /// new_clone and rollback_to, before the first suspension point.
   virtual rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
        crimson::osd::ObjectContextRef&& obc,

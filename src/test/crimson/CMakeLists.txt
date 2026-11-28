@@ -80,6 +80,13 @@ add_ceph_unittest(unittest-seastar-calc-subsets
   --memory 256M --smp 1)
 target_link_libraries(unittest-seastar-calc-subsets crimson GTest::Main)
 
+add_executable(unittest-crimson-attr-cache-update
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/attr_cache_update.cc
+  ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
+  test_attr_cache_update.cc)
+add_ceph_unittest(unittest-crimson-attr-cache-update)
+target_link_libraries(unittest-crimson-attr-cache-update crimson GTest::Main)
+
 add_executable(unittest-fixed-kv-node-layout
   test_fixed_kv_node_layout.cc)
 add_ceph_unittest(unittest-fixed-kv-node-layout)
