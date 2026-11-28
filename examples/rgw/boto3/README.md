@@ -54,6 +54,11 @@ Expected output:
 aws --region=default --endpoint-url http://localhost:8000 s3api put-bucket-notification-configuration --bucket=mybucket --notification-configuration='{"TopicConfigurations": [{"Id": "notif1", "TopicArn": "arn:aws:sns:default::mytopic", "Events": ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"], "Filter": {"Metadata": {"FilterRules": [{"Name": "x-amz-meta-foo", "Value": "bar"}, {"Name": "x-amz-meta-hello", "Value": "world"}]}, "Key": {"FilterRules": [{"Name": "regex", "Value": "([a-z]+)"}]}}}]}'
 ```
 
+- Delete all notifications of a bucket with an empty notification configuration (standard S3 API, no extensions needed):
+```
+aws --region=default --endpoint-url http://localhost:8000 s3api put-bucket-notification-configuration --bucket=mybucket --notification-configuration='{}'
+```
+
 - Get configuration of a specific notification of a bucket:
 ```
 aws --endpoint-url http://localhost:8000 s3api get-bucket-notification-configuration --bucket=mybucket --notification=notif1

@@ -492,6 +492,16 @@ Create Notification
 
 Create a publisher for a specific bucket into a topic.
 
+A ``NotificationConfiguration`` that holds no ``TopicConfiguration`` entities
+deletes all notifications on the bucket. This is the standard S3 API, so any
+S3 client can do it. An empty configuration looks like this:
+
+::
+
+   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>
+
+To delete a single notification, see `Delete Notification`_.
+
 Syntax
 ~~~~~~
 
@@ -601,7 +611,9 @@ Delete a specific, or all, notifications from a bucket.
 
 .. note::
 
-    - Notification deletion is an extension to the S3 notification API
+    - Notification deletion is an extension to the S3 notification API. To
+      delete all notifications on a bucket with the standard S3 API, send an
+      empty notification configuration: see `Create Notification`_
     - When the bucket is deleted, any notification defined on it is also deleted
     - Deleting an unknown notification (e.g. double delete) is not considered an error
 
