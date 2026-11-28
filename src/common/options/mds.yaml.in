@@ -1166,6 +1166,19 @@ options:
   default: 20_M
   services:
   - mds
+- name: mds_null_dentry_drop_batch
+  type: uint
+  level: advanced
+  desc: Dentries looked at per batch when dropping null dentries before an export
+  long_desc: Before a dirfrag with more null dentries than this is exported, its
+    clean null dentries are dropped in batches of this many dentries looked at,
+    letting go of mds_lock in between, and the export waits until that is done.
+    0 drops them all at once when the export encodes the dirfrag.
+  default: 10000
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_kill_export_at
   type: int
   level: dev
