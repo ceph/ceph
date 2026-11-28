@@ -3,7 +3,7 @@ import re
 import logging
 from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List, cast
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, CertificateSource, NFSServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, CertificateSource, NFSServiceSpec, TracingSpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import SpecialHostLabels
 from cephadm.services.nfs import NFSService
@@ -17,7 +17,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 11
+LAST_MIGRATION = 12
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,11 @@ class Migrations:
             logger.info('Running migration 10 -> 11')
             if self.migrate_10_11():
                 self.set(11)
+
+        if self.mgr.migration_current == 11 and not startup:
+            logger.info('Running migration 11 -> 12')
+            if self.migrate_11_12():
+                self.set(12)
 
     def migrate_0_1(self) -> bool:
         """
@@ -659,6 +664,133 @@ class Migrations:
             return False
         if nfs_services:
             self.mgr.set_store('nfs_services_with_old_userid', ','.join(nfs_services))
+        self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
+        return True
+
+    def migrate_11_12(self) -> bool:
+        """
+        Migration 11 -> 12
+
+        Jaeger tracing was refactored in update from jeager v1 to v2: the three separate
+        daemon types (jaeger-agent, jaeger-collector, jaeger-query) were
+        collapsed into a single 'jaeger' daemon type / service type.
+
+        Detection uses raw KV store scans rather than active_specs /
+        cache.get_daemons() because both of those filter out the old daemon
+        types by the time this migration runs:
+
+          * active_specs: ServiceSpec.from_json() throws for unknown
+            service_type values, so the SpecStore.load() exception handler
+            silently drops the entries and logs "unable to load spec for …".
+
+          * cache.get_daemons(): _process_ls_output() skips daemon types that
+            are not in KNOWN_DAEMON_TYPES (jaeger-agent/collector/query were
+            removed from that list as part of the same refactor), so the host
+            cache never contains entries for them after a host refresh.
+
+        Reading the raw KV JSON directly avoids both filters.
+        """
+        from cephadm.inventory import HOST_CACHE_PREFIX, SPEC_STORE_PREFIX
+        from cephadm.serve import CephadmServe
+        from cephadm.ssh import RemoteExecutable, RemoteCommand
+
+        old_daemon_types = {'jaeger-agent', 'jaeger-collector', 'jaeger-query'}
+
+        # Scan raw spec KV store — ServiceSpec.from_json() throws for unknown
+        # service_type values so active_specs never contains these entries.
+        old_raw_specs: Dict[str, Any] = {}
+        for k, v in self.mgr.get_store_prefix(SPEC_STORE_PREFIX).items():
+            service_name = k[len(SPEC_STORE_PREFIX):]
+            try:
+                j = json.loads(v)
+                if j.get('spec', {}).get('service_type', '') in old_daemon_types:
+                    old_raw_specs[service_name] = j
+            except Exception:
+                pass
+
+        if not old_raw_specs:
+            # Nothing to migrate
+            return True
+
+        logger.info('Running migration 11 -> 12 (jaeger v1 -> v2)')
+        logger.info(f'migrate_11_12: v1 specs in KV store: {sorted(old_raw_specs)}')
+
+        # Carry the old settings (es_nodes, networks, config, unmanaged,
+        # placement) over to the unified spec.  jaeger-tracing created all three
+        # v1 specs with the same settings, so prefer the collector but accept any.
+        old_spec: Dict[str, Any] = next((old_raw_specs[t]['spec']
+                                         for t in ('jaeger-collector', 'jaeger-query', 'jaeger-agent')
+                                         if t in old_raw_specs), {})
+        # 'without_query' no longer exists; drop it so the old spec still loads.
+        old_spec = {**old_spec, 'spec': {k: v for k, v in old_spec.get('spec', {}).items()
+                                         if k != 'without_query'}}
+        try:
+            new_spec = TracingSpec.from_json({**old_spec, 'service_type': 'jaeger', 'service_name': 'jaeger'})
+            # _apply validates the spec (e.g. an Elasticsearch backend is
+            # available, either via es_nodes or an elasticsearch service).
+            self.mgr._apply(new_spec)
+        except Exception as e:
+            self.mgr.set_health_warning('CEPHADM_MIGRATION_FAILURE',
+                                        f'Cephadm migration failed: unable to apply migrated jaeger spec: {e}',
+                                        1, [str(e)])
+            return False
+
+        # Stop old daemons on each host via systemctl.  cephadm rm-daemon
+        # cannot be used because the new cephadm binary rejects the old
+        # daemon-type prefixes (jaeger-agent, jaeger-collector, jaeger-query).
+        serve = CephadmServe(self.mgr)
+        systemctl = RemoteExecutable('systemctl')
+        candidate_hosts: List[str] = sorted(set(self.mgr.inventory.keys()))
+        failed_hosts: List[str] = []
+        for host in candidate_hosts:
+            try:
+                with self.mgr.async_timeout_handler(host, 'cephadm ls'):
+                    ls: List[Dict[str, Any]] = self.mgr.wait_async(
+                        serve._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
+                    )
+            except Exception as e:
+                logger.warning(f'migrate_11_12: cephadm ls failed on {host}: {e}')
+                # A host that could not be refreshed (e.g. offline) keeps its
+                # v1 daemons in the host cache; those cannot be stopped, so the
+                # migration must be retried.  Any other host is skipped.
+                cached = json.loads(self.mgr.get_store(HOST_CACHE_PREFIX + host) or '{}')
+                if any(n.split('.')[0] in old_daemon_types for n in cached.get('daemons', {})):
+                    failed_hosts.append(host)
+                continue
+
+            for d in ls:
+                name = d.get('name', '')
+                if name.split('.')[0] not in old_daemon_types:
+                    continue
+                if d.get('fsid') != self.mgr._cluster_fsid:
+                    continue
+                unit = d.get('systemd_unit') or f"ceph-{self.mgr._cluster_fsid}@{name}.service"
+                logger.info(f'migrate_11_12: stopping {unit} on {host}')
+                for action in ('stop', 'disable'):
+                    cmd = RemoteCommand(systemctl, [action, unit])
+                    try:
+                        _, err, code = self.mgr.ssh.execute_command(host, cmd)
+                        if code:
+                            logger.info(f'migrate_11_12: systemctl {action} {unit} on {host} failed ({code}): {err}')
+                            failed_hosts.append(host)
+                    except Exception as e:
+                        logger.info(f'migrate_11_12: systemctl {action} {unit} on {host} raised: {e}')
+                        failed_hosts.append(host)
+
+        if failed_hosts:
+            failed = sorted(set(failed_hosts))
+            msg = (f'Cephadm migration 11->12 (jaeger v1->v2): '
+                   f'Failed to stop jaeger daemons on {failed}. ')
+            logger.warning(f'migrate_11_12: {msg}')
+            self.mgr.set_health_warning('CEPHADM_MIGRATION_FAILURE', msg, 1, failed)
+            return False
+
+        # Delete old service specs from the raw KV store.
+        for service_name in old_raw_specs:
+            self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
+        self.mgr.spec_store.load()
+
+        # clear a failure reported by an earlier attempt of this migration
         self.mgr.remove_health_warning('CEPHADM_MIGRATION_FAILURE')
         return True
 
