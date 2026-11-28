@@ -342,6 +342,19 @@ inline namespace v14_2_0 {
     void cmpext(uint64_t off, const bufferlist& cmp_bl, int *prval);
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
+
+    /**
+     * Drop all of a redirect object's clones and reset its snapset seq, so
+     * that reads at a snapid are forwarded to the target.  The object must
+     * already be a redirect, for example from a set_redirect earlier in this
+     * operation, and this must be the last op.  Otherwise it returns -EINVAL.
+     *
+     * Send it with an empty snap context.
+     *
+     * Declared here rather than in ObjectWriteOperation so that a test can
+     * send it at a snapid: a write operation cannot name a clone.
+     */
+    void remove_clones();
    protected:
     void exec_impl(const char *cls, const char *method, bufferlist& inbl);
     void exec_impl(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);

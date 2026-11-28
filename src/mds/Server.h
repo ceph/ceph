@@ -282,6 +282,40 @@ public:
                           std::string value,
                           file_layout_t *layout);
   void handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur);
+  struct FileMigrate;
+  struct FileMigrateArgs;
+  // What an internal file migration did.
+  struct FileMigrateResult {
+    bool moved = false;      // false: it was in the pool already
+    bool head_only = false;  // snapshots see the file and stayed behind
+    uint64_t bytes = 0;
+  };
+  void file_migrate(CInode *in, int64_t pool, Context *fin,
+                    FileMigrateResult *result = nullptr);
+  void dispatch_file_migrate(const MDRequestRef& mdr);
+  void handle_client_file_migrate(const MDRequestRef& mdr, CInode *cur,
+                                  const std::string& value);
+  std::shared_ptr<FileMigrate> _file_migrate_new(const MDRequestRef& mdr,
+                                                 CInode *cur,
+                                                 const file_layout_t& to);
+  bool _file_migrate_precopy(const MDRequestRef& mdr, CInode *cur,
+                             const file_layout_t& to);
+  void _file_migrate_precopied(std::shared_ptr<FileMigrate> fm);
+  void handle_client_dir_migrate(const MDRequestRef& mdr, CInode *cur,
+                                 const std::string& value);
+  void _file_migrate_begin(const MDRequestRef& mdr, CInode *cur, int64_t pool);
+  void _file_migrate_reply(const MDRequestRef& mdr, int r);
+  void _file_migrate_wait_flush(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_prepare(std::shared_ptr<FileMigrate> fm);
+  std::map<inodeno_t, std::shared_ptr<FileMigrate>> file_migrates;
+  bool _file_migrate_find_versions(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_copy_step(std::shared_ptr<FileMigrate> fm, uint64_t i,
+                               size_t k);
+  void _file_migrate_start_copy(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_issue(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_op_finish(std::shared_ptr<FileMigrate> fm, int r);
+  void _file_migrate_copied(std::shared_ptr<FileMigrate> fm);
+  void _file_migrate_logged(std::shared_ptr<FileMigrate> fm);
   void handle_client_getvxattr(const MDRequestRef& mdr);
   void handle_client_setxattr(const MDRequestRef& mdr);
   void handle_client_removexattr(const MDRequestRef& mdr);
@@ -500,6 +534,8 @@ private:
   static bool is_ceph_vxattr(std::string_view xattr_name) {
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
            xattr_name.rfind("ceph.file.layout", 0) == 0 ||
+           xattr_name == "ceph.file.migrate.pool"sv ||
+           xattr_name == "ceph.dir.migrate.pool"sv ||
            xattr_name.rfind("ceph.quota", 0) == 0 ||
            xattr_name.rfind("ceph.alternate_name", 0) == 0 ||
            xattr_name == "ceph.quiesce.block"sv ||
