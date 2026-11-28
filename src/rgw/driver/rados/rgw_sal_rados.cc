@@ -50,6 +50,7 @@
 #include "rgw_multi.h"
 #include "rgw_obj_types.h"
 #include "rgw_oidc_provider.h"
+#include "rgw_otp.h"
 #include "rgw_rados.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_rest_config.h"
@@ -323,8 +324,26 @@ int RadosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool 
 
 int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    return store->ctl()->user->remove_info(dpp, info, y,
+    int r = store->ctl()->user->remove_info(dpp, info, y,
 					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
+    if (r < 0) {
+      return r;
+    }
+
+    // the user's MFA devices live in a separate otp metadata object that
+    // outlives the user, so a user re-created with the same uid would
+    // inherit them. only users with mfa_ids have one; checking first avoids
+    // creating the otp pool on zones that never used MFA
+    if (!info.mfa_ids.empty()) {
+      std::string otp_key = rgwrados::otp::get_meta_key(info.user_id);
+      r = store->ctl()->meta.mgr->remove(otp_key, y, dpp);
+      if (r < 0 && r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: could not remove " << otp_key
+            << " for removed user: " << cpp_strerror(-r) << dendl;
+        return r;
+      }
+    }
+    return 0;
 }
 
 int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
