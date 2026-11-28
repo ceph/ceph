@@ -3185,7 +3185,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   mut->auth_pin(in);
 
   // make max_size _increase_ timely
-  if (max_increased)
+  if (max_increased || in->filelock.is_waiter_for(SimpleLock::WAIT_ALL))
     mds->mdlog->flush();
 
   return true;
@@ -3234,15 +3234,18 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
 
 bool Locker::_need_flush_mdlog(CInode *in, int wanted, bool lock_state_any)
 {
-  /* flush log if caps are wanted by client but corresponding lock is unstable and locked by
-   * pending mutations. */
-  if (((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
+  /*
+   * Return true if a held lock has waiters or corresponds to caps in wanted.
+   * The lock must also be unstable unless lock_state_any is true.
+   * Flushing the log can help pending mutations complete and release locks.
+   */
+  if (((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL) || in->filelock.is_waiter_for(SimpleLock::WAIT_ALL)) &&
        (lock_state_any ? in->filelock.is_locked() : in->filelock.is_unstable_and_locked())) ||
-      ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL)) &&
+      ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL) || in->authlock.is_waiter_for(SimpleLock::WAIT_ALL)) &&
        (lock_state_any ? in->authlock.is_locked() : in->authlock.is_unstable_and_locked())) ||
-      ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL)) &&
+      ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL) || in->linklock.is_waiter_for(SimpleLock::WAIT_ALL)) &&
        (lock_state_any ? in->linklock.is_locked() : in->linklock.is_unstable_and_locked())) ||
-      ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) &&
+      ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL) || in->xattrlock.is_waiter_for(SimpleLock::WAIT_ALL)) &&
        (lock_state_any ? in->xattrlock.is_locked() : in->xattrlock.is_unstable_and_locked())))
     return true;
   return false;
