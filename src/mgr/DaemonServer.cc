@@ -3198,9 +3198,11 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  // Validate that the module is active
+  // Validate that the module is active. One locked lookup; everything
+  // below uses active_module, not the modules map.
   auto& mod_name = py_command.module_name;
-  if (!py_modules.is_module_active(mod_name)) {
+  auto active_module = py_modules.get_active_module(mod_name);
+  if (!active_module) {
     ss << "Module '" << mod_name << "' did not initialize in time (required by "
           "command '" << prefix << "'): see https://docs.ceph.com/en/latest/rados/operations/health-checks/#mgr-module-error "
 	  "for troubleshooting tips.";
@@ -3209,12 +3211,25 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Reject instead of queueing behind a slow or stuck module: a queued
+  // command holds its client message throttle until it is answered.
+  auto max_queue_len = py_modules.get_max_command_queue_length(module);
+  auto in_flight = active_module->cmd_tracker->try_get(max_queue_len);
+  if (!in_flight) {
+    ss << "Module '" << mod_name << "' has reached max_command_queue_length ("
+       << max_queue_len << "), try again later";
+    dout(4) << ss.str() << ": '" << prefix << "'" << dendl;
+    cmdctx->reply(-EAGAIN, ss);
+    return true;
+  }
+
   op->mark_queued_for_module();
 
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
-  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module]
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module,
+                                        in_flight=std::move(in_flight)]
                                        (int r_) mutable {
     std::stringstream ss;
 
@@ -3248,6 +3263,7 @@ bool DaemonServer::_handle_command(
 
     if (!accept_command) {
       dout(4) << ss.str() << dendl;
+      in_flight.reset();
       cmdctx->reply(-EIO, ss);
       return;
     }
@@ -3262,6 +3278,9 @@ bool DaemonServer::_handle_command(
     }
 
     cmdctx->odata.append(ds);
+    // release before replying, so a client retrying on the reply
+    // doesn't find this command still counted
+    in_flight.reset();
     cmdctx->reply(r, ss);
     dout(10) << " command returned " << r << dendl;
   }));

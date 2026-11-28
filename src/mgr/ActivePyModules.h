@@ -229,6 +229,15 @@ public:
     return modules.at(name)->finisher;
   }
 
+  std::shared_ptr<ActivePyModule> get_module(const std::string &name) const {
+    std::lock_guard l(lock);
+    auto it = modules.find(name);
+    if (it == modules.end()) {
+      return nullptr;
+    }
+    return it->second;
+  }
+
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
   }

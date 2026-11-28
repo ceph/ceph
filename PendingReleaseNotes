@@ -1,5 +1,10 @@
 >=22.0.0
 
+* MGR: Manager modules have a new option ``mgr/<module>/max_command_queue_length``.
+  When set, commands for that module fail with ``EAGAIN`` once it has that many
+  commands queued or running, so a slow module cannot fill the Manager's client
+  message throttle. It is disabled (``0``) by default. To remove a limit, set
+  it back to ``0``: ``ceph config rm`` only takes effect after a Manager restart.
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to

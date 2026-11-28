@@ -15,6 +15,7 @@
 #include "PyFormatter.h"
 
 #include "common/debug.h"
+#include "common/perf_counters.h"
 #include "mon/MonCommand.h"
 
 #include "ActivePyModule.h"
@@ -28,6 +29,32 @@
 
 using std::string;
 using namespace std::literals;
+
+std::unique_ptr<ModuleCommandTracker::InFlight>
+ModuleCommandTracker::try_get(uint64_t limit)
+{
+  std::lock_guard l(lock);
+  if (limit > 0 && in_flight >= limit) {
+    if (py_module->perfcounter) {
+      py_module->perfcounter->inc(py_module->l_pym_cmd_eagain);
+    }
+    return nullptr;
+  }
+  ++in_flight;
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_cmd_in_flight, in_flight);
+  }
+  return std::make_unique<InFlight>(shared_from_this());
+}
+
+void ModuleCommandTracker::put()
+{
+  std::lock_guard l(lock);
+  --in_flight;
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_cmd_in_flight, in_flight);
+  }
+}
 
 int ActivePyModule::load(ActivePyModules *py_modules)
 {
