@@ -203,3 +203,85 @@ class TestAsyncSSHLogLevel:
 
         mock_set_log_level.assert_called_with('DEBUG')
         mock_set_debug_level.assert_called_with(debug_level)
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestSSHIdentity:
+    """The cephadm SSH identity is loaded once, by _reconfig_ssh(), not by
+    asyncssh.connect() for every new connection."""
+
+    @staticmethod
+    def _set_identity(cephadm_module, key, cert=None):
+        cephadm_module.set_store('ssh_identity_key', key.export_private_key().decode())
+        cephadm_module.set_store('ssh_identity_pub', key.export_public_key().decode())
+        cephadm_module.set_store('ssh_identity_cert',
+                                 cert.export_certificate().decode() if cert else None)
+        cephadm_module.ssh._reconfig_ssh()
+
+    @mock.patch("asyncssh.connect")
+    def test_identity_loaded_once(self, mock_connect, cephadm_module):
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+        key = asyncssh.generate_private_key('ssh-ed25519')
+        self._set_identity(cephadm_module, key)
+
+        client_keys = cephadm_module.ssh._client_keys
+        assert client_keys is not None
+        assert [k.key_public_data for k in client_keys] == [key.public_data]
+
+        with mock.patch("asyncssh.load_keypairs", wraps=asyncssh.load_keypairs) as load:
+            for host in ('host1', 'host2', 'host3'):
+                cephadm_module.wait_async(
+                    cephadm_module.ssh._remote_connection(host, '1::4'))
+            load.assert_not_called()
+        assert mock_connect.call_count == 3
+        for call in mock_connect.call_args_list:
+            assert call.kwargs['client_keys'] is client_keys
+
+    def test_identity_with_certificate(self, cephadm_module):
+        key = asyncssh.generate_private_key('ssh-ed25519')
+        ca = asyncssh.generate_private_key('ssh-ed25519')
+        cert = ca.generate_user_certificate(key, 'root', principals=['root'])
+        self._set_identity(cephadm_module, key, cert)
+
+        # as client_keys=[key file]: the key with its certificate, and alone
+        client_keys = cephadm_module.ssh._client_keys
+        assert client_keys is not None
+        assert [k.algorithm for k in client_keys] == [
+            b'ssh-ed25519-cert-v01@openssh.com', b'ssh-ed25519']
+        assert all(k.key_public_data == key.public_data for k in client_keys)
+
+    @mock.patch("asyncssh.connect")
+    def test_identity_follows_key_changes(self, mock_connect, cephadm_module):
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+        key1 = asyncssh.generate_private_key('ssh-ed25519')
+        key2 = asyncssh.generate_private_key('ssh-ed25519')
+
+        self._set_identity(cephadm_module, key1)
+        self._set_identity(cephadm_module, key2)
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('host1', '1::4'))
+        client_keys = mock_connect.call_args.kwargs['client_keys']
+        assert [k.key_public_data for k in client_keys] == [key2.public_data]
+
+        # key removed: back to the key file, as before
+        cephadm_module.set_store('ssh_identity_key', None)
+        cephadm_module.set_store('ssh_identity_pub', None)
+        cephadm_module.ssh._reconfig_ssh()
+        assert cephadm_module.ssh._client_keys is None
+
+    @mock.patch("asyncssh.connect")
+    def test_unloadable_identity_uses_key_file(self, mock_connect, cephadm_module, caplog):
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+        cephadm_module.set_store('ssh_identity_key', 'not a key')
+        cephadm_module.ssh._reconfig_ssh()
+
+        assert cephadm_module.ssh._client_keys is None
+        assert 'Unable to load the cephadm SSH identity' in caplog.text
+        # the connection reads the key file and reports the error, as before
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('host1', '1::4'))
+        assert mock_connect.call_args.kwargs['client_keys'] == [cephadm_module.tkey.name]
