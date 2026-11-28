@@ -1668,15 +1668,19 @@ struct laddr_hint_t {
   laddr_conflict_policy_t policy;
   extent_len_t block_size;
 
+  extent_len_t expected_object_size = 0;
+
   static laddr_hint_t create_as_fixed(
     laddr_t laddr,
-    extent_len_t block_size = laddr_t::UNIT_SIZE)
+    extent_len_t block_size = laddr_t::UNIT_SIZE,
+    extent_len_t expected_object_size = 0)
   {
     return {
       laddr,
       laddr_conflict_condition_t::all_at_never,
       laddr_conflict_policy_t::linear_search,
-      block_size
+      block_size,
+      expected_object_size
     };
   }
   static laddr_hint_t create_global_md_hint(
@@ -1781,6 +1785,10 @@ struct laddr_hint_t {
     default:
       __builtin_unreachable();
     }
+  }
+
+  bool has_alloc_hint() const {
+    return expected_object_size != 0;
   }
 
   bool operator==(const laddr_hint_t&) const = default;

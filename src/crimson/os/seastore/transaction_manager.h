@@ -684,13 +684,26 @@ public:
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
+
+    paddr_t paddr_hint = P_ADDR_NULL;
+    if (laddr_hint.has_alloc_hint() && pos &&
+        laddr_hint.addr.is_object_address() &&
+        !laddr_hint.addr.is_metadata() &&
+        laddr_hint.addr.get_offset_bytes() + len <=
+        laddr_hint.expected_object_size &&
+        epm->get_main_backend_type() ==
+          backend_type_t::RANDOM_BLOCK) {
+      paddr_hint = pos->get_adjacent_paddr_hint(
+        laddr_hint.addr, laddr_hint.expected_object_size);
+    }
+
     std::vector<TCachedExtentRef<T>> exts;
     while (exts.empty()) {
       try {
         exts = cache->alloc_new_data_extents<T>(
           t, len,
           {
-            placement_hint, INIT_GENERATION, false, P_ADDR_NULL,
+            placement_hint, INIT_GENERATION, false, paddr_hint,
             epm->get_write_policy(T::TYPE, len)
           });
       } catch (crimson::ct_error::eagain&) {}

@@ -221,6 +221,8 @@ public:
 
   base_iertr::future<LBAMapping> next();
 
+  paddr_t get_adjacent_paddr_hint(laddr_t laddr, extent_len_t expected_object_size);
+
 private:
   friend class LBAManager;
   friend lba::BtreeLBAManager;

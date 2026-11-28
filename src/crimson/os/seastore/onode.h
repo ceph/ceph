@@ -115,6 +115,7 @@ protected:
   }
   const hobject_t hobj;
   std::optional<local_object_id_t> sibling_object_id;
+  extent_len_t expected_object_size = 0;
 
 public:
   explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
@@ -215,6 +216,14 @@ public:
   // should only be used for unittest
   void reset_sibling_object_id() {
     sibling_object_id.reset();
+  }
+  void set_alloc_hint(extent_len_t size) {
+    if (size != 0) {
+      expected_object_size = size;
+    }
+  }
+  extent_len_t get_expected_object_size() const {
+    return expected_object_size;
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
