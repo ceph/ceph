@@ -3,8 +3,7 @@
   class="clipboard-btn"
   [ngClass]="{ 'clipboard-btn-with-text': text }"
   [size]="size"
-  description="Copy to Clipboard"
-  i18n-description
+  [attr.aria-label]="text ? null : copyLabel"
   type="button"
   (click)="onClick()"
 >
