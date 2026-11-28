@@ -5,9 +5,21 @@ systems outside the mgr module. The naming is simpilfied and the
 cluster id acts as a namespace so that external entities can be
 granted access to only one cluster at a time.
 """
-from typing import Collection, Tuple
+from typing import Any, Collection, Dict, List, Tuple
 
+import json
+import re
+
+from . import config_store
 from .proto import ConfigStore, EntryKey
+
+# A config-key entry is limited by the mon option mon_config_key_max_entry_size
+# (64KiB by default). Entries holding RGW credentials are chunked to fit.
+RGW_STUB_MAX_BYTES = 64 * 1024
+# All chunked RGW credential entries are named rgw.<chunk>.json, where chunk
+# is a number. The entries are packed full, whatever credential a share uses.
+RGW_CHUNK_PREFIX = 'rgw.'
+_RGW_CHUNK_RE = re.compile(r'rgw\.(0|[1-9][0-9]*)\.json')
 
 # Convert identifiers into config entry keys
 
@@ -61,8 +73,83 @@ def spec_backup_key(cluster_id: str) -> EntryKey:
 
 
 def rgw_config_key(cluster_id: str) -> EntryKey:
-    """Return key for the RGW credential stub in the private store."""
+    """Return key for the legacy RGW credential stub in the private store.
+    Older versions kept the credentials of every share in this one entry. It
+    is no longer written but may still exist, and be in use by deployed
+    daemons, until the cluster is next updated.
+    """
     return (cluster_id, 'config.smb.rgw')
+
+
+def rgw_chunk_config_key(cluster_id: str, chunk: int) -> EntryKey:
+    """Return key for one numbered chunk of the RGW credential stubs in the
+    private store.
+    """
+    return (cluster_id, f'{RGW_CHUNK_PREFIX}{chunk}.json')
+
+
+def rgw_stub(shares: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a sambacc config:merge stub carrying the per-share options."""
+    return {
+        'samba-container-config': 'v0',
+        'config:merge': {'shares': shares},
+    }
+
+
+def chunk_rgw_shares(
+    shares: Dict[str, Any], max_bytes: int = RGW_STUB_MAX_BYTES
+) -> List[Dict[str, Any]]:
+    """Split the per-share options into as few groups as possible that each
+    serialize, as a complete stub, to at most max_bytes. Shares are packed in
+    the order given, filling each group before starting the next, so the
+    caller controls which shares end up together. Sizes are computed from
+    the json.dumps encoding that the config stores use.
+    """
+    base = len(json.dumps(rgw_stub({})))
+    chunks: List[Dict[str, Any]] = []
+    current: Dict[str, Any] = {}
+    size = base
+    for name in shares:
+        # '"name": {...}' plus the ', ' separating it from a previous item
+        item = len(json.dumps(name)) + 2 + len(json.dumps(shares[name]))
+        sep = 2 if current else 0
+        if current and size + sep + item > max_bytes:
+            chunks.append(current)
+            current, size, sep = {}, base, 0
+        current[name] = shares[name]
+        size += sep + item
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def stored_rgw_chunk_keys(
+    store: ConfigStore, cluster_id: str
+) -> List[EntryKey]:
+    """Return the keys of all stored RGW credential stub chunks, in chunk
+    order.
+    """
+    chunks = {}
+    for name in config_store.find_keys(store, cluster_id, RGW_CHUNK_PREFIX):
+        match = _RGW_CHUNK_RE.fullmatch(name)
+        if match:
+            chunk_num = int(match.group(1))
+            chunks[chunk_num] = (cluster_id, name)
+    return [chunks[num] for num in sorted(chunks.keys())]
+
+
+def stored_rgw_stub_keys(
+    store: ConfigStore, cluster_id: str
+) -> List[EntryKey]:
+    """Return the keys of every stored stub that must be given to the
+    daemons: the legacy stub (if still present) and all credential stub
+    chunks.
+    """
+    keys = stored_rgw_chunk_keys(store, cluster_id)
+    legacy = rgw_config_key(cluster_id)
+    if store[legacy].exists():
+        keys.insert(0, legacy)
+    return keys
 
 
 def tls_credential_key(
