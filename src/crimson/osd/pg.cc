@@ -2304,11 +2304,20 @@ void PG::merge_from(
   peering_state.merge_from(source_states, rctx, split_bits, last_pg_merge_meta);
 
   // We iterate through each source and move its objects into the target collection
+  std::vector<spg_t> staged_sources;
   for (auto& [pgid, entry] : sources) {
     auto& src_pg = entry.second;
     auto src_coll = src_pg->get_collection_ref()->get_cid();
     auto dst_coll = coll_ref->get_cid();
-    DEBUG("merging source {}", pgid);
+    if (shard_services.is_merge_source_staged(pgid)) {
+      // Seastore cross-shard merge: the source's collection lives in
+      // another store; merge from the copy staged on this shard instead.
+      src_coll = ShardServices::merge_staging_cid(pgid);
+      staged_sources.push_back(pgid);
+      DEBUG("merging source {} from staging {}", pgid, src_coll);
+    } else {
+      DEBUG("merging source {}", pgid);
+    }
 
     // Remove source-specific metadata objects that are no longer needed
     // now that the collections are being collapsed.
@@ -2322,6 +2331,25 @@ void PG::merge_from(
   // new, smaller PG count (reducing bitmask).
   rctx.transaction.collection_set_bits(coll_ref->get_cid(), split_bits);
   snap_mapper.update_bits(split_bits);
+
+  if (!staged_sources.empty()) {
+    // Delete each staged source's ORIGINAL collection (on its own shard)
+    // only once the merge is durable on this shard. Until then the
+    // original is the source of truth.
+    rctx.transaction.register_on_commit(
+      new LambdaContext(
+        [&ss=shard_services, staged_sources=std::move(staged_sources)](int) {
+          for (const auto& src : staged_sources) {
+            (void)ss.remove_merged_source_collection(
+              src
+            ).handle_exception([src](auto ep) {
+              LOG_PREFIX(PG::merge_from);
+              ERROR("failed to remove original collection of {}: {}",
+                    src, ep);
+            });
+          }
+        }));
+  }
 }
 
 std::optional<hobject_t> PG::consider_updating_migration_watermark(
