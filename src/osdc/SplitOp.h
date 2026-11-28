@@ -307,6 +307,18 @@ class SplitOp {
     Unknown
   };
 
+ public:
+  /**
+   * Which op reads a shard's version with its data: GET_INTERNAL_VERSIONS_V2
+   * asks every participating shard, so every OSD of the acting set must know
+   * it, which OSDs with the INTERNAL_VERSIONS_V2 feature do. An acting set
+   * with an OSD of an earlier release falls back to GET_INTERNAL_VERSIONS.
+   */
+  static InternalVersionStrategy internal_version_strategy(
+    const OSDMap& osdmap, const std::vector<int>& acting);
+
+ protected:
+
   int assemble_rc() const;
   virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const = 0;
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) const = 0;

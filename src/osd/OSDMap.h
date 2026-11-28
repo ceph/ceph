@@ -996,6 +996,12 @@ public:
                                      std::set<int> skip,
                                      std::set<int> *want) const;
 
+  /// the first release whose clients can all follow a pool migration:
+  /// set-require-min-compat-client sets require_pool_migration from it.
+  /// A backport names its own release.
+  static constexpr ceph_release_t POOL_MIGRATION_MIN_COMPAT_CLIENT =
+    ceph_release_t::vampire;
+
   /**
    * get feature bits required by the current structure
    *

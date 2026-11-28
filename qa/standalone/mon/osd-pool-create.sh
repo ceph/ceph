@@ -685,6 +685,15 @@ function creating() {
     pool_field $1 flags_names | tr , '\n' | grep -qx creating
 }
 
+# once clients that can follow a pool migration are required, the requirement
+# is a feature in use and cannot be lowered again
+function TEST_pool_migration_requirement_stays() {
+    local dir=$1
+    run_mon_for_pool_migration $dir || return 1
+    ! ceph osd set-require-min-compat-client umbrella 2> $dir/lower.out || return 1
+    grep "features that require vampire" $dir/lower.out || return 1
+}
+
 function TEST_pool_migrate_copies_pool() {
     local dir=$1
     run_mon_for_pool_migration $dir || return 1
