@@ -462,14 +462,19 @@ class Module(MgrModule):
         if not daemons:
             return (-errno.EAGAIN, '',
                     'device ' + devid + ' not claimed by any active daemons')
-        (daemon_type, daemon_id) = daemons[0].split('.')
-        raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
-                                               devid=devid)
-        if raw_smart_data:
+        # Any daemon claiming the device reads the same drive, so fall
+        # back to the next one if a daemon is down or returns nothing.
+        for daemon in daemons:
+            daemon_type, daemon_id = daemon.split('.', 1)
+            raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
+                                                   devid=devid)
+            if not raw_smart_data:
+                continue
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
                 if device and data:
                     self.put_device_metrics(device, data)
+            break
         return 0, "", ""
 
     def do_scrape_daemon(self,
