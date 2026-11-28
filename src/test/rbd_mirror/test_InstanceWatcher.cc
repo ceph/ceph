@@ -15,6 +15,8 @@
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
+#include <vector>
+
 using rbd::mirror::InstanceWatcher;
 
 void register_test_instance_watcher() {
@@ -61,8 +63,8 @@ TEST_F(TestInstanceWatcher, InitShutdown)
   ASSERT_EQ(m_instance_id, instance_ids[0]);
 
   ASSERT_EQ(0, m_local_io_ctx.stat(m_oid, &size, nullptr));
-  std::list<obj_watch_t> watchers;
-  ASSERT_EQ(0, m_local_io_ctx.list_watchers(m_oid, &watchers));
+  std::vector<obj_watch_t> watchers;
+  ASSERT_EQ(0, m_local_io_ctx.list_watchers(m_oid, watchers));
   ASSERT_EQ(1U, watchers.size());
   ASSERT_EQ(m_instance_id, stringify(watchers.begin()->watcher_id));
 
@@ -103,8 +105,8 @@ TEST_F(TestInstanceWatcher, Remove)
   ASSERT_EQ(instance_id, instance_ids[0]);
 
   ASSERT_EQ(0, m_local_io_ctx.stat(oid, &size, nullptr));
-  std::list<obj_watch_t> watchers;
-  ASSERT_EQ(0, m_local_io_ctx.list_watchers(oid, &watchers));
+  std::vector<obj_watch_t> watchers;
+  ASSERT_EQ(0, m_local_io_ctx.list_watchers(oid, watchers));
   ASSERT_EQ(1U, watchers.size());
 
   // Remove

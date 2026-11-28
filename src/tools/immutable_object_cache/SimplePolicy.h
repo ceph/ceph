@@ -30,7 +30,7 @@ class SimplePolicy : public Policy {
 
   int evict_entry(std::string file_name);
 
-  void get_evict_list(std::list<std::string>* obj_list);
+  void get_evict_list(std::vector<std::string>& obj_list);
 
   uint64_t get_free_size();
   uint64_t get_promoting_entry_num();

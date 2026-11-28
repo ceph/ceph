@@ -5,7 +5,7 @@
 #define RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_PRUNE_REQUEST_H
 
 #include "tools/rbd_mirror/image_sync/Types.h"
-#include <list>
+#include <deque>
 #include <string>
 
 class Context;
@@ -66,7 +66,7 @@ private:
   Context *m_on_finish;
 
   SyncPoints m_sync_points_copy;
-  std::list<std::string> m_snap_names;
+  std::deque<std::string> m_snap_names;
 
   bool m_invalid_master_sync_point = false;
 

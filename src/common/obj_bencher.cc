@@ -1089,23 +1089,22 @@ int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, cons
     return -EINVAL;
   }
 
-  std::list<Object> unfiltered_objects;
+  std::vector<Object> unfiltered_objects;
   std::set<std::string> meta_namespaces, all_namespaces;
 
   // If caller set all_nspaces this will be searching
   // across multiple namespaces.
   while (true) {
-    bool objects_remain = get_objects(&unfiltered_objects, 20);
+    bool objects_remain = get_objects(unfiltered_objects, 20);
     if (!objects_remain)
       break;
 
-    std::list<Object>::const_iterator i = unfiltered_objects.begin();
-    for ( ; i != unfiltered_objects.end(); ++i) {
-      if (i->first == run_name_meta) {
-        meta_namespaces.insert(i->second);
+    for (const auto& object : unfiltered_objects) {
+      if (object.first == run_name_meta) {
+        meta_namespaces.insert(object.second);
       }
-      if (i->first.substr(0, prefix.length()) == prefix) {
-        all_namespaces.insert(i->second);
+      if (object.first.substr(0, prefix.length()) == prefix) {
+        all_namespaces.insert(object.second);
       }
     }
   }
@@ -1260,29 +1259,29 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
 /**
  * Return objects from the datastore which match a prefix.
  *
- * Clears the list and populates it with any objects which match the
- * prefix. The list is guaranteed to have at least one item when the
+ * Clears the output and populates it with any objects which match the
+ * prefix. The output is guaranteed to have at least one item when the
  * function returns true.
  *
  * @param prefix the prefix to match against
- * @param objects [out] return list of objects
+ * @param objects [out] return sequence of objects
  * @returns true if there are any objects in the store which match
  * the prefix, false if there are no more
  */
-bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::list<Object>* objects) {
-  std::list<Object> unfiltered_objects;
+bool ObjBencher::more_objects_matching_prefix(const std::string& prefix,
+                                              std::deque<Object>& objects) {
+  std::vector<Object> unfiltered_objects;
 
-  objects->clear();
+  objects.clear();
 
-  while (objects->empty()) {
-    bool objects_remain = get_objects(&unfiltered_objects, 20);
+  while (objects.empty()) {
+    bool objects_remain = get_objects(unfiltered_objects, 20);
     if (!objects_remain)
       return false;
 
-    std::list<Object>::const_iterator i = unfiltered_objects.begin();
-    for ( ; i != unfiltered_objects.end(); ++i) {
-      if (i->first.substr(0, prefix.length()) == prefix) {
-        objects->push_back(*i);
+    for (const auto& object : unfiltered_objects) {
+      if (object.first.substr(0, prefix.length()) == prefix) {
+        objects.push_back(object);
       }
     }
   }
@@ -1300,7 +1299,7 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   Object newName;
   int r = 0;
   int slot = 0;
-  std::list<Object> objects;
+  std::deque<Object> objects;
   bool objects_remain = true;
 
   std::unique_lock locker{lock};
@@ -1320,7 +1319,7 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   for (int i = 0; i < concurrentios; ++i) {
     if (objects.empty()) {
       // if there are fewer objects than concurrent ios, don't generate extras
-      bool objects_found = more_objects_matching_prefix(prefix, &objects);
+      bool objects_found = more_objects_matching_prefix(prefix, objects);
       if (!objects_found) {
         concurrentios = i;
         objects_remain = false;
@@ -1372,7 +1371,7 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
 
     // get more objects if necessary
     if (objects.empty()) {
-      objects_remain = more_objects_matching_prefix(prefix, &objects);
+      objects_remain = more_objects_matching_prefix(prefix, objects);
       // quit if there are no more
       if (!objects_remain) {
         break;

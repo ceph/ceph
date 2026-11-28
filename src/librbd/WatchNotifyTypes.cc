@@ -424,8 +424,8 @@ NotifyOp NotifyMessage::get_notify_op() const {
   return payload->get_notify_op();
 }
 
-std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
-  std::list<NotifyMessage> o;
+std::vector<NotifyMessage> NotifyMessage::generate_test_instances() {
+  std::vector<NotifyMessage> o;
   o.push_back(NotifyMessage(new AcquiredLockPayload(ClientId(1, 2))));
   o.push_back(NotifyMessage(new ReleasedLockPayload(ClientId(1, 2))));
   o.push_back(NotifyMessage(new RequestLockPayload(ClientId(1, 2), true)));
@@ -472,8 +472,8 @@ void ResponseMessage::dump(Formatter *f) const {
   f->dump_int("result", result);
 }
 
-std::list<ResponseMessage> ResponseMessage::generate_test_instances() {
-  std::list<ResponseMessage> o;
+std::vector<ResponseMessage> ResponseMessage::generate_test_instances() {
+  std::vector<ResponseMessage> o;
   o.push_back(ResponseMessage(1));
   return o;
 }
