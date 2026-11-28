@@ -41,6 +41,21 @@ int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
   return 0;
 }
 
+// Unlike user create, where a 'tenant' request parameter overwrites any
+// tenant embedded in the 'uid' parameter, a conflict between the two
+// spellings is rejected here so that neither is silently ignored.
+static int apply_tenant_param(const DoutPrefixProvider* dpp,
+                              const std::string& tenant_name,
+                              const std::string& uid_str, rgw_user& uid)
+{
+  std::string err_msg;
+  int ret = rgw_apply_tenant_to_uid(tenant_name, uid_str, uid, err_msg);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "NOTICE: " << err_msg << dendl;
+  }
+  return ret;
+}
+
 class RGWOp_User_List : public RGWRESTOp {
 
 public:
@@ -92,13 +107,14 @@ void RGWOp_User_Info::execute(optional_yield y)
   RGWUserAdminOpState op_state(driver);
   op_state.set_system(s->system_request);
 
-  std::string uid_str, access_key_str;
+  std::string uid_str, access_key_str, tenant_name;
   bool fetch_stats;
   bool sync_stats;
   bool dump_keys = false;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "access-key", access_key_str, &access_key_str);
+  RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
 
   // if uid was not supplied in rest argument, error out now, otherwise we'll
   // end up initializing anonymous user, for which keys.init will eventually
@@ -109,6 +125,11 @@ void RGWOp_User_Info::execute(optional_yield y)
   }
 
   rgw_user uid(uid_str);
+
+  op_ret = apply_tenant_param(this, tenant_name, uid_str, uid);
+  if (op_ret < 0) {
+    return;
+  }
 
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
 
@@ -311,6 +332,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   std::string access_key;
   std::string secret_key;
   std::string key_type_str;
+  std::string tenant_name;
   std::string op_mask_str;
   std::string default_placement_str;
   std::string placement_tags_str;
@@ -337,6 +359,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets, &quota_set);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
+  RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
 
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "account-root", false, &account_root);
@@ -350,6 +373,11 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
     op_ret = -EINVAL;
+    return;
+  }
+
+  op_ret = apply_tenant_param(this, tenant_name, uid_str, uid);
+  if (op_ret < 0) {
     return;
   }
 
@@ -464,6 +492,7 @@ public:
 void RGWOp_User_Remove::execute(optional_yield y)
 {
   std::string uid_str;
+  std::string tenant_name;
   bool purge_data;
 
   RGWUserAdminOpState op_state(driver);
@@ -472,6 +501,12 @@ void RGWOp_User_Remove::execute(optional_yield y)
   rgw_user uid(uid_str);
 
   RESTArgs::get_bool(s, "purge-data", false, &purge_data);
+  RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
+
+  op_ret = apply_tenant_param(this, tenant_name, uid_str, uid);
+  if (op_ret < 0) {
+    return;
+  }
 
   // FIXME: no double checking
   if (!uid.empty())
