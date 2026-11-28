@@ -63,6 +63,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_rest_conn_connect_to_resolved_ips
 .. confval:: rgw_rest_conn_ip_fail_timeout_secs
 .. confval:: rgw_max_chunk_size
+.. confval:: rgw_max_put_size
+.. confval:: rgw_multipart_part_upload_limit
 .. confval:: rgw_multi_obj_del_max_aio
 .. confval:: rgw_smb_frontends
 .. confval:: rgw_smb_run_dedup_threads
