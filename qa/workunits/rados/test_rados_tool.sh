@@ -301,6 +301,10 @@ test_omap() {
         $RADOS_TOOL -p $POOL rmomapkey $OBJ $i
     done
     $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 5
+    # removing a key that does not exist must fail
+    expect_false $RADOS_TOOL -p $POOL rmomapkey $OBJ 1 2>/dev/null
+    expect_false $RADOS_TOOL -p $POOL rmomapkey $OBJ nosuchkey 2>/dev/null
+    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 5
     $RADOS_TOOL -p $POOL clearomap $OBJ
     $RADOS_TOOL -p $POOL listomapvals $OBJ | wc -l | grep 0
     cleanup

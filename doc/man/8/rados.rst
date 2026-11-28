@@ -345,7 +345,8 @@ Pool specific commands
   input.
 
 :command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*
-  Remove key from the object map of object name.
+  Remove key from the object map of object name. Fails with an error if
+  the key does not exist.
 
 :command:`getomapheader` *name*
   Dump the hexadecimal value of the object map header of object name.
