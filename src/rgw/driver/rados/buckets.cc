@@ -18,6 +18,7 @@
 #include "common/async/yield_context.h"
 #include "common/dout.h"
 #include "cls/user/cls_user_client.h"
+#include "rgw/datum/adapters/cls/user.h"
 #include "rgw_common.h"
 #include "rgw_sal.h"
 #include "rgw_tools.h"
@@ -163,10 +164,14 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
   librados::ObjectReadOperation op;
   cls_user_header header;
-  ::cls_user_get_header(op, &header, nullptr);
+  int status = 0;
+  cls_user_get_header(op, &header, &status);
 
   bufferlist bl;
   r = ref.operate(dpp, std::move(op), &bl, y);
+  if (r >= 0) {
+    r = status;
+  }
   if (r < 0 && r != -ENOENT) {
     return r;
   }
@@ -223,6 +228,8 @@ int read_stats_async(const DoutPrefixProvider* dpp,
 int reset_stats(const DoutPrefixProvider* dpp, optional_yield y,
                 librados::Rados& rados, const rgw_raw_obj& obj)
 {
+  namespace user_datum = cls::rgw::user_datum;
+
   rgw_rados_ref ref;
   int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
   if (r < 0) {
@@ -231,29 +238,29 @@ int reset_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
   int rval;
 
-  cls_user_reset_stats2_op call;
-  cls_user_reset_stats2_ret ret;
+  user_datum::reset_reply page;
 
-  do {
-    buffer::list in, out;
+  do
+   {
+    auto in = user_datum::encode_reset(ceph::real_clock::now(), page.marker, page.acc_stats);
+    buffer::list out;
     librados::ObjectWriteOperation op;
 
-    call.time = ceph::real_clock::now();
-    ret.update_call(call);
-
-    encode(call, in);
     op.exec(cls::user::method::reset_user_stats2, in, &out, &rval);
     r = ref.operate(dpp, std::move(op), y, librados::OPERATION_RETURNVEC);
     if (r < 0) {
       return r;
     }
-    try {
-      auto bliter = out.cbegin();
-      decode(ret, bliter);
-    } catch (ceph::buffer::error& err) {
+    try
+     {
+      page = user_datum::decode_reset_reply(out);
+     }
+    catch (const ceph::buffer::error&)
+     {
       return -EINVAL;
-    }
-  } while (ret.truncated);
+     }
+   }
+  while (page.truncated);
 
   return rval;
 }

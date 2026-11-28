@@ -69,6 +69,8 @@ add_executable(unittest_ec_coroutines
 add_ceph_unittest(unittest_ec_coroutines)
 target_link_libraries(unittest_ec_coroutines Boost::context)
 
+add_catch2_test(omap_values)
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc

@@ -1,0 +1,15 @@
+/* This stylesheet is loaded only on Datum documentation pages. */
+.wy-nav-content {
+    min-width: 0;
+}
+
+.rst-content img {
+    max-width: 100%;
+    height: auto;
+    background: white;
+}
+
+.rst-content code.literal {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}

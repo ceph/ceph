@@ -1,0 +1,248 @@
+# Developer’s guide
+
+Datum helps turn byte handling and handler state into operations with explicit contracts.
+For a port, first record the existing ordering, wire format, quota, lifetime, error, and
+publication rules. Then choose vocabulary and operations that make those rules visible.
+These ideas appear particularly well suited to Datum in Ceph, RGW (RADOS Gateway),
+object classes, and SALAD. They are design tools, not a straitjacket:
+use a direct loop or a different architecture when it expresses the contract better.
+
+## Start with meaning
+
+Distinguish an object name from its encoded storage key, encoded bytes from a decoded record,
+and a selection boundary from a continuation token. The same string type may represent several
+roles; give them clear names before introducing a new type. Existing key encodings and wire
+formats remain contracts. Datum vocabulary describes their use without changing their bytes.
+
+Start with supplied operations: `byte_extent` and `byte_mapping` for byte geometry,
+`key::byte_query` for string-key selections, and `order_by` with field projections for ordering.
+Use standard Ranges algorithms and views where their evaluation and lifetime rules fit.
+For coverage changes, `symmetric_difference(previous, desired)` or `previous ^ desired`
+identifies changed membership. Keep `desired - previous` and `previous - desired` when the
+consumer needs addition/removal direction, and `visit_overlaps` when it needs source identity.
+Algebra operators preserve domain identity, borrowing, and the named operations' evaluation;
+they do not combine plan requirements, residual predicates, controls, or native effects.
+Keep Ceph buffers in the maintained `<ceph-datum.h>` vocabulary and native records, codecs,
+errno translation, reshard accounting, and persistence in native bindings.
+See the [layer map](design.md#architectural-guidelines) and
+[Ceph vocabulary lesson](../tutorial.md#18-bytes-with-a-ceph-accent).
+
+For fixed fragmented output, `scatter_bytes(source, destination)` accepts contiguous or
+fragmented bytes and preserves unused destination capacity. Fragment inputs support two
+repeatable passes: capacity admission, then transfer. Current value descriptors are retained
+through their pieces; borrowed references do not transfer ownership. Capacity failure writes
+nothing, while later observation exceptions may leave a written prefix. Keep source and
+destination storage disjoint, destination fragments mutually nonaliasing, and all backing live.
+See the [fragment-transfer example](../examples/fragment_transfer.cpp) and
+[transfer lesson](../tutorial.md#transfer-between-fragmented-buffers).
+
+## Decode once, then use the value
+
+A validated record is useful input. Pass it to checking, accounting, and selection operations
+rather than passing encoded bytes and decoding them again. Paired writes can similarly share
+one encoding while retaining their separate storage effects and transaction requirements.
+
+A lazy transformation does not cache each decoded value. In this fragment, `decode` is a pure
+application function returning `std::expected<unsigned, std::errc>`:
+
+```cpp
+auto lazy = encoded | std::views::transform(decode);
+auto current = std::ranges::begin(lazy); // Assume a nonempty source.
+auto first = *current;
+auto again = *current;                  // Invokes decode again at the same position.
+```
+
+The standard specifies invocation of the transformation on each
+[iterator dereference](https://eel.is/c++draft/range.transform.iterator).
+In an expected-returning function, materialize the result once, then reuse it:
+
+```cpp
+auto decoded = *current;
+if (!decoded) {
+    return std::unexpected(decoded.error());
+}
+const unsigned value = *decoded;        // Use this validated value in subsequent operations.
+```
+
+This guarantees one transformation for that visit, not for future passes or retries. For a
+streaming handler, keep the value local while processing that row. If several passes need it,
+retain decoded records explicitly. Materializing a complete page uses storage and may decode
+rows beyond the reply quota; choose that behavior deliberately. Keep fetching and transaction
+assumptions visible at the native boundary rather than hiding them in iterator operations.
+
+For two ordered, internally disjoint layout/selection streams, `interval::visit_overlaps`
+retains each current value descriptor and its projected geometry through all overlapping cuts.
+It accepts input iterators and borrows callbacks and lenses. The [mapped-read program](examples/overlap_reads.cpp)
+shows logical-to-backing translation without materializing layout records. Cut/source observations
+are scoped to the callback; retain needed native ownership explicitly when scheduling I/O.
+For a sparse extent map with a packed payload, `interval::visit_packed_overlaps` also supplies
+the selected `byte_mapping`. Keep unselected origins in that map when their bytes are present
+in the payload. `byte_cursor::take(byte_extent)` selects the absolute packed region after
+admitting its skip and length. The [packed-payload program](examples/packed_payload.cpp) shows
+this composition; native framing, payload validation, and publication remain caller decisions.
+
+For native/admitted algebra, `interval::observe_intervals(expression)` supplies a lazy standard
+range. It borrows named expressions and retains temporaries without changing their leaf ownership.
+Compose ordinary range adaptors, `visit_range`, or `visit_intervals` rather than collecting just
+to consume the result once. Controlled stopping prevents further increments; preparing output
+can require lookahead through input bounds. Compound output descriptors borrow leaf endpoints, while
+`copy_interval` retains point values. See [algebra observation](../tutorial.md#observe-algebra-as-a-range)
+and the [lazy-read program](../examples/lazy_reads.cpp).
+
+For a covered-byte batch, `interval::take(expression, quota, metric)` streams
+native/admitted algebra directly into automatically selected owning output. Zero quota avoids iteration;
+exact or partial exhaustion performs no next increment. Nested cursor preparation can still
+look ahead. Explicit `take<Capacity>` limits entries and throws without returning a partial
+batch; it does not bound point allocations or input preparation. The [read planner](../examples/read_plan.cpp)
+uses this form to avoid collecting missing coverage and a vector-backed batch.
+
+## Choose preparation for the consumer
+
+Use `contains(expression, point)` when filtering records by membership. For a single pass over
+native/admitted algebra, use `observe_intervals`; a byte consumer can turn each finite half-open
+part into `byte_extent` with `extent_of`. For a bounded batch, pass the algebra directly to
+`take`. These paths avoid collecting coverage just to traverse it once.
+
+Retain `compile_intervals` where it provides something the caller needs: normalization of raw
+unordered entries, repeated geometry consumers, or owned point values that must survive the
+input. Small structural bounds automatically select inline output; unknown or large bounds
+use a vector. Use explicit `<Capacity>` for an application entry limit, and `dynamic_storage`
+when different expression shapes must share one concrete owning type. Raw normalization may
+still allocate temporary workspace. Keep
+`evaluate(expression, workspace)` where preparation must obey explicit work/intermediate-entry
+limits. Lazy output and bounded output capacity do not enforce those workspace limits.
+
+Reuse a named expression when its inputs remain suitable for each consumer; this reuses the
+selection description, not prepared coverage. Compile once for repeated consumers that need the
+same normalized values. Expressions can borrow canonical lvalues, so keep those sources alive
+and valid throughout use. Choose storage for the consumer's retention and type requirements,
+then measure its actual workload: allocation counts alone do not predict execution time.
+
+| Retained-result requirement | Policy |
+| --- | --- |
+| Ordinary owning range | Use `auto` with `compile_intervals` or `take`; small proven bounds select inline output |
+| Application entry limit | Use `<Capacity>`; raw compilation applies the limit after normalization |
+| Common field, collection element, or function return type | Pass `interval::dynamic_storage` explicitly |
+
+The [storage lesson](../tutorial.md#choose-retained-storage) and
+[complete program](../examples/retained_storage.cpp) cover each choice, including resolved plan
+compilation. A dynamic span erases a fixed extent; a runtime size or a small actual result does
+not recover that type information. The private inline threshold is no substitute for a caller's
+work budget, and owning point values does not make borrowed point backing survive its owner.
+
+XOR (exclusive OR) uses one monotone boundary-parity transition in both push and pull consumers. Each merge
+processes at most two events per canonical input interval with constant additional state,
+without recursively duplicating expression subtrees. Total composed work still includes each
+node's actual inputs and outputs; a lazy expression is not a global resource budget. Covered
+quotas and controlled visitation keep their existing preparation/lookahead and stop contracts.
+
+Choose `visit_overlaps` for synchronous alignment of ordered, internally disjoint record and
+selection streams, including input producers returning values. Use `clip_view` when its stable,
+forward inputs and prevalidation are useful for repeatable traversal. Choose `visit_packed_overlaps`
+when sparse logical origins correspond to a densely packed payload; it counts every preceding
+origin's bytes, even when that origin is unselected.
+
+Known numeric geometry can use ordinary compilation and `take` during C++23 constant
+evaluation. The [constant-plan example](../examples/constexpr_plan.cpp) checks the actual pieces
+and measure with `static_assert`; it prints only after compilation. Inline entries allow a plan
+to remain a `constexpr` value. Custom domains and callbacks must also support constant evaluation;
+native I/O and payload ownership remain runtime concerns. See the
+[bibliography's C++23 rules](../tutorial.md#bibliography).
+
+## Own what must survive
+
+Borrow for synchronous calls whose references do not escape. Retain an owner when a callback,
+asynchronous completion, or result outlives the call. A `std::span` or `std::string_view` provides
+access without extending the backing storage’s lifetime. Owning a view descriptor need not own
+its payload. Datum’s `owning_value` contract requires truthful enrollment for custom types.
+
+With `<ceph-datum.h>`, `datum::slice(bufferlist, extent)` retains native segment references;
+`datum::copy(bufferlist, extent)` creates independent payload bytes. Retention follows the
+buffer’s native lifetime rules and does not imply immutability or isolation. Externally backed
+buffers keep their external lifetime obligations. Capture owned request or completion state
+when work escapes, and return owned continuation state before page storage disappears.
+
+## Specify progress separately from output
+
+`visit_range` and `traversal::scan_range` distinguish an offered row, consumption, acceptance,
+and stopping. Each decision contributes:
+
+| Decision | Offered | Consumed | Accepted | Stops |
+| --- | --- | --- | --- | --- |
+| `accept` | 1 | 1 | 1 | No |
+| `skip` | 1 | 1 | 0 | No |
+| `accept_and_stop` | 1 | 1 | 1 | Yes |
+| `reject_and_stop` | 1 | 0 | 0 | Yes |
+
+Acceptance has the meaning chosen by the consumer. A native GC (garbage collection) listing
+may charge a row against its quota without returning an entry. A removal lookahead can supply
+a boundary while remaining unconsumed. Neither the number returned nor a quota counter can
+automatically replace consumption. `visit_result` reports `offered`, `accepted`, and the
+optional `stop`; `consumed()` and `stopped()` derive from those facts.
+
+`scan_range` saves `positions.position(row)` before invoking the consumer, which may move the
+row. On stop, `positions.next(saved, consumed)` constructs the continuation. An ordered scan
+usually resumes exclusively after a consumed key and inclusively at a rejected key. The profile
+must establish that this matches the backend’s order and replay rules. An owned token provides
+neither a snapshot nor durable acknowledgement. See [Keep your place](../tutorial.md#10-keep-your-place).
+
+## Decide failure and publication together
+
+The [complete example](examples/developer_flow.cpp) decodes a toy page of unsigned decimal
+values, prepares an owned reply, and only then prints it. Its application function
+`prepare_reply(encoded, maximum)` returns `std::expected<page_reply, std::errc>`.
+Successful preparation decodes each row once into owned records before `scan_range` applies the quota.
+Zero values are skipped, and a full reply rejects the next offered row.
+The program limits `{"0", "7", "9"}` to one reply entry, then rejects a malformed page.
+Its [expected output](expected/developer_flow.txt) is:
+
+```text
+returned: 7
+offered: 3, consumed: 2, accepted: 1
+resume index: 2
+malformed page: no reply published
+```
+
+The index refers to this unchanged toy source; a production binding supplies its own owned key
+or opaque token. Malformed input anywhere in the page returns an error with no reply or partial
+progress, even beyond the quota. Local staged values are discarded. Allocation can still throw.
+This is a deliberate whole-page validation contract, not a model for every native listing.
+Publication and storage effects stay outside preparation; `std::expected` itself supplies no
+rollback. Sharing one encoding across writes likewise does not make the writes atomic.
+
+**Available interfaces:** `visit_range` and `scan_range` accept callbacks returning either
+`acceptance` or `std::expected<acceptance, Error>`. A returned error retains the prior progress
+and counts the failing row as offered but unconsumed. A failed scan also retains its owned
+resume position. The [fallible scan example](examples/fallible_scan.cpp) shows that boundary.
+Callback exceptions propagate without a partial result; neither path rolls back callback effects.
+`traversal::for_each_page` accepts expected-returning readers and visitors. A returned error
+retains the attempted page’s input state and the count of previously completed pages; the
+failing page is not completed. Fallible readers and visitors must share their error type.
+Row consumption, page progress, safe retry, and transaction commit remain separate contracts.
+
+Build the example in the ordinary [tutorial build](build-and-run.md):
+
+```sh
+cmake --build build --target developer_flow --parallel 8
+ctest --test-dir build -R '^developer_flow$' --output-on-failure
+```
+
+## Choose the useful programming ideas
+
+The mechanisms above suggest **value-oriented generic programming with a pure core and explicit
+effect boundaries** as a useful description of Datum’s style. This is an interpretation of the
+code, not a required paradigm or a claim that all callbacks are pure.
+
+| Approach | Relationship to Datum | Practical consequence |
+| --- | --- | --- |
+| Data-oriented programming | [Sharvit’s principles](https://blog.klipse.tech/databook/2022/06/22/immutable-data.html) separate data and behavior, use generic data structures, require immutability, and separate schema from representation. Datum shares useful separation, but also uses concrete static types, writable views, and controlled mutation. | Pass useful data between operations; immutable maps or persistent containers are optional design choices. |
+| Generic programming | [Musser and Stepanov](https://stepanovpapers.com/genprog.pdf) derive reusable algorithms from concrete algorithms and the operations their representations need. Datum’s ordered domains, ranges, projections, and callbacks follow this pattern. | Supply the smallest truthful contract; reuse standard algorithms before adding protocols. |
+| Functional core, imperative shell | [Bernhardt’s architecture](https://www.destroyallsoftware.com/screencasts/catalog/functional-core-imperative-shell) separates value calculations from external effects. Datum’s interval algebra fits the core; native handlers arrange decoding, storage, transactions, and asynchronous work. | Test decisions with ordinary values, and keep publication explicit. A generic traversal can still run effectful callbacks. |
+| Hardware-oriented data-oriented design | [Fabian’s account](https://www.dataorienteddesign.com/dodbook/node2.html) designs transformations around actual data and target hardware. Datum does not prescribe layout, batching, or cache behavior. | Decode-once and encoding reuse remove repeated work; layout and throughput still need workload-specific measurement. |
+
+For a new shared operation, trace its producers and consumers and question every required
+method, flag, mutable reference, and cached field. Recurring domain-independent protocols
+deserve strong reusable core machinery when they simplify real callers; low-level composition
+alone does not establish that the shared interface is sufficient. Keep that machinery pure of
+native dependencies and policy. Validate ordering, quota boundaries, errors, lifetimes, and
+publication against actual consumers and wire tests before calling a port complete.

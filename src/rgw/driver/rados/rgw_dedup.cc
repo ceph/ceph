@@ -2606,6 +2606,11 @@ namespace rgw::dedup {
       unsigned slab_rec_count = 0;
       auto bl_itr = bl.cbegin();
       for (uint32_t block_num = 0; block_num < DISK_BLOCK_COUNT; block_num++, seq_number++) {
+        if (sizeof(block_buff) > bl_itr.get_remaining()) {
+          ldpp_dout(dpp, 1) << __func__ << "::Short slab at block=" << seq_number << dendl;
+          p_stats->failed_block_load++;
+          return -EIO;
+        }
         disk_block_id_t disk_block_id(worker_id, seq_number);
         const char *p = get_next_data_ptr(bl_itr, block_buff, sizeof(block_buff),
                                           dpp);
@@ -2868,13 +2873,15 @@ namespace rgw::dedup {
       }
 
       const string& oid = oids[current_shard];
-      rgw_cls_list_ret result;
+      cls::rgw::bucket_datum::reply result;
       librados::ObjectReadOperation op;
+      int status = 0;
       d_ctl.bucket_index_throttle.acquire();
       // get bucket-indices of @current_shard
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter, max_entries,
-                             list_versions, &result);
+                             list_versions, result, status);
       int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, null_yield);
+      ret = cls_rgw_bucket_list_result(ret, status);
       if (unlikely(ret < 0)) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed rgw_rados_operate() ret="
                           << ret << "::" << cpp_strerror(-ret) << dendl;

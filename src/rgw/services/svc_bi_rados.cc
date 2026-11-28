@@ -3,10 +3,12 @@
 
 #include <algorithm>
 #include <iterator>
+#include <new>
 
 #include <fmt/format.h>
 
 #include "svc_bi_rados.h"
+#include "common/error_code.h"
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
@@ -344,7 +346,7 @@ struct IndexHeadReader : rgwrados::shard_io::RadosReader {
     auto& bl = buffers[shard];
     op.omap_get_header(&bl, nullptr);
   }
-  Result on_complete(int, boost::system::error_code ec) override {
+  Result on_complete(int, boost::system::error_code& ec) override {
     // ignore ENOENT
     if (ec && ec != boost::system::errc::no_such_file_or_directory) {
       return Result::Error;
@@ -607,7 +609,7 @@ struct ReshardStatusReader : rgwrados::shard_io::RadosReader {
     auto& bl = buffers[shard];
     cls_rgw_get_bucket_resharding(op, bl);
   }
-  Result on_complete(int, boost::system::error_code ec) override {
+  Result on_complete(int, boost::system::error_code& ec) override {
     // ignore ENOENT
     if (ec && ec != boost::system::errc::no_such_file_or_directory) {
       return Result::Error;
@@ -833,19 +835,66 @@ int RGWSI_BucketIndex_RADOS::set_tag_timeout(const DoutPrefixProvider* dpp,
   return ceph::from_error_code(ec);
 }
 
+struct IndexCheck {
+  rgw_cls_index_check check;
+  bufferlist reply;
+  bool paged = true;
+};
+
 struct CheckReader : rgwrados::shard_io::RadosReader {
-  std::map<int, bufferlist>& buffers;
+  std::map<int, IndexCheck>& checks;
+  const bool for_rebuild;
 
   CheckReader(const DoutPrefixProvider& dpp,
               boost::asio::any_io_executor ex,
               librados::IoCtx& ioctx,
-              std::map<int, bufferlist>& buffers)
-    : RadosReader(dpp, std::move(ex), ioctx), buffers(buffers)
+              std::map<int, IndexCheck>& checks, const bool for_rebuild = false)
+    : RadosReader(dpp, std::move(ex), ioctx), checks(checks), for_rebuild(for_rebuild)
   {}
   void prepare_read(int shard, librados::ObjectReadOperation& op) override {
-    auto& bl = buffers[shard];
-    cls_rgw_bucket_check_index(op, bl);
+    auto& state = checks[shard];
+    state.reply.clear();
+    if (state.paged) {
+      cls_rgw_bucket_check_index(op, state.check.cursor, state.reply);
+      return;
+    }
+    cls_rgw_bucket_check_index(op, state.reply);
   }
+  Result on_complete(int shard, boost::system::error_code& ec) override
+  try
+   {
+    auto& state = checks.at(shard);
+    if (ec.value() == EOPNOTSUPP && state.paged && 0 == state.check.cursor.version) {
+      // Older modules retain their full-call protocol. Rebuild can go directly
+      // to its old write operation instead of scanning the same shard twice.
+      state.paged = false;
+      ec.clear();
+      return for_rebuild ? Result::Success : Result::Retry;
+    }
+    if (ec) {
+      return Result::Error;
+    }
+    if (!state.paged) {
+      cls_rgw_bucket_check_index_decode(state.reply, state.check.result);
+      return Result::Success;
+    }
+    if (const int result = state.check.consume(state.reply); result < 0) {
+      ec = ceph::to_error_code(result);
+      return Result::Error;
+    }
+
+    return state.check.complete() ? Result::Success : Result::Retry;
+   }
+  catch (const std::bad_alloc&)
+   {
+    ec = ceph::to_error_code(-ENOMEM);
+    return Result::Error;
+   }
+  catch (const ceph::buffer::error&)
+   {
+    ec = ceph::to_error_code(-EIO);
+    return Result::Error;
+   }
   void add_prefix(std::ostream& out) const override {
     out << "check index shards: ";
   }
@@ -864,29 +913,50 @@ int RGWSI_BucketIndex_RADOS::check_index(const DoutPrefixProvider *dpp, optional
   }
 
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  std::map<int, IndexCheck> checks;
   boost::system::error_code ec;
   if (y) {
     // run on the coroutine's executor and suspend until completion
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
-    auto reader = CheckReader{*dpp, ex, index_pool, buffers};
+    auto reader = CheckReader{*dpp, ex, index_pool, checks};
 
     rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio, yield[ec]);
   } else {
     // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
-    auto reader = CheckReader{*dpp, ex, index_pool, buffers};
+    auto reader = CheckReader{*dpp, ex, index_pool, checks};
 
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio,
                                     ceph::async::use_blocked[ec]);
   }
-  return ceph::from_error_code(ec);
+  if (ec) {
+    return ceph::from_error_code(ec);
+  }
+  std::map<int, bufferlist> candidate;
+  for (const auto& [shard, state] : checks) {
+    encode(state.check.result, candidate[shard]);
+  }
+  buffers = std::move(candidate);
+
+  return 0;
 }
 
 struct RebuildWriter : rgwrados::shard_io::RadosWriter {
-  using RadosWriter::RadosWriter;
-  void prepare_write(int, librados::ObjectWriteOperation& op) override {
+  const std::map<int, IndexCheck>& checks;
+
+  RebuildWriter(const DoutPrefixProvider& dpp, boost::asio::any_io_executor ex,
+                 librados::IoCtx& ioctx, const std::map<int, IndexCheck>& checks)
+    : RadosWriter(dpp, std::move(ex), ioctx), checks(checks)
+  {}
+
+  void prepare_write(int shard, librados::ObjectWriteOperation& op) override {
+    const auto& state = checks.at(shard);
+    if (state.paged) {
+      cls_rgw_bucket_rebuild_index(op, state.check);
+      return;
+    }
     cls_rgw_bucket_rebuild_index(op);
   }
   void add_prefix(std::ostream& out) const override {
@@ -907,18 +977,32 @@ int RGWSI_BucketIndex_RADOS::rebuild_index(const DoutPrefixProvider *dpp,
   }
 
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
+  std::map<int, IndexCheck> checks;
   boost::system::error_code ec;
   if (y) {
     // run on the coroutine's executor and suspend until completion
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
-    auto writer = RebuildWriter{*dpp, ex, index_pool};
+    auto reader = CheckReader{*dpp, ex, index_pool, checks, true};
+    rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio, yield[ec]);
+    if (ec) {
+      return ceph::from_error_code(ec);
+    }
+    auto writer = RebuildWriter{*dpp, ex, index_pool, checks};
 
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
   } else {
     // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
-    auto writer = RebuildWriter{*dpp, ex, index_pool};
+    auto reader = CheckReader{*dpp, ex, index_pool, checks, true};
+
+    maybe_warn_about_blocking(dpp);
+    rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio,
+                                    ceph::async::use_blocked[ec]);
+    if (ec) {
+      return ceph::from_error_code(ec);
+    }
+    auto writer = RebuildWriter{*dpp, ex, index_pool, checks};
 
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
@@ -933,7 +1017,8 @@ struct ListReader : rgwrados::shard_io::RadosReader {
   const std::string& delimiter;
   uint32_t num_entries;
   bool list_versions;
-  std::map<int, rgw_cls_list_ret>& results;
+  std::map<int, cls::rgw::bucket_datum::reply>& results;
+  std::map<int, int> statuses;
 
   ListReader(const DoutPrefixProvider& dpp,
              boost::asio::any_io_executor ex,
@@ -942,7 +1027,7 @@ struct ListReader : rgwrados::shard_io::RadosReader {
              const std::string& prefix,
              const std::string& delimiter,
              uint32_t num_entries, bool list_versions,
-             std::map<int, rgw_cls_list_ret>& results)
+             std::map<int, cls::rgw::bucket_datum::reply>& results)
     : RadosReader(dpp, std::move(ex), ioctx),
       start_obj(start_obj), prefix(prefix), delimiter(delimiter),
       num_entries(num_entries), list_versions(list_versions),
@@ -955,19 +1040,24 @@ struct ListReader : rgwrados::shard_io::RadosReader {
     // to advance the search, otherwise use the marker passed in by the
     // caller
     auto& result = results[shard];
+    auto& status = statuses[shard];
+    status = 0;
     const cls_rgw_obj_key& marker =
         result.marker.empty() ? start_obj : result.marker;
     cls_rgw_bucket_list_op(op, marker, prefix, delimiter,
-                           num_entries, list_versions, &result);
+                           num_entries, list_versions, result, status);
   }
-  Result on_complete(int, boost::system::error_code ec) override {
+  Result on_complete(int shard, boost::system::error_code& ec) override {
+    // Preserve transport failures, but a malformed retry reply must not trigger another retry.
+    const int status = statuses.at(shard);
+    if ((!ec || ec.value() == -RGWBIAdvanceAndRetryError) && status < 0) {
+      ec = ceph::to_error_code(status);
+    }
     if (ec.value() == -RGWBIAdvanceAndRetryError) {
       return Result::Retry;
-    } else if (ec) {
-      return Result::Error;
-    } else {
-      return Result::Success;
     }
+
+    return ec ? Result::Error : Result::Success;
   }
   void add_prefix(std::ostream& out) const override {
     out << "sharded list objects: ";
@@ -981,7 +1071,7 @@ int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp, optiona
                                           const std::string& prefix,
                                           const std::string& delimiter,
                                           uint32_t num_entries, bool list_versions,
-                                          std::map<int, rgw_cls_list_ret>& results)
+                                          std::map<int, cls::rgw::bucket_datum::reply>& results)
 {
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
   boost::system::error_code ec;

@@ -217,11 +217,7 @@ public:
                 bool process_log = false) {
     entries.push_back(entry);
     if (account) {
-      rgw_bucket_category_stats& target = stats[category];
-      target.num_entries += entry_stats.num_entries;
-      target.total_size += entry_stats.total_size;
-      target.total_size_rounded += entry_stats.total_size_rounded;
-      target.actual_size += entry_stats.actual_size;
+      stats[category] += entry_stats;
     }
     if (entries.size() >= reshard_shard_batch_size) {
       int ret = flush(process_log);

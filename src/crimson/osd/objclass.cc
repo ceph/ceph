@@ -16,6 +16,7 @@
 
 #include "objclass/objclass.h"
 #include "osd/ClassHandler.h"
+#include "osd/OmapGetValues.h"
 
 #include "auth/Crypto.h"
 #include "common/armor.h"
@@ -27,14 +28,15 @@ using std::string;
 
 static constexpr int dout_subsys = ceph_subsys_objclass;
 
-static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
+static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op,
+                                 ceph::osd::OmapGetValues *omap_read = nullptr)
 {
   // we can expect the memory under `ret` will be still fine after
   // executing the osd op as we're running inside `seastar::thread`
   // created for us by `seastar::async` in `::do_op_call()`.
   int ret = 0;
   using osd_op_errorator = crimson::osd::OpsExecuter::osd_op_errorator;
-  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_op(op)
+  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_op(op, omap_read)
   .handle_error_interruptible(
     osd_op_errorator::all_same_way([&ret] (const std::error_code& err) {
       assert(err.value() > 0);
@@ -318,19 +320,12 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
                          bool* const more)
 {
   OSDOp op{CEPH_OSD_OP_OMAPGETVALS};
-  encode(start_obj, op.indata);
-  encode(max_to_get, op.indata);
-  encode(filter_prefix, op.indata);
-  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+  ceph::osd::OmapGetValues query(start_obj, filter_prefix, max_to_get);
+  if (const auto ret = execute_osd_op(hctx, op, &query); ret < 0) {
     return ret;
   }
-  try {
-    auto iter = op.outdata.cbegin();
-    decode(*vals, iter);
-    decode(*more, iter);
-  } catch (buffer::error&) {
-    return -EIO;
-  }
+  vals->swap(query.values);
+  *more = query.more;
   return vals->size();
 }
 

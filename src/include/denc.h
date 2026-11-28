@@ -381,7 +381,7 @@ struct denc_traits<T>
     o = get_pos_add<etype>(p);
   }
   static void decode(T& o, ceph::buffer::list::const_iterator &p) {
-    etype e;
+    etype e CEPH_INDETERMINATE;
     p.copy(sizeof(etype), reinterpret_cast<char*>(&e));
     o = e;
   }
