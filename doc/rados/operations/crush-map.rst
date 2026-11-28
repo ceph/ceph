@@ -319,9 +319,20 @@ Ceph supports two types of weight sets:
 #. A **per-pool** weight set is more flexible in that it allows placement to
    be optimized for each data pool. Additionally, weights can be adjusted
    for each position of placement, allowing the optimizer to correct for a
-   subtle skew of data toward devices with small weights relative to their
-   peers (an effect that is usually apparent only in very large clusters
-   but that can cause balancing problems).
+   skew of data toward devices and buckets with small weights relative to
+   their peers.
+
+   This skew does not depend on the size of the cluster. It arises whenever
+   a rule places the replicas or shards of a PG on items of unequal weight,
+   for example hosts or racks: when a draw lands on an item that the PG
+   already uses, CRUSH draws again, and because larger items are more likely
+   to have been chosen already, the extra draws favor the smaller items. The
+   skew is greater when the items differ more in weight and when there are
+   few items relative to the number of replicas or shards. For example, if an
+   erasure-coded pool with six shards per PG uses a ``rack`` failure domain
+   with eight racks, three of which have half the weight of the other five,
+   then each of the three smaller racks receives about 30% more data than its
+   weight calls for.
 
 When weight sets are in use, the weights associated with each node in the
 hierarchy are visible in a separate column (labeled either as ``(compat)`` or
