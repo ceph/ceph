@@ -1,13 +1,18 @@
 import json
+import logging
+from datetime import timedelta
 from unittest.mock import patch
 
 from ceph.deployment.service_spec import (
     PlacementSpec,
     ServiceSpec,
 )
+from ceph.utils import datetime_now
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.module import CephadmOrchestrator
+from cephadm.serve import CephadmServe
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
+from tests import mock
 
 
 cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
@@ -76,6 +81,110 @@ class TestAgent:
                     use_current_daemon_image=False,
                 )
         _get_ceph_volume_image.assert_called_with(cephadm_module)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_proceeds_when_agent_unreachable(self, _run_cephadm, cephadm_module: CephadmOrchestrator, caplog):
+        # an agent can keep reporting in fine while the mgr still can't push
+        # to it (e.g. its listener port is firewalled). 3 failed pushes in a
+        # row should stop that host from blocking the apply of other specs.
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cephadm_module.use_agent = True
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.metadata_up_to_date['test'] = False
+            for _ in range(3):
+                cephadm_module.agent_cache.record_message_failure('test')
+
+            caplog.set_level(logging.WARNING)
+            CephadmServe(cephadm_module)._apply_all_services()
+            assert any('appears unreachable' in r.message for r in caplog.records)
+            # the wait is over, not just skipped this one time
+            assert cephadm_module.agent_cache.apply_wait_since is None
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_waits_on_genuinely_stale_host(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # a host that is simply slow to report in, with no messenger
+        # failures recorded, should still block the apply as before
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cephadm_module.use_agent = True
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.metadata_up_to_date['test'] = False
+            assert cephadm_module.agent_helpers.ok_to_apply_despite_stale_metadata() is False
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_proceeds_after_wait_cap(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # even if a host is never flagged unreachable, the wait should not
+        # go on forever
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cephadm_module.use_agent = True
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.metadata_up_to_date['test'] = False
+            now = datetime_now()
+            cephadm_module.agent_cache.apply_wait_since = now - timedelta(seconds=301)
+            with mock.patch('cephadm.agent.datetime_now', lambda: now):
+                assert cephadm_module.agent_helpers.ok_to_apply_despite_stale_metadata() is True
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_wait_timer_persists_across_cap_bypass(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # once the cap lets specs apply despite stale metadata, the next
+        # pass should not restart the wait from scratch, or the cap only
+        # ever unblocks one pass every 300 seconds instead of staying clear
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cephadm_module.use_agent = True
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.metadata_up_to_date['test'] = False
+            now = datetime_now()
+            wait_since = now - timedelta(seconds=301)
+            cephadm_module.agent_cache.apply_wait_since = wait_since
+            with mock.patch('cephadm.agent.datetime_now', lambda: now):
+                CephadmServe(cephadm_module)._apply_all_services()
+                assert cephadm_module.agent_cache.apply_wait_since == wait_since
+
+                CephadmServe(cephadm_module)._apply_all_services()
+                assert cephadm_module.agent_cache.apply_wait_since == wait_since
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_stale_ls_report_ignored_while_push_unreachable(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        # a host's agent can keep sending its regular report even while the
+        # mgr can't push anything to it. If that report reflects a daemon
+        # list from before we deployed something there over SSH, applying
+        # it would erase the new daemon from the cache and cause a
+        # duplicate deploy on the next pass.
+        from cephadm.agent import HostData
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.agent_cache.agent_counter['test'] = 2
+            data = {'host': 'test', 'port': 4721, 'ack': '1', 'ls': [{'name': 'crash.test'}]}
+
+            for _ in range(3):
+                cephadm_module.agent_cache.record_message_failure('test')
+            with mock.patch.object(cephadm_module, '_process_ls_output') as process_ls:
+                HostData(cephadm_module).handle_metadata(data)
+                process_ls.assert_not_called()
+
+            cephadm_module.agent_cache.record_message_success('test')
+            with mock.patch.object(cephadm_module, '_process_ls_output') as process_ls, \
+                    mock.patch.object(cephadm_module, 'update_failed_daemon_health_check'):
+                HostData(cephadm_module).handle_metadata(data)
+                process_ls.assert_called_once()
+
+    @mock.patch('ssl.SSLContext.wrap_socket')
+    @mock.patch('socket.socket')
+    @mock.patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @mock.patch('cephadm.cert_mgr.CertMgr.generate_cert',
+                lambda instance, *a, **kw: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    def test_message_thread_requires_ack(self, _socket, wrap_socket, cephadm_module: CephadmOrchestrator):
+        # the agent's listener sends back an error string, not a closed
+        # connection, when it rejects a message. That must still count as
+        # a failed delivery, not a successful one.
+        from cephadm.agent import AgentMessageThread
+
+        wrap_socket.return_value.recv.return_value = b'could not process message'
+        AgentMessageThread('test', 4721, {'counter': 1}, cephadm_module).run()
+        assert cephadm_module.agent_cache.messenger_failures.get('test', 0) == 1
+
+        wrap_socket.return_value.recv.return_value = b'ACK'
+        AgentMessageThread('test', 4721, {'counter': 1}, cephadm_module).run()
+        assert cephadm_module.agent_cache.messenger_failures.get('test', 0) == 0
 
 
 def test_agent_get_dependencies():
