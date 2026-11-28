@@ -595,6 +595,14 @@ public:
     unsigned priority) override;
   void cancel_local_background_io_reservation() override;
 
+  int64_t to_shard_bytes(int64_t num_bytes, int64_t num_objects) final {
+    if (pool.info.is_erasure()) {
+      num_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
+      num_bytes += get_pgbackend()->get_ec_stripe_chunk_size() * num_objects;
+    }
+    return num_bytes;
+  }
+
   void request_remote_recovery_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
@@ -909,9 +917,14 @@ public:
     return primary_num_bytes.load() > 0;
   }
 
-  bool try_reserve_recovery_space(int64_t primary,
-				  int64_t local,
-				  int64_t num_objects) override;
+  std::optional<backfill_osd_space_usage_t>
+  get_local_osd_space_usage() override;
+  bool try_reserve_recovery_space(
+    int64_t primary,
+    int64_t local,
+    int64_t primary_num_objects,
+    int64_t local_num_objects,
+    backfill_reservation_space_info_t *space_info = nullptr) override;
   void unreserve_recovery_space() override;
 
   // If num_bytes are inconsistent and local_num- goes negative
@@ -919,29 +932,8 @@ public:
 
   // The value of num_bytes could be negative,
   // but we don't let local_num_bytes go negative.
-  void add_local_num_bytes(int64_t num_bytes) {
-    if (num_bytes) {
-      int64_t prev_bytes = local_num_bytes.load();
-      int64_t new_bytes;
-      do {
-        new_bytes = prev_bytes + num_bytes;
-        if (new_bytes < 0)
-          new_bytes = 0;
-      } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
-    }
-  }
-  void sub_local_num_bytes(int64_t num_bytes) {
-    ceph_assert(num_bytes >= 0);
-    if (num_bytes) {
-      int64_t prev_bytes = local_num_bytes.load();
-      int64_t new_bytes;
-      do {
-        new_bytes = prev_bytes - num_bytes;
-        if (new_bytes < 0)
-          new_bytes = 0;
-      } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
-    }
-  }
+  void add_local_num_bytes(int64_t num_bytes);
+  void sub_local_num_bytes(int64_t num_bytes);
   // The value of num_bytes could be negative,
   // but we don't let info.stats.stats.sum.num_bytes go negative.
   void add_num_bytes(int64_t num_bytes) {

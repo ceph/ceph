@@ -1720,16 +1720,29 @@ static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t loca
 }
 
 
+std::optional<backfill_osd_space_usage_t> PG::get_local_osd_space_usage()
+{
+  std::lock_guard l{osd->stat_lock};
+  const auto& statfs = osd->osd_stat.statfs;
+  if (statfs.total == 0) {
+    return std::nullopt;
+  }
+  return backfill_osd_space_usage_t{
+    statfs.get_used_raw() + osd->reserved_pg_bytes.load(),
+    statfs.total};
+}
+
 // We can zero the value of primary num_bytes as just an atomic.
 // However, setting above zero reserves space for backfill and requires
 // the OSDService::stat_lock which protects all OSD usage
 bool PG::try_reserve_recovery_space(
-  int64_t primary_bytes, int64_t local_bytes, int64_t num_objects) {
+  int64_t primary_bytes,
+  int64_t local_bytes,
+  int64_t primary_num_objects,
+  int64_t local_num_objects,
+  backfill_reservation_space_info_t *space_info) {
   // Use tentative_bacfill_full() to make sure enough
   // space is available to handle target bytes from primary.
-
-  // TODO: If we passed num_objects from primary we could account for
-  // an estimate of the metadata overhead.
 
   // TODO: If we had compressed_allocated and compressed_original from primary
   // we could compute compression ratio and adjust accordingly.
@@ -1741,20 +1754,20 @@ bool PG::try_reserve_recovery_space(
   // statfs using ps->primary_bytes.
   uint64_t pending_adjustment = 0;
   if (primary_bytes) {
-    if (!num_objects) {
+    if (!local_num_objects) {
       // backfill uses number of objects from the stats, pool migration
       // tells the target PG how many objects will be migrated
-      num_objects = info.stats.stats.sum.num_objects;
+      local_num_objects = info.stats.stats.sum.num_objects;
     }
     // For erasure coded pool overestimate by a full stripe per object
     // because we don't know how each objected rounded to the nearest stripe
     if (pool.info.is_erasure()) {
       primary_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       primary_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	num_objects;
+	primary_num_objects;
       local_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       local_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	num_objects;
+	local_num_objects;
     }
     pending_adjustment = pending_backfill(
       cct,
@@ -1776,12 +1789,23 @@ bool PG::try_reserve_recovery_space(
     dout(10) << "backfill reservation rejected: failure injection"
 	     << dendl;
     return false;
-  } else if (!cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-      osd->tentative_backfill_full(this, pending_adjustment, cur_stat)) {
+  } else if (auto adjusted_ratio = osd->compute_adjusted_ratio(
+               cur_stat, pending_adjustment);
+             !cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+             osd->tentative_backfill_full(this, adjusted_ratio)) {
     dout(10) << "backfill reservation rejected: backfill full"
 	     << dendl;
     return false;
   } else {
+    if (space_info &&
+        cct->_conf.get_val<bool>("osd_space_aware_backfill_priority")) {
+      const auto [before, after] = adjusted_ratio;
+      space_info->target_usage_before =
+	backfill_reservation_space_info_t::encode_usage_ratio(before);
+      space_info->target_usage_after =
+        std::max(space_info->target_usage_after,
+                 backfill_reservation_space_info_t::encode_usage_ratio(after));
+    }
     // Don't reserve space if skipped reservation check, this is used
     // to test the other backfill full check AND in case a corruption
     // of num_bytes requires ignoring that value and trying the
@@ -1790,6 +1814,10 @@ bool PG::try_reserve_recovery_space(
 	!cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
       primary_num_bytes.store(primary_bytes);
       local_num_bytes.store(local_bytes);
+      if (likely(primary_bytes >= local_bytes)) {
+        std::ignore = osd->reserved_pg_bytes.fetch_add(primary_bytes - local_bytes);
+      }
+      dout(10) << __func__ << " reserved_pg_bytes: " << osd->reserved_pg_bytes.load() << dendl;
     } else {
       unreserve_recovery_space();
     }
@@ -1797,9 +1825,53 @@ bool PG::try_reserve_recovery_space(
   }
 }
 
+void PG::add_local_num_bytes(int64_t num_bytes) {
+  if (num_bytes) {
+    int64_t prev_bytes = local_num_bytes.load();
+    int64_t new_bytes;
+    do {
+      new_bytes = prev_bytes + num_bytes;
+      if (new_bytes < 0)
+        new_bytes = 0;
+    } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+    // subtract the newly added local bytes from the OSD-scale reserved bytes
+    int64_t delta_bytes = new_bytes - prev_bytes;
+    prev_bytes = osd->reserved_pg_bytes.load();
+    do {
+      new_bytes = prev_bytes - delta_bytes;
+      if (new_bytes < 0)
+        break;
+    } while(!osd->reserved_pg_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+  }
+}
+
+void PG::sub_local_num_bytes(int64_t num_bytes) {
+  ceph_assert(num_bytes >= 0);
+  if (num_bytes) {
+    int64_t prev_bytes = local_num_bytes.load();
+    int64_t new_bytes;
+    do {
+      new_bytes = prev_bytes - num_bytes;
+      if (new_bytes < 0)
+        new_bytes = 0;
+    } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+    // add the newly subtracted local bytes from the OSD-scale reserved bytes
+    int64_t delta_bytes = prev_bytes - new_bytes;
+    prev_bytes = osd->reserved_pg_bytes.load();
+    do {
+      new_bytes = prev_bytes + delta_bytes;
+    } while(!osd->reserved_pg_bytes.compare_exchange_weak(prev_bytes, new_bytes));
+  }
+}
+
 void PG::unreserve_recovery_space() {
+  auto primary_bytes = primary_num_bytes.load();
+  auto local_bytes = local_num_bytes.load();
   primary_num_bytes.store(0);
   local_num_bytes.store(0);
+  if (primary_bytes >= local_bytes) {
+    std::ignore = osd->reserved_pg_bytes.fetch_sub(primary_bytes - local_bytes);
+  }
 }
 
 bool PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
