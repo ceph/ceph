@@ -647,10 +647,15 @@ int MonClient::authenticate(double timeout)
   until += ceph::make_timespan(timeout);
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
-  while (!active_con && authenticate_err >= 0) {
+  // msgr2 authenticates before the session handshake, which can still
+  // refuse us: wait for _finish_auth() too, not just for active_con
+  auto in_progress = [this] {
+    return !active_con || authenticate_err == 1;
+  };
+  while (in_progress() && authenticate_err >= 0) {
     if (timeout > 0.0) {
       auto r = auth_cond.wait_until(lock, until);
-      if (r == std::cv_status::timeout && !active_con) {
+      if (r == std::cv_status::timeout && in_progress()) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -ETIMEDOUT;
       }
@@ -659,11 +664,9 @@ int MonClient::authenticate(double timeout)
     }
   }
 
-  if (active_con) {
+  if (active_con && authenticate_err == 0) {
     ldout(cct, 5) << __func__ << " success, global_id "
 		  << active_con->get_global_id() << dendl;
-    // active_con should not have been set if there was an error
-    ceph_assert(authenticate_err >= 0);
     authenticated = true;
   }
 
