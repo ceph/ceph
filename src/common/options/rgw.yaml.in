@@ -1475,50 +1475,113 @@ options:
 - name: rgw_nfs_lru_lanes
   type: int
   level: advanced
+  desc: Number of lanes in the RGW NFS file handle LRU.
+  long_desc: The number of lanes in the least recently used (LRU) list that RGW
+    NFS uses to choose which cached file handles to free or reuse. Each lane has
+    its own lock. A handle's lane is chosen from its address in memory, which is
+    always even, so with an even number of lanes some lanes are never used. Use
+    an odd number. RGW NFS reads this when NFS-Ganesha creates an export, for
+    example when NFS-Ganesha starts.
   default: 5
   services:
   - rgw
+  see_also:
+  - rgw_nfs_lru_lane_hiwat
   with_legacy: true
 - name: rgw_nfs_lru_lane_hiwat
   type: int
   level: advanced
+  desc: Maximum released file handles cached per RGW NFS LRU lane.
+  long_desc: The maximum number of released file handles that each lane of the
+    RGW NFS file handle LRU keeps cached. Beyond this, RGW NFS frees released
+    handles instead of caching them, so the LRU caches at most rgw_nfs_lru_lanes
+    times this many. RGW NFS reads this when NFS-Ganesha creates an export, for
+    example when NFS-Ganesha starts.
   default: 911
   services:
   - rgw
+  see_also:
+  - rgw_nfs_lru_lanes
   with_legacy: true
 - name: rgw_nfs_fhcache_partitions
   type: int
   level: advanced
+  desc: Number of partitions in the RGW NFS file handle cache.
+  long_desc: The number of partitions in the RGW NFS file handle cache, which
+    indexes the file handles that RGW NFS has looked up. Each partition has its
+    own lock, search tree, and lookup slots, and a handle's partition is chosen
+    from a hash of its name. RGW NFS reads this when NFS-Ganesha creates an
+    export, for example when NFS-Ganesha starts.
   default: 3
   services:
   - rgw
+  see_also:
+  - rgw_nfs_fhcache_size
   with_legacy: true
 - name: rgw_nfs_fhcache_size
   type: int
   level: advanced
+  desc: Number of lookup slots in each RGW NFS file handle cache partition.
+  long_desc: The number of lookup slots in each partition of the RGW NFS file
+    handle cache. Each slot holds the handle most recently found for the names
+    that hash to it, so a lookup that hits its slot skips the partition's search
+    tree. This does not limit how many handles the cache holds. RGW NFS reads
+    this when NFS-Ganesha creates an export, for example when NFS-Ganesha
+    starts.
   default: 2017
   services:
   - rgw
+  see_also:
+  - rgw_nfs_fhcache_partitions
   with_legacy: true
 - name: rgw_nfs_namespace_expire_secs
   type: int
   level: advanced
+  desc: Seconds after RGW NFS reads a directory before invalidating it.
+  long_desc: The number of seconds after RGW NFS reads a directory before it
+    invalidates the directory, so that changes made outside NFS, for example
+    through S3, show up in the next listing. RGW NFS checks for directories to
+    invalidate at intervals of half this value, but at least every 120 seconds
+    and at most once per second. When RGW NFS reports the attributes of a
+    directory whose modification time is older than this, it also sets that time
+    to the current time, so that NFS clients see that the directory may have
+    changed.
   default: 5_min
   services:
   - rgw
   min: 1
+  see_also:
+  - rgw_nfs_max_gc
   with_legacy: true
 - name: rgw_nfs_max_gc
   type: int
   level: advanced
-  default: 5_min
+  desc: Maximum number of directory events that RGW NFS expires per batch.
+  long_desc: The maximum number of directory events that RGW NFS expires per
+    batch while fewer than 500 events are queued. RGW NFS queues an event each
+    time it reads a directory, and the event expires after
+    rgw_nfs_namespace_expire_secs. When RGW NFS checks for expired events, it
+    takes them off the queue in batches and invalidates their directories, until
+    it reaches an event that has not expired. When 500 or more events are
+    queued, each batch is a quarter of the queue instead.
+  default: 300
   services:
   - rgw
   min: 1
+  see_also:
+  - rgw_nfs_namespace_expire_secs
   with_legacy: true
 - name: rgw_nfs_write_completion_interval_s
   type: int
   level: advanced
+  desc: Seconds from the first NFSv3 write until RGW NFS completes the upload.
+  long_desc: How long, in seconds, RGW NFS waits after the first NFSv3 write to
+    a file before it completes the upload, which makes the object readable.
+    NFSv3 has no OPEN or CLOSE, so RGW NFS starts an upload at the first write
+    and completes it when a timer expires. This option sets that timer at the
+    first write, and each later write resets the timer to 10 seconds. NFSv4
+    clients complete uploads with CLOSE, so this option does not apply to them.
+    RGW NFS reads this option once, when it starts.
   default: 10
   services:
   - rgw

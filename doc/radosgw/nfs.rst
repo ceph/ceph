@@ -122,8 +122,9 @@ Required ceph.conf configuration for RGW NFS includes:
 Other config variables (e.g., ``rgw data`` and ``rgw backend store``) are
 optional.
 
-A small number of config variables (e.g., ``rgw_nfs_namespace_expire_secs``)
-are unique to RGW NFS.
+A small number of config variables are unique to RGW NFS, for example
+:confval:`rgw_nfs_namespace_expire_secs` and the options in
+`Tuning the NFS Handle Cache`_.
 
 In particular, frontend selection is handled specially by the librgw.so runtime.  By default, only the
 ``rgw-nfs`` frontend is started. Additional frontends (e.g., ``beast``) are enabled via the
@@ -309,9 +310,11 @@ currently not supported.
 
 When adding objects and buckets outside of NFS, those objects will
 appear in the NFS namespace in the time set by
-``rgw_nfs_namespace_expire_secs``, which defaults to 300 seconds (5 minutes).
-Override the default value for ``rgw_nfs_namespace_expire_secs`` in the
+:confval:`rgw_nfs_namespace_expire_secs`. Override the default value in the
 Ceph configuration file to change the refresh rate.
+
+.. confval:: rgw_nfs_namespace_expire_secs
+.. confval:: rgw_nfs_max_gc
 
 If exporting Swift containers that do not conform to valid S3 bucket
 naming requirements, set ``rgw_relaxed_s3_bucket_names`` to true in the
@@ -369,10 +372,23 @@ Since NFSv3 does not communicate client OPEN and CLOSE operations to
 file servers, RGW NFS cannot use these operations to mark the
 beginning and ending of file upload transactions. Instead, RGW NFS
 starts a new upload when the first write is sent to a file at offset
-0, and finalizes the upload when no new writes to the file have been
-seen for a period of time, by default, 10 seconds. To change this
-timeout, set an alternate value for ``rgw_nfs_write_completion_interval_s``
-in the RGW section(s) of the Ceph configuration file. 
+0, and finalizes the upload when a timer expires. To change the timer, set
+:confval:`rgw_nfs_write_completion_interval_s` in the RGW section(s) of the
+Ceph configuration file.
+
+.. confval:: rgw_nfs_write_completion_interval_s
+
+Tuning the NFS Handle Cache
+===========================
+
+RGW NFS caches a file handle for each file and directory that NFS-Ganesha
+looks up. The following options set how that cache is partitioned and how many
+released handles it keeps.
+
+.. confval:: rgw_nfs_fhcache_partitions
+.. confval:: rgw_nfs_fhcache_size
+.. confval:: rgw_nfs_lru_lanes
+.. confval:: rgw_nfs_lru_lane_hiwat
 
 References
 ==========
