@@ -348,7 +348,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
-  if (auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
+  boost::optional<const std::string&> rdma_token;
+  if (const int ret = rgw::cuobj::get_request_token(*s->info.env, rdma_token);
+      ret < 0) {
+    return ret;
+  }
+  if (rdma_token) {
     if (!RGWCuObjServer::available()) {
       // The client asked for an out-of-band transfer that cannot be served
       // (cuObject library not installed, or init failed). Do not silently
@@ -3000,7 +3005,12 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
-  if (s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
+  boost::optional<const std::string&> rdma_token;
+  if (const int ret = rgw::cuobj::get_request_token(*s->info.env, rdma_token);
+      ret < 0) {
+    return ret;
+  }
+  if (rdma_token) {
     if (!RGWCuObjServer::available()) {
       ldpp_dout(this, 0) << "rgw_cuobj: ERROR: RDMA token received but cuObject "
                             "is unavailable" << dendl;

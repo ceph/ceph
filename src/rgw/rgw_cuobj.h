@@ -4,11 +4,15 @@
 #pragma once
 
 #include <atomic>
+#include <cerrno>
 #include <cstdint>
 #include <memory>
 #include <string>
 
+#include <boost/optional.hpp>
+
 #include "common/dout.h"
+#include "rgw_common.h"
 
 // Opaque handle owned by the cuObject library. RGW never dereferences it.
 struct rdma_buffer;
@@ -119,3 +123,26 @@ private:
   static thread_local uint16_t tls_channel_id;
   static thread_local bool tls_channel_valid;
 };
+
+namespace rgw::cuobj {
+
+// NIXL's Dell engine sends the same raw cuObject descriptor as
+// x-amz-rdma-token, but names the header x-rdma-info. Keep selection identical
+// in request validation and the transfer path. Never treat an empty token as
+// an ordinary HTTP request or choose between conflicting descriptors.
+inline int get_request_token(const RGWEnv& env,
+                             boost::optional<const std::string&>& token)
+{
+  token = boost::none;
+  const auto amz_token = env.get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+  const auto rdma_info = env.get_optional("HTTP_X_RDMA_INFO");
+  if ((amz_token && amz_token->empty()) ||
+      (rdma_info && rdma_info->empty()) ||
+      (amz_token && rdma_info && *amz_token != *rdma_info)) {
+    return -EINVAL;
+  }
+  token = amz_token ? amz_token : rdma_info;
+  return 0;
+}
+
+} // namespace rgw::cuobj
