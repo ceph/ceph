@@ -178,6 +178,42 @@ TEST(sb_info_space_efficient_map_t, size) {
   dump_mempools();
 }
 
+// Collection::split_cache() moves cached buffers to the new collection's
+// shard with _move(). The moved bytes must then be counted in the
+// destination shard's age bins, not in the source shard's.
+TEST(BufferCacheShard, move_rebins) {
+  BlueStore store(g_ceph_context, "", 4096);
+  for (auto type : {"lru", "2q"}) {
+    std::unique_ptr<BlueStore::BufferCacheShard> src{
+        BlueStore::BufferCacheShard::create(&store, type, NULL)};
+    std::unique_ptr<BlueStore::BufferCacheShard> dst{
+        BlueStore::BufferCacheShard::create(&store, type, NULL)};
+    bufferlist bl;
+    bl.append_zero(4096);
+    auto b = std::make_unique<BlueStore::Buffer>(
+        nullptr, BlueStore::Buffer::STATE_CLEAN, nullptr, 0, bl);
+
+    std::scoped_lock l{src->lock, dst->lock};
+    src->_add(b.get(), 1, nullptr);
+    ASSERT_EQ(4096u, src->sum_bins(0, src->get_bin_count()))
+      << type << ": _add() does not count the buffer in the age bins";
+
+    dst->_move(src.get(), b.get());
+    EXPECT_EQ(0u, src->_get_bytes())
+      << type << ": source shard still counts the buffer bytes";
+    EXPECT_EQ(4096u, dst->_get_bytes())
+      << type << ": destination shard does not count the buffer bytes";
+    EXPECT_EQ(0u, src->sum_bins(0, src->get_bin_count()))
+      << type << ": source age bins still count the buffer";
+    EXPECT_EQ(4096u, dst->sum_bins(0, dst->get_bin_count()))
+      << type << ": destination age bins do not count the buffer";
+
+    dst->_rm(b.get());
+    EXPECT_EQ(0u, dst->sum_bins(0, dst->get_bin_count()))
+      << type << ": age bins still count the removed buffer";
+  }
+}
+
 TEST(bluestore_extent_ref_map_t, add) {
   bluestore_extent_ref_map_t m;
   m.get(10, 10);

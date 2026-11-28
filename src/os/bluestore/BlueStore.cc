@@ -1078,6 +1078,9 @@ public:
     default:
       ceph_abort_msg("bad cache_private");
     }
+    // It is technically possible to preserve original depth of age bin, but
+    // it is not worth it. This puts the buffer in our newest age bin.
+    b->cache_age_bin = age_bins.front();
     if (!b->is_empty()) {
       buffer_bytes += b->length;
       list_bytes[b->cache_private] += b->length;
