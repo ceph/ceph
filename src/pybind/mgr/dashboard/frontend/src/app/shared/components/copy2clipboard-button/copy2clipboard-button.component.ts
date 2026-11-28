@@ -44,9 +44,25 @@ export class Copy2ClipboardButtonComponent {
 
   constructor(private notificationService: NotificationService) {}
 
+  // Use the form control value. Whitespace between <textarea> tags is
+  // textContent, so an empty token field would otherwise look copyable.
   private getText(): string {
-    const element = document.getElementById(this.source) as HTMLInputElement;
-    return element?.value || element?.textContent;
+    const element = document.getElementById(this.source);
+    if (!element) {
+      return '';
+    }
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      return element.value ?? '';
+    }
+    return element.textContent ?? '';
+  }
+
+  get isCopyDisabled(): boolean {
+    const text = this.byId ? this.getText() : this.source;
+    if (typeof text !== 'string') {
+      return !text;
+    }
+    return !text.trim();
   }
 
   @HostListener('click')

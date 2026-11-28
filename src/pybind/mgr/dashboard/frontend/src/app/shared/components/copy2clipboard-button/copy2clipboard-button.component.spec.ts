@@ -80,5 +80,40 @@ describe('Copy2ClipboardButtonComponent', () => {
         'Failed to copy text to the clipboard.'
       ]);
     });
+
+    it('should disable copy when the provided source text is blank', () => {
+      component.byId = false;
+      (component as any).source = '  ';
+
+      expect(component.isCopyDisabled).toBe(true);
+    });
+  });
+
+  describe('textarea source', () => {
+    let textarea: HTMLTextAreaElement;
+
+    beforeEach(() => {
+      component = new Copy2ClipboardButtonComponent(TestBed.inject(NotificationService));
+      textarea = document.createElement('textarea');
+      textarea.id = 'copy-source-token';
+      textarea.value = '';
+      textarea.textContent = '\n          ';
+      document.body.appendChild(textarea);
+      (component as any).source = textarea.id;
+    });
+
+    afterEach(() => {
+      document.body.removeChild(textarea);
+    });
+
+    it('should stay disabled while the textarea has no value', () => {
+      expect(component.isCopyDisabled).toBe(true);
+    });
+
+    it('should enable copy once the textarea has a value', () => {
+      textarea.value = 'bootstrap-token';
+
+      expect(component.isCopyDisabled).toBe(false);
+    });
   });
 });
