@@ -151,7 +151,7 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
     v2_bucket_topics.encode(bl);
     attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
 
-    r = bucket->merge_and_store_attrs(dpp, attrs, y);
+    r = rgw::sal::merge_and_store_attrs(dpp, bucket.get(), attrs, y);
     if (r != -ECANCELED && r < 0) {
       const std::string s = fmt::format("failed writing migrated notifications to bucket: {}. error: {}", 
           bucket->get_name(), cpp_strerror(-r));

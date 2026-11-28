@@ -920,12 +920,6 @@ int FilterBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota,
   return next->check_quota(dpp, quota, obj_size, y, check_size_only);
 }
 
-int FilterBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
-					Attrs& new_attrs, optional_yield y)
-{
-  return next->merge_and_store_attrs(dpp, new_attrs, y);
-}
-
 int FilterBucket::try_refresh_info(const DoutPrefixProvider* dpp,
 				   ceph::real_time* pmtime, optional_yield y)
 {

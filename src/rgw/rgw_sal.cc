@@ -440,6 +440,18 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
 }
 
 namespace rgw::sal {
+int merge_and_store_attrs(const DoutPrefixProvider* dpp, Bucket* bucket,
+                          const Attrs& new_attrs, optional_yield y)
+{
+  Attrs& attrs = bucket->get_attrs();
+  for (const auto& [name, value] : new_attrs) {
+    attrs[name] = value;
+  }
+  constexpr bool exclusive = false; // overwrite
+  constexpr ceph::real_time no_set_mtime{};
+  return bucket->put_info(dpp, exclusive, no_set_mtime, y);
+}
+
 int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
 {
   if (ofs < 0) {

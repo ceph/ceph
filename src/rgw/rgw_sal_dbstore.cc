@@ -266,21 +266,6 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_attrs, optional_yield y)
-  {
-    int ret = 0;
-
-    for(auto& it : new_attrs) {
-	    attrs[it.first] = it.second;
-    }
-
-    /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
-
-    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, nullptr, &get_info().objv_tracker);
-
-    return ret;
-  }
-
   int DBBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime, optional_yield y)
   {
     int ret = 0;

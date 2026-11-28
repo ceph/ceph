@@ -1673,7 +1673,7 @@ void RGWPutBucketTags::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_TAGS] = tags_bl;
-    return s->bucket->merge_and_store_attrs(this, attrs, y);
+    return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
   }, y);
 
 }
@@ -7251,7 +7251,7 @@ void RGWPutACLs::execute(optional_yield y)
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
-    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
+    op_ret = rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
@@ -7439,7 +7439,7 @@ void RGWPutCORS::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_CORS] = cors_bl;
-      return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, s->yield);
     }, y);
 }
 
@@ -9513,7 +9513,7 @@ void RGWSetAttrs::execute(optional_yield y)
     rgw::sal::Attrs a(attrs);
     op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, rgw::sal::FLAG_LOG_OP);
   } else {
-    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
+    op_ret = rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
   }
 
 } /* RGWSetAttrs::execute() */
@@ -9755,7 +9755,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
         } else {
           attrs.erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
         }
-        op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+        op_ret = rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, s->yield);
         return op_ret;
       }, y);
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -10352,7 +10352,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, &bl] {
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
-      return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, s->yield);
     }, y);
 
 }
@@ -10490,7 +10490,7 @@ void RGWPutBucketEncryption::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, &conf_bl] {
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY] = conf_bl;
-    return s->bucket->merge_and_store_attrs(this, attrs, y);
+    return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
   }, y);
 }
 

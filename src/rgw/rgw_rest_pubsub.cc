@@ -1428,7 +1428,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     bucket_topics.encode(bl);
     rgw::sal::Attrs &attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
-    return s->bucket->merge_and_store_attrs(this, attrs, y);
+    return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
   }, y);
 
   if (op_ret < 0) {

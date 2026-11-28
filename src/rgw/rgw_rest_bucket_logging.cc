@@ -275,7 +275,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
           // conf changed (or was unknown) - update
           it->second = conf_bl;
           update_mtime_attribute(this, attrs);
-          return s->bucket->merge_and_store_attrs(this, attrs, y);
+          return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
         }
         // nothing to update
         return 0;
@@ -283,7 +283,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       // conf was added
       attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING, conf_bl));
       update_mtime_attribute(this, attrs);
-      return s->bucket->merge_and_store_attrs(this, attrs, y);
+      return rgw::sal::merge_and_store_attrs(this, s->bucket.get(), attrs, y);
     }, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to set logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' to bucket '" <<

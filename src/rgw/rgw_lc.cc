@@ -3211,7 +3211,7 @@ int RGWLC::set_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
     config->encode(lc_bl);
     attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-    ret = bucket->merge_and_store_attrs(dpp, attrs, y);
+    ret = rgw::sal::merge_and_store_attrs(dpp, bucket, attrs, y);
     if (ret < 0) {
       return ret;
     }

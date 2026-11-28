@@ -617,7 +617,7 @@ int store_bucket_attrs_and_update_mapping(
       attrs.erase(it);
     }
   }
-  auto ret = bucket->merge_and_store_attrs(dpp, attrs, y);
+  auto ret = rgw::sal::merge_and_store_attrs(dpp, bucket, attrs, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1)
         << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
@@ -648,7 +648,7 @@ int delete_notification_attrs(const DoutPrefixProvider* dpp,
   }
   // delete all notifications of on a bucket
   attrs.erase(iter);
-  auto ret = bucket->merge_and_store_attrs(dpp, attrs, y);
+  auto ret = rgw::sal::merge_and_store_attrs(dpp, bucket, attrs, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1)
         << "Failed to remove RGW_ATTR_BUCKET_NOTIFICATION attr on bucket="
