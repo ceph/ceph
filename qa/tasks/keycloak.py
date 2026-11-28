@@ -59,6 +59,10 @@ def install_packages(ctx, config):
             toxvenv_sh(ctx, remote, ['sudo', 'dnf', 'install', '-y', 'java-17-openjdk-headless'])
         elif os_type in ['ubuntu']:
             toxvenv_sh(ctx, remote, ['sudo', 'apt', 'install', '-y', 'openjdk-17-jdk-headless'])
+            # Ubuntu 26.04+ defaults to a newer JDK (25) that keycloak 11's
+            # WildFly cannot run on; make sure 'java' resolves to JDK 17.
+            toxvenv_sh(ctx, remote, ['sudo', 'update-alternatives', '--set', 'java',
+                                     run.Raw('/usr/lib/jvm/java-17-openjdk-$(dpkg --print-architecture)/bin/java')])
         else:
             raise RuntimeError(f'unsupported distro {os_type} for keycloak')
 
@@ -96,6 +100,7 @@ def install_packages(ctx, config):
             elif os_type in ['centos', 'rhel']:
                 toxvenv_sh(ctx, remote, ['sudo', 'dnf', 'remove', '-y', 'java-17-openjdk-headless'])
             elif os_type in ['ubuntu']:
+                toxvenv_sh(ctx, remote, ['sudo', 'update-alternatives', '--auto', 'java'])
                 toxvenv_sh(ctx, remote, ['sudo', 'apt', 'remove', '-y', 'openjdk-17-jdk-headless'])
             else:
                 raise RuntimeError(f'unsupported distro {os_type} for keycloak')
