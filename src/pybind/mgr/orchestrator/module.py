@@ -724,7 +724,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @OrchestratorCLICommand.Write('orch host drain stop')
     def _stop_drain_host(self, hostname: str) -> HandleCommandResult:
-        """drain all daemons from a host"""
+        """stop draining a host and cancel its pending OSD removals"""
         completion = self.stop_drain_host(hostname)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
