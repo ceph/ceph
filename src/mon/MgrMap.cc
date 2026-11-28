@@ -81,9 +81,9 @@ void MgrMap::ModuleOption::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<MgrMap::ModuleOption> MgrMap::ModuleOption::generate_test_instances()
+std::vector<MgrMap::ModuleOption> MgrMap::ModuleOption::generate_test_instances()
 {
-  std::list<ModuleOption> ls;
+  std::vector<ModuleOption> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().name = "name";
@@ -137,9 +137,9 @@ void MgrMap::ModuleInfo::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<MgrMap::ModuleInfo> MgrMap::ModuleInfo::generate_test_instances()
+std::vector<MgrMap::ModuleInfo> MgrMap::ModuleInfo::generate_test_instances()
 {
-  std::list<ModuleInfo> ls;
+  std::vector<ModuleInfo> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().name = "name";
@@ -225,9 +225,9 @@ void MgrMap::StandbyInfo::dump(ceph::Formatter *f) const
   f->dump_unsigned("mgr_features", mgr_features);
 }
 
-std::list<MgrMap::StandbyInfo> MgrMap::StandbyInfo::generate_test_instances()
+std::vector<MgrMap::StandbyInfo> MgrMap::StandbyInfo::generate_test_instances()
 {
-  std::list<StandbyInfo> ls;
+  std::vector<StandbyInfo> ls;
   ls.push_back(StandbyInfo(1, "a", {}, 0));
   ls.push_back(StandbyInfo(2, "b", {}, 0));
   ls.push_back(StandbyInfo(3, "c", {}, 0));
@@ -505,9 +505,9 @@ void MgrMap::dump(ceph::Formatter *f) const
   f->close_section(); // active_clients
 }
 
-std::list<MgrMap> MgrMap::generate_test_instances()
+std::vector<MgrMap> MgrMap::generate_test_instances()
 {
-  std::list<MgrMap> l;
+  std::vector<MgrMap> l;
   l.emplace_back();
   return l;
 }

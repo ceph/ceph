@@ -18,7 +18,7 @@
 #define JOURNAL_POINTER_H
 
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <string>
 
 #include "common/Formatter.h"
@@ -66,9 +66,9 @@ class JournalPointer {
     f->close_section(); // journal_header
   }
 
-  static std::list<JournalPointer> generate_test_instances()
+  static std::vector<JournalPointer> generate_test_instances()
   {
-    std::list<JournalPointer> ls;
+    std::vector<JournalPointer> ls;
     ls.push_back(JournalPointer());
     ls.push_back(JournalPointer());
     ls.back().front = 0xdeadbeef;

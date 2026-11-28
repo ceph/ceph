@@ -20,9 +20,9 @@
 #include <errno.h>
 #include <string.h>
 
-#include <list>
-#include <optional>
+#include <deque>
 #include <vector>
+#include <optional>
 
 #include "include/ceph_assert.h"
 #include "include/int_types.h"
@@ -43,7 +43,7 @@ class UserspaceEventManager {
   uint32_t max_wait_idx = 0;
   std::vector<std::optional<UserspaceFDImpl> > fds;
   std::vector<int> waiting_fds;
-  std::list<uint32_t> unused_fds;
+  std::deque<uint32_t> unused_fds;
 
  public:
   explicit UserspaceEventManager(CephContext *c): cct(c) {

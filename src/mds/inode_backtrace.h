@@ -4,7 +4,6 @@
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
-#include <list>
 #include <iosfwd>
 #include <string>
 #include <string_view>
@@ -36,7 +35,7 @@ struct inode_backpointer_t {
   void decode(ceph::buffer::list::const_iterator &bl);
   void decode_old(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<inode_backpointer_t> generate_test_instances();
+  static std::vector<inode_backpointer_t> generate_test_instances();
 
   inodeno_t dirino;    // containing directory ino
   std::string dname;        // linking dentry name
@@ -61,7 +60,7 @@ struct inode_backtrace_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<inode_backtrace_t> generate_test_instances();
+  static std::vector<inode_backtrace_t> generate_test_instances();
 
   /**
    * Compare two backtraces *for the same inode*.

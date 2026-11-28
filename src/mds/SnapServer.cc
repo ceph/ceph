@@ -509,10 +509,10 @@ void SnapServer::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<SnapServer> SnapServer::generate_test_instances()
+std::vector<SnapServer> SnapServer::generate_test_instances()
 {
-  std::list<SnapServer> ls;
-  list<SnapInfo> snapinfo_instances = SnapInfo::generate_test_instances();
+  std::vector<SnapServer> ls;
+  vector<SnapInfo> snapinfo_instances = SnapInfo::generate_test_instances();
 
   SnapInfo populated_snapinfo = snapinfo_instances.back();
 

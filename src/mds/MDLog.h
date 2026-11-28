@@ -54,7 +54,7 @@ enum {
 #include "LogSegmentRef.h"
 
 #include <atomic>
-#include <list>
+#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -289,7 +289,7 @@ protected:
   uint64_t expired_events = 0;
 
   int64_t mdsmap_up_features = 0;
-  std::map<uint64_t,std::list<PendingEvent> > pending_events; // log segment -> event list
+  std::map<uint64_t, std::deque<PendingEvent>> pending_events;
   ceph::fair_mutex submit_mutex{"MDLog::submit_mutex"};
   std::condition_variable_any submit_cond;
 

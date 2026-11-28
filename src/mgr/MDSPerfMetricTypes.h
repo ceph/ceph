@@ -419,8 +419,8 @@ struct MDSPerfMetricReport {
     }
     f->close_section();
   }
-  static std::list<MDSPerfMetricReport> generate_test_instances() {
-    std::list<MDSPerfMetricReport> o;
+  static std::vector<MDSPerfMetricReport> generate_test_instances() {
+    std::vector<MDSPerfMetricReport> o;
     o.emplace_back();
     o.emplace_back();
     o.back().reports.emplace(MDSPerfMetricQuery(), MDSPerfMetrics());

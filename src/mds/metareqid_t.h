@@ -4,6 +4,7 @@
 #define CEPH_METAREQID_T_H
 
 #include <iosfwd>
+#include <vector>
 #include <string_view>
 #include <stdexcept>
 
@@ -37,7 +38,7 @@ struct metareqid_t {
   void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
-  static std::list<metareqid_t> generate_test_instances();
+  static std::vector<metareqid_t> generate_test_instances();
   entity_name_t name;
   uint64_t tid = 0;
 };

@@ -11,8 +11,9 @@
 #endif
 #include <stdlib.h>
 
-#include <list>
 #include <string>
+#include <vector>
+#include <utility>
 
 namespace ceph {
 
@@ -64,9 +65,10 @@ struct ClibBackTrace : public BackTrace {
 
 
 struct PyBackTrace : public BackTrace {
-  std::list<std::string> strings;
+  std::vector<std::string> strings;
 
-  explicit PyBackTrace(std::list<std::string>& s) : strings(s) {}
+  explicit PyBackTrace(std::vector<std::string> frames)
+    : strings(std::move(frames)) {}
 
   void dump(Formatter *f) const override;
   void print(std::ostream& out) const override;

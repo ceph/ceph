@@ -49,7 +49,7 @@ public:
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& p);
     void dump(ceph::Formatter *f) const;
-    static std::list<ModuleOption> generate_test_instances();
+    static std::vector<ModuleOption> generate_test_instances();
   };
 
   class ModuleInfo
@@ -69,7 +69,7 @@ public:
     }
 
     void dump(ceph::Formatter *f) const ;
-    static std::list<ModuleInfo> generate_test_instances();
+    static std::vector<ModuleInfo> generate_test_instances();
   };
 
   class StandbyInfo
@@ -92,7 +92,7 @@ public:
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& p);
     void dump(ceph::Formatter *f) const;
-    static std::list<StandbyInfo> generate_test_instances();
+    static std::vector<StandbyInfo> generate_test_instances();
 
     bool have_module(const std::string &module_name) const;
   };
@@ -197,7 +197,7 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
-  static std::list<MgrMap> generate_test_instances();
+  static std::vector<MgrMap> generate_test_instances();
   void print_summary(ceph::Formatter *f, std::ostream *ss) const;
 
   friend std::ostream& operator<<(std::ostream& out, const MgrMap& m);

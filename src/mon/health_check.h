@@ -3,9 +3,11 @@
 
 #pragma once
 
-#include <iosfwd>
 #include <map>
+#include <iosfwd>
 #include <string>
+#include <vector>
+#include <iterator>
 
 #include "include/container_ios.h"
 #include "include/health.h"
@@ -18,7 +20,7 @@
 struct health_check_t {
   health_status_t severity;
   std::string summary;
-  std::list<std::string> detail;
+  std::vector<std::string> detail;
   int64_t count = 0;
 
   DENC(health_check_t, v, p) {
@@ -70,8 +72,8 @@ struct health_check_t {
     }
   }
 
-  static std::list<health_check_t> generate_test_instances() {
-    std::list<health_check_t> ls;
+  static std::vector<health_check_t> generate_test_instances() {
+    std::vector<health_check_t> ls;
     ls.emplace_back();
     ls.back().severity = HEALTH_WARN;
     ls.emplace_back();
@@ -112,8 +114,8 @@ struct health_mute_t {
     f->dump_int("count", count);
   }
 
-  static std::list<health_mute_t> generate_test_instances() {
-    std::list<health_mute_t> ls;
+  static std::vector<health_mute_t> generate_test_instances() {
+    std::vector<health_mute_t> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().code = "OSD_DOWN";
@@ -152,8 +154,8 @@ struct health_check_map_t {
     }
   }
 
-  static std::list<health_check_map_t> generate_test_instances() {
-    std::list<health_check_map_t> ls;
+  static std::vector<health_check_map_t> generate_test_instances() {
+    std::vector<health_check_map_t> ls;
 
     ls.emplace_back();
     ls.emplace_back();
@@ -208,10 +210,9 @@ struct health_check_map_t {
       auto [it, new_check] = checks.try_emplace(code, check);
       if (!new_check) {
         // merge details, and hope the summary matches!
-        it->second.detail.insert(
-          it->second.detail.end(),
-          check.detail.begin(),
-          check.detail.end());
+        auto& detail = it->second.detail;
+        detail.reserve(std::size(detail) + std::size(check.detail));
+        detail.insert(std::end(detail), std::begin(check.detail), std::end(check.detail));
         it->second.count += check.count;
       }
     }

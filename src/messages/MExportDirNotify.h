@@ -16,6 +16,9 @@
 #ifndef CEPH_MEXPORTDIRNOTIFY_H
 #define CEPH_MEXPORTDIRNOTIFY_H
 
+#include <vector>
+#include <iterator>
+
 #include "messages/MMDSOp.h"
 
 class MExportDirNotify final : public MMDSOp {
@@ -26,15 +29,15 @@ private:
   dirfrag_t base;
   bool ack;
   std::pair<__s32,__s32> old_auth, new_auth;
-  std::list<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
+  std::vector<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
 
  public:
   dirfrag_t get_dirfrag() const { return base; }
   std::pair<__s32,__s32> get_old_auth() const { return old_auth; }
   std::pair<__s32,__s32> get_new_auth() const { return new_auth; }
   bool wants_ack() const { return ack; }
-  const std::list<dirfrag_t>& get_bounds() const { return bounds; }
-  std::list<dirfrag_t>& get_bounds() { return bounds; }
+  const std::vector<dirfrag_t>& get_bounds() const { return bounds; }
+  std::vector<dirfrag_t>& get_bounds() { return bounds; }
 
 protected:
   MExportDirNotify() :
@@ -58,12 +61,11 @@ public:
       o << " no ack)";
   }
   
-  void copy_bounds(std::list<dirfrag_t>& ex) {
+  void copy_bounds(const std::vector<dirfrag_t>& ex) {
     this->bounds = ex;
   }
-  void copy_bounds(std::set<dirfrag_t>& ex) {
-    for (auto i = ex.begin(); i != ex.end(); ++i)
-      bounds.push_back(*i);
+  void copy_bounds(const std::set<dirfrag_t>& ex) {
+    bounds.assign(std::begin(ex), std::end(ex));
   }
 
   void encode_payload(uint64_t features) override {

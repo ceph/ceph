@@ -13,7 +13,10 @@
  *
  */
 
+#include <list>
 #include <iostream>
+#include <iterator>
+
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "include/ceph_assert.h"
@@ -28,6 +31,81 @@
 #define dout_prefix *_dout
 
 using namespace std;
+
+namespace {
+
+template <typename T>
+using legacy_sequence = std::list<T>;
+
+ceph::buffer::list encode_legacy_subsystem(
+  const NvmeNqnId& nqn,
+  const legacy_sequence<BeaconListener>& listeners,
+  const legacy_sequence<BeaconNamespace>& namespaces)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(nqn, encoded);
+  encode(static_cast<uint32_t>(std::size(listeners)), encoded);
+
+  for (const auto& listener : listeners) {
+    encode(listener, encoded);
+  }
+
+  encode(static_cast<uint32_t>(std::size(namespaces)), encoded);
+
+  for (const auto& namespace_value : namespaces) {
+    encode(namespace_value, encoded);
+  }
+
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+} // namespace
+
+void test_beacon_container_wire_compatibility()
+{
+  const legacy_sequence<BeaconListener> legacy_listeners {
+    {"IPv4", "192.0.2.1", "4420"},
+    {"IPv6", "2001:db8::1", "4420"}
+  };
+  const legacy_sequence<BeaconNamespace> legacy_namespaces {
+    {1, "first"},
+    {2, "second"}
+  };
+
+  BeaconSubsystem subsystem;
+  subsystem.nqn = "nqn.2014-08.org.nvmexpress:ceph:test";
+  subsystem.listeners.assign(std::cbegin(legacy_listeners),
+                             std::cend(legacy_listeners));
+  subsystem.namespaces.assign(std::cbegin(legacy_namespaces),
+                              std::cend(legacy_namespaces));
+
+  ceph::buffer::list current_subsystem_bytes;
+  encode(subsystem, current_subsystem_bytes);
+  const auto legacy_subsystem_bytes = encode_legacy_subsystem(
+    subsystem.nqn, legacy_listeners, legacy_namespaces);
+  ceph_assert(current_subsystem_bytes.contents_equal(legacy_subsystem_bytes));
+
+  BeaconSubsystem decoded_subsystem;
+  auto subsystem_cursor = legacy_subsystem_bytes.cbegin();
+  decode(decoded_subsystem, subsystem_cursor);
+  ceph_assert(decoded_subsystem == subsystem);
+
+  const legacy_sequence<BeaconSubsystem> legacy_subsystems {subsystem};
+  const BeaconSubsystems current_subsystems {subsystem};
+  ceph::buffer::list legacy_sequence_bytes;
+  ceph::buffer::list current_sequence_bytes;
+  encode(legacy_subsystems, legacy_sequence_bytes);
+  encode(current_subsystems, current_sequence_bytes);
+  ceph_assert(current_sequence_bytes.contents_equal(legacy_sequence_bytes));
+
+  BeaconSubsystems decoded_subsystems;
+  auto sequence_cursor = legacy_sequence_bytes.cbegin();
+  decode(decoded_subsystems, sequence_cursor);
+  ceph_assert(decoded_subsystems == current_subsystems);
+}
 
 void test_NVMeofGwMap() {
   dout(0) << __func__ << "\n\n" << dendl;
@@ -281,10 +359,10 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   // Run tests
+  test_beacon_container_wire_compatibility();
   test_NVMeofGwMap();
   test_MNVMeofGwMap();
   test_MNVMeofGwBeacon();
   test_subsystem_change_descriptors();
   test_NVMeofGwTimers();
 }
-

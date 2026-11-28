@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_ESESSIONS_H
 #define CEPH_MDS_ESESSIONS_H
 
+#include <deque>
 #include "common/config.h"
 #include "include/types.h"
 
@@ -48,7 +49,7 @@ public:
     else decode_new(bl);
   }
   void dump(Formatter *f) const override;
-  static std::list<ESessions> generate_test_instances();
+  static std::deque<ESessions> generate_test_instances();
 
   void print(std::ostream& out) const override {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;

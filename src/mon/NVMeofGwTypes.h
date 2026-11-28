@@ -18,7 +18,6 @@
 #include <iomanip>
 #include <map>
 #include <iostream>
-#include <list>
 #include <vector>
 #include <cstdint>
 #include <chrono>
@@ -104,8 +103,8 @@ struct BeaconListener {
 
 struct BeaconSubsystem {
   NvmeNqnId nqn;
-  std::list<BeaconListener>  listeners;
-  std::list<BeaconNamespace> namespaces;
+  std::vector<BeaconListener> listeners;
+  std::vector<BeaconNamespace> namespaces;
   subsystem_change_t change_descriptor = subsystem_change_t::SUBSYSTEM_ADDED;
 
   // Define the equality operator
@@ -116,7 +115,7 @@ struct BeaconSubsystem {
   }
 };
 
-using BeaconSubsystems = std::list<BeaconSubsystem>;
+using BeaconSubsystems = std::vector<BeaconSubsystem>;
 
 using NvmeNonceVector = std::vector<std::string>;
 using NvmeAnaNonceMap = std::map <NvmeAnaGrpId, NvmeNonceVector>;

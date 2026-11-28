@@ -220,6 +220,42 @@ TEST(PyFormatter, DumpStream)
   Py_DECREF(py_obj);
 }
 
+TEST(PyFormatter, PendingStreamsRemainStable)
+{
+  PyFormatter py_f;
+  py_f.open_object_section("streams");
+  auto& first = py_f.dump_stream("first");
+  auto& second = py_f.dump_stream("second");
+
+  for (int i = 0; i < 64; ++i) {
+    py_f.dump_stream(std::to_string(i));
+  }
+
+  first << "first value";
+  second << "second value";
+  py_f.close_section();
+
+  PyObject *py_obj = py_f.get();
+  ASSERT_NE(py_obj, nullptr);
+  ASSERT_TRUE(PyDict_Check(py_obj));
+
+  PyObject *streams = PyDict_GetItemString(py_obj, "streams");
+  ASSERT_NE(streams, nullptr);
+  ASSERT_TRUE(PyDict_Check(streams));
+
+  PyObject *first_value = PyDict_GetItemString(streams, "first");
+  ASSERT_NE(first_value, nullptr);
+  ASSERT_TRUE(PyUnicode_Check(first_value));
+  EXPECT_STREQ(PyUnicode_AsUTF8(first_value), "first value");
+
+  PyObject *second_value = PyDict_GetItemString(streams, "second");
+  ASSERT_NE(second_value, nullptr);
+  ASSERT_TRUE(PyUnicode_Check(second_value));
+  EXPECT_STREQ(PyUnicode_AsUTF8(second_value), "second value");
+
+  Py_DECREF(py_obj);
+}
+
 TEST(PyFormatter, DumpFormatVa)
 {
   auto dump_format_va_helper = [](PyFormatter* py_formatter,

@@ -17,6 +17,7 @@
 #ifndef CEPH_INOTABLE_H
 #define CEPH_INOTABLE_H
 
+#include <vector>
 #include "MDSTable.h"
 #include "include/fs_types.h" // for inodeno_t
 #include "include/interval_set.h"
@@ -68,7 +69,7 @@ class InoTable : public MDSTable {
     decode_state(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<InoTable> generate_test_instances();
+  static std::vector<InoTable> generate_test_instances();
 
   void skip_inos(inodeno_t i);
 

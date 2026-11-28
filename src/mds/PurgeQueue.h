@@ -60,7 +60,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static std::list<PurgeItem> generate_test_instances();
+  static std::vector<PurgeItem> generate_test_instances();
 
   std::string_view get_type_str() const;
 
