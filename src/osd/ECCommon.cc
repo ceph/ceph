@@ -638,18 +638,18 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
 
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
-        messages[shard_read.pg_shard].attrs_to_read.insert(hoid);
+        messages[shard_read.pg_shard].requests[hoid].want_attrs = true;
         reads_sent = true;
         need_attrs = false;
       }
       if (need_omap && !sinfo.is_nonprimary_shard(shard)) {
         if (need_omap_header) {
-          messages[shard_read.pg_shard].omap_headers_to_read.insert(hoid);
+          messages[shard_read.pg_shard].requests[hoid].want_omap_header = true;
           reads_sent = true;
         }
         if (need_omap_keys) {
-          messages[shard_read.pg_shard].omap_read_from.insert(
-            {hoid, {read_request.omap_read_from, read_request.omap_max_bytes}});
+          messages[shard_read.pg_shard].requests[hoid].omap_read_from =
+            {read_request.omap_read_from, read_request.omap_max_bytes};
           reads_sent = true;
         }
         shard_read.omap_source = true;
@@ -660,7 +660,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       // Sub-chunks are not supported, but replicas running older code
       // require a whole-chunk sub-chunk entry for every object read.
       static const std::vector default_sub_chunk = {make_pair(0, 1)};
-      messages[shard_read.pg_shard].subchunks[hoid] = default_sub_chunk;
+      messages[shard_read.pg_shard].requests[hoid].subchunks = default_sub_chunk;
       rop.obj_to_source[hoid].insert(shard_read.pg_shard);
       rop.source_to_obj[shard_read.pg_shard].insert(hoid);
     }
@@ -668,7 +668,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       rop.debug_log.emplace_back(ECUtil::READ_REQUEST, shard_read.pg_shard,
                                    shard_read.extents);
       for (auto &[start, len]: shard_read.extents) {
-        messages[shard_read.pg_shard].to_read[hoid].emplace_back(
+        messages[shard_read.pg_shard].requests[hoid].to_read.emplace_back(
           boost::make_tuple(start, len, read_request.flags));
         reads_sent = true;
       }
@@ -711,8 +711,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     msg->compute_cost(cct, subchunk_info);
     if (is_cross_zone(get_parent(), sinfo, pg_shard)) {
       uint64_t requested = 0;
-      for (const auto &[hoid, extents] : read.to_read) {
-        for (const auto &extent : extents) {
+      for (const auto &[hoid, req] : read.requests) {
+        for (const auto &extent : req.to_read) {
           requested += extent.get<1>();
         }
       }

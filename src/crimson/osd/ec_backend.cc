@@ -573,19 +573,19 @@ ECBackend::handle_rep_read_op(ECSubRead& op)
     reply.from = whoami;
     reply.tid = op.tid;
     using read_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
-    DEBUGDPP("tid={} to_read={}", dpp, op.tid, op.to_read);
-    return interruptor::do_for_each(op.to_read, [FNAME, &op, &reply, this] (auto read_item) {
-      const auto& [obj, op_list] = read_item;
+    DEBUGDPP("tid={} requests={}", dpp, op.tid, op.requests.size());
+    return interruptor::do_for_each(op.requests, [FNAME, &op, &reply, this] (auto read_item) {
+      const auto& [obj, req] = read_item;
       // `obj=obj` is workaround for Clang's bug:
       // https://www.reddit.com/r/LLVM/comments/s0ykcj/why_does_clang_fail_with_error_reference_to_local/?rdt=36162
-      return interruptor::do_for_each(op_list, [FNAME, &op, &reply, obj=obj, this] (auto op_spec) {
+      return interruptor::do_for_each(req.to_read, [FNAME, &op, &reply, obj=obj, this] (auto op_spec) {
         const auto& [off, size, flags] = op_spec;
         return maybe_chunked_read(
           obj, op, off, size, flags
         ).safe_then([&reply, obj, off=off, size=size, FNAME,
 		     &dpp=this->dpp] (auto&& result_bl) {
 	  DEBUGDPP("tid={} hoid={} requested={} len={}", dpp, reply.tid, obj, size, result_bl.length());
-	  reply.buffers_read[obj].emplace_back(off, std::move(result_bl));
+	  reply.responses[obj].buffers_read.emplace_back(off, std::move(result_bl));
 	  return read_ertr::now();
 	}).handle_error(read_ertr::all_same_way([&reply, obj, FNAME, this] (const auto& e) {
           assert(e.value() > 0);
@@ -594,30 +594,34 @@ ECBackend::handle_rep_read_op(ECSubRead& op)
 	  } else {
 	    ERRORDPP("tid={} hoid={} error={} reading", dpp, reply.tid, obj, e.value());
 	    // TODO: clog error logging
-            reply.buffers_read.erase(obj);
-            reply.errors[obj] = -e.value();
+        reply.responses[obj].buffers_read.clear();
+        reply.responses[obj].error = -e.value();
 	  }
           return read_ertr::now();
         }));
       });
     }).si_then([&op, &reply, FNAME, this] {
-      DEBUGDPP("tid={} attrs_to_read={}", dpp, op.tid, op.attrs_to_read.size());
-      return interruptor::do_for_each(op.attrs_to_read,
-		                      [&reply, FNAME, this] (auto obj_attr) {
+      DEBUGDPP("tid={} requests={}", dpp, op.tid, op.requests.size());
+      return interruptor::do_for_each(op.requests,
+		                      [&reply, FNAME, this] (auto req_item) {
+        const auto& [obj_attr, req] = req_item;
+        if (!req.want_attrs) {
+          return read_ertr::now();
+        }
 	DEBUGDPP("tid={} hoid={} fulfilling attr request", dpp, reply.tid, obj_attr);
-	if (reply.errors.count(obj_attr)) {
+	if (reply.responses.contains(obj_attr) && reply.responses.at(obj_attr).error) {
           return read_ertr::now();
 	}
         return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
           store, coll, ghobject_t{obj_attr, ghobject_t::NO_GEN, get_shard()}, 0
 	).safe_then([&reply, obj_attr] (auto&& attrs) {
-	  reply.attrs_read[obj_attr] = std::move(attrs);
+	  reply.responses[obj_attr].attrs_read = std::move(attrs);
           return read_ertr::now();
         }, read_ertr::all_same_way([&reply, obj_attr] (const auto& e) {
           assert(e.value() > 0);
-          reply.attrs_read.erase(obj_attr);
-          reply.buffers_read.erase(obj_attr);
-          reply.errors[obj_attr] = -e.value();
+          reply.responses[obj_attr].attrs_read.clear();
+          reply.responses[obj_attr].buffers_read.clear();
+          reply.responses[obj_attr].error = -e.value();
           return read_ertr::now();
 	}));
       });
@@ -647,9 +651,12 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
   auto& rop = read_pipeline.tid_to_read_map.at(mop.tid);
 
   // 1. data
-  for (auto& [obj, offset_buffer_map] : mop.buffers_read) {
+  for (auto& [obj, resp] : mop.responses) {
+    if (resp.buffers_read.empty()) {
+      continue;
+    }
     // if attribute error we better not have sent a buffer
-    assert(!mop.errors.contains(obj));
+    assert(!resp.error);
     if (!rop.to_read.contains(obj)) {
       // We canceled this read! @see filter_read_op
       DEBUGDPP("tid={} hoid={} to_read skipping", dpp, mop.tid, obj);
@@ -659,7 +666,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       rop.complete.emplace(obj, &sinfo);
     }
     auto &buffers_read = rop.complete.at(obj).buffers_read;
-    for (auto &&[offset, buffer_list]: offset_buffer_map) {
+    for (auto &&[offset, buffer_list]: resp.buffers_read) {
       buffers_read.insert_in_shard(from.shard, offset, buffer_list);
     }
   }
@@ -685,8 +692,11 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
     }
   }
   // 2. attrs
-  for (auto &&[hoid, attr]: mop.attrs_read) {
-    assert(!mop.errors.count(hoid));
+  for (auto &&[hoid, resp]: mop.responses) {
+    if (resp.attrs_read.empty()) {
+      continue;
+    }
+    assert(!resp.error);
     // if read error better not have sent an attribute
     if (!rop.to_read.count(hoid)) {
       // we canceled this read! @see filter_read_op
@@ -697,15 +707,18 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       rop.complete.emplace(hoid, &sinfo);
     }
     rop.complete.at(hoid).attrs.emplace();
-    (*(rop.complete.at(hoid).attrs)).swap(attr);
+    (*(rop.complete.at(hoid).attrs)).swap(resp.attrs_read);
   }
   // 3. errors
-  for (auto &&[hoid, err]: mop.errors) {
+  for (auto &&[hoid, resp]: mop.responses) {
+    if (!resp.error) {
+      continue;
+    }
     if (!rop.complete.contains(hoid)) {
       rop.complete.emplace(hoid, &sinfo);
     }
     auto &complete = rop.complete.at(hoid);
-    complete.errors.emplace(from, err);
+    complete.errors.emplace(from, *resp.error);
     complete.buffers_read.erase_shard(from.shard);
     // If we are doing redundant reads, then we must take care that any failed
     // reads are not replaced with a zero buffer. When fast_reads are disabled,
@@ -715,7 +728,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
     }
     complete.processed_read_requests.erase(from.shard);
-    DEBUGDPP("tid={} hoid={} shard={} error={}", dpp, mop.tid, hoid, from, err);
+    DEBUGDPP("tid={} hoid={} shard={} error={}", dpp, mop.tid, hoid, from, *resp.error);
   }
   {
     auto it = read_pipeline.shard_to_read_map.find(from);

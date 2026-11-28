@@ -23,6 +23,8 @@ using std::make_pair;
 using std::map;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 using ceph::bufferlist;
 using ceph::Formatter;
 
@@ -219,19 +221,52 @@ list<ECSubWriteReply> ECSubWriteReply::generate_test_instances()
   return o;
 }
 
+void ECSubReadRequest::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(to_read, bl);
+  encode(subchunks, bl);
+  encode(want_attrs, bl);
+  encode(want_omap_header, bl);
+  encode(omap_read_from, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ECSubReadRequest::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START(1, bl);
+  decode(to_read, bl);
+  decode(subchunks, bl);
+  decode(want_attrs, bl);
+  decode(want_omap_header, bl);
+  decode(omap_read_from, bl);
+  DECODE_FINISH(bl);
+}
+
 void ECSubRead::encode(bufferlist &bl, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_OSD_FADVISE_FLAGS) == 0) {
+    // Legacy layout, pre-OSD_FADVISE_FLAGS: no per-extent flags, no omap.
     ENCODE_START(2, 1, bl);
     encode(from, bl);
     encode(tid, bl);
     map<hobject_t, list<pair<uint64_t, uint64_t> >> tmp;
-    for (auto m = to_read.cbegin(); m != to_read.cend(); ++m) {
-      list<pair<uint64_t, uint64_t> > tlist;
-      for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
-	tlist.push_back(std::make_pair(l->get<0>(), l->get<1>()));
+    map<hobject_t, vector<pair<int, int>>> subchunks;
+    set<hobject_t> attrs_to_read;
+    for (auto &[hoid, req] : requests) {
+      if (!req.to_read.empty()) {
+	list<pair<uint64_t, uint64_t> > tlist;
+	for (auto l = req.to_read.cbegin(); l != req.to_read.cend(); ++l) {
+	  tlist.push_back(std::make_pair(l->get<0>(), l->get<1>()));
+	}
+	tmp[hoid] = tlist;
       }
-      tmp[m->first] = tlist;
+      if (!req.subchunks.empty()) {
+	subchunks[hoid] = req.subchunks;
+      }
+      if (req.want_attrs) {
+	attrs_to_read.insert(hoid);
+      }
     }
     encode(tmp, bl);
     encode(attrs_to_read, bl);
@@ -240,49 +275,106 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(4, 2, bl);
+  if (!HAVE_FEATURE(features, SERVER_VAMPIRE)) {
+    // Legacy layout with parallel containers keyed by hobject_t.
+    map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
+    set<hobject_t> attrs_to_read;
+    map<hobject_t, vector<pair<int, int>>> subchunks;
+    set<hobject_t> omap_headers_to_read;
+    map<hobject_t, pair<string, uint64_t>> omap_read_from;
+    for (auto &[hoid, req] : requests) {
+      if (!req.to_read.empty()) {
+	to_read[hoid] = req.to_read;
+      }
+      if (!req.subchunks.empty()) {
+	subchunks[hoid] = req.subchunks;
+      }
+      if (req.want_attrs) {
+	attrs_to_read.insert(hoid);
+      }
+      if (req.want_omap_header) {
+	omap_headers_to_read.insert(hoid);
+      }
+      if (req.omap_read_from) {
+	omap_read_from[hoid] = *req.omap_read_from;
+      }
+    }
+    ENCODE_START(4, 2, bl);
+    encode(from, bl);
+    encode(tid, bl);
+    encode(to_read, bl);
+    encode(attrs_to_read, bl);
+    encode(subchunks, bl);
+    encode(omap_read_from, bl);
+    encode(omap_headers_to_read, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+
+  // New, compact layout: hobject_t is encoded only once per object.
+  ENCODE_START(5, 5, bl);
   encode(from, bl);
   encode(tid, bl);
-  encode(to_read, bl);
-  encode(attrs_to_read, bl);
-  encode(subchunks, bl);
-  encode(omap_read_from, bl);
-  encode(omap_headers_to_read, bl);
+  encode(requests, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubRead::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(4, bl);
+  DECODE_START(5, bl);
   decode(from, bl);
   decode(tid, bl);
-  if (struct_v == 1) {
-    map<hobject_t, list<pair<uint64_t, uint64_t> >>tmp;
-    decode(tmp, bl);
-    for (auto m = tmp.cbegin(); m != tmp.cend(); ++m) {
-      list<boost::tuple<uint64_t, uint64_t, uint32_t> > tlist;
-      for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
-	tlist.push_back(boost::make_tuple(l->first, l->second, 0));
+  requests.clear();
+  if (struct_v >= 5) {
+    decode(requests, bl);
+  } else {
+    // Legacy layout: decode the parallel containers and fold them back
+    // into the per-object request map.
+    map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
+    set<hobject_t> attrs_to_read;
+    map<hobject_t, vector<pair<int, int>>> subchunks;
+    set<hobject_t> omap_headers_to_read;
+    map<hobject_t, pair<string, uint64_t>> omap_read_from;
+    if (struct_v == 1) {
+      map<hobject_t, list<pair<uint64_t, uint64_t> >>tmp;
+      decode(tmp, bl);
+      for (auto m = tmp.cbegin(); m != tmp.cend(); ++m) {
+	list<boost::tuple<uint64_t, uint64_t, uint32_t> > tlist;
+	for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
+	  tlist.push_back(boost::make_tuple(l->first, l->second, 0));
+	}
+	to_read[m->first] = tlist;
       }
-      to_read[m->first] = tlist;
+    } else {
+      decode(to_read, bl);
     }
-  } else {
-    decode(to_read, bl);
-  }
-  decode(attrs_to_read, bl);
-  if (struct_v > 2 && struct_v.v > struct_compat) {
-    decode(subchunks, bl);
-  } else {
-    for (auto &i : to_read) {
-      subchunks[i.first].push_back(make_pair(0, 1));
+    decode(attrs_to_read, bl);
+    if (struct_v > 2 && struct_v.v > struct_compat) {
+      decode(subchunks, bl);
+    } else {
+      for (auto &i : to_read) {
+	subchunks[i.first].push_back(make_pair(0, 1));
+      }
     }
-  }
-  if (struct_v >= 4) {
-    decode(omap_read_from, bl);
-    decode(omap_headers_to_read, bl);
-  } else {
-    omap_read_from.clear();
-    omap_headers_to_read.clear();
+    if (struct_v >= 4) {
+      decode(omap_read_from, bl);
+      decode(omap_headers_to_read, bl);
+    }
+    for (auto &[hoid, l] : to_read) {
+      requests[hoid].to_read = std::move(l);
+    }
+    for (auto &[hoid, sc] : subchunks) {
+      requests[hoid].subchunks = std::move(sc);
+    }
+    for (auto &hoid : attrs_to_read) {
+      requests[hoid].want_attrs = true;
+    }
+    for (auto &hoid : omap_headers_to_read) {
+      requests[hoid].want_omap_header = true;
+    }
+    for (auto &[hoid, rf] : omap_read_from) {
+      requests[hoid].omap_read_from = std::move(rf);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -320,16 +412,13 @@ uint64_t ECSubRead::cost(CephContext *cct, std::pair<int, int>& subchunk_info)
 
   uint64_t subchunk_size = subchunk_info.second;
 
-  for (auto &&[hoid, tl] : to_read) {
-    auto it = subchunks.find(hoid);
-    if (it == subchunks.end()) continue;
-
-    auto &sc = it->second;
+  for (auto &&[hoid, req] : requests) {
+    auto &sc = req.subchunks;
     if (sc.empty()) continue;
 
     // Case 1: Optimized / Complete chunk aligned read
     if (sc.size() == 1 && sc.front().second == subchunk_info.first) {
-      for ([[maybe_unused]] auto &&[offset, len, flags] : tl) {
+      for ([[maybe_unused]] auto &&[offset, len, flags] : req.to_read) {
         total_cost += len;
       }
       continue;
@@ -340,7 +429,7 @@ uint64_t ECSubRead::cost(CephContext *cct, std::pair<int, int>& subchunk_info)
     for (auto &&k : sc) {
       fragmented_shard_bytes += (uint64_t)k.second * subchunk_size;
     }
-    total_cost += fragmented_shard_bytes * tl.size();
+    total_cost += fragmented_shard_bytes * req.to_read.size();
   }
 
   // Safety Boundary: mClock requires non-zero costs for tracking active ops
@@ -350,53 +439,79 @@ uint64_t ECSubRead::cost(CephContext *cct, std::pair<int, int>& subchunk_info)
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubRead &rhs)
 {
-  return lhs
-    << "ECSubRead(tid=" << rhs.tid
-    << ", to_read=" << rhs.to_read
-    << ", subchunks=" << rhs.subchunks
-    << ", attrs_to_read=" << rhs.attrs_to_read
-    << ", omap_headers_to_read=" << rhs.omap_headers_to_read
-    << ", omap_read_from=" << rhs.omap_read_from
-    << ")";
+  lhs << "ECSubRead(tid=" << rhs.tid << ", objects=[";
+  bool first = true;
+  for (const auto &[hoid, req] : rhs.requests) {
+    if (!first) {
+      lhs << ", ";
+    }
+    first = false;
+    lhs << hoid << "(to_read=" << req.to_read
+	<< ", subchunks=" << req.subchunks;
+    if (req.want_attrs) {
+      lhs << ", want_attrs";
+    }
+    if (req.want_omap_header) {
+      lhs << ", want_omap_header";
+    }
+    if (req.omap_read_from) {
+      lhs << ", omap_read_from=" << *req.omap_read_from;
+    }
+    lhs << ")";
+  }
+  return lhs << "])";
+}
+
+void ECSubReadRequest::dump(Formatter *f) const
+{
+  using extent_t = boost::tuple<uint64_t, uint64_t, uint32_t>;
+
+  f->with_obj_array_section(
+      "to_read"sv, to_read, [](Formatter& f, const extent_t& extent) {
+	f.dump_unsigned("off", extent.get<0>());
+	f.dump_unsigned("len", extent.get<1>());
+	f.dump_unsigned("flags", extent.get<2>());
+      });
+  f->with_obj_array_section(
+      "subchunks"sv, subchunks,
+      [](Formatter& f, const std::pair<int, int>& sc) {
+	f.dump_int("start", sc.first);
+	f.dump_int("count", sc.second);
+      });
+  f->dump_bool("want_attrs", want_attrs);
+  f->dump_bool("want_omap_header", want_omap_header);
+  if (omap_read_from) {
+    f->dump_string("omap_start_after", omap_read_from->first);
+    f->dump_unsigned("omap_max_bytes", omap_read_from->second);
+  }
+}
+
+list<ECSubReadRequest> ECSubReadRequest::generate_test_instances()
+{
+  list<ECSubReadRequest> o;
+  o.emplace_back();
+  o.back().to_read.push_back(boost::make_tuple(100, 200, 0));
+  o.back().to_read.push_back(boost::make_tuple(400, 600, 0));
+  o.back().subchunks.push_back(make_pair(0, 1));
+  o.back().want_attrs = true;
+  o.emplace_back();
+  o.back().to_read.push_back(boost::make_tuple(2000, 600, 0));
+  o.back().subchunks.push_back(make_pair(0, 1));
+  o.back().want_omap_header = true;
+  o.back().omap_read_from = make_pair("startkey"s, uint64_t(4096));
+  return o;
 }
 
 void ECSubRead::dump(Formatter *f) const
 {
-  using extent_t = boost::tuple<uint64_t, uint64_t, uint32_t>;
-
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
 
-  // 'to_read' (map<hobject_t, list<tuple<offset, length, flags>>>)
   f->with_obj_array_section(
-      "object"sv, to_read,
-      [](Formatter& f, const hobject_t& oid, const list<extent_t>& extents) {
+      "requests"sv, requests,
+      [](Formatter& f, const hobject_t& oid, const ECSubReadRequest& req) {
 	f.dump_stream("oid") << oid;
-	f.with_obj_array_section(
-	    "extent", extents, [](Formatter& f, const extent_t& extent) {
-	      f.dump_unsigned("off", extent.get<0>());
-	      f.dump_unsigned("len", extent.get<1>());
-	      f.dump_unsigned("flags", extent.get<2>());
-	    });
-      });
-
-  // 'object_attrs_requested': 'attrs_to_read' (set<hobject_t>)
-  f->with_obj_array_section(
-      "object_attrs_requested"sv, attrs_to_read,
-      [](Formatter& f, const hobject_t& oid) { f.dump_stream("oid") << oid; });
-
-  // 'object_omap_headers_requested': 'headers_to_read' (set<hobject_t>)
-  f->with_obj_array_section(
-      "object_omap_headers_requested"sv, omap_headers_to_read,
-      [](Formatter& f, const hobject_t& oid) { f.dump_stream("oid") << oid; });
-
-  // 'omap_read_from' (map<hobject_t, string>)
-  f->with_obj_array_section(
-      "object"sv, omap_read_from,
-      [](Formatter& f, const hobject_t& oid, const std::pair<std::string, uint64_t>& read_from) {
-	f.dump_stream("oid") << oid;
-	f.dump_string("start_after", read_from.first);
-        f.dump_unsigned("max_bytes", read_from.second);
+	req.dump(&f);
       });
 }
 
@@ -408,18 +523,66 @@ list<ECSubRead> ECSubRead::generate_test_instances()
   o.push_back(ECSubRead());
   o.back().from = pg_shard_t(2, shard_id_t(-1));
   o.back().tid = 1;
-  o.back().to_read[hoid1].push_back(boost::make_tuple(100, 200, 0));
-  o.back().to_read[hoid1].push_back(boost::make_tuple(400, 600, 0));
-  o.back().to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
-  o.back().attrs_to_read.insert(hoid1);
+  o.back().requests[hoid1].to_read.push_back(boost::make_tuple(100, 200, 0));
+  o.back().requests[hoid1].to_read.push_back(boost::make_tuple(400, 600, 0));
+  o.back().requests[hoid1].subchunks.push_back(make_pair(0, 1));
+  o.back().requests[hoid2].to_read.push_back(boost::make_tuple(400, 600, 0));
+  o.back().requests[hoid2].subchunks.push_back(make_pair(0, 1));
+  o.back().requests[hoid1].want_attrs = true;
   o.push_back(ECSubRead());
   o.back().from = pg_shard_t(2, shard_id_t(-1));
   o.back().tid = 300;
-  o.back().to_read[hoid1].push_back(boost::make_tuple(300, 200, 0));
-  o.back().to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
-  o.back().to_read[hoid2].push_back(boost::make_tuple(2000, 600, 0));
-  o.back().attrs_to_read.insert(hoid2);
+  o.back().requests[hoid1].to_read.push_back(boost::make_tuple(300, 200, 0));
+  o.back().requests[hoid1].subchunks.push_back(make_pair(0, 1));
+  o.back().requests[hoid2].to_read.push_back(boost::make_tuple(400, 600, 0));
+  o.back().requests[hoid2].to_read.push_back(boost::make_tuple(2000, 600, 0));
+  o.back().requests[hoid2].subchunks.push_back(make_pair(0, 1));
+  o.back().requests[hoid2].want_attrs = true;
   return o;
+}
+
+void ECSubReadResponse::encode(bufferlist &p_bl, bufferlist &d_bl) const
+{
+  ENCODE_START(1, 1, p_bl);
+  // The buffer payloads are encoded into d_bl to keep them page aligned;
+  // only the offset/length metadata goes into p_bl.
+  __u32 nlist = (__u32)(buffers_read.size());
+  encode(nlist, p_bl);
+  for (auto &[off, bl] : buffers_read) {
+    encode(off, p_bl);
+    encode(bl.length(), p_bl);
+    encode_nohead(bl, d_bl);
+  }
+  encode(attrs_read, p_bl);
+  encode(error, p_bl);
+  encode(omap_header_read, p_bl);
+  encode(omap_entries_read, p_bl);
+  encode(omap_complete, p_bl);
+  ENCODE_FINISH(p_bl);
+}
+
+void ECSubReadResponse::decode(bufferlist::const_iterator &p_bl,
+			       bufferlist::const_iterator &d_bl)
+{
+  DECODE_START(1, p_bl);
+  __u32 nlist;
+  decode(nlist, p_bl);
+  buffers_read.clear();
+  while (nlist--) {
+    uint64_t off;
+    decode(off, p_bl);
+    __u32 length;
+    decode(length, p_bl);
+    ceph::buffer::list bl;
+    decode_nohead(length, bl, d_bl);
+    buffers_read.emplace_back(off, std::move(bl));
+  }
+  decode(attrs_read, p_bl);
+  decode(error, p_bl);
+  decode(omap_header_read, p_bl);
+  decode(omap_entries_read, p_bl);
+  decode(omap_complete, p_bl);
+  DECODE_FINISH(p_bl);
 }
 
 void ECSubReadReply::encode(bufferlist &bl) const
@@ -431,6 +594,51 @@ void ECSubReadReply::encode(bufferlist &p_bl,
 			    bufferlist &d_bl,
 			    uint64_t features) const
 {
+  if (HAVE_FEATURE(features, SERVER_VAMPIRE)) {
+    // New, compact layout: hobject_t is encoded only once per object.
+    ENCODE_START(4, 4, p_bl);
+    encode(from, p_bl);
+    encode(tid, p_bl);
+    __u32 nmap = (__u32)(responses.size());
+    encode(nmap, p_bl);
+    for (auto &[oid, resp] : responses) {
+      encode(oid, p_bl);
+      resp.encode(p_bl, d_bl);
+    }
+    ENCODE_FINISH(p_bl);
+    return;
+  }
+
+  // Legacy layout: reconstruct the parallel containers keyed by hobject_t.
+  map<hobject_t, list<pair<uint64_t, ceph::buffer::list> >> buffers_read;
+  map<hobject_t, map<string, ceph::buffer::list, std::less<>>> attrs_read;
+  map<hobject_t, int> errors;
+  map<hobject_t, ceph::buffer::list> omap_headers_read;
+  map<hobject_t, map<string, ceph::buffer::list>> omap_entries_read;
+  map<hobject_t, bool> omaps_complete;
+  for (auto &[oid, resp] : responses) {
+    if (!resp.buffers_read.empty()) {
+      buffers_read[oid] = resp.buffers_read;
+    }
+    if (!resp.attrs_read.empty()) {
+      attrs_read[oid] = resp.attrs_read;
+    }
+    if (resp.error) {
+      errors[oid] = *resp.error;
+    }
+    if (resp.omap_header_read) {
+      omap_headers_read[oid] = *resp.omap_header_read;
+    }
+    if (resp.omap_entries_read) {
+      omap_entries_read[oid] = *resp.omap_entries_read;
+    }
+    // A missing omaps_complete entry and an entry with value false are
+    // equivalent to the consumer, so only emit the true ones.
+    if (resp.omap_complete) {
+      omaps_complete[oid] = true;
+    }
+  }
+
   uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 3 : 1;
   uint8_t compat_ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 2 : 1;
   ENCODE_START(ver, compat_ver, p_bl);
@@ -473,46 +681,80 @@ void ECSubReadReply::decode(bufferlist::const_iterator &bl)
 void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
 			    bufferlist::const_iterator &d_bl)
 {
-  DECODE_START(3, p_bl);
+  DECODE_START(4, p_bl);
   decode(from, p_bl);
   decode(tid, p_bl);
-  if (struct_v < 2) {
-    decode(buffers_read, p_bl);
-  } else {
-    // Manual decode of std::map<hobject_t, std::list<std::pair<uint64_t,
-    //   ceph::buffer::list> >> buffers_read;
-    // data is decoded from d_bl to keep it aligned
+  responses.clear();
+  if (struct_v >= 4) {
+    // New, compact layout.
     __u32 nmap;
     decode(nmap, p_bl);
-    buffers_read.clear();
     while (nmap--) {
       hobject_t oid;
       decode(oid, p_bl);
-      std::list<std::pair<uint64_t,ceph::buffer::list>> datalist;
-      __u32 nlist;
-      decode(nlist, p_bl);
-      while (nlist--) {
-	uint64_t result;
-	decode(result, p_bl);
-	ceph::buffer::list bl;
-	__u32 length;
-	decode(length, p_bl);
-	decode_nohead(length, bl, d_bl);
-	datalist.emplace_back(make_pair(result, bl));
-      }
-      buffers_read[oid] = datalist;
+      responses[oid].decode(p_bl, d_bl);
     }
-  }
-  decode(attrs_read, p_bl);
-  decode(errors, p_bl);
-  if (struct_v >= 3) {
-    decode(omap_headers_read, p_bl);
-    decode(omap_entries_read, p_bl);
-    decode(omaps_complete, p_bl);
   } else {
-    omap_headers_read.clear();
-    omap_entries_read.clear();
-    omaps_complete.clear();
+    // Legacy layout: decode the parallel containers and fold them back into
+    // the per-object response map.
+    map<hobject_t, list<pair<uint64_t, ceph::buffer::list> >> buffers_read;
+    map<hobject_t, map<string, ceph::buffer::list, std::less<>>> attrs_read;
+    map<hobject_t, int> errors;
+    map<hobject_t, ceph::buffer::list> omap_headers_read;
+    map<hobject_t, map<string, ceph::buffer::list>> omap_entries_read;
+    map<hobject_t, bool> omaps_complete;
+    if (struct_v < 2) {
+      decode(buffers_read, p_bl);
+    } else {
+      // Manual decode of std::map<hobject_t, std::list<std::pair<uint64_t,
+      //   ceph::buffer::list> >> buffers_read;
+      // data is decoded from d_bl to keep it aligned
+      __u32 nmap;
+      decode(nmap, p_bl);
+      while (nmap--) {
+	hobject_t oid;
+	decode(oid, p_bl);
+	std::list<std::pair<uint64_t,ceph::buffer::list>> datalist;
+	__u32 nlist;
+	decode(nlist, p_bl);
+	while (nlist--) {
+	  uint64_t result;
+	  decode(result, p_bl);
+	  ceph::buffer::list bl;
+	  __u32 length;
+	  decode(length, p_bl);
+	  decode_nohead(length, bl, d_bl);
+	  datalist.emplace_back(make_pair(result, bl));
+	}
+	buffers_read[oid] = datalist;
+      }
+    }
+    decode(attrs_read, p_bl);
+    decode(errors, p_bl);
+    if (struct_v >= 3) {
+      decode(omap_headers_read, p_bl);
+      decode(omap_entries_read, p_bl);
+      decode(omaps_complete, p_bl);
+    }
+
+    for (auto &[oid, l] : buffers_read) {
+      responses[oid].buffers_read = std::move(l);
+    }
+    for (auto &[oid, m] : attrs_read) {
+      responses[oid].attrs_read = std::move(m);
+    }
+    for (auto &[oid, e] : errors) {
+      responses[oid].error = e;
+    }
+    for (auto &[oid, h] : omap_headers_read) {
+      responses[oid].omap_header_read = std::move(h);
+    }
+    for (auto &[oid, m] : omap_entries_read) {
+      responses[oid].omap_entries_read = std::move(m);
+    }
+    for (auto &[oid, complete] : omaps_complete) {
+      responses[oid].omap_complete = complete;
+    }
   }
 
   DECODE_FINISH(p_bl);
@@ -521,15 +763,22 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubReadReply &rhs)
 {
-  lhs << "ECSubReadReply(tid=" << rhs.tid
-      << ", attrs_read=" << rhs.attrs_read.size()
-      << ", omap_headers_read=" << rhs.omap_headers_read.size()
-      << ", omap_entries_read=" << rhs.omap_entries_read.size()
-      << ", omaps_complete=[";
-
+  size_t attrs_read = 0;
+  size_t omap_headers_read = 0;
+  size_t omap_entries_read = 0;
+  lhs << "ECSubReadReply(tid=" << rhs.tid << ", omaps_complete=[";
   bool first = true;
-  for (const auto & [hoid, complete] : rhs.omaps_complete) {
-    if (complete) {
+  for (const auto &[hoid, resp] : rhs.responses) {
+    if (!resp.attrs_read.empty()) {
+      ++attrs_read;
+    }
+    if (resp.omap_header_read) {
+      ++omap_headers_read;
+    }
+    if (resp.omap_entries_read) {
+      ++omap_entries_read;
+    }
+    if (resp.omap_complete) {
       if (!first) {
         lhs << ", ";
       }
@@ -537,86 +786,56 @@ std::ostream &operator<<(
       first = false;
     }
   }
-
-  lhs << "])";
+  lhs << "], attrs_read=" << attrs_read
+      << ", omap_headers_read=" << omap_headers_read
+      << ", omap_entries_read=" << omap_entries_read << ")";
   return lhs;
 }
 
+void ECSubReadResponse::dump(Formatter* f) const
+{
+  using offset_pair_t = pair<uint64_t, bufferlist>;
+
+  f->with_obj_array_section(
+      "buffers_read"sv, buffers_read,
+      [](Formatter& f, const offset_pair_t& offset_n_bl) {
+	const auto& [off, bl] = offset_n_bl;
+	f.dump_unsigned("off", off);
+	f.dump_unsigned("buf_len", bl.length());
+      });
+  f->with_obj_array_section(
+      "attrs_read"sv, attrs_read,
+      [](Formatter& f, const std::string& attr, const ceph::buffer::list& bl) {
+	f.dump_string("attr", attr);
+	f.dump_unsigned("val_len", bl.length());
+      });
+  if (error) {
+    f->dump_int("error", *error);
+  }
+  if (omap_header_read) {
+    f->dump_unsigned("omap_header_len", omap_header_read->length());
+  }
+  if (omap_entries_read) {
+    f->with_obj_array_section(
+	"omap_entries_read"sv, *omap_entries_read,
+	[](Formatter& f, const std::string& key, const ceph::buffer::list& bl) {
+	  f.dump_string("omap_key", key);
+	  f.dump_unsigned("val_len", bl.length());
+	});
+  }
+  f->dump_bool("omap_complete", omap_complete);
+}
 
 void ECSubReadReply::dump(Formatter* f) const
 {
-  using offset_pair_t = pair<uint64_t, bufferlist>;
-  using extents_list_t = list<offset_pair_t>;
-
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
 
-  // 'buffers_read' (map<hobject_t, list<pair<uint64_t, bufferlist>>>)
   f->with_obj_array_section(
-      "object"sv, buffers_read,
-      [](Formatter& f, const hobject_t& oid, const extents_list_t& l) {
+      "responses"sv, responses,
+      [](Formatter& f, const hobject_t& oid, const ECSubReadResponse& resp) {
 	f.dump_stream("oid") << oid;
-	f.with_obj_array_section(
-	    "extent", l,
-	    [](Formatter& f, const offset_pair_t& offset_n_bl) {
-	      const auto& [off, bl] = offset_n_bl;
-	      f.dump_unsigned("off", off);
-	      f.dump_unsigned("buf_len", bl.length());
-	    });
-      });
-
-  // "attrs_returned" (mapping hobject_t to a <string to bl> table)
-  f->with_obj_array_section(
-      "object_attrs"sv, attrs_read,
-      [](Formatter& f, const hobject_t& oid,
-	 const std::map<std::string, ceph::buffer::list, std::less<>>& m) {
-	f.dump_stream("oid") << oid;
-	f.with_obj_array_section(
-	    "attr", m,
-	    [](Formatter& f, const std::string& attr,
-	       const ceph::buffer::list& bl) {
-	      f.dump_string("attr", attr);
-	      f.dump_unsigned("val_len", bl.length());
-	    });
-      });
-
-  // "errors": map<hobject_t, int>
-  f->with_obj_array_section(
-      "error_pair"sv, errors,
-      [](Formatter& f, const hobject_t& oid, int err) {
-	f.dump_stream("oid") << oid;
-        f.dump_int("error", err);
-      });
-
-  // "omap_headers_returned": map<hobject_t, bl>
-  f->with_obj_array_section(
-      "object_omap_headers"sv, omap_headers_read,
-      [](Formatter& f, const hobject_t& oid, const ceph::buffer::list& bl) {
-	f.dump_stream("oid") << oid;
-        f.dump_unsigned("header_len", bl.length());
-      });
-
-  // "omap_entries_returned" (mapping hobject_t to a <string to bl> table)
-  f->with_obj_array_section(
-      "object_omap_entries"sv, omap_entries_read,
-      [](Formatter& f, const hobject_t& oid,
-	 const std::map<std::string, ceph::buffer::list>& m) {
-	f.dump_stream("oid") << oid;
-	f.with_obj_array_section(
-	    "omap_entry", m,
-	    [](Formatter& f, const std::string& key,
-	       const ceph::buffer::list& bl) {
-	      f.dump_string("omap_key", key);
-	      f.dump_unsigned("val_len", bl.length());
-	    });
-      });
-
-  // "omap_complete": map<hobject_t, bool>
-  f->with_obj_array_section(
-      "object_omaps_complete"sv, omaps_complete,
-      [](Formatter& f, const hobject_t& oid, const bool complete) {
-	f.dump_stream("oid") << oid;
-        f.dump_unsigned("omap_complete", complete);
+	resp.dump(&f);
       });
 }
 
@@ -632,17 +851,17 @@ list<ECSubReadReply> ECSubReadReply::generate_test_instances()
   o.push_back(ECSubReadReply());
   o.back().from = pg_shard_t(2, shard_id_t(-1));
   o.back().tid = 1;
-  o.back().buffers_read[hoid1].push_back(make_pair(20, bl));
-  o.back().buffers_read[hoid1].push_back(make_pair(2000, bl2));
-  o.back().buffers_read[hoid2].push_back(make_pair(0, bl));
-  o.back().attrs_read[hoid1]["foo"] = bl;
-  o.back().attrs_read[hoid1]["_"] = bl2;
+  o.back().responses[hoid1].buffers_read.push_back(make_pair(20, bl));
+  o.back().responses[hoid1].buffers_read.push_back(make_pair(2000, bl2));
+  o.back().responses[hoid2].buffers_read.push_back(make_pair(0, bl));
+  o.back().responses[hoid1].attrs_read["foo"] = bl;
+  o.back().responses[hoid1].attrs_read["_"] = bl2;
   o.push_back(ECSubReadReply());
   o.back().from = pg_shard_t(2, shard_id_t(-1));
   o.back().tid = 300;
-  o.back().buffers_read[hoid2].push_back(make_pair(0, bl2));
-  o.back().attrs_read[hoid2]["foo"] = bl;
-  o.back().attrs_read[hoid2]["_"] = bl2;
-  o.back().errors[hoid1] = -2;
+  o.back().responses[hoid2].buffers_read.push_back(make_pair(0, bl2));
+  o.back().responses[hoid2].attrs_read["foo"] = bl;
+  o.back().responses[hoid2].attrs_read["_"] = bl2;
+  o.back().responses[hoid1].error = -2;
   return o;
 }

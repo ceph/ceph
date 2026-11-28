@@ -1048,19 +1048,19 @@ void ECBackendL::handle_sub_read(
 {
   trace.event("handle sub read");
   shard_id_t shard = get_parent()->whoami_shard().shard;
-  for(auto i = op.to_read.begin();
-      i != op.to_read.end();
-      ++i) {
+  for (auto &&[hoid, req] : op.requests) {
+    if (req.to_read.empty()) {
+      continue;
+    }
     int r = 0;
-    for (auto j = i->second.begin(); j != i->second.end(); ++j) {
+    for (auto j = req.to_read.begin(); j != req.to_read.end(); ++j) {
       bufferlist bl;
-      if ((op.subchunks.find(i->first)->second.size() == 1) &&
-          (op.subchunks.find(i->first)->second.front().second ==
-                                            ec_impl->get_sub_chunk_count())) {
+      if ((req.subchunks.size() == 1) &&
+          (req.subchunks.front().second == ec_impl->get_sub_chunk_count())) {
         dout(20) << __func__ << " case1: reading the complete chunk/shard." << dendl;
         r = switcher->store->read(
 	  switcher->ch,
-	  ghobject_t(i->first, ghobject_t::NO_GEN, shard),
+	  ghobject_t(hoid, ghobject_t::NO_GEN, shard),
 	  j->get<0>(),
 	  j->get<1>(),
 	  bl, j->get<2>()); // Allow EIO return
@@ -1073,11 +1073,11 @@ void ECBackendL::handle_sub_read(
         bool error = false;
         for (int m = 0; m < (int)j->get<1>() && !error;
              m += sinfo.get_chunk_size()) {
-          for (auto &&k:op.subchunks.find(i->first)->second) {
+          for (auto &&k:req.subchunks) {
             bufferlist bl0;
             r = switcher->store->read(
                 switcher->ch,
-                ghobject_t(i->first, ghobject_t::NO_GEN, shard),
+                ghobject_t(hoid, ghobject_t::NO_GEN, shard),
                 j->get<0>() + m + (k.first)*subchunk_size,
                 (k.second)*subchunk_size,
                 bl0, j->get<2>());
@@ -1091,28 +1091,28 @@ void ECBackendL::handle_sub_read(
       }
 
       if (r < 0) {
-	// if we are doing fast reads, it's possible for one of the shard
-	// reads to cross paths with another update and get a (harmless)
-	// ENOENT.  Suppress the message to the cluster log in that case.
-	if (r == -ENOENT && get_parent()->get_pool().fast_read) {
-	  dout(5) << __func__ << ": Error " << r
-		  << " reading " << i->first << ", fast read, probably ok"
-		  << dendl;
-	} else {
-	  get_parent()->clog_error() << "Error " << r
-				     << " reading object "
-				     << i->first;
-	  dout(5) << __func__ << ": Error " << r
-		  << " reading " << i->first << dendl;
+        // if we are doing fast reads, it's possible for one of the shard
+        // reads to cross paths with another update and get a (harmless)
+        // ENOENT.  Suppress the message to the cluster log in that case.
+        if (r == -ENOENT && get_parent()->get_pool().fast_read) {
+          dout(5) << __func__ << ": Error " << r
+              << " reading " << hoid << ", fast read, probably ok"
+              << dendl;
+        } else {
+          get_parent()->clog_error() << "Error " << r
+                     << " reading object "
+                     << hoid;
+          dout(5) << __func__ << ": Error " << r
+          << " reading " << hoid << dendl;
 	}
 	goto error;
       } else {
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
-	reply->buffers_read[i->first].push_back(
-	  make_pair(
-	    j->get<0>(),
-	    bl)
-	  );
+        reply->responses[hoid].buffers_read.push_back(
+          make_pair(
+            j->get<0>(),
+            bl)
+        );
       }
 
       if (!get_parent()->get_pool().allows_ecoverwrites()) {
@@ -1122,37 +1122,37 @@ void ECBackendL::handle_sub_read(
 	// the state of our chunk in case other chunks could substitute.
         ECUtilL::HashInfoRef hinfo;
         map<string, bufferlist, less<>> attrs;
-	struct stat st;
-	int r = object_stat(i->first, &st);
+        struct stat st;
+        int r = object_stat(hoid, &st);
         if (r >= 0) {
-	  dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
-	  r = switcher->objects_get_attrs_with_hinfo(i->first, &attrs);
-	}
-	if (r >= 0) {
-	  hinfo = unstable_hashinfo_registry.get_hash_info(i->first, false, attrs, st.st_size);
-	} else {
-	  derr << __func__ << ": access (attrs) on " << i->first << " failed: "
-	       << cpp_strerror(r) << dendl;
-	}
+          dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
+          r = switcher->objects_get_attrs_with_hinfo(hoid, &attrs);
+        }
+        if (r >= 0) {
+          hinfo = unstable_hashinfo_registry.get_hash_info(hoid, false, attrs, st.st_size);
+        } else {
+          derr << __func__ << ": access (attrs) on " << hoid << " failed: "
+               << cpp_strerror(r) << dendl;
+        }
         if (!hinfo) {
           r = -EIO;
           get_parent()->clog_error() << "Corruption detected: object "
-                                     << i->first
+                                     << hoid
                                      << " is missing hash_info";
-          dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
+          dout(5) << __func__ << ": No hinfo for " << hoid << dendl;
           goto error;
         }
 	ceph_assert(hinfo->has_chunk_hash());
 	if ((bl.length() == hinfo->get_total_chunk_size()) &&
 	    (j->get<0>() == 0)) {
-	  dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
+	  dout(20) << __func__ << ": Checking hash of " << hoid << dendl;
 	  bufferhash h(-1);
 	  h << bl;
           int s = static_cast<int>(shard);
 	  if (h.digest() != hinfo->get_chunk_hash(s)) {
-	    get_parent()->clog_error() << "Bad hash for " << i->first << " digest 0x"
+	    get_parent()->clog_error() << "Bad hash for " << hoid << " digest 0x"
 				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(s) << dec;
-	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
+	    dout(5) << __func__ << ": Bad hash for " << hoid << " digest 0x"
 		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(s) << dec << dendl;
 	    r = -EIO;
 	    goto error;
@@ -1164,26 +1164,29 @@ void ECBackendL::handle_sub_read(
 error:
     // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
     // the state of our chunk in case other chunks could substitute.
-    reply->buffers_read.erase(i->first);
-    reply->errors[i->first] = r;
+    reply->responses[hoid].buffers_read.clear();
+    reply->responses[hoid].error = r;
   }
-  for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
-       i != op.attrs_to_read.end();
-       ++i) {
-    dout(10) << __func__ << ": fulfilling attr request on "
-	     << *i << dendl;
-    if (reply->errors.count(*i))
+  for (auto &&[hoid, req] : op.requests) {
+    if (!req.want_attrs) {
       continue;
+    }
+    dout(10) << __func__ << ": fulfilling attr request on "
+	     << hoid << dendl;
+    auto resp_it = reply->responses.find(hoid);
+    if (resp_it != reply->responses.end() && resp_it->second.error)
+      continue;
+    auto &resp = reply->responses[hoid];
     int r = switcher->store->getattrs(
       switcher->ch,
       ghobject_t(
-	*i, ghobject_t::NO_GEN, shard),
-      reply->attrs_read[*i]);
+	hoid, ghobject_t::NO_GEN, shard),
+      resp.attrs_read);
     if (r < 0) {
       // If we read error, we should not return the attrs too.
-      reply->attrs_read.erase(*i);
-      reply->buffers_read.erase(*i);
-      reply->errors[*i] = r;
+      resp.attrs_read.clear();
+      resp.buffers_read.clear();
+      resp.error = r;
     }
   }
   reply->from = get_parent()->whoami_shard();
@@ -1247,65 +1250,61 @@ void ECBackendL::handle_sub_read_reply(
   }
   ReadOp &rop = iter->second;
   if (cct->_conf->bluestore_debug_inject_read_err) {
-    for (auto i = op.buffers_read.begin();
-	 i != op.buffers_read.end();
-	 ++i) {
-      if (ECInject::test_read_error0(ghobject_t(i->first, ghobject_t::NO_GEN, op.from.shard))) {
-	dout(0) << __func__ << " Error inject - EIO error for shard " << op.from.shard << dendl;
-	op.buffers_read.erase(i->first);
-	op.attrs_read.erase(i->first);
-	op.errors[i->first] = -EIO;
+    for (auto &[hoid, resp] : op.responses) {
+      if (resp.buffers_read.empty()) {
+	continue;
       }
-
+      if (ECInject::test_read_error0(ghobject_t(hoid, ghobject_t::NO_GEN, op.from.shard))) {
+	dout(0) << __func__ << " Error inject - EIO error for shard " << op.from.shard << dendl;
+	resp.buffers_read.clear();
+	resp.attrs_read.clear();
+	resp.error = -EIO;
+      }
     }
   }
-  for (auto i = op.buffers_read.begin();
-       i != op.buffers_read.end();
-       ++i) {
-    ceph_assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
-    if (!rop.to_read.count(i->first)) {
-      // We canceled this read! @see filter_read_op
-      dout(20) << __func__ << " to_read skipping" << dendl;
-      continue;
+  for (auto &[hoid, resp] : op.responses) {
+    if (!resp.buffers_read.empty()) {
+      ceph_assert(!resp.error);	// If attribute error we better not have sent a buffer
+      if (!rop.to_read.count(hoid)) {
+	// We canceled this read! @see filter_read_op
+	dout(20) << __func__ << " to_read skipping" << dendl;
+      } else {
+	list<ec_align_t>::const_iterator req_iter =
+	  rop.to_read.find(hoid)->second.to_read.begin();
+	list<
+	  boost::tuple<
+	    uint64_t, uint64_t, map<pg_shard_t, bufferlist> > >::iterator riter =
+	  rop.complete[hoid].returned.begin();
+	for (list<pair<uint64_t, bufferlist> >::iterator j = resp.buffers_read.begin();
+	     j != resp.buffers_read.end();
+	     ++j, ++req_iter, ++riter) {
+	  ceph_assert(req_iter != rop.to_read.find(hoid)->second.to_read.end());
+	  ceph_assert(riter != rop.complete[hoid].returned.end());
+	  pair<uint64_t, uint64_t> aligned =
+	    sinfo.chunk_aligned_offset_len_to_chunk(
+	      make_pair(req_iter->offset, req_iter->size));
+	  ceph_assert(aligned.first == j->first);
+	  riter->get<2>()[from] = std::move(j->second);
+	}
+      }
     }
-    list<ec_align_t>::const_iterator req_iter =
-      rop.to_read.find(i->first)->second.to_read.begin();
-    list<
-      boost::tuple<
-	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > >::iterator riter =
-      rop.complete[i->first].returned.begin();
-    for (list<pair<uint64_t, bufferlist> >::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j, ++req_iter, ++riter) {
-      ceph_assert(req_iter != rop.to_read.find(i->first)->second.to_read.end());
-      ceph_assert(riter != rop.complete[i->first].returned.end());
-      pair<uint64_t, uint64_t> aligned =
-	sinfo.chunk_aligned_offset_len_to_chunk(
-	  make_pair(req_iter->offset, req_iter->size));
-      ceph_assert(aligned.first == j->first);
-      riter->get<2>()[from] = std::move(j->second);
+    if (!resp.attrs_read.empty()) {
+      ceph_assert(!resp.error);	// if read error better not have sent an attribute
+      if (!rop.to_read.count(hoid)) {
+	// We canceled this read! @see filter_read_op
+	dout(20) << __func__ << " to_read skipping" << dendl;
+      } else {
+	rop.complete[hoid].attrs.emplace();
+	(*(rop.complete[hoid].attrs)).swap(resp.attrs_read);
+      }
     }
-  }
-  for (auto i = op.attrs_read.begin();
-       i != op.attrs_read.end();
-       ++i) {
-    ceph_assert(!op.errors.count(i->first));	// if read error better not have sent an attribute
-    if (!rop.to_read.count(i->first)) {
-      // We canceled this read! @see filter_read_op
-      dout(20) << __func__ << " to_read skipping" << dendl;
-      continue;
+    if (resp.error) {
+      rop.complete[hoid].errors.insert(
+	make_pair(
+	  from,
+	  *resp.error));
+      dout(20) << __func__ << " shard=" << from << " error=" << *resp.error << dendl;
     }
-    rop.complete[i->first].attrs.emplace();
-    (*(rop.complete[i->first].attrs)).swap(i->second);
-  }
-  for (auto i = op.errors.begin();
-       i != op.errors.end();
-       ++i) {
-    rop.complete[i->first].errors.insert(
-      make_pair(
-	from,
-	i->second));
-    dout(20) << __func__ << " shard=" << from << " error=" << i->second << dendl;
   }
 
   map<pg_shard_t, set<ceph_tid_t> >::iterator siter =

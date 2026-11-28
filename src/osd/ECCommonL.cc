@@ -443,10 +443,10 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
 	 j != i->second.need.end();
 	 ++j) {
       if (need_attrs) {
-	messages[j->first].attrs_to_read.insert(i->first);
+	messages[j->first].requests[i->first].want_attrs = true;
 	need_attrs = false;
       }
-      messages[j->first].subchunks[i->first] = j->second;
+      messages[j->first].requests[i->first].subchunks = j->second;
       op.obj_to_source[i->first].insert(j->first);
       op.source_to_obj[j->first].insert(i->first);
     }
@@ -456,7 +456,7 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
       for (auto k = i->second.need.begin();
 	   k != i->second.need.end();
 	   ++k) {
-	messages[k->first].to_read[i->first].push_back(
+	messages[k->first].requests[i->first].to_read.push_back(
 	  boost::make_tuple(
 	    chunk_off_len.first,
 	    chunk_off_len.second,

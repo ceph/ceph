@@ -2681,3 +2681,150 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_local_backfill_not_displaced_b
   ASSERT_TRUE(read_request.shard_reads.contains(shard_id_t(1)));
   EXPECT_EQ(read_request.shard_reads.at(shard_id_t(1)).pg_shard, local_backfill);
 }
+
+// ---------------------------------------------------------------------------
+// Wire-format round-trip tests for ECSubRead / ECSubReadReply.
+//
+// These exercise the backwards-compatible encoding: the compact single-map
+// layout is used when the peer advertises SERVER_VAMPIRE, otherwise the
+// legacy parallel-container layout is produced.  Both must decode back into
+// the same in-memory representation (modulo fields the legacy layout cannot
+// carry).
+// ---------------------------------------------------------------------------
+
+static ECSubRead roundtrip_subread(const ECSubRead &in, uint64_t features)
+{
+  ceph::buffer::list bl;
+  in.encode(bl, features);
+  ECSubRead out;
+  auto p = bl.cbegin();
+  out.decode(p);
+  return out;
+}
+
+static ECSubReadReply roundtrip_subreadreply(const ECSubReadReply &in,
+                                             uint64_t features)
+{
+  ceph::buffer::list bl;
+  in.encode(bl, bl, features);
+  ECSubReadReply out;
+  auto p = bl.cbegin();
+  out.decode(p, p);
+  return out;
+}
+
+TEST(ECSubRead, roundtrip_new_and_legacy)
+{
+  hobject_t hoid1(sobject_t("obj1", 1));
+  hobject_t hoid2(sobject_t("obj2", CEPH_NOSNAP));
+  ECSubRead in;
+  in.from = pg_shard_t(3, shard_id_t(1));
+  in.tid = 42;
+  in.requests[hoid1].to_read.push_back(boost::make_tuple(0, 4096, 1));
+  in.requests[hoid1].to_read.push_back(boost::make_tuple(8192, 4096, 1));
+  in.requests[hoid1].subchunks.push_back(std::make_pair(0, 1));
+  in.requests[hoid1].want_attrs = true;
+  in.requests[hoid2].to_read.push_back(boost::make_tuple(0, 4096, 0));
+  in.requests[hoid2].subchunks.push_back(std::make_pair(0, 1));
+  in.requests[hoid2].want_omap_header = true;
+  in.requests[hoid2].omap_read_from =
+    std::make_pair(std::string("startkey"), uint64_t(1024));
+
+  // New compact layout (SERVER_VAMPIRE): everything round-trips.
+  {
+    ECSubRead out = roundtrip_subread(in, CEPH_FEATURES_ALL);
+    EXPECT_EQ(out.tid, in.tid);
+    ASSERT_EQ(out.requests.size(), 2u);
+    ASSERT_EQ(out.requests[hoid1].to_read.size(), 2u);
+    EXPECT_TRUE(out.requests[hoid1].want_attrs);
+    EXPECT_EQ(out.requests[hoid1].to_read.front().get<2>(), 1u);  // flags kept
+    ASSERT_EQ(out.requests[hoid1].subchunks.size(), 1u);
+    EXPECT_TRUE(out.requests[hoid2].want_omap_header);
+    ASSERT_TRUE(out.requests[hoid2].omap_read_from.has_value());
+    EXPECT_EQ(out.requests[hoid2].omap_read_from->first, "startkey");
+    EXPECT_EQ(out.requests[hoid2].omap_read_from->second, 1024u);
+  }
+
+  // Legacy layout (FADVISE, no VAMPIRE): flags and omap still carried.
+  {
+    ECSubRead out = roundtrip_subread(in, CEPH_FEATURE_OSD_FADVISE_FLAGS);
+    ASSERT_EQ(out.requests.size(), 2u);
+    EXPECT_TRUE(out.requests[hoid1].want_attrs);
+    EXPECT_EQ(out.requests[hoid1].to_read.front().get<2>(), 1u);
+    ASSERT_EQ(out.requests[hoid1].subchunks.size(), 1u);
+    EXPECT_TRUE(out.requests[hoid2].want_omap_header);
+    ASSERT_TRUE(out.requests[hoid2].omap_read_from.has_value());
+    EXPECT_EQ(out.requests[hoid2].omap_read_from->second, 1024u);
+  }
+}
+
+TEST(ECSubReadReply, roundtrip_new_and_legacy)
+{
+  hobject_t hoid1(sobject_t("obj1", 1));
+  hobject_t hoid2(sobject_t("obj2", CEPH_NOSNAP));
+  ceph::buffer::list data1;
+  data1.append("hello");
+  ceph::buffer::list data2;
+  data2.append("world!!");
+  ceph::buffer::list omaph;
+  omaph.append("hdr");
+
+  ECSubReadReply in;
+  in.from = pg_shard_t(3, shard_id_t(1));
+  in.tid = 7;
+  in.responses[hoid1].buffers_read.push_back(std::make_pair(0, data1));
+  in.responses[hoid1].buffers_read.push_back(std::make_pair(4096, data2));
+  in.responses[hoid1].attrs_read["_"] = data1;
+  in.responses[hoid1].omap_header_read = omaph;
+  in.responses[hoid1].omap_entries_read =
+    std::map<std::string, ceph::buffer::list>{{"k1", data2}};
+  in.responses[hoid1].omap_complete = true;
+  in.responses[hoid2].error = -EIO;
+
+  auto check_core = [&](const ECSubReadReply &out) {
+    EXPECT_EQ(out.tid, in.tid);
+    ASSERT_TRUE(out.responses.count(hoid1));
+    ASSERT_EQ(out.responses.at(hoid1).buffers_read.size(), 2u);
+    EXPECT_EQ(out.responses.at(hoid1).buffers_read.front().first, 0u);
+    EXPECT_EQ(out.responses.at(hoid1).buffers_read.front().second.length(),
+              data1.length());
+    EXPECT_EQ(out.responses.at(hoid1).buffers_read.back().first, 4096u);
+    EXPECT_EQ(out.responses.at(hoid1).buffers_read.back().second.length(),
+              data2.length());
+    EXPECT_EQ(out.responses.at(hoid1).attrs_read.count("_"), 1u);
+    ASSERT_TRUE(out.responses.count(hoid2));
+    ASSERT_TRUE(out.responses.at(hoid2).error.has_value());
+    EXPECT_EQ(*out.responses.at(hoid2).error, -EIO);
+  };
+
+  // New compact layout (SERVER_VAMPIRE): omap carried too.
+  {
+    ECSubReadReply out = roundtrip_subreadreply(in, CEPH_FEATURES_ALL);
+    check_core(out);
+    ASSERT_TRUE(out.responses.at(hoid1).omap_header_read.has_value());
+    EXPECT_EQ(out.responses.at(hoid1).omap_header_read->length(),
+              omaph.length());
+    ASSERT_TRUE(out.responses.at(hoid1).omap_entries_read.has_value());
+    EXPECT_EQ(out.responses.at(hoid1).omap_entries_read->size(), 1u);
+    EXPECT_TRUE(out.responses.at(hoid1).omap_complete);
+  }
+
+  // Legacy layout with omap (SERVER_TENTACLE, no VAMPIRE).
+  {
+    ECSubReadReply out =
+      roundtrip_subreadreply(in, CEPH_FEATUREMASK_SERVER_TENTACLE);
+    check_core(out);
+    ASSERT_TRUE(out.responses.at(hoid1).omap_header_read.has_value());
+    ASSERT_TRUE(out.responses.at(hoid1).omap_entries_read.has_value());
+    EXPECT_TRUE(out.responses.at(hoid1).omap_complete);
+  }
+
+  // Oldest legacy layout (no features): core preserved, omap dropped.
+  {
+    ECSubReadReply out = roundtrip_subreadreply(in, 0);
+    check_core(out);
+    EXPECT_FALSE(out.responses.at(hoid1).omap_header_read.has_value());
+    EXPECT_FALSE(out.responses.at(hoid1).omap_entries_read.has_value());
+    EXPECT_FALSE(out.responses.at(hoid1).omap_complete);
+  }
+}
