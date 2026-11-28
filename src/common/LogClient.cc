@@ -20,6 +20,7 @@
 #include "msg/Messenger.h"
 #include "mon/MonMap.h"
 #include "common/Graylog.h"
+#include "common/perf_counters.h"
 
 #include <algorithm>
 #include <iterator>
@@ -57,11 +58,32 @@ LogChannel::LogChannel(CephContext *cct, LogClient *lc,
 {
 }
 
+enum {
+  l_clog_first = 96000,
+  l_clog_queue_len,
+  l_clog_sent,
+  l_clog_resent,
+  l_clog_acked,
+  l_clog_last,
+};
+
 LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 		     enum logclient_flag_t flags)
   : cct(cct), messenger(m), monmap(mm), is_mon(flags & FLAG_MON),
     last_log_sent(0), last_log(0)
 {
+  PerfCountersBuilder b(cct, "clog", l_clog_first, l_clog_last);
+  b.add_u64(l_clog_queue_len, "queue_len",
+	    "Cluster log entries the monitors have not acknowledged yet",
+	    "clgq", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_clog_sent, "sent",
+		    "Cluster log entries sent to the monitors, resends included");
+  b.add_u64_counter(l_clog_resent, "resent",
+		    "Cluster log entries queued again for a new monitor session");
+  b.add_u64_counter(l_clog_acked, "acked",
+		    "Cluster log entries acknowledged by the monitors");
+  logger = {b.create_perf_counters(), cct};
+  cct->get_perfcounters_collection()->add(logger.get());
 }
 
 void LogChannel::set_log_to_monitors(bool v)
@@ -219,7 +241,14 @@ ceph::ref_t<Message> LogClient::get_mon_log_message(bool flush)
     if (log_queue.empty())
       return nullptr;
     // reset session
-    last_log_sent = log_queue.front().seq;
+    const auto resend_from = log_queue.front().seq;
+    logger->inc(l_clog_resent,
+		std::count_if(log_queue.begin(), log_queue.end(),
+			      [this, resend_from](const LogEntry& e) {
+				return e.seq > resend_from &&
+				  e.seq <= last_log_sent;
+			      }));
+    last_log_sent = resend_from;
   }
   return _get_mon_log_message();
 }
@@ -277,6 +306,7 @@ ceph::ref_t<Message> LogClient::_get_mon_log_message()
     ldout(cct,10) << " will send " << *p << dendl;
     ++p;
   }
+  logger->inc(l_clog_sent, o.size());
   
   return ceph::make_message<MLog>(monmap->get_fsid(),
 				  std::move(o));
@@ -297,6 +327,7 @@ version_t LogClient::queue(LogEntry &entry)
   std::lock_guard l(log_lock);
   entry.seq = ++last_log;
   log_queue.push_back(entry);
+  logger->set(l_clog_queue_len, log_queue.size());
 
   if (is_mon) {
     _send_to_mon();
@@ -311,6 +342,7 @@ void LogClient::reset()
   if (log_queue.size()) {
     log_queue.clear();
   }
+  logger->set(l_clog_queue_len, 0);
   last_log_sent = last_log;
 }
 
@@ -349,6 +381,8 @@ bool LogClient::handle_log_ack(MLogAck *m)
       break;
     ldout(cct,10) << " logged " << entry << dendl;
     q = log_queue.erase(q);
+    logger->inc(l_clog_acked);
   }
+  logger->set(l_clog_queue_len, log_queue.size());
   return true;
 }

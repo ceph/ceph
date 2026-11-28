@@ -1,5 +1,12 @@
 >=22.0.0
 
+* Daemons now count the cluster log entries the monitors have not acknowledged
+  yet, in the ``clog`` perf counters: ``queue_len`` (entries waiting for an
+  acknowledgement), ``sent``, ``resent`` (queued again for a new monitor
+  session) and ``acked``.  A ``queue_len`` that keeps growing means the
+  daemon's monitor does not acknowledge its log entries, and the whole queue
+  will be sent again when its monitor session is reset.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
