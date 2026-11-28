@@ -24,3 +24,11 @@ bool NVMeofGwMonitorGroupClient::set_group_id(const uint32_t& id) {
 
   return status.ok();
 }
+
+bool NVMeofGwMonitorGroupClient::apply_config(const config_snapshot& snapshot,
+                                              config_apply_reply* reply)
+{
+  ClientContext context;
+  Status status = stub_->apply_config(&context, snapshot, reply);
+  return status.ok();
+}
