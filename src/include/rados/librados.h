@@ -1085,10 +1085,15 @@ CEPH_RADOS_API int rados_nobjects_list_open(rados_ioctx_t io,
                                             rados_list_ctx_t *ctx);
 
 /**
- * Return hash position of iterator, rounded to the current PG
+ * Return hash position of iterator
+ *
+ * Note that entries are prefetched in batches, so during iteration this
+ * reflects the hash of the next fetch position (or 0 once the end of the
+ * pool has been reached), not necessarily the hash of the last entry
+ * returned by rados_nobjects_list_next().
  *
  * @param ctx iterator marking where you are in the listing
- * @returns current hash position, rounded to the current pg
+ * @returns hash of the current list position (not rounded to a pg)
  */
 CEPH_RADOS_API uint32_t rados_nobjects_list_get_pg_hash_position(rados_list_ctx_t ctx);
 
@@ -1097,7 +1102,7 @@ CEPH_RADOS_API uint32_t rados_nobjects_list_get_pg_hash_position(rados_list_ctx_
  *
  * @param ctx iterator marking where you are in the listing
  * @param pos hash position to move to
- * @returns actual (rounded) position we moved to
+ * @returns pos, unchanged (not rounded to a pg)
  */
 CEPH_RADOS_API uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx,
                                                  uint32_t pos);
@@ -1107,7 +1112,7 @@ CEPH_RADOS_API uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx,
  *
  * @param ctx iterator marking where you are in the listing
  * @param cursor position to move to
- * @returns rounded position we moved to
+ * @returns the placement seed of the pg that contains cursor
  */
 CEPH_RADOS_API uint32_t rados_nobjects_list_seek_cursor(rados_list_ctx_t ctx,
                                                         rados_object_list_cursor cursor);

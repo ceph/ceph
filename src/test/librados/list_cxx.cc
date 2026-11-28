@@ -253,6 +253,55 @@ TEST_F(LibRadosListPP, ListObjectsStartPP) {
   }
 }
 
+TEST_F(LibRadosListPP, ListObjectsSeekHashPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  for (int i = 0; i < 64; ++i) {
+    ASSERT_EQ(0, ioctx.write("obj-" + stringify(i), bl, bl.length(), 0));
+  }
+
+  // Find an object that is not the first entry in its PG in listing order.
+  std::map<uint32_t, std::pair<std::string, uint32_t>> pg_first_obj;
+  std::string target_oid;
+  uint32_t target_hash = 0;
+  bool found_target = false;
+  for (librados::NObjectIterator it = ioctx.nobjects_begin();
+       it != ioctx.nobjects_end(); ++it) {
+    std::string oid = it->get_oid();
+    uint32_t hash = 0;
+    uint32_t pg = 0;
+    ASSERT_EQ(0, ioctx.get_object_hash_position2(oid, &hash));
+    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(oid, &pg));
+
+    auto [p, inserted] = pg_first_obj.emplace(pg, std::make_pair(oid, hash));
+    if (!inserted && !found_target && hash != p->second.second) {
+      target_oid = oid;
+      target_hash = hash;
+      found_target = true;
+    }
+  }
+  ASSERT_TRUE(found_target);
+
+  // Fresh iterator constructed at target_hash via nobjects_begin(uint32_t).
+  {
+    librados::NObjectIterator it = ioctx.nobjects_begin(target_hash);
+    ASSERT_TRUE(it != ioctx.nobjects_end());
+    ASSERT_EQ(target_oid, it->get_oid());
+  }
+
+  // Already-fetched iterator repositioned via seek(uint32_t).
+  {
+    librados::NObjectIterator it = ioctx.nobjects_begin();
+    ASSERT_TRUE(it != ioctx.nobjects_end());
+    ASSERT_EQ(target_hash, it.seek(target_hash));
+    ASSERT_TRUE(it != ioctx.nobjects_end());
+    ASSERT_EQ(target_oid, it->get_oid());
+  }
+}
+
 TEST_F(LibRadosListPP, ListObjectsCursorNSPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
