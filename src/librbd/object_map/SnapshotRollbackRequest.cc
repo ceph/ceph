@@ -3,6 +3,8 @@
 
 #include "librbd/object_map/SnapshotRollbackRequest.h"
 #include "common/dout.h"
+#include "common/errno.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/InvalidateRequest.h"
@@ -56,6 +58,12 @@ bool SnapshotRollbackRequest::should_complete(int r) {
   bool finished = false;
   switch (m_state) {
   case STATE_READ_MAP:
+    if (r >= 0) {
+      r = mark_objects_dirty();
+      if (r < 0 && m_ret_val == 0) {
+        m_ret_val = r;
+      }
+    }
     if (r < 0) {
       // invalidate the snapshot object map
       send_invalidate_map();
@@ -93,6 +101,45 @@ void SnapshotRollbackRequest::send_read_map() {
                                          &m_read_bl);
   ceph_assert(r == 0);
   rados_completion->release();
+}
+
+int SnapshotRollbackRequest::mark_objects_dirty() {
+  CephContext *cct = m_image_ctx.cct;
+
+  ceph::BitVector<2> object_map;
+  auto it = m_read_bl.cbegin();
+  int r = cls_client::object_map_load_finish(&it, &object_map);
+  if (r < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to decode snapshot "
+               << "object map: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // The OSD handles a snapshot rollback as a modification of the HEAD
+  // object (even if its content already matches the snapshot), so every
+  // rolled back object is dirty relative to the most recent snapshot.  The
+  // snapshot object map flags objects that were not written since the
+  // preceding snapshot as clean, so writing it unchanged as the HEAD object
+  // map would cause fast-diff to report them as unchanged between the most
+  // recent snapshot and the next one.
+  uint64_t dirty_count = 0;
+  auto obj_it = object_map.begin();
+  auto end_it = object_map.end();
+  for (; obj_it != end_it; ++obj_it) {
+    if (*obj_it == OBJECT_EXISTS_CLEAN) {
+      *obj_it = OBJECT_EXISTS;
+      ++dirty_count;
+    }
+  }
+  ldout(cct, 10) << this << " " << __func__ << ": marked " << dirty_count
+                 << " object(s) dirty" << dendl;
+
+  if (dirty_count > 0) {
+    // preserves the CRC setting of the on-disk snapshot object map
+    m_read_bl.clear();
+    object_map.encode(m_read_bl);
+  }
+  return 0;
 }
 
 void SnapshotRollbackRequest::send_write_map() {

@@ -4,6 +4,8 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
+#include "common/bit_vector.hpp"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -60,6 +62,24 @@ public:
                   .Times(times)
                   .WillRepeatedly(DoDefault());
   }
+
+  int save_map(librbd::ImageCtx *ictx, uint64_t snap_id,
+               const ceph::BitVector<2> &object_map) {
+    librados::ObjectWriteOperation op;
+    cls_client::object_map_save(&op, object_map);
+    return ictx->md_ctx.operate(
+      ObjectMap<>::object_map_name(ictx->id, snap_id), &op);
+  }
+
+  int load_map(librbd::ImageCtx *ictx, uint64_t snap_id,
+               ceph::BitVector<2> *object_map) {
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
+    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+                exec_internal(oid, _, StrEq("rbd"), StrEq("object_map_load"),
+                              _, _, _, _))
+                  .WillOnce(DoDefault());
+    return cls_client::object_map_load(&ictx->md_ctx, oid, object_map);
+  }
 };
 
 TEST_F(TestMockObjectMapSnapshotRollbackRequest, Success) {
@@ -83,6 +103,52 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, Success) {
   expect_unlock_exclusive_lock(*ictx);
 }
 
+TEST_F(TestMockObjectMapSnapshotRollbackRequest, MarkObjectsDirty) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
+
+  uint64_t snap_id = ictx->snap_info.rbegin()->first;
+
+  ceph::BitVector<2> snap_object_map;
+  snap_object_map.resize(4);
+  snap_object_map[0] = OBJECT_NONEXISTENT;
+  snap_object_map[1] = OBJECT_EXISTS;
+  snap_object_map[2] = OBJECT_PENDING;
+  snap_object_map[3] = OBJECT_EXISTS_CLEAN;
+  ASSERT_EQ(0, save_map(ictx, snap_id, snap_object_map));
+
+  expect_read_map(ictx, snap_id, 0);
+  expect_write_map(ictx, 0);
+
+  C_SaferCond cond_ctx;
+  AsyncRequest<> *request = new SnapshotRollbackRequest(
+    *ictx, snap_id, &cond_ctx);
+  request->send();
+  ASSERT_EQ(0, cond_ctx.wait());
+
+  // objects that exist in the snapshot must be dirty in the HEAD object map
+  ceph::BitVector<2> head_object_map;
+  ASSERT_EQ(0, load_map(ictx, CEPH_NOSNAP, &head_object_map));
+  ASSERT_EQ(4U, head_object_map.size());
+  ASSERT_EQ(OBJECT_NONEXISTENT, static_cast<uint8_t>(head_object_map[0]));
+  ASSERT_EQ(OBJECT_EXISTS, static_cast<uint8_t>(head_object_map[1]));
+  ASSERT_EQ(OBJECT_PENDING, static_cast<uint8_t>(head_object_map[2]));
+  ASSERT_EQ(OBJECT_EXISTS, static_cast<uint8_t>(head_object_map[3]));
+
+  // the snapshot object map itself must not be modified
+  ceph::BitVector<2> on_disk_snap_object_map;
+  ASSERT_EQ(0, load_map(ictx, snap_id, &on_disk_snap_object_map));
+  ASSERT_EQ(4U, on_disk_snap_object_map.size());
+  ASSERT_EQ(OBJECT_EXISTS_CLEAN,
+            static_cast<uint8_t>(on_disk_snap_object_map[3]));
+
+  expect_unlock_exclusive_lock(*ictx);
+}
+
 TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
   REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 
@@ -93,6 +159,43 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_read_map(ictx, snap_id, -ENOENT);
+  expect_invalidate(ictx, 2);
+
+  C_SaferCond cond_ctx;
+  AsyncRequest<> *request = new SnapshotRollbackRequest(
+    *ictx, snap_id, &cond_ctx);
+  request->send();
+  ASSERT_EQ(0, cond_ctx.wait());
+
+  {
+    std::shared_lock image_locker{ictx->image_lock};
+    uint64_t flags;
+    ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
+    ASSERT_NE(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
+  }
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP,
+                                RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
+  expect_unlock_exclusive_lock(*ictx);
+}
+
+TEST_F(TestMockObjectMapSnapshotRollbackRequest, DecodeMapError) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
+
+  uint64_t snap_id = ictx->snap_info.rbegin()->first;
+
+  bufferlist bl;
+  bl.append("corrupt");
+  ASSERT_EQ(0, ictx->md_ctx.write_full(
+    ObjectMap<>::object_map_name(ictx->id, snap_id), bl));
+
+  expect_read_map(ictx, snap_id, 0);
   expect_invalidate(ictx, 2);
 
   C_SaferCond cond_ctx;
