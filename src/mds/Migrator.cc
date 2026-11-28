@@ -1401,17 +1401,23 @@ void Migrator::handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m
   }
 }
 
+/*
+ * The sessions of the exported caps can take a while to flush, and the export
+ * can be cancelled meanwhile.  The dirfrag is then unfrozen and can be split
+ * or merged before this completes, so look it up again rather than keep a
+ * pointer to it: a pin would make the fragmentation assert in
+ * CDir::finish_old_fragment(), and without one the pointer would dangle.
+ */
 class C_M_ExportSessionsFlushed : public MigratorContext {
-  CDir *dir;
+  dirfrag_t df;
   uint64_t tid;
 public:
   C_M_ExportSessionsFlushed(Migrator *m, CDir *d, uint64_t t) :
-    MigratorContext(m), dir(d), tid(t) {
-    dir->get(CDir::PIN_PTRWAITER);
-  }
+    MigratorContext(m), df(d->dirfrag()), tid(t) {}
   void finish(int r) override {
-    mig->export_sessions_flushed(dir, tid);
-    dir->put(CDir::PIN_PTRWAITER);
+    CDir *dir = mig->mdcache->get_dirfrag(df);
+    if (dir)
+      mig->export_sessions_flushed(dir, tid);
   }
 };
 
