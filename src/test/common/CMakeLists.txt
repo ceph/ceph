@@ -471,6 +471,10 @@ add_executable(unittest_versioned_variant test_versioned_variant.cc)
 add_ceph_unittest(unittest_versioned_variant)
 target_link_libraries(unittest_versioned_variant common)
 
+add_executable(unittest_snap_types test_snap_types.cc)
+add_ceph_unittest(unittest_snap_types)
+target_link_libraries(unittest_snap_types ceph-common)
+
 if(WITH_SYSTEMD)
   add_executable(unittest_journald_logger test_journald_logger.cc)
   target_link_libraries(unittest_journald_logger ceph-common)

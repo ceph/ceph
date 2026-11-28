@@ -80,6 +80,10 @@ void SnapRealmInfoNew::decode(ceph::buffer::list::const_iterator& bl)
   decode(change_attr, bl);
   if (struct_v >= 2) {
     decode(flags, bl);
+  } else {
+    // struct_v 1 (older MDS): `flags` was not encoded - default to
+    // snapdir visible, same as sr_t does for its pre-flags versions.
+    flags = SNAPDIR_VISIBILITY;
   }
   DECODE_FINISH(bl);
 }
