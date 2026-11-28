@@ -1034,13 +1034,45 @@ Context *RefreshRequest<I>::handle_v2_block_writes(int *result) {
 }
 
 template <typename I>
+bool RefreshRequest<I>::has_live_snapshot_parent() {
+  // A snapshot's object map isn't immutable for a cloned image: a copyup
+  // anywhere in the parent chain (e.g. the parent gets flattened or
+  // removed) can invalidate it at any time, and there may be no watch to
+  // ever refresh it (e.g. a read-only open). Avoid caching the object map
+  // while this snapshot still has a live parent relationship of its own;
+  // once its recorded overlap drops to zero for good, a later refresh will
+  // load it safely. A migration source counts as a parent here -- it goes
+  // away on commit, exactly like a flattened parent does.
+  if (m_image_ctx.snap_name.empty()) {
+    return false;
+  }
+
+  std::shared_lock image_locker{m_image_ctx.image_lock};
+
+  // on the initial open the image context isn't pinned to the snapshot yet,
+  // so this consults the HEAD overlap. That is harmless: SetSnapRequest
+  // runs next and its apply() installs its own (possibly null) object map
+  // unconditionally, so it has the final say for that case.
+  ParentImageInfo parent_md;
+  MigrationInfo migration_info;
+  int r = get_parent_info(m_image_ctx.snap_id, &parent_md, &migration_info);
+  if (r < 0) {
+    // no parent info to go on -- assume the worst and leave it unloaded
+    return true;
+  }
+
+  return (parent_md.overlap > 0);
+}
+
+template <typename I>
 void RefreshRequest<I>::send_v2_open_object_map() {
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == 0 ||
       m_image_ctx.object_map != nullptr ||
       (m_image_ctx.snap_name.empty() &&
        (m_read_only ||
         m_image_ctx.exclusive_lock == nullptr ||
-        !m_image_ctx.exclusive_lock->is_lock_owner()))) {
+        !m_image_ctx.exclusive_lock->is_lock_owner())) ||
+      has_live_snapshot_parent()) {
     send_v2_open_journal();
     return;
   }
