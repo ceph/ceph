@@ -1,0 +1,238 @@
+---
+- hosts:
+    - mon0
+    - osd0
+    - registry
+  any_errors_fatal: true
+  become: true
+  vars:
+    container_image_registry: "{{ ceph_container_image_registry | default('quay.ceph.io') }}"
+    container_image_name: "{{ ceph_container_image_name | default('ceph-ci/ceph') }}"
+    container_image_tag: "{{ ceph_container_image_tag | default(ceph_dev_branch) }}"
+    container_image: "{{ container_image_registry + '/' + container_image_name + ':' + container_image_tag }}"
+  tasks:
+    - name: Set image fact
+      ansible.builtin.set_fact:
+        local_container_image: "{{ hostvars['registry']['ansible_eth1']['ipv4']['address'] }}:5000/ceph-volume-ci:{{ 'pr-' + ghprbPullId if ghprbPullId | length > 0 else ceph_dev_branch }}"
+
+    - name: Gather and delegate facts
+      ansible.builtin.setup:
+      delegate_to: "{{ item }}"
+      delegate_facts: True
+      with_items: "{{ groups['all'] }}"
+      run_once: true
+
+    - name: Force rpm pkg upgrade
+      ansible.builtin.package:
+        name: rpm
+        state: latest
+
+    - name: Install pre-requisites packages
+      ansible.builtin.package:
+        name:
+          - net-tools
+          - git
+          - lvm2
+          - podman
+        state: present
+
+    - name: Update the system
+      ansible.builtin.command: dnf update -y
+      changed_when: false
+
+    - name: Add registry as insecure registry in registries.conf
+      ansible.builtin.blockinfile:
+        path: "/etc/containers/registries.conf"
+        state: present
+        marker: "# {mark} cephadm-ansible managed : {{ hostvars['registry']['ansible_eth1']['ipv4']['address'] }}:5000"
+        create: yes
+        block: |
+          [[registry]]
+          location = "{{ hostvars['registry']['ansible_eth1']['ipv4']['address'] }}:5000"
+          insecure = true
+
+    - name: Remove dnf cached data
+      ansible.builtin.command: dnf clean all
+      changed_when: false
+
+- hosts:
+    - mon0
+    - osd0
+  any_errors_fatal: true
+  become: true
+  vars:
+    container_image_registry: "{{ ceph_container_image_registry | default('quay.ceph.io') }}"
+    container_image_name: "{{ ceph_container_image_name | default('ceph-ci/ceph') }}"
+    container_image_tag: "{{ ceph_container_image_tag | default(ceph_dev_branch) }}"
+    container_image: "{{ container_image_registry + '/' + container_image_name + ':' + container_image_tag }}"
+
+  tasks:
+    - name: Fetch ceph red hat development repository
+      ansible.builtin.uri:
+        # Use the centos repo since we don't currently have a dedicated red hat repo
+        url: "https://shaman.ceph.com/api/repos/ceph/{{ ceph_dev_branch }}/{{ ceph_dev_sha1 }}/centos/{{ ansible_facts['distribution_major_version'] }}/repo?arch={{ ansible_facts['architecture'] }}"
+        return_content: yes
+      register: ceph_dev_yum_repo
+    
+    - name: Configure ceph red hat development repository
+      ansible.builtin.copy:
+        content: "{{ ceph_dev_yum_repo.content }}"
+        dest: /etc/yum.repos.d/ceph-dev.repo
+        owner: root
+        group: root
+        backup: yes
+    
+    - name: Install cephadm
+      ansible.builtin.package:
+        name:
+          - cephadm
+        state: present
+
+- hosts: registry
+  become: true
+  gather_facts: true
+  vars:
+    container_image_registry: "{{ ceph_container_image_registry | default('quay.ceph.io') }}"
+    container_image_name: "{{ ceph_container_image_name | default('ceph-ci/ceph') }}"
+    container_image_tag: "{{ ceph_container_image_tag | default(ceph_dev_branch) }}"
+    container_image: "{{ container_image_registry + '/' + container_image_name + ':' + container_image_tag }}"
+  tasks:
+    - name: Ensure /var/lib/registry is created
+      ansible.builtin.file:
+        path: /var/lib/registry
+        state: directory
+
+    - name: Remove local ceph-volume registry if any
+      containers.podman.podman_container:
+        name: cv-tests-registry
+        state: absent
+
+    - name: Create a local registry
+      containers.podman.podman_container:
+        name: cv-tests-registry
+        state: started
+        restart_policy: always
+        image: registry:2
+        privileged: true
+        volume:
+          - '/var/lib/registry:/var/lib/registry'
+        ports:
+          - '5000:5000'
+
+    # - name: Create a temp dir
+    #   ansible.builtin.tempfile:
+    #     state: directory
+    #     suffix: cv
+    #   register: tempdir
+
+    # - name: Clone ceph repository
+    #   ansible.builtin.git:
+    #     repo: https://github.com/ceph/ceph.git
+    #     dest: "{{ tempdir.path }}"
+    #     refspec: "{{ 'pull/'+ ghprbPullId + '/head:pr-' + ghprbPullId if ghprbPullId | length > 0 else omit }}"
+    #     depth: 1
+    #     version: "{{ 'pr-' + ghprbPullId if ghprbPullId | length > 0 else ceph_dev_branch }}"
+
+    # - name: Create a Dockerfile
+    #   ansible.builtin.copy:
+    #     dest: "{{ tempdir.path }}/src/Dockerfile"
+    #     content: |
+    #       FROM {{ container_image }}
+    #       {{ 'COPY /ceph-volume/ceph_volume /usr/lib/python3.9/site-packages/ceph_volume' if ghprbPullId is defined else '' }}
+
+    # - name: Create a Dockerfile
+    #   ansible.builtin.copy:
+    #     dest: "{{ tempdir.path }}/src/Dockerfile"
+    #     content: |
+    #       FROM {{ container_image }}
+    #       {{ 'COPY /ceph-volume/ceph_volume /usr/lib/python3.9/site-packages/ceph_volume' if ghprbPullId is defined else '' }}
+
+    - name: Pull the base container image
+      ansible.builtin.command: "podman pull {{ container_image }}"
+      register: base_image_pull
+      # async: 600
+      # poll: 0
+      # delegate_to: mon0
+      # run_once: true
+
+    - name: Create a Dockerfile
+      ansible.builtin.copy:
+        dest: "/vagrant/Dockerfile"
+        content: |
+          FROM {{ container_image }}
+          COPY /ceph_volume /usr/lib/python3.9/site-packages/ceph_volume
+
+    # - name: Set image fact
+    #   ansible.builtin.set_fact:
+    #     local_container_image: "{{ hostvars[inventory_hostname]['ansible_eth1']['ipv4']['address'] }}:5000/ceph-volume-ci:{{ 'pr-' + ghprbPullId if ghprbPullId | length > 0 else ceph_dev_branch }}"
+
+    # - name: Build the image
+    #   ansible.builtin.command: "podman build --squash --force-rm -t {{ local_container_image }} ."
+    #   args:
+    #     chdir: "{{ tempdir.path }}/src"
+
+    # - name: Check on base image pull task status
+    #   async_status:
+    #     jid: "{{ base_image_pull.ansible_job_id }}"
+    #   register: job_result
+    #   until: job_result.finished
+    #   retries: 500
+    #   delay: 1
+
+    - name: Build the image
+      ansible.builtin.command: "podman build --force-rm --squash -t {{ local_container_image }} ."
+      args:
+        chdir: "/vagrant"
+
+    - name: Push the image to the local registry
+      ansible.builtin.command: "podman push {{ local_container_image }}"
+
+    # - name: Remove cloned repository
+    #   ansible.builtin.file:
+    #     path: "{{ tempdir.path }}"
+    #     state: absent
+    #   no_log: true
+
+- hosts: mon0
+  become: true
+  gather_facts: true
+  vars:
+    container_image_registry: "{{ ceph_container_image_registry | default('quay.ceph.io') }}"
+    container_image_name: "{{ ceph_container_image_name | default('ceph-ci/ceph') }}"
+    container_image_tag: "{{ ceph_container_image_tag | default(ceph_dev_branch) }}"
+    container_image: "{{ container_image_registry + '/' + container_image_name + ':' + container_image_tag }}"
+  tasks:
+    - name: Bootstrap a minimal cluster with cephadm
+      ansible.builtin.command: "cephadm --image {{ local_container_image }} bootstrap --mon-ip {{ hostvars[inventory_hostname]['ansible_eth1']['ipv4']['address'] }} --skip-dashboard --skip-monitoring-stack --single-host-defaults"
+
+    - name: Set Ceph config parameters
+      ansible.builtin.command: "cephadm shell -- ceph config set {{ item.entity }} {{ item.param }} {{ item.value }}"
+      with_items:
+        - { entity: 'global', param: 'cluster_network', value: "{{ cluster_network }}" }
+        - { entity: 'osd', param: 'public_network', value: "{{ public_network }}" }
+
+    - name: Get cephadm public key
+      ansible.builtin.command: "cephadm shell -- ceph cephadm get-pub-key"
+      register: cephadm_ssh_pub_key
+
+    - name: Allow bootstrap host to ssh to osd host
+      ansible.posix.authorized_key:
+        user: root
+        state: present
+        key: "{{ cephadm_ssh_pub_key.stdout }}"
+      delegate_to: osd0
+
+    - name: Update placement for mons
+      ansible.builtin.command: "cephadm shell -- ceph orch apply mon --placement='count:1 mon0'"
+
+    - name: Update placement for mgrs
+      ansible.builtin.command: "cephadm shell -- ceph orch apply mgr --placement='count:1 mon0'"
+
+    - name: Add osd host
+      ansible.builtin.command: "cephadm shell -- ceph orch host add osd0 {{ hostvars['osd0']['ansible_eth1']['ipv4']['address'] }}"
+
+- name: Setup devices
+  ansible.builtin.import_playbook: setup-devices.yml
+
+- name: Deploy OSDs
+  ansible.builtin.import_playbook: deploy-osds.yml
