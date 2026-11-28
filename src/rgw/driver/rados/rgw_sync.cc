@@ -1282,6 +1282,9 @@ class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, strin
 
   RGWSyncTraceNodeRef tn;
 
+  map<string, string> key_to_marker;
+  map<string, string> marker_to_key;
+
 public:
   RGWMetaSyncShardMarkerTrack(RGWMetaSyncEnv *_sync_env,
                          const string& _marker_oid,
@@ -1291,6 +1294,33 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker),
                                                                 tn(_tn){}
+  /*
+   * create index from key -> marker, and from marker -> key
+   * this is useful so that we can ensure that we only have one
+   * entry for any key that is used. This is needed when doing
+   * incremental sync of metadata, and we don't want to run multiple
+   * concurrent sync operations for the same metadata key.
+   */
+
+  bool index_key_to_marker(const string& key, const string& marker) {
+    auto result = key_to_marker.emplace(key, marker);
+    if (!result.second) { // exists
+      set_need_retry(key);
+      return false;
+    }
+    marker_to_key[marker] = key;
+    return true;
+  }
+
+  void handle_finish(const string& marker) override {
+    auto iter = marker_to_key.find(marker);
+    if (iter == marker_to_key.end()) {
+      return;
+    }
+    key_to_marker.erase(iter->second);
+    reset_need_retry(iter->second);
+    marker_to_key.erase(iter);
+  }
 
   RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
@@ -1314,6 +1344,35 @@ public:
     return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
+
+/* test-only: hold points for bucket.instance entries, released by
+ * clearing rgw_inject_delay_pattern */
+static constexpr std::string_view META_SYNC_HOLD =
+    "delay_meta_sync_bucket_instance_hold";
+static constexpr std::string_view META_SYNC_FETCH_HOLD =
+    "delay_meta_sync_bucket_instance_fetch_hold";
+
+static bool meta_sync_hold_active(CephContext *cct, std::string_view pattern)
+{
+  return std::string_view(cct->_conf->rgw_inject_delay_pattern) == pattern;
+}
+
+/* test-only: returns true if this entry should be held; at most one entry per hold
+ * point is held at a time */
+static bool meta_sync_should_hold(CephContext *cct, std::string_view pattern,
+                                  bool is_bucket_instance)
+{
+  static std::atomic_flag hold_taken;
+  static std::atomic_flag fetch_hold_taken;
+  auto& taken = (pattern == META_SYNC_HOLD) ? hold_taken : fetch_hold_taken;
+
+  if (!meta_sync_hold_active(cct, pattern)) {
+    taken.clear();
+    return false;
+  }
+  return cct->_conf->rgw_inject_delay_sec > 0 && is_bucket_instance &&
+         !taken.test_and_set();
+}
 
 RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker,
@@ -1346,78 +1405,139 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
       return set_cr_done();
     }
     tn->set_flag(RGW_SNS_FLAG_ACTIVE);
-    for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
-      yield {
-        pos = raw_key.find(':');
-        section = raw_key.substr(0, pos);
-        key = raw_key.substr(pos + 1);
-        tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
-        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn));
+    do {
+      // data sync fetches bucket.instance entries with no marker tracker
+      if (marker_tracker) {
+        marker_tracker->reset_need_retry(raw_key);
       }
+      /* test-only: delay the fetch so it sees the latest state and a
+       * queued retry can skip a redundant store */
+      if (meta_sync_should_hold(cct, META_SYNC_FETCH_HOLD,
+                                raw_key.starts_with("bucket.instance:"))) {
+        tn->log(0, SSTR("holding metadata fetch " << raw_key
+                        << " until rgw_inject_delay_pattern is cleared"));
+        while (meta_sync_hold_active(cct, META_SYNC_FETCH_HOLD)) {
+          yield {
+            utime_t tick;
+            tick.set_from_double(1.0);
+            wait(tick);
+          }
+        }
+        tn->log(0, SSTR("releasing held metadata fetch"));
+      }
+      for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
+        yield {
+          pos = raw_key.find(':');
+          section = raw_key.substr(0, pos);
+          key = raw_key.substr(pos + 1);
+          tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
+          call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn));
+        }
 
-      sync_status = retcode;
+        sync_status = retcode;
 
-      if (sync_status == -ENOENT) {
+        if (sync_status == -ENOENT) {
+          break;
+        }
+
+        if (sync_status < 0) {
+          if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
+            ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata entry: " << section << ":" << key << ", will retry" << dendl;
+            continue;
+          }
+
+          tn->log(10, SSTR("failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
+          log_error() << "failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
+          yield call(sync_env->error_logger->log_error_cr(dpp, sync_env->conn->get_remote_id(), section, key, -sync_status,
+                                                          string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
+          return set_cr_error(sync_status);
+        }
+
         break;
       }
 
-      if (sync_status < 0) {
-        if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
-          ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata entry: " << section << ":" << key << ", will retry" << dendl;
+      fetched_ver = obj_version();
+      if (sync_status != -ENOENT) {
+        JSONParser parser;
+        if (parser.parse(md_bl.c_str(), md_bl.length())) {
+          try {
+            JSONDecoder::decode_json("ver", fetched_ver, &parser);
+          } catch (const JSONDecoder::err&) {
+            fetched_ver = obj_version();
+          }
+        }
+      }
+
+      retcode = 0;
+      for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
+        if (sync_status != -ENOENT) {
+          /*
+           A queued retry typically re-reads the already applied remote state.
+           Comparing the tag and ver skips this retry
+          */
+          if (!fetched_ver.tag.empty() && 
+              fetched_ver == prev_applied_ver) {
+            tn->log(10, SSTR("skipping store of unchanged metadata entry: "
+                             << section << ":" << key << " ver=" << fetched_ver.ver));
+            break;
+          }
+          if (section == "bucket.instance" &&
+              cct->_conf->rgw_inject_delay_sec > 0 &&
+              std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                  "delay_meta_sync_bucket_instance_store") {
+            yield {
+              utime_t dur;
+              dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+              tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket.instance metadata store"));
+              wait(dur);
+            }
+          }
+          if (section == "bucket" &&
+              cct->_conf->rgw_inject_delay_sec > 0 &&
+              std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                  "delay_meta_sync_bucket_entrypoint_store") {
+            yield {
+              utime_t dur;
+              dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+              tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket entrypoint metadata store"));
+              wait(dur);
+            }
+          }
+          /* test-only: hold a fetched entry before its apply, so a later
+           * update is applied first and the stale one lands on top */
+          if (meta_sync_should_hold(cct, META_SYNC_HOLD,
+                                    section == "bucket.instance")) {
+            tn->log(0, SSTR("holding metadata update " << section << ":" << key
+                            << " until rgw_inject_delay_pattern is cleared"));
+            while (meta_sync_hold_active(cct, META_SYNC_HOLD)) {
+              yield {
+                utime_t tick;
+                tick.set_from_double(1.0);
+                wait(tick);
+              }
+            }
+            tn->log(0, SSTR("releasing held metadata update"));
+          }
+          tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
+          yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+          if (retcode == 0) {
+            prev_applied_ver = fetched_ver;
+          }
+        } else {
+          tn->log(10, SSTR("removing local metadata entry:" << section << ":" << key));
+          yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
+          if (retcode == -ENOENT) {
+            retcode = 0;
+            break;
+          }
+        }
+        if ((retcode < 0) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
+          ldpp_dout(dpp, 20) << *this << ": failed to store metadata entry: " << section << ":" << key << ", got retcode=" << retcode << ", will retry" << dendl;
           continue;
         }
-
-        tn->log(10, SSTR("failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
-        log_error() << "failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
-        yield call(sync_env->error_logger->log_error_cr(dpp, sync_env->conn->get_remote_id(), section, key, -sync_status,
-                                                        string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
-        return set_cr_error(sync_status);
+        break;
       }
-
-      break;
-    }
-
-    retcode = 0;
-    for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
-      if (sync_status != -ENOENT) {
-        if (section == "bucket.instance" &&
-            cct->_conf->rgw_inject_delay_sec > 0 &&
-            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
-                "delay_meta_sync_bucket_instance_store") {
-          yield {
-            utime_t dur;
-            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
-            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket.instance metadata store"));
-            wait(dur);
-          }
-        }
-        if (section == "bucket" &&
-            cct->_conf->rgw_inject_delay_sec > 0 &&
-            std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
-                "delay_meta_sync_bucket_entrypoint_store") {
-          yield {
-            utime_t dur;
-            dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
-            tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket entrypoint metadata store"));
-            wait(dur);
-          }
-        }
-        tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
-        yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
-      } else {
-        tn->log(10, SSTR("removing local metadata entry:" << section << ":" << key));
-        yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
-        if (retcode == -ENOENT) {
-          retcode = 0;
-          break;
-        }
-      }
-      if ((retcode < 0) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
-        ldpp_dout(dpp, 20) << *this << ": failed to store metadata entry: " << section << ":" << key << ", got retcode=" << retcode << ", will retry" << dendl;
-        continue;
-      }
-      break;
-    }
+    } while (marker_tracker && marker_tracker->need_retry(raw_key));
 
     sync_status = retcode;
 
@@ -1935,10 +2055,16 @@ public:
               continue;
             }
             tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
+            raw_key = log_iter->section + ":" + log_iter->name;
+            if (!marker_tracker->index_key_to_marker(raw_key, log_iter->id)) {
+              // a sync op for this key is already in flight: don't spawn a
+              // competing one, just let the running op know to retry once
+              // it's done. the marker still advances past this entry.
+              tn->log(20, SSTR("skipping " << log_iter->id << ":" << raw_key << ", sync already in progress for this key"));
+              marker_tracker->try_update_high_marker(log_iter->id, 0, log_iter->timestamp);
+            } else if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
               ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
-              raw_key = log_iter->section + ":" + log_iter->name;
               yield {
                 RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn), false);
                 ceph_assert(stack);
