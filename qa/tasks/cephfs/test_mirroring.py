@@ -3271,6 +3271,45 @@ class TestMirroring(CephFSTestCase):
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_full_sync_purges_extra_remote_entries(self):
+        """Full sync must delete extras under an already-existing remote dir.
+
+        After s1 syncs, remote d1 has a and b. Deleting s1 forces a full sync
+        for s2 (no local prev). mkdirat on d1 returns EEXIST so skip_dirsync
+        stays false and propagate_deleted_entries must remove remote b.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+
+        dir_name = 'full_sync_purge'
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/d1'])
+        self.mount_a.write_file(f'{dir_name}/d1/a', data='keep')
+        self.mount_a.write_file(f'{dir_name}/d1/b', data='stale')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/s1'])
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', 's1', 1)
+        self.verify_snapshot(dir_name, 's1')
+
+        self.mount_a.run_shell(['rm', '-f', f'{dir_name}/d1/b'])
+        self.mount_a.run_shell(['rmdir', f'{dir_name}/.snap/s1'])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/s2'])
+
+        self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                    peer_spec, f'/{dir_name}', 's2', 2)
+        self.verify_snapshot(dir_name, 's2')
+
+        remote = f'{dir_name}/.snap/s2/d1'
+        self.assertEqual(sorted(self.mount_b.ls(path=remote)), ['a'])
+        self.assertEqual('keep', self.mount_b.read_file(f'{remote}/a'))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_peer_add_primary(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
