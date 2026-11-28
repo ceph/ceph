@@ -314,7 +314,7 @@ OSDSPEC PREVIEWS
 
 def preview_table_osd(data: List) -> str:
     table = PrettyTable(header_style='upper', title='OSDSPEC PREVIEWS', border=True)
-    table.field_names = "service name host data db wal".split()
+    table.field_names = "service name host data db wal crush_device_class".split()
     table.align = 'l'
     table.left_padding_width = 0
     table.right_padding_width = 2
@@ -333,9 +333,11 @@ def preview_table_osd(data: List) -> str:
                     db_path = osd.get('block_db', '-')
                     wal_path = osd.get('block_wal', '-')
                     block_data = osd.get('data', '')
+                    crush_device_class = osd.get('crush_device_class', '-')
                     if not block_data:
                         continue
-                    table.add_row(('osd', dg_name, host, block_data, db_path, wal_path))
+                    table.add_row(('osd', dg_name, host, block_data, db_path,
+                                   wal_path, crush_device_class))
     return notes + table.get_string()
 
 
