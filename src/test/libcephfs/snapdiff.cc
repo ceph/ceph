@@ -2690,6 +2690,35 @@ TEST(LibCephFS, SnapDiffChangedBlockWithCustomObjectSize)
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
 
+TEST(LibCephFS, BlockDiffPartialTruncateThenSparseRegrow)
+{
+  TestMount test_mount("BlockDiffPartialTruncateThenSparseRegrow");
+
+  constexpr uint64_t original_size = 16 * 1024 * 1024;
+  constexpr uint64_t truncate_offset = 5 * 1024 * 1024;
+
+  ASSERT_LE(0, test_mount.write_random("fileA", 4, 4 * 1024 * 1024));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  ASSERT_EQ(0, test_mount.truncate("fileA", truncate_offset));
+  ASSERT_EQ(0, test_mount.truncate("fileA", original_size));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  // The entire discarded range must be reported as changed.
+  interval_set<uint64_t> expected;
+  expected.union_insert(truncate_offset, original_size - truncate_offset);
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff(
+                 "fileA", "snap1", "snap2", &expected));
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
 TEST(LibCephFS, SnapDiffDeletionRecreation) {
 #ifdef _WIN32
   // Windows client is ~8x slower per file op; 1<<15 exceeds the test timeout
