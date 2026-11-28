@@ -62,6 +62,15 @@ def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slot
                 continue
             # any LV present is considered a taken slot
             occupied_slots = len(dev.lvs)
+            if occupied_slots >= requested_slots:
+                # the device is already at its slot capacity: it cannot
+                # receive any new allocation in this batch, so its
+                # remaining capacity must not be validated against the
+                # requested size, let alone abort the whole batch
+                # (see https://tracker.ceph.com/issues/81097)
+                mlogger.info('{} is already at its slot capacity ({} slots), skipping'.format(
+                    dev.path, requested_slots))
+                continue
             # prior to v15.2.8, db/wal deployments were grouping multiple fast devices into single VGs - we need to
             # multiply requested_slots (per device) by the number of devices in the VG in order to ensure that
             # abs_size is calculated correctly from vg_size
@@ -77,14 +86,6 @@ def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slot
             # way
             abs_size = disk.Size(b=int(dev_size / slots_for_vg))
             free_size = dev.vg_free[0]
-            # When a fast device VG is partially used (e.g. one OSD's DB/WAL
-            # is still live while its partner is being replaced), slots_for_vg
-            # can undercount the true slot capacity, making abs_size larger
-            # than free_size so the while loop never fires.  Fall back to
-            # dividing the actual free space by the number of slots we still
-            # want to allocate.
-            if abs_size > free_size and fast_slots_per_device > 0:
-                abs_size = disk.Size(b=int(free_size / fast_slots_per_device))
             relative_size = int(abs_size) / dev_size
             if requested_size:
                 if requested_size <= abs_size:
@@ -109,6 +110,28 @@ def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slot
                             abs_size,
                         ))
                     exit(1)
+            elif abs_size > free_size and fast_slots_per_device > 0:
+                # No size was requested, so slots are sized proportionally
+                # to what the fast device can provide. When a fast device
+                # VG is partially used (e.g. one OSD's DB/WAL is still
+                # live while its partner is being replaced), slots_for_vg
+                # can undercount the true slot capacity, making abs_size
+                # larger than free_size so the while loop below never
+                # fires. Fall back to dividing the actual free space by
+                # the number of slots we still want to allocate.
+                # (https://tracker.ceph.com/issues/76522)
+                #
+                # When a size *was* requested this fallback must not
+                # apply: shrinking abs_size to the leftovers of a nearly
+                # full VG would make the requested size impossible to
+                # fulfill and abort the whole batch, even though other
+                # fast devices could serve the plan. The requested size
+                # is validated against the total capacity above, and the
+                # while loop below naturally skips devices whose free
+                # space cannot fit it.
+                # (https://tracker.ceph.com/issues/81097)
+                abs_size = disk.Size(b=int(free_size / fast_slots_per_device))
+                relative_size = int(abs_size) / dev_size
             # Track new allocations separately from pre-existing ones.
             # fast_slots_per_device caps how many *new* slots this batch may
             # add per device (distribution); requested_slots caps the *total*
