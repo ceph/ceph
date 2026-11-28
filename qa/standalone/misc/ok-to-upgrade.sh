@@ -80,7 +80,9 @@ function TEST_ok_to_upgrade_invalid_args() {
 
     # test with 'root' crush bucket name
     crush_bucket="default"
-    ! ceph osd ok-to-upgrade $crush_bucket $ceph_version_short || return 1
+    ceph osd ok-to-upgrade $crush_bucket $ceph_version_short 2>&1 | \
+      grep -E "Error (ENOTSUP|EOPNOTSUPP).*incompatible for upgradability check" \
+      || return 1
 
     # test with invalid ceph_version formats
     crush_bucket=$(ceph osd tree | grep host | awk '{ print $4 }')
