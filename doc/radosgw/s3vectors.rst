@@ -157,7 +157,7 @@ more than one zone, holding different indexes and vectors.
 Vector buckets that store their own data have sync disabled. When a separate
 S3 backing bucket is used, its own sync configuration applies to it, and sync
 should be disabled. See:
-`Recommended Bucket Configuration`_.
+`Recommended S3 Bucket Configuration`_.
 
 Metadata Filtering
 ------------------

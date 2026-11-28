@@ -68,7 +68,7 @@ Demoting extents that are only live in the Logical Bucket Cache would involve
 rewriting the extents to the cold tier.
 
 Data Arrangement
-===============
+================
 
 With cache devices in place, logical extents may be stored in the cache device
 or data device, while the journal and the lba/backref tree will always be stored

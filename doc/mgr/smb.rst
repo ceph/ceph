@@ -1568,7 +1568,7 @@ Another example of an RGW-backed share with an explicit ``user_id``:
       user_id: s3user
 
 Tenant-Aware RGW Shares
-^^^^^^^^^^^^^^^^^^^^^^^
++++++++++++++++++++++++
 
 RGW supports multi-tenant deployments where user IDs and buckets can be isolated
 by tenant. Tenant-aware RGW user IDs must be of the form tenant$user, for example

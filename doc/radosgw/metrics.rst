@@ -587,7 +587,7 @@ The following metrics related to bucket resharding are tracked across buckets by
      - Gauge
      - Average time successful reshards take
 
-Bucket reshard metrics across buckets are in the "rgw/counters" section and all have the prefix "rgw_reshard_".
+Bucket reshard metrics across buckets are in the "rgw/counters" section and all have the prefix ``rgw_reshard_``.
 
 The following metrics related to bucket resharding are tracked per bucket by the Ceph Object Gateway.
 

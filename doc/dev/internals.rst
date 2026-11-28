@@ -136,6 +136,7 @@ CephFS and MDS
    mds_internals/index
    cephfs-snapshots
    cephfs-mirroring
+   cephfs-mirroring-multi-tenant-credential-exchange
    cephfs-reclaim
    cephfs-fscrypt
    file-striping
