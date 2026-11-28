@@ -108,6 +108,216 @@ def test_get_smart_data(caplog, by, args, log):
             assert log in caplog.text
 
 
+class CephServicePoolMigrationTest(unittest.TestCase):
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_no_migrations(self, mock_mgr_get):
+        mock_mgr_get.side_effect = lambda key: {
+            'osd_map': {'pools': [{'pool': 1, 'pool_name': 'pool1'}]},
+            'pool_stats': {'pool_stats': []}
+        }.get(key, {})
+
+        migrations, migration_stats = CephService.get_pool_migration_info()
+        self.assertEqual(migrations, [])
+        self.assertEqual(migration_stats, {})
+
+        # Also when pools are passed explicitly
+        migrations, migration_stats = CephService.get_pool_migration_info(
+            [{'pool': 1, 'pool_name': 'pool1'}])
+        self.assertEqual(migrations, [])
+        self.assertEqual(migration_stats, {})
+
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_progress_calculation(self, mock_mgr_get):
+        # Progress = target.num_objects / (source.num_objects + target.num_objects)
+        mock_mgr_get.side_effect = lambda key: {
+            'osd_map': {
+                'pools': [
+                    {'pool': 1, 'pool_name': '.migrate-1', 'migration_target': 2},
+                    {'pool': 2, 'pool_name': 'target_pool', 'migration_src': 1}
+                ]
+            },
+            'pool_stats': {
+                'pool_stats': [
+                    {
+                        'poolid': 1,
+                        'stat_sum': {
+                            'num_objects': 25,
+                            'num_bytes': 2500
+                        }
+                    },
+                    {
+                        'poolid': 2,
+                        'stat_sum': {
+                            'num_objects': 75,
+                            'num_bytes': 7500
+                        }
+                    }
+                ]
+            }
+        }.get(key, {})
+
+        migrations, migration_stats = CephService.get_pool_migration_info()
+
+        self.assertEqual(len(migrations), 1)
+        mig = migrations[0]
+        self.assertEqual(mig['pool_id'], 2)
+        self.assertEqual(mig['pool_name'], 'target_pool')
+        self.assertEqual(mig['src_id'], 1)
+        self.assertEqual(mig['src_name'], '.migrate-1')
+        self.assertEqual(mig['num_objects'], 100)
+        self.assertEqual(mig['num_objects_migrated'], 75)
+        self.assertEqual(mig['num_bytes'], 10000)
+        self.assertEqual(mig['num_bytes_migrated'], 7500)
+        self.assertEqual(mig['progress'], 75)
+
+        # Both target pool (2) and source pool (1) should have stats mapped
+        expected_stats = {
+            'num_objects': 100,
+            'num_objects_migrated': 75,
+            'num_bytes': 10000,
+            'num_bytes_migrated': 7500,
+            'migrating_pgs': '',
+        }
+        self.assertEqual(migration_stats.get(2), expected_stats)
+        self.assertEqual(migration_stats.get(1), expected_stats)
+
+    def test_format_migrating_pgs(self):
+        self.assertEqual(
+            CephService.format_migrating_pgs({
+                'migrating_pgs': '{1.2,3.4,5.6}',
+                'pg_num': 32
+            }),
+            '3/32')
+        self.assertEqual(
+            CephService.format_migrating_pgs({
+                'migrating_pgs': ['1.2', '3.4'],
+                'pg_num': 16
+            }),
+            '2/16')
+        self.assertEqual(
+            CephService.format_migrating_pgs({'migrating_pgs': '{}', 'pg_num': 8}),
+            '0/8')
+        self.assertEqual(CephService.format_migrating_pgs({'pg_num': 8}), '')
+
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_uses_source_migrating_pgs(self, mock_mgr_get):
+        # migrating_pgs is stored on the source stub; the target's set is empty.
+        mock_mgr_get.side_effect = lambda key: {
+            'osd_map': {
+                'pools': [
+                    {
+                        'pool': 1,
+                        'pool_name': '.migrate-1',
+                        'migration_target': 2,
+                        'pg_num': 32,
+                        'migrating_pgs': '{1.2,1.5,1.7}'
+                    },
+                    {
+                        'pool': 2,
+                        'pool_name': 'target_pool',
+                        'migration_src': 1,
+                        'pg_num': 1,
+                        'migrating_pgs': '{}'
+                    }
+                ]
+            },
+            'pool_stats': {
+                'pool_stats': [
+                    {'poolid': 1, 'stat_sum': {'num_objects': 50, 'num_bytes': 500}},
+                    {'poolid': 2, 'stat_sum': {'num_objects': 50, 'num_bytes': 500}}
+                ]
+            }
+        }.get(key, {})
+
+        migrations, migration_stats = CephService.get_pool_migration_info()
+        self.assertEqual(migrations[0]['migrating_pgs'], '3/32')
+        self.assertEqual(migration_stats[2]['migrating_pgs'], '3/32')
+        self.assertEqual(migration_stats[1]['migrating_pgs'], '3/32')
+
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_completed_migration(self, mock_mgr_get):
+        # When all objects are on the target, source has 0 remaining objects
+        mock_mgr_get.side_effect = lambda key: {
+            'osd_map': {
+                'pools': [
+                    {'pool': 1, 'pool_name': '.migrate-1', 'migration_target': 2},
+                    {'pool': 2, 'pool_name': 'target_pool', 'migration_src': 1}
+                ]
+            },
+            'pool_stats': {
+                'pool_stats': [
+                    {
+                        'poolid': 1,
+                        'stat_sum': {
+                            'num_objects': 0,
+                            'num_bytes': 0
+                        }
+                    },
+                    {
+                        'poolid': 2,
+                        'stat_sum': {
+                            'num_objects': 100,
+                            'num_bytes': 10000
+                        }
+                    }
+                ]
+            }
+        }.get(key, {})
+
+        migrations, migration_stats = CephService.get_pool_migration_info()
+        self.assertEqual(len(migrations), 1)
+        self.assertEqual(migrations[0]['progress'], 100)
+        self.assertEqual(migrations[0]['num_objects'], 100)
+        self.assertEqual(migrations[0]['num_objects_migrated'], 100)
+        self.assertEqual(migration_stats.get(2)['num_objects_migrated'], 100)
+
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_uses_caller_pool_stats(self, mock_mgr_get):
+        pools = [
+            {'pool': 1, 'pool_name': '.migrate-1', 'migration_target': 2},
+            {'pool': 2, 'pool_name': 'target_pool', 'migration_src': 1}
+        ]
+        pool_stats = {
+            1: {'num_objects': 25, 'num_bytes': 2500},
+            2: {'num_objects': 75, 'num_bytes': 7500},
+        }
+
+        migrations, migration_stats = CephService.get_pool_migration_info(
+            pools, pool_stats)
+
+        self.assertEqual(migrations[0]['progress'], 75)
+        self.assertEqual(migrations[0]['num_objects_migrated'], 75)
+        self.assertEqual(migration_stats[2]['num_objects'], 100)
+        mock_mgr_get.assert_not_called()
+
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_exposes_target_create_time(self, mock_mgr_get):
+        mock_mgr_get.side_effect = lambda key: {'pool_stats': {'pool_stats': []}}.get(key, {})
+        pools = [
+            {'pool': 1, 'pool_name': '.migrate-1', 'migration_target': 2,
+             'create_time': '2024-01-01T00:00:00.000000+0000'},
+            {'pool': 2, 'pool_name': 'target_pool', 'migration_src': 1,
+             'create_time': '2024-05-01T12:00:00.123456+0000'}
+        ]
+
+        migrations, _ = CephService.get_pool_migration_info(pools)
+
+        # The target pool's creation marks the start of the migration, not the source's.
+        self.assertEqual(migrations[0]['create_time'], '2024-05-01T12:00:00.123456+0000')
+
+    @mock.patch('dashboard.mgr.get')
+    def test_get_pool_migration_info_without_create_time(self, mock_mgr_get):
+        mock_mgr_get.side_effect = lambda key: {'pool_stats': {'pool_stats': []}}.get(key, {})
+        pools = [
+            {'pool': 1, 'pool_name': '.migrate-1', 'migration_target': 2},
+            {'pool': 2, 'pool_name': 'target_pool', 'migration_src': 1}
+        ]
+
+        migrations, _ = CephService.get_pool_migration_info(pools)
+
+        self.assertIsNone(migrations[0]['create_time'])
+
+
 @mock.patch.object(CephService, 'send_command')
 def test_get_smart_data_by_device(send_command):
     # pylint: disable=protected-access

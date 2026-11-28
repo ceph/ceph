@@ -62,6 +62,14 @@ describe('PoolService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
+  it('should call migrate', () => {
+    const params = { pg_num: 32, yes_i_really_mean_it: true };
+    service.migrate('somePool', params).subscribe();
+    const req = httpTesting.expectOne(`${apiPath}/somePool/migrate`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(params);
+  });
+
   it('should call list without parameter', fakeAsync(() => {
     let result;
     service.list().then((resp) => (result = resp));

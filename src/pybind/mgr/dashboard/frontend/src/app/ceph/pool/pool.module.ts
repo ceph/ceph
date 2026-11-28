@@ -19,6 +19,8 @@ import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
 import { PoolCapacityProtectionCardComponent } from './pool-capacity-protection-card/pool-capacity-protection-card.component';
 import { PoolIoCardComponent } from './pool-io-card/pool-io-card.component';
+import { PoolMigrationClusterSettingsModalComponent } from './pool-migration-cluster-settings-modal/pool-migration-cluster-settings-modal.component';
+import { PoolBusyModalComponent } from './pool-busy-modal/pool-busy-modal.component';
 import {
   IconModule,
   InputModule,
@@ -34,12 +36,14 @@ import {
   ToggletipModule,
   IconService,
   LayoutModule,
+  LinkModule,
   SkeletonModule,
   ModalModule,
   ButtonModule,
   GridModule,
   MenuButtonModule,
-  ContextMenuModule
+  ContextMenuModule,
+  ProgressBarModule
 } from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
 import UnlockedIcon from '@carbon/icons/es/unlocked/16';
@@ -79,12 +83,14 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     RadioModule,
     SelectModule,
     LayoutModule,
+    LinkModule,
     SkeletonModule,
     ModalModule,
     ButtonModule,
     GridModule,
     MenuButtonModule,
     ContextMenuModule,
+    ProgressBarModule,
     AreaChartComponent
   ],
   exports: [PoolListComponent, PoolFormComponent],
@@ -96,7 +102,9 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     PoolResourceSidebarComponent,
     PoolResourcePageComponent,
     PoolCapacityProtectionCardComponent,
-    PoolIoCardComponent
+    PoolIoCardComponent,
+    PoolMigrationClusterSettingsModalComponent,
+    PoolBusyModalComponent
   ]
 })
 export class PoolModule {
@@ -156,6 +164,11 @@ const routes: Routes = [
     path: `${URLVerbs.EDIT}/:name`,
     component: PoolFormComponent,
     data: { breadcrumbs: ActionLabels.EDIT }
+  },
+  {
+    path: `${URLVerbs.MIGRATE}/:name`,
+    component: PoolFormComponent,
+    data: { breadcrumbs: ActionLabels.MIGRATE }
   }
 ];
 

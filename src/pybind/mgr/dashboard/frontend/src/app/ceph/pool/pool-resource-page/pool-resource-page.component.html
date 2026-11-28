@@ -1,6 +1,105 @@
 @if (poolName) {
   @switch (section) {
     @case ('overview') {
+      @if (migrationCard) {
+        <cds-tile class="pool-overview-card cds-mb-6">
+          <div class="pool-detail-row">
+            <h4
+              class="cds--type-heading-02"
+              i18n
+            >
+              Migration progress
+            </h4>
+            @if (migrationCard.status === PoolMigrationCardStatus.Finished) {
+              <cds-icon-button
+                kind="ghost"
+                size="sm"
+                description="Dismiss"
+                i18n-description
+                data-testid="dismiss-migration"
+                (click)="dismissMigration()"
+              >
+                <cd-icon type="destroy"></cd-icon>
+              </cds-icon-button>
+            }
+          </div>
+          <p
+            class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+            data-testid="migration-subtitle"
+          >
+            @if (migrationCard.status === PoolMigrationCardStatus.Finished) {
+              <ng-container i18n
+                >Migration finished for pool '{{ migrationCard.targetName }}' (source:
+                {{ migrationCard.sourceName }})</ng-container
+              >
+            } @else {
+              <ng-container i18n
+                >Migrating pool '{{ migrationCard.targetName }}' (source:
+                {{ migrationCard.sourceName }})</ng-container
+              >
+            }
+          </p>
+
+          <div class="pool-detail-panel__usage-head cds-mt-4">
+            <span
+              class="cds--type-label-01"
+              i18n
+              >Overall progress</span
+            >
+            <span class="cds--type-heading-04">{{ migrationCard.progress }}%</span>
+          </div>
+
+          <cds-progress-bar
+            [value]="migrationCard.progress"
+            [max]="100"
+            size="md"
+            [label]="migrationCard.progress + '%'"
+            [status]="migrationCard.status"
+            i18n-helperText
+            helperText="Objects migrated"
+          ></cds-progress-bar>
+
+          <div class="pool-detail-stats cds-mt-4">
+            <div class="pool-detail-stat-box">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Objects migrated</span
+              >
+              <span class="cds--type-heading-03">
+                {{ migrationCard.objectsMigrated | number }}
+                <span class="cds--type-body-compact-01">
+                  / {{ migrationCard.objectsTotal | number }}
+                </span>
+              </span>
+            </div>
+            <div class="pool-detail-stat-box">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Bytes migrated</span
+              >
+              <span class="cds--type-heading-03">
+                {{ migrationCard.bytesMigrated | dimlessBinary }}
+                <span class="cds--type-body-compact-01">
+                  / {{ migrationCard.bytesTotal | dimlessBinary }}
+                </span>
+              </span>
+            </div>
+            <div class="pool-detail-stat-box">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >PGs migrating</span
+              >
+              <span class="cds--type-heading-03">
+                {{ migrationCard.migratingPgs || '-' }}
+              </span>
+            </div>
+          </div>
+        </cds-tile>
+      }
+
       <cd-resource-overview-card
         title="Pool details"
         [columns]="4"

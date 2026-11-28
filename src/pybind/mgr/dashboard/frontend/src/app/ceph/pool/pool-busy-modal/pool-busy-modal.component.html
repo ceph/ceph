@@ -1,0 +1,22 @@
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3
+      cdsModalHeaderHeading
+      modal-primary-focus
+    >
+      {{ title }}
+    </h3>
+  </cds-modal-header>
+  <section cdsModalContent>
+    <p
+      class="cds--type-body-01 cds--mb-05"
+      data-testid="description"
+    >
+      {{ description }}
+    </p>
+  </section>
+</cds-modal>

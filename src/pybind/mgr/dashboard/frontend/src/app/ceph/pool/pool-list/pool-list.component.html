@@ -84,6 +84,16 @@
   >
     {{ row.pool_name }}
   </a>
+  @if (row.migrationTag) {
+    <span class="cds-ml-2">
+      <cds-tag
+        [class]="row.migrationTag.cssClass"
+        size="sm"
+      >
+        {{ row.migrationTag.label }}
+      </cds-tag>
+    </span>
+  }
 </ng-template>
 
 <ng-template #poolEnableTpl>
@@ -103,4 +113,26 @@
     Pool deletion is currently disabled.<br />
     You do not have permissions to enable. Please contact administrator.
   </p>
+</ng-template>
+
+<ng-template #osdReleaseTpl>
+  <p
+    class="cds--type-body-01 cds--mb-05"
+    i18n
+  >
+    Pool migration is currently unavailable because not every OSD of this cluster is upgraded to
+    vampire release or newer.
+  </p>
+  <div class="cds--mb-05">
+    <a
+      cdsLink
+      class="cds--type-body-01"
+      data-testid="documentation-link"
+      target="_blank"
+      rel="noopener noreferrer"
+      href="https://docs.ceph.com/en/latest/cephadm/upgrade/#upgrading-ceph"
+      i18n
+      >Check documentation</a
+    >
+  </div>
 </ng-template>

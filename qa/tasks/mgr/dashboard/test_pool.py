@@ -432,4 +432,6 @@ class PoolTest(DashboardTestCase):
             'used_rules': JObj({}, allow_unknown=True),
             'used_profiles': JObj({}, allow_unknown=True),
             'nodes': JList(JObj({}, allow_unknown=True)),
+            'require_min_compat_client': str,
+            'require_osd_release': str,
         }))

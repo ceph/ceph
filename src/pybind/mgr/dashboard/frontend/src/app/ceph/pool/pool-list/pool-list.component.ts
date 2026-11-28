@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -29,10 +29,26 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { mapPoolApplications, Pool, PoolType, transformPgStatus } from '../pool';
+import {
+  EXPERIMENTAL_FEATURES_CONFIG,
+  getActiveMigrationSourceIds,
+  getPoolBusyReason,
+  isPoolInActiveMigration,
+  isPoolMigrationFlagEnabled,
+  isReleaseAtLeast,
+  MIN_POOL_MIGRATION_RELEASE,
+  mapPoolApplications,
+  Pool,
+  PoolAction,
+  PoolType,
+  transformPgStatus
+} from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
+import { PoolMigrationClusterSettingsModalComponent } from '../pool-migration-cluster-settings-modal/pool-migration-cluster-settings-modal.component';
+import { PoolBusyModalComponent } from '../pool-busy-modal/pool-busy-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { Router } from '@angular/router';
 
 const BASE_URL = 'pool';
 const POOL_CONFIG = 'mon_allow_pool_delete';
@@ -66,6 +82,9 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild('poolNoPermsTpl', { static: true })
   poolNoPermsTpl!: TemplateRef<any>;
 
+  @ViewChild('osdReleaseTpl', { static: true })
+  osdReleaseTpl!: TemplateRef<any>;
+
   pools: Pool[] = [];
   columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
@@ -88,7 +107,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private pgCategoryService: PgCategoryService,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private router: Router
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -102,14 +122,22 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       {
         permission: 'update',
         icon: Icons.edit,
-        routerLink: () =>
-          this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
+        click: () => this.editPool(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.EDIT
+      },
+      {
+        permission: 'create',
+        icon: Icons.exchange,
+        click: () => this.migratePool(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
+        name: this.actionLabels.MIGRATE
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deletePoolModal(),
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.DELETE
       }
     ];
@@ -191,8 +219,49 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     this.selection = selection;
   }
 
+  editPool() {
+    const selected = this.selection.first();
+    if (!selected) {
+      return;
+    }
+
+    this.withLatestPoolState(selected.pool_name, (pool) => {
+      const busyReason = getPoolBusyReason(pool, getActiveMigrationSourceIds(this.pools));
+      if (busyReason) {
+        this.modalService.show(PoolBusyModalComponent, {
+          reason: busyReason,
+          taskDescription: pool.cdExecuting,
+          action: PoolAction.EDIT
+        });
+        return;
+      }
+      this.router.navigate([`/pool/${URLVerbs.EDIT}`, pool.pool_name]);
+    });
+  }
+
   deletePoolModal() {
-    const name = this.selection.first().pool_name;
+    const selected = this.selection.first();
+    if (!selected) {
+      return;
+    }
+
+    this.withLatestPoolState(selected.pool_name, (pool) => {
+      this.deletePoolModalForPool(pool);
+    });
+  }
+
+  private deletePoolModalForPool(pool: Pool) {
+    const busyReason = getPoolBusyReason(pool, getActiveMigrationSourceIds(this.pools));
+    if (busyReason) {
+      this.modalService.show(PoolBusyModalComponent, {
+        reason: busyReason,
+        taskDescription: pool.cdExecuting,
+        action: PoolAction.DELETE
+      });
+      return;
+    }
+
+    const name = pool.pool_name;
     if (!this.monAllowPoolDelete$.getValue()) {
       if (this.permissions.configOpt.read && this.permissions.pool.read) {
         this.modalService.show(ConfirmationModalComponent, {
@@ -220,6 +289,90 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
           task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
           call: this.poolService.delete(name)
         })
+    });
+  }
+
+  /**
+   * Migration prerequisites are verified in order. The first unmet one shows
+   * its own modal and stops the flow.
+   */
+  migratePool() {
+    this.poolService
+      .getInfo()
+      .pipe(
+        mergeMap((info: any) => {
+          if (!isReleaseAtLeast(info?.require_osd_release || '', MIN_POOL_MIGRATION_RELEASE)) {
+            this.modalService.show(ConfirmationModalComponent, {
+              titleText: $localize`Cannot migrate pool`,
+              buttonText: $localize`Go to upgrade page`,
+              bodyTpl: this.osdReleaseTpl,
+              warning: true,
+              onSubmit: () => {
+                this.modalService.dismissAll();
+                this.router.navigate(['/upgrade']);
+              }
+            });
+            return EMPTY;
+          }
+          return this.configurationService
+            .get(EXPERIMENTAL_FEATURES_CONFIG)
+            .pipe(map((config) => ({ info, config })));
+        })
+      )
+      .subscribe(({ info, config }) => {
+        const flagValue = this.configurationService.getValue(config, 'global');
+        const needsFlag = !isPoolMigrationFlagEnabled(flagValue);
+        const needsMinCompatClient = !isReleaseAtLeast(
+          info?.require_min_compat_client || '',
+          MIN_POOL_MIGRATION_RELEASE
+        );
+
+        if (needsFlag || needsMinCompatClient) {
+          this.modalService.show(PoolMigrationClusterSettingsModalComponent, {
+            needsFlag,
+            needsMinCompatClient,
+            flagValue,
+            onComplete: () => this.goToMigrateForm()
+          });
+          return;
+        }
+        this.goToMigrateForm();
+      });
+  }
+
+  private goToMigrateForm() {
+    const selected = this.selection.first();
+    if (!selected) {
+      return;
+    }
+
+    this.withLatestPoolState(selected.pool_name, (pool) => {
+      const busyReason = getPoolBusyReason(pool, getActiveMigrationSourceIds(this.pools));
+      if (busyReason) {
+        this.modalService.show(PoolBusyModalComponent, {
+          reason: busyReason,
+          taskDescription: pool.cdExecuting,
+          action: PoolAction.MIGRATE
+        });
+        return;
+      }
+      this.router.navigate([`/pool/${URLVerbs.MIGRATE}`, pool.pool_name]);
+    });
+  }
+
+  /**
+   * Re-fetch pools before gating actions on busy state so a recently finished
+   * pg_num/pgp_num convergence is not missed because the table row is stale.
+   */
+  private withLatestPoolState(poolName: string, next: (pool: Pool) => void): void {
+    this.poolService.getList().subscribe((pools: Pool[]) => {
+      this.pools = this.transformPoolsData(pools);
+      const pool = this.pools.find((item) => item.pool_name === poolName);
+      if (!pool) {
+        return;
+      }
+      this.selection.selected = [pool];
+      next(pool);
     });
   }
 
@@ -265,6 +418,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       'wr'
     ];
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
+    const activeSourceIds = getActiveMigrationSourceIds(pools);
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = transformPgStatus(pool['pg_status']);
@@ -275,12 +429,18 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       pool['stats'] = stats;
       pool['usage'] = stats.percent_used?.latest ?? 0;
 
-      if (
-        !pool.cdExecuting &&
-        pool.pg_num + pool.pg_placement_num !== pool.pg_num_target + pool.pg_placement_num_target
-      ) {
-        pool['cdExecuting'] = 'Updating';
+      if (!pool.cdExecuting) {
+        if (isPoolInActiveMigration(pool, activeSourceIds)) {
+          pool['cdExecuting'] = 'Migrating';
+        } else if (
+          pool.pg_num + pool.pg_placement_num !==
+          pool.pg_num_target + pool.pg_placement_num_target
+        ) {
+          pool['cdExecuting'] = 'Updating';
+        }
       }
+
+      pool['migrationTag'] = this.getMigrationTag(pool, activeSourceIds);
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
         const statData = pool.stats?.[stat] || emptyStat;
@@ -314,5 +474,28 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
     this.getSelectionTiers();
+  }
+
+  private getMigrationTag(
+    pool: Pool,
+    activeSourceIds: Set<number>
+  ): { label: string; cssClass: string } | null {
+    if (!isPoolInActiveMigration(pool, activeSourceIds)) {
+      return null;
+    }
+
+    const hasMigrationError = pool['pg_status']
+      ?.toString()
+      .match(/migration_(toofull|unfound|error)/);
+
+    if (hasMigrationError) {
+      return { label: $localize`Migration Error`, cssClass: 'tag-danger' };
+    }
+    // Only the stub that is the source of the current migration is tagged.
+    if (pool.migration_src == null && pool.migration_target != null) {
+      return { label: $localize`Migration stub`, cssClass: 'tag-background-gray' };
+    }
+
+    return { label: $localize`Migrating`, cssClass: 'tag-info' };
   }
 }
