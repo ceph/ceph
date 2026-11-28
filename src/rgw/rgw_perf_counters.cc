@@ -2,9 +2,16 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_perf_counters.h"
+#include <map>
+#include <mutex>
+#include <shared_mutex>
+#include "common/ceph_mutex.h"
+#include "common/ceph_time.h"
 #include "common/perf_counters.h"
 #include "common/perf_counters_key.h"
 #include "common/ceph_context.h"
+#include "common/perf_histogram.h"
+#include "rgw_op.h"
 #include "rgw_sal.h"
 
 using namespace ceph::perf_counters;
@@ -384,6 +391,105 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
 
 }; // namespace rgw::bucket_reshard_counters
 
+namespace rgw::op_hist {
+
+const std::string rgw_op_hist_key = "rgw_op_hist";
+const std::string rgw_op_err_key = "rgw_op_err";
+static std::map<std::string, PerfCounters*, std::less<>> op_hist_counters;
+static ceph::shared_mutex op_hist_lock =
+    ceph::make_shared_mutex("rgw::op_hist_lazy_create");
+
+Labels labels(const req_state* s, RGWOp* op) {
+  static constexpr std::string_view status_classes[] = {
+      "unknown", "1xx", "2xx", "3xx", "4xx", "5xx"};
+  const int status_class = s->err.http_ret / 100;
+
+  Labels l;
+  l.api = s->system_request ? "system"
+        : s->dialect.empty() ? "unknown"
+        : std::string_view{s->dialect};
+  l.status = status_classes[status_class >= 1 && status_class <= 5
+                                ? status_class : 0];
+  if (!op) {
+    l.op = "unknown";
+  } else if (op->get_type() == RGW_OP_GET_OBJ && s->op == OP_HEAD) {
+    l.op = "head_obj";
+  } else if (op->get_type() == RGW_OP_PUT_OBJ &&
+             s->info.args.exists("uploadId")) {
+    l.op = "upload_part";
+  } else {
+    l.op = op->name();
+  }
+  return l;
+}
+
+static PerfCounters* create_op_hist_counters(
+    CephContext* cct, const std::string& key) {
+  using axis = PerfHistogramCommon::axis_config_d;
+
+  PerfCountersBuilder pcb(cct, key, l_rgw_op_hist_first, l_rgw_op_hist_last);
+  pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  pcb.add_time_histogram(l_rgw_op_hist_lat, "lat",
+      axis::web_latency("lat"), "Request latency distribution");
+  PerfCounters* new_counters = pcb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(new_counters);
+  return new_counters;
+}
+
+static PerfCounters* create_op_err_counters(
+    CephContext* cct, const std::string& key) {
+  PerfCountersBuilder pcb(cct, key, l_rgw_op_err_first, l_rgw_op_err_last);
+  pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  pcb.add_u64_counter(l_rgw_op_err_errors, "errors",
+      "Requests answered with an error status (HTTP <200 or >=400)");
+  PerfCounters* new_counters = pcb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(new_counters);
+  return new_counters;
+}
+
+static PerfCounters* get_or_create(
+    CephContext* cct, std::string key,
+    PerfCounters* (*create)(CephContext*, const std::string&)) {
+  {
+    std::shared_lock lock(op_hist_lock);
+    if (auto i = op_hist_counters.find(key); i != op_hist_counters.end()) {
+      return i->second;
+    }
+  }
+  std::unique_lock lock(op_hist_lock);
+  auto [i, inserted] = op_hist_counters.try_emplace(std::move(key), nullptr);
+  if (inserted) {
+    i->second = create(cct, i->first);
+  }
+  return i->second;
+}
+
+PerfCounters* get(CephContext* cct, const Labels& labels) {
+  return get_or_create(cct,
+      ceph::perf_counters::key_create(rgw_op_hist_key, {
+          {"api", labels.api}, {"op", labels.op},
+          {"status", labels.status}}),
+      create_op_hist_counters);
+}
+
+void inc_error(CephContext* cct, const req_state* s, const Labels& labels) {
+  const std::string ret = std::to_string(s->err.ret);
+  get_or_create(cct,
+      ceph::perf_counters::key_create(rgw_op_err_key, {
+          {"api", labels.api}, {"op", labels.op},
+          {"status", labels.status}, {"ret", ret}}),
+      create_op_err_counters)->inc(l_rgw_op_err_errors);
+}
+
+static void shutdown(CephContext* cct) {
+  std::unique_lock lock(op_hist_lock);
+  for (auto& [key, counters] : op_hist_counters) {
+    cct->get_perfcounters_collection()->remove(counters);
+    delete counters;
+  }
+  op_hist_counters.clear();
+}
+} // namespace rgw::op_hist
 
 int rgw_perf_start(CephContext *cct)
 {
@@ -434,4 +540,5 @@ void rgw_perf_stop(CephContext *cct)
   delete bucket_counters_cache;
   delete rgw::lc_counters::lc_counters_cache;
   rgw::bucket_reshard_counters::bucket_reshard_counters_cache.reset();
+  rgw::op_hist::shutdown(cct);
 }

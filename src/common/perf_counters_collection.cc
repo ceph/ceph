@@ -35,11 +35,14 @@ bool PerfCountersCollection::reset(const std::string &name)
 }
 void PerfCountersCollection::dump_formatted(ceph::Formatter *f, bool schema,
                       select_labeled_t dump_labeled,
+                      select_histograms_t histograms,
                       const std::string &logger,
-                      const std::string &counter)
+                      const std::string &counter,
+                      const std::vector<std::string> &histogram_loggers)
 {
   std::lock_guard lck(m_lock);
-  perf_impl.dump_formatted(f, schema, dump_labeled, logger, counter);
+  perf_impl.dump_formatted(f, schema, dump_labeled, histograms, logger, counter,
+                           histogram_loggers);
 }
 void PerfCountersCollection::dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &logger,

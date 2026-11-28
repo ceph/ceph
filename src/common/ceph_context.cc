@@ -16,6 +16,7 @@
 
 #include "common/ceph_context.h"
 
+#include <algorithm>
 #include <mutex>
 #include <iostream>
 #include <sstream>
@@ -549,17 +550,24 @@ int CephContext::_do_command(
     cmd_getval(cmdmap, "logger", logger);
     cmd_getval(cmdmap, "counter", counter);
     _perf_counters_collection->dump_formatted(f, false, select_labeled_t::unlabeled,
+                                              select_histograms_t::exclude,
                                               logger, counter);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
     command == "perf schema") {
-    _perf_counters_collection->dump_formatted(f, true, select_labeled_t::unlabeled);
+    _perf_counters_collection->dump_formatted(f, true, select_labeled_t::unlabeled,
+                                              select_histograms_t::exclude);
   }
-  else if (command == "counter dump") {
-    _perf_counters_collection->dump_formatted(f, false, select_labeled_t::labeled);
-  }
-  else if (command == "counter schema") {
-    _perf_counters_collection->dump_formatted(f, true, select_labeled_t::labeled);
+  else if (command == "counter dump" || command == "counter schema") {
+    std::vector<std::string> histograms;
+    cmd_getval(cmdmap, "histograms", histograms);
+    const bool all = std::find(histograms.begin(), histograms.end(), "ALL") !=
+                     histograms.end();
+    _perf_counters_collection->dump_formatted(
+        f, command == "counter schema", select_labeled_t::labeled,
+        histograms.empty() ? select_histograms_t::exclude
+                           : select_histograms_t::include,
+        "", "", all ? std::vector<std::string>{} : histograms);
   }
   else if (command == "perf histogram dump") {
     std::string logger;
@@ -585,8 +593,7 @@ int CephContext::_do_command(
        f->dump_string("success", std::string(command) + ' ' + var);
     }
     f->close_section();
-  }
-  else {
+  } else {
     std::string section(command);
     boost::replace_all(section, " ", "_");
     f->open_object_section(section.c_str());
@@ -784,8 +791,8 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("perf histogram dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perf histogram values");
   _admin_socket->register_command("2", _admin_hook, "");
   _admin_socket->register_command("perf schema", _admin_hook, "dump non-labeled counters schemas");
-  _admin_socket->register_command("counter dump", _admin_hook, "dump all labeled and non-labeled counters and their values");
-  _admin_socket->register_command("counter schema", _admin_hook, "dump all labeled and non-labeled counters schemas");
+  _admin_socket->register_command("counter dump name=histograms,type=CephString,n=N,req=false", _admin_hook, "dump all labeled and non-labeled counters and their values; include histograms of given loggers or ALL");
+  _admin_socket->register_command("counter schema name=histograms,type=CephString,n=N,req=false", _admin_hook, "dump all labeled and non-labeled counters schemas; include histograms of given loggers or ALL");
   _admin_socket->register_command("perf histogram schema", _admin_hook, "dump perf histogram schema");
   _admin_socket->register_command("perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
   _admin_socket->register_command("config show", _admin_hook, "dump current config settings");

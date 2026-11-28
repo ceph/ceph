@@ -66,3 +66,14 @@ options:
   - ceph-exporter
   flags:
   - runtime
+- name: exporter_histograms
+  type: str
+  level: advanced
+  desc: Perf counter loggers to export histograms of
+  long_desc: Comma or space separated list of perf counter logger names, e.g.
+    rgw_op_hist, or ALL.
+  default:
+  services:
+  - ceph-exporter
+  flags:
+  - runtime

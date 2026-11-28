@@ -143,6 +143,18 @@ enum {
   l_rgw_bucket_reshard_last,
 };
 
+enum {
+  l_rgw_op_hist_first = 20000,
+  l_rgw_op_hist_lat,
+  l_rgw_op_hist_last,
+};
+
+enum {
+  l_rgw_op_err_first = 21000,
+  l_rgw_op_err_errors,
+  l_rgw_op_err_last,
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -191,3 +203,22 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
                                   const std::string& tenant);
 
 } // namespace rgw::bucket_reshard_counters
+
+class RGWOp;
+
+namespace rgw::op_hist {
+
+struct Labels {
+  std::string_view api;
+  std::string_view op;
+  std::string_view status;
+};
+
+Labels labels(const req_state* s, RGWOp* op);
+PerfCounters* get(CephContext* cct, const Labels& labels);
+// count a failed request in rgw_op_err, labeled like rgw_op_hist plus
+// RGW's internal return value
+void inc_error(CephContext* cct, const req_state* s, const Labels& labels);
+
+} // namespace rgw::op_hist
+

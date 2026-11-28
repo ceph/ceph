@@ -54,6 +54,22 @@ components have distinct responsibilities:
   ``ceph_exporter_scrape_time`` and, in Tentacle and later releases,
   ``ceph_daemon_socket_up``.
 
+Histograms
+----------
+
+``ceph-exporter`` does not export histogram performance counters by
+default. To export the 1D histograms of selected loggers, list the
+loggers in :confval:`exporter_histograms` (or pass ``--histograms``).
+Use ``ALL`` to export the histograms of every logger. Exporting 2D
+histograms, for example the OSD op histograms, is not supported.
+
+Each histogram is exported as a Prometheus histogram named
+``ceph_<logger>_<counter>`` with ``_bucket``, ``_sum`` and ``_count``
+series. Time histograms get the suffix ``_seconds``. Byte histograms
+get the suffix ``_bytes``.
+
+.. confval:: exporter_histograms
+
 Configuration
 -------------
 
