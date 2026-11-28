@@ -264,6 +264,24 @@ TEST(md_config_t, set_val)
   }
 }
 
+TEST(md_config_t, set_auth_methods)
+{
+  ConfigProxy conf{false};
+  for (auto opt : {"auth_cluster_required",
+                   "auth_service_required",
+                   "auth_client_required"}) {
+    EXPECT_EQ(0, conf.set_val(opt, "cephx, none", nullptr));
+    // a key type is not an auth method
+    std::stringstream err;
+    EXPECT_EQ(-EINVAL, conf.set_val(opt, "aes256k", &err));
+    EXPECT_NE(std::string::npos, err.str().find("aes256k"));
+    EXPECT_EQ(-EINVAL, conf.set_val(opt, "cephx, aes256k", nullptr));
+    // at least one method is required
+    EXPECT_EQ(-EINVAL, conf.set_val(opt, "", nullptr));
+    EXPECT_EQ("cephx, none", conf.get_val<std::string>(opt));
+  }
+}
+
 TEST(Option, validation)
 {
   Option opt_int("foo", Option::TYPE_INT, Option::LEVEL_BASIC);
