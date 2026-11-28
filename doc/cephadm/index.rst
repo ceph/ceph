@@ -44,6 +44,7 @@ support older versions of Ceph.
     docker-live-restore
     adoption
     host-management
+    ports
     Service Management <services/index>
     certmgr
     upgrade

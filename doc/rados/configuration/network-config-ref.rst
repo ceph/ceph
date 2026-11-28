@@ -75,12 +75,16 @@ flap, which disrupts client I/O. This is one reason not to configure a cluster
 network unless it is needed for bandwidth.
 
 
+.. _network-config-ip-tables:
+
 IP Tables
 =========
 
 By default, daemons `bind`_ to ports within the ``6800:7568`` range. You may
 configure this range at your discretion. Before configuring your IP tables,
 check the default ``iptables`` configuration.
+
+For every port that a cephadm-managed cluster uses, see :ref:`cephadm-ports`.
 
 .. prompt:: bash $
 
