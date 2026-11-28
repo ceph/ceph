@@ -602,6 +602,9 @@ class MetadataHandler : public RGWMetadataHandler {
     if (new_info.id != account_id) {
       return -EINVAL;
     }
+    if (!rgw_metadata_attrs_valid(dpp, account_obj->get().attrs)) {
+      return -EINVAL;
+    }
 
     // read existing metadata
     RGWAccountInfo old_info;
