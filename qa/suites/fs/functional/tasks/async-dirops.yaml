@@ -1,0 +1,6 @@
+tasks:
+  - cephfs_test_runner:
+      # the tests need the kernel client and skip on ceph-fuse
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_async_dirops
