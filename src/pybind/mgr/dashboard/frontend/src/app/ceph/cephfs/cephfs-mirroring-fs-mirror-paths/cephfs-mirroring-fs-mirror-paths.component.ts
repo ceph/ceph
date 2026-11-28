@@ -12,6 +12,7 @@ import { BehaviorSubject, forkJoin, Observable, of, Subscription } from 'rxjs';
 import { catchError, finalize, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
@@ -27,6 +28,7 @@ import {
   MirrorCheckpointStatus,
   MirrorStatusResponse
 } from '~/app/shared/models/cephfs.model';
+import { MgrModuleInfo } from '~/app/shared/models/mgr-modules.interface';
 import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -132,6 +134,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
   private cephfsService = inject(CephfsService);
   private snapshotScheduleService = inject(CephfsSnapshotScheduleService);
+  private mgrModuleService = inject(MgrModuleService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private formatterService = inject(FormatterService);
@@ -140,6 +143,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   private notificationService = inject(NotificationService);
   private taskWrapper = inject(TaskWrapperService);
   private relativeDatePipe = inject(RelativeDatePipe);
+
+  readonly SNAP_SCHEDULE_MODULE = 'snap_schedule';
 
   columns: CdTableColumn[] = [];
   mirrorPaths: MirrorPath[] = [];
@@ -156,6 +161,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   pathCheckpoints: MirrorCheckpoint[] = [];
   checkpointActionInProgress = '';
   expandedSnapshotNames = new Set<string>();
+  snapScheduleModuleStatus$ = new BehaviorSubject<boolean>(false);
 
   private subscriptions = new Subscription();
   private mirrorPathsSubscription?: Subscription;
@@ -193,6 +199,47 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     this.initializeColumns();
     this.initializeTableActions();
     this.fetchFsName();
+    this.watchSnapScheduleModuleStatus();
+  }
+
+  enableSnapshotSchedule(): void {
+    this.mgrModuleService.updateModuleState(
+      this.SNAP_SCHEDULE_MODULE,
+      false,
+      null,
+      '',
+      $localize`Enabled Snapshot Schedule Module`
+    );
+  }
+
+  private watchSnapScheduleModuleStatus(): void {
+    const refreshModuleStatus = () =>
+      this.mgrModuleService
+        .list()
+        .pipe(
+          map((modules: MgrModuleInfo[]) =>
+            modules.find((module) => module?.['name'] === this.SNAP_SCHEDULE_MODULE)
+          )
+        );
+
+    this.subscriptions.add(
+      refreshModuleStatus().subscribe({
+        next: (module) => this.snapScheduleModuleStatus$.next(!!module?.enabled)
+      })
+    );
+
+    this.subscriptions.add(
+      this.mgrModuleService.updateCompleted$
+        .pipe(switchMap(() => refreshModuleStatus()))
+        .subscribe({
+          next: (module) => {
+            this.snapScheduleModuleStatus$.next(!!module?.enabled);
+            if (module?.enabled && this.selectedPath?.path) {
+              this.loadSchedulePolicies(this.selectedPath.path);
+            }
+          }
+        })
+    );
   }
 
   ngOnDestroy(): void {
@@ -825,6 +872,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   loadSchedulePolicies(path: string): void {
     if (!this.fsName || !path) {
       this.schedulePolicies = [];
+      return;
+    }
+
+    if (!this.snapScheduleModuleStatus$.value) {
+      this.schedulePolicies = [];
+      this.schedulePoliciesLoading = false;
       return;
     }
 

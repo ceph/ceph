@@ -403,131 +403,145 @@
           i18n-heading
         >
           <div class="cds-p-4">
-            <div class="cds-mb-6 cds--type-body-compact-01">
-              <ng-container i18n>Total policies applied to path</ng-container>:
-              <strong>{{ schedulePolicies.length }}</strong>
-            </div>
-
-            @if (schedulePoliciesLoading) {
-              <cds-inline-loading
-                [isActive]="true"
-                loadingText="Loading schedule policies"
-                i18n-loadingText
+            @if ((snapScheduleModuleStatus$ | async) === false) {
+              <cd-alert-panel
+                type="info"
+                spacingClass="mb-3"
+                i18n
+                class="align-items-center"
+                actionName="Enable"
+                (action)="enableSnapshotSchedule()"
               >
-              </cds-inline-loading>
+                In order to access the snapshot scheduler feature, the snap_schedule module must be
+                enabled
+              </cd-alert-panel>
             } @else {
-              @if (!schedulePolicies.length) {
-                <span
-                  class="cds--type-body-01"
-                  i18n
+              <div class="cds-mb-6 cds--type-body-compact-01">
+                <ng-container i18n>Total policies applied to path</ng-container>:
+                <strong>{{ schedulePolicies.length }}</strong>
+              </div>
+
+              @if (schedulePoliciesLoading) {
+                <cds-inline-loading
+                  [isActive]="true"
+                  loadingText="Loading schedule policies"
+                  i18n-loadingText
                 >
-                  No schedule policies applied to this path.
-                </span>
-              }
-
-              @for (policy of schedulePolicies; track policy.removeId; let last = $last) {
-                <div class="cds-mb-6">
-                  <div class="cds--type-heading-03 cds-mb-5">
-                    {{ policy.scheduleCopy || policy.scheduleText }}
-                  </div>
-
-                  <div
-                    cdsGrid
-                    [useCssGrid]="true"
-                    [fullWidth]="true"
-                    class="cds-mb-5 padding-inline-0"
+                </cds-inline-loading>
+              } @else {
+                @if (!schedulePolicies.length) {
+                  <span
+                    class="cds--type-body-01"
+                    i18n
                   >
+                    No schedule policies applied to this path.
+                  </span>
+                }
+
+                @for (policy of schedulePolicies; track policy.removeId; let last = $last) {
+                  <div class="cds-mb-6">
+                    <div class="cds--type-heading-03 cds-mb-5">
+                      {{ policy.scheduleCopy || policy.scheduleText }}
+                    </div>
+
                     <div
-                      cdsCol
-                      [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
+                      cdsGrid
+                      [useCssGrid]="true"
+                      [fullWidth]="true"
                       class="cds-mb-5 padding-inline-0"
                     >
                       <div
-                        class="cds--type-label-01 cds-mb-2"
-                        i18n
+                        cdsCol
+                        [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
+                        class="cds-mb-5 padding-inline-0"
                       >
-                        Schedule
+                        <div
+                          class="cds--type-label-01 cds-mb-2"
+                          i18n
+                        >
+                          Schedule
+                        </div>
+                        <div class="cds--type-body-01">{{ policy.scheduleText }}</div>
                       </div>
-                      <div class="cds--type-body-01">{{ policy.scheduleText }}</div>
+                      <div
+                        cdsCol
+                        [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
+                        class="cds-mb-5"
+                      >
+                        <div
+                          class="cds--type-label-01 cds-mb-2"
+                          i18n
+                        >
+                          Retention
+                        </div>
+                        <div class="cds--type-body-01">{{ policy.retentionText }}</div>
+                      </div>
+                      <div
+                        cdsCol
+                        [columnNumbers]="{ sm: 5, md: 5, lg: 6 }"
+                        class="cds-mb-5"
+                      >
+                        <div
+                          class="cds--type-label-01 cds-mb-2"
+                          i18n
+                        >
+                          Status
+                        </div>
+                        <div
+                          cdsStack="horizontal"
+                          [gap]="2"
+                        >
+                          <cd-icon [type]="policy.statusIcon || 'warning'"></cd-icon>
+                          <span class="cds--type-body-01">{{ policy.statusLabel }}</span>
+                        </div>
+                      </div>
+                      <div
+                        cdsCol
+                        [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
+                        class="padding-inline-0"
+                      >
+                        <div
+                          class="cds--type-label-01 cds-mb-2"
+                          i18n
+                        >
+                          Last sync
+                        </div>
+                        <div class="cds--type-body-01">{{ formatScheduleDate(policy.last) }}</div>
+                      </div>
+                      <div
+                        cdsCol
+                        [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
+                      >
+                        <div
+                          class="cds--type-label-01 cds-mb-2"
+                          i18n
+                        >
+                          Next sync
+                        </div>
+                        <div class="cds--type-body-01">{{ policy.nextSync }}</div>
+                      </div>
                     </div>
-                    <div
-                      cdsCol
-                      [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
-                      class="cds-mb-5"
+
+                    <button
+                      cdsButton="tertiary"
+                      size="md"
+                      type="button"
+                      [disabled]="removingSchedule === policy.removeId"
+                      (click)="removeSchedulePolicy(policy)"
                     >
-                      <div
-                        class="cds--type-label-01 cds-mb-2"
-                        i18n
+                      <span i18n>Remove schedule</span>
+                      <cd-icon
+                        type="trash"
+                        class="cds--btn__icon"
                       >
-                        Retention
-                      </div>
-                      <div class="cds--type-body-01">{{ policy.retentionText }}</div>
-                    </div>
-                    <div
-                      cdsCol
-                      [columnNumbers]="{ sm: 5, md: 5, lg: 6 }"
-                      class="cds-mb-5"
-                    >
-                      <div
-                        class="cds--type-label-01 cds-mb-2"
-                        i18n
-                      >
-                        Status
-                      </div>
-                      <div
-                        cdsStack="horizontal"
-                        [gap]="2"
-                      >
-                        <cd-icon [type]="policy.statusIcon || 'warning'"></cd-icon>
-                        <span class="cds--type-body-01">{{ policy.statusLabel }}</span>
-                      </div>
-                    </div>
-                    <div
-                      cdsCol
-                      [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
-                      class="padding-inline-0"
-                    >
-                      <div
-                        class="cds--type-label-01 cds-mb-2"
-                        i18n
-                      >
-                        Last sync
-                      </div>
-                      <div class="cds--type-body-01">{{ formatScheduleDate(policy.last) }}</div>
-                    </div>
-                    <div
-                      cdsCol
-                      [columnNumbers]="{ sm: 5, md: 5, lg: 5 }"
-                    >
-                      <div
-                        class="cds--type-label-01 cds-mb-2"
-                        i18n
-                      >
-                        Next sync
-                      </div>
-                      <div class="cds--type-body-01">{{ policy.nextSync }}</div>
-                    </div>
+                      </cd-icon>
+                    </button>
+
+                    @if (!last) {
+                      <hr class="cds-mt-6" />
+                    }
                   </div>
-
-                  <button
-                    cdsButton="tertiary"
-                    size="md"
-                    type="button"
-                    [disabled]="removingSchedule === policy.removeId"
-                    (click)="removeSchedulePolicy(policy)"
-                  >
-                    <span i18n>Remove schedule</span>
-                    <cd-icon
-                      type="trash"
-                      class="cds--btn__icon"
-                    >
-                    </cd-icon>
-                  </button>
-
-                  @if (!last) {
-                    <hr class="cds-mt-6" />
-                  }
-                </div>
+                }
               }
             }
           </div>

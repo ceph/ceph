@@ -3,7 +3,7 @@ declare const jest: any;
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -11,6 +11,7 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -28,6 +29,8 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
   let cephfsService: any;
   let formatterService: any;
   let notificationService: any;
+  let mgrModuleServiceMock: any;
+  let updateCompleted$: Subject<void>;
 
   const mockMirrorStatusResponse: MirrorStatusResponse = {
     metrics: {
@@ -148,6 +151,13 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       delete: jest.fn()
     };
 
+    updateCompleted$ = new Subject<void>();
+    mgrModuleServiceMock = {
+      list: jest.fn().mockReturnValue(of([{ name: 'snap_schedule', enabled: true }])),
+      updateModuleState: jest.fn(),
+      updateCompleted$
+    };
+
     const formatterServiceMock = {
       toBytes: jest.fn((value: string) => {
         const match = value.match(/([\d.]+)\s*(\w+)/);
@@ -211,6 +221,10 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         {
           provide: TaskWrapperService,
           useValue: { wrapTaskAroundCall: jest.fn((args) => args.call) }
+        },
+        {
+          provide: MgrModuleService,
+          useValue: mgrModuleServiceMock
         }
       ],
       schemas: [NO_ERRORS_SCHEMA],
@@ -769,6 +783,10 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
 
     describe('loadSchedulePolicies', () => {
+      beforeEach(() => {
+        component.snapScheduleModuleStatus$.next(true);
+      });
+
       it('should load schedule policies for a path', () => {
         snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
         component.fsName = 'test-fs';
@@ -801,6 +819,18 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
         expect(snapshotScheduleService.getSnapshotSchedule).not.toHaveBeenCalled();
         expect(component.schedulePolicies).toEqual([]);
+      });
+
+      it('should skip API call when snap_schedule module is disabled', () => {
+        component.snapScheduleModuleStatus$.next(false);
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+
+        component.loadSchedulePolicies('/path1');
+
+        expect(snapshotScheduleService.getSnapshotSchedule).not.toHaveBeenCalled();
+        expect(component.schedulePolicies).toEqual([]);
+        expect(component.schedulePoliciesLoading).toBe(false);
       });
 
       it('should handle error when loading schedule policies', () => {
@@ -839,12 +869,48 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       });
     });
 
+    describe('snap_schedule module guard', () => {
+      it('should enable snap_schedule module when enableSnapshotSchedule is called', () => {
+        component.enableSnapshotSchedule();
+
+        expect(mgrModuleServiceMock.updateModuleState).toHaveBeenCalledWith(
+          'snap_schedule',
+          false,
+          null,
+          '',
+          expect.any(String)
+        );
+      });
+
+      it('should refresh module status and reload schedules after enable completes', () => {
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+        component.snapScheduleModuleStatus$.next(false);
+        component.ngOnInit();
+
+        mgrModuleServiceMock.list.mockReturnValue(of([{ name: 'snap_schedule', enabled: true }]));
+        updateCompleted$.next();
+
+        expect(component.snapScheduleModuleStatus$.value).toBe(true);
+        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
+          '/path1',
+          'test-fs',
+          true
+        );
+      });
+    });
+
     describe('removeSchedulePolicy', () => {
       const confirmRemove = () => {
         const modalService = TestBed.inject(ModalCdsService) as any;
         const config = modalService.show.mock.calls[0][1];
         return config.submitActionObservable();
       };
+
+      beforeEach(() => {
+        component.snapScheduleModuleStatus$.next(true);
+      });
 
       it('should open medium-impact confirmation modal', () => {
         const modalService = TestBed.inject(ModalCdsService);
@@ -1324,6 +1390,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
         cephfsService.getMirrorStatus.mockReturnValue(of(mockMirrorStatusResponse));
         component.fsName = 'test-fs';
+        component.snapScheduleModuleStatus$.next(true);
 
         const mockPath = {
           path: '/path1',

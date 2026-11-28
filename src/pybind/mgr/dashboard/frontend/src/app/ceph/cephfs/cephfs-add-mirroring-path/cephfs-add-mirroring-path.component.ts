@@ -2,14 +2,16 @@ import { Component, DestroyRef, inject, OnInit, ViewChild } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Step } from 'carbon-components-angular';
-import { from, of } from 'rxjs';
+import { BehaviorSubject, from, of } from 'rxjs';
 import { catchError, concatMap, finalize, map, switchMap, tap, toArray } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { MgrModuleInfo } from '~/app/shared/models/mgr-modules.interface';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { MirroringPathUtils } from './mirroring-path-utils';
@@ -38,9 +40,12 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   private router = inject(Router);
   private cephfsService = inject(CephfsService);
   private snapshotScheduleService = inject(CephfsSnapshotScheduleService);
+  private mgrModuleService = inject(MgrModuleService);
   private taskWrapper = inject(TaskWrapperService);
   private notificationService = inject(NotificationService);
   private destroyRef = inject(DestroyRef);
+
+  readonly SNAP_SCHEDULE_MODULE = 'snap_schedule';
 
   fsName = '';
   fsId = 0;
@@ -52,6 +57,7 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     { label: $localize`Review`, invalid: false }
   ];
   isSubmitLoading = false;
+  snapScheduleModuleStatus$ = new BehaviorSubject<boolean>(false);
   reviewSelectedPaths: string[] = [];
   reviewTotalPaths = 0;
   reviewSnapshotInterval = '—';
@@ -60,6 +66,15 @@ export class CephfsAddMirroringPathComponent implements OnInit {
 
   get schedulePath(): string {
     return this.pathsStep?.getSubmitPaths()?.toAdd?.[0] ?? '';
+  }
+
+  /** null defers validity to the embedded schedule form (#tearsheetStep). */
+  get scheduleStepValid(): boolean | null {
+    if (!this.snapScheduleModuleStatus$.value) {
+      // Module disabled: allow continuing without a schedule.
+      return true;
+    }
+    return null;
   }
 
   ngOnInit(): void {
@@ -73,6 +88,40 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     const navState = this.router.lastSuccessfulNavigation()?.extras?.state as
       { returnUrl?: string } | undefined;
     this.returnUrl = navState?.returnUrl ?? (history.state?.['returnUrl'] as string) ?? null;
+
+    const refreshModuleStatus = () =>
+      this.mgrModuleService
+        .list()
+        .pipe(
+          map((modules: MgrModuleInfo[]) =>
+            modules.find((module) => module?.['name'] === this.SNAP_SCHEDULE_MODULE)
+          )
+        );
+
+    refreshModuleStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (module) => this.snapScheduleModuleStatus$.next(!!module?.enabled)
+      });
+
+    this.mgrModuleService.updateCompleted$
+      .pipe(
+        switchMap(() => refreshModuleStatus()),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (module) => this.snapScheduleModuleStatus$.next(!!module?.enabled)
+      });
+  }
+
+  enableSnapshotSchedule(): void {
+    this.mgrModuleService.updateModuleState(
+      this.SNAP_SCHEDULE_MODULE,
+      false,
+      null,
+      '',
+      $localize`Enabled Snapshot Schedule Module`
+    );
   }
 
   onStepChanged(event: { current: number }): void {
@@ -214,7 +263,7 @@ export class CephfsAddMirroringPathComponent implements OnInit {
   }
 
   private createSnapshotSchedules(paths: string[]) {
-    if (!this.scheduleStep || !paths.length) {
+    if (!this.snapScheduleModuleStatus$.value || !this.scheduleStep || !paths.length) {
       return of(undefined);
     }
 
