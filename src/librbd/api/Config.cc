@@ -36,7 +36,8 @@ static std::set<std::string_view> EXCLUDE_OPTIONS {
     "rbd_validate_names",
     "rbd_validate_pool",
     "rbd_mirror_pool_replayers_refresh_interval",
-    "rbd_config_pool_override_update_timestamp"
+    "rbd_config_pool_override_update_timestamp",
+    "rbd_luks_insecure_fast_kdf"
   };
 static std::set<std::string_view> EXCLUDE_IMAGE_OPTIONS {
     "rbd_default_clone_format",

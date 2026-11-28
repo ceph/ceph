@@ -31,6 +31,7 @@ using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
+using ::testing::Mock;
 
 namespace librbd {
 namespace object_map {
@@ -217,13 +218,19 @@ public:
   int do_diff(bool want_object_map, F&& f,
               uint64_t start_snap_id, uint64_t end_snap_id,
               uint64_t start_object_no, uint64_t end_object_no) {
+    MockTestImageCtx mock_image_ctx(*m_image_ctx);
+    return do_diff(mock_image_ctx, want_object_map, std::forward<F>(f),
+                   start_snap_id, end_snap_id, start_object_no, end_object_no);
+  }
+
+  template <typename F>
+  int do_diff(MockTestImageCtx& mock_image_ctx, bool want_object_map, F&& f,
+              uint64_t start_snap_id, uint64_t end_snap_id,
+              uint64_t start_object_no, uint64_t end_object_no) {
     InSequence seq;
 
-    MockTestImageCtx mock_image_ctx(*m_image_ctx);
     MockObjectMap mock_object_map;
-    if (want_object_map) {
-      mock_image_ctx.object_map = &mock_object_map;
-    }
+    mock_image_ctx.object_map = want_object_map ? &mock_object_map : nullptr;
     mock_image_ctx.snap_id = end_snap_id;
     std::forward<F>(f)(mock_image_ctx);
 
@@ -239,20 +246,29 @@ public:
   void test_diff_iterate(bool want_object_map, F&& f,
                          uint64_t start_snap_id, uint64_t end_snap_id,
                          const BitVector<2>& expected_diff_state) {
+    // One context for all ranges: constructing one copies the whole config.
+    MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
     // ranged -- run through all ranges (substrings) in expected_diff_state
     for (uint64_t i = 0; i < expected_diff_state.size(); i++) {
       for (uint64_t j = i + 1; j <= expected_diff_state.size(); j++) {
-        ASSERT_EQ(0, do_diff(want_object_map, std::forward<F>(f),
+        ASSERT_EQ(0, do_diff(mock_image_ctx, want_object_map, std::forward<F>(f),
                              start_snap_id, end_snap_id, i, j));
         ASSERT_EQ(j - i, m_diff_state.size());
         for (uint64_t k = 0; k < m_diff_state.size(); k++) {
           ASSERT_EQ(expected_diff_state[i + k], m_diff_state[k]);
         }
+
+        // Reuse the context: check this diff's expectations, restore the
+        // snapshots a load callback may have erased.
+        Mock::VerifyAndClearExpectations(&mock_image_ctx);
+        Mock::VerifyAndClearExpectations(&get_mock_io_ctx(mock_image_ctx.md_ctx));
+        mock_image_ctx.snap_info = m_image_ctx->snap_info;
       }
     }
 
     // unranged -- equivalent to i=0, j=expected_diff_state.size() range
-    ASSERT_EQ(0, do_diff(want_object_map, std::forward<F>(f),
+    ASSERT_EQ(0, do_diff(mock_image_ctx, want_object_map, std::forward<F>(f),
                          start_snap_id, end_snap_id, 0, UINT64_MAX - 1));
     ASSERT_EQ(expected_diff_state, m_diff_state);
   }

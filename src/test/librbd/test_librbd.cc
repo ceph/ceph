@@ -511,6 +511,12 @@ public:
     _image_number = 0;
     ASSERT_EQ("", connect_cluster(&_cluster));
     ASSERT_EQ("", connect_cluster_pp(_rados));
+    if (is_librados_test_stub(_rados)) {
+      // Full LUKS key derivation takes seconds; keep it for real clusters.
+      ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_luks_insecure_fast_kdf",
+                                  "true"));
+      ASSERT_EQ(0, _rados.conf_set("rbd_luks_insecure_fast_kdf", "true"));
+    }
 
     create_optional_data_pool();
   }
@@ -11405,9 +11411,8 @@ static void test_write_exclusive_lock_transient(rbd_image_t image1,
   rbd_aio_create_completion(NULL, NULL, &flush_comp);
   ASSERT_EQ(0, rbd_aio_flush(image2, flush_comp));
 
-  for (int i = 0; i < 10 && !rbd_aio_is_complete(write_comp); i++) {
-    usleep(500 * 1000);
-  }
+  // A refused write fails within 50 ms, see test_write_exclusive_lock().
+  usleep(500 * 1000);
   ASSERT_FALSE(rbd_aio_is_complete(write_comp));
   ASSERT_FALSE(rbd_aio_is_complete(flush_comp));
 
