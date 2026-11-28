@@ -512,6 +512,12 @@ public:
     ASSERT_EQ("", connect_cluster(&_cluster));
     ASSERT_EQ("", connect_cluster_pp(_rados));
 
+    // these tests expect a removed image to be gone rather than moved to
+    // the trash, so don't let a ceph.conf setting change that
+    ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_move_to_trash_on_remove",
+                                "false"));
+    ASSERT_EQ(0, _rados.conf_set("rbd_move_to_trash_on_remove", "false"));
+
     create_optional_data_pool();
   }
 
