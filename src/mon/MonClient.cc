@@ -784,6 +784,7 @@ void MonClient::_finish_auth(int auth_err)
   // the one the MonCommand is targeting.
   if (!auth_err && active_con) {
     ceph_assert(auth);
+    ++auth_generation;
     _check_auth_tickets();
   } else if (auth_err == -EAGAIN && !active_con) {
     ldout(cct,10) << __func__

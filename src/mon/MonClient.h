@@ -15,6 +15,7 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
+#include <atomic>
 #include <functional>
 #include <list>
 #include <map>
@@ -368,6 +369,7 @@ private:
   ceph::condition_variable auth_cond;
   int authenticate_err = 0;
   bool authenticated = false;
+  std::atomic<uint64_t> auth_generation{0};
 
   std::list<MessageRef> waiting_for_session;
   utime_t last_rotating_renew_sent;
@@ -562,6 +564,14 @@ public:
   uint64_t get_global_id() const {
     std::lock_guard l(monc_lock);
     return global_id;
+  }
+
+  /// Bumped each time authentication with the monitors succeeds, which
+  /// includes every ticket renewal.  A connection to a service opened
+  /// before the last bump may be using a ticket whose caps have since
+  /// changed.
+  uint64_t get_auth_generation() const {
+    return auth_generation;
   }
 
   void set_messenger(Messenger *m) { messenger = m; }

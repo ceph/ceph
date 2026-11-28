@@ -2057,6 +2057,7 @@ int Objecter::_get_session(int osd, OSDSession **session,
   }
   auto s = new OSDSession(cct, osd, service.get_executor());
   osd_sessions[osd] = s;
+  s->auth_generation = monc->get_auth_generation();
   s->con = messenger->connect_to_osd(osdmap->get_addrs(osd));
   s->con->set_priv(RefCountedPtr{s});
   logger->inc(l_osdc_osd_session_open);
@@ -2101,10 +2102,32 @@ void Objecter::_reopen_session(OSDSession *s)
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
+  s->auth_generation = monc->get_auth_generation();
   s->con = messenger->connect_to_osd(addrs);
   s->con->set_priv(RefCountedPtr{s});
   s->incarnation++;
   logger->inc(l_osdc_osd_session_open);
+}
+
+// An OSD takes a session's caps from the ticket the session was opened
+// with, so caps granted since then don't reach it until we reconnect.
+// Reconnect, and resend the ops on the session, as ms_handle_reset does.
+void Objecter::reconnect_for_new_caps(OSDSession *s, const ConnectionRef& con)
+{
+  unique_lock wl(rwlock);
+  // stop if the session was closed or already reconnected meanwhile
+  auto i = osd_sessions.find(s->osd);
+  if (!initialized || i == osd_sessions.end() || i->second != s ||
+      s->con != con || !osdmap->is_up(s->osd)) {
+    return;
+  }
+  ldout(cct, 1) << __func__ << " osd." << s->osd << dendl;
+  map<uint64_t, LingerOp *> lresend;
+  unique_lock sl(s->lock);
+  _reopen_session(s);
+  _kick_requests(s, lresend);
+  sl.unlock();
+  _linger_ops_resend(lresend, wl);
 }
 
 void Objecter::close_session(OSDSession *s)
@@ -4303,6 +4326,18 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
     op->target.flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
     op->target.pgid = pg_t();
     _op_submit(op, sul, NULL);
+    return;
+  }
+
+  if (rc == -EPERM && s->auth_generation != monc->get_auth_generation()) {
+    // our tickets were renewed after this session was opened, so we may
+    // have been granted caps the OSD doesn't know about yet.  Reconnect,
+    // which resends this op too, instead of returning EPERM.
+    ldout(cct, 5) << " got -EPERM on a session opened before our tickets"
+		  << " were renewed; reconnecting" << dendl;
+    sl.unlock();
+    sul.unlock();
+    reconnect_for_new_caps(s, con);
     return;
   }
 
