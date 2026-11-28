@@ -236,9 +236,9 @@ TEST_P(CuObjPutReadFailure, RejectsInvalidCompletionsBeforeStorage)
   rdma.result = GetParam();
   op->execute(null_yield);
   const bool invalid_argument = rdma.result == -EINVAL;
-  // RGW maps -EIO to its generic HTTP 500 / UnknownError response.
+  // RGW maps -EIO to HTTP 500 / InternalError.
   expect_error(invalid_argument ? -EINVAL : -EIO, invalid_argument ? 400 : 500,
-               invalid_argument ? "InvalidArgument" : "UnknownError");
+               invalid_argument ? "InvalidArgument" : "InternalError");
   EXPECT_EQ(rdma.prepares, 1);
   EXPECT_EQ(rdma.reads, 1);
   EXPECT_EQ(rdma.releases, 1);
@@ -319,7 +319,7 @@ TEST_F(CuObjPut, FilterFailureReleasesBufferWithoutCommitting)
 {
   rdma.process_error = -EIO;
   op->execute(null_yield);
-  expect_error(-EIO, 500, "UnknownError");
+  expect_error(-EIO, 500, "InternalError");
   EXPECT_EQ(rdma.reads, 1);
   EXPECT_EQ(rdma.releases, 1);
   EXPECT_EQ(rdma.processes, 1);
@@ -330,7 +330,7 @@ TEST_F(CuObjPut, StorageFailureDoesNotReturnRdmaSuccess)
 {
   rdma.complete_error = -EIO;
   op->execute(null_yield);
-  expect_error(-EIO, 500, "UnknownError");
+  expect_error(-EIO, 500, "InternalError");
   EXPECT_EQ(rdma.reads, 1);
   EXPECT_EQ(rdma.releases, 1);
   EXPECT_EQ(rdma.completes, 1);

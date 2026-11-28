@@ -3,6 +3,10 @@
 
 #include "rgw_common.h"
 #include "rgw_http_errors.h"
+#include "rgw_log.h"
+
+#include "include/encoding.h"
+#include "include/buffer.h"
 
 #include <gtest/gtest.h>
 
@@ -30,4 +34,75 @@ TEST(RGWHttpErrors, BucketSuspendedDistinctFromUser)
   ASSERT_NE(user_it, rgw_http_s3_errors.end());
   EXPECT_NE(std::string(bucket_it->second.second),
             std::string(user_it->second.second));
+}
+
+TEST(RGWHttpErrors, RgwConnectionResetDistinctCode)
+{
+  const auto it = rgw_http_s3_errors.find(ERR_RGW_CONNECTION_RESET);
+  ASSERT_NE(it, rgw_http_s3_errors.end());
+  EXPECT_EQ(500, it->second.first);
+  EXPECT_STREQ("ConnectionReset", it->second.second);
+}
+
+TEST(RGWHttpErrors, EioNormalizesToInternalError)
+{
+  rgw_err err;
+  set_req_state_err(err, EIO, RGW_REST_S3);
+  EXPECT_EQ(500, err.http_ret);
+  EXPECT_EQ("InternalError", err.err_code);
+  EXPECT_EQ(-EIO, err.ret);
+}
+
+TEST(RGWHttpErrors, BusyReshardingDistinctCode)
+{
+  const auto it = rgw_http_s3_errors.find(ERR_BUSY_RESHARDING);
+  ASSERT_NE(it, rgw_http_s3_errors.end());
+  EXPECT_EQ(503, it->second.first);
+  EXPECT_STREQ("BucketResharding", it->second.second);
+}
+
+TEST(RGWHttpErrors, SetReqStateErrConnResetNotUnknown)
+{
+  rgw_err err;
+  set_req_state_err(err, ECONNRESET, RGW_REST_S3);
+  EXPECT_EQ(500, err.http_ret);
+  EXPECT_EQ("ConnectionReset", err.err_code);
+  EXPECT_EQ(-ECONNRESET, err.ret);
+}
+
+TEST(RGWHttpErrors, SetReqStateErrConnResetDistinctFromInternalError)
+{
+  rgw_err conn;
+  rgw_err io;
+  set_req_state_err(conn, ECONNRESET, RGW_REST_S3);
+  set_req_state_err(io, ERR_INTERNAL_ERROR, RGW_REST_S3);
+  EXPECT_NE(conn.err_code, io.err_code);
+  EXPECT_EQ("ConnectionReset", conn.err_code);
+  EXPECT_EQ("InternalError", io.err_code);
+}
+
+TEST(RGWHttpErrors, HttpErrorMapKeyTransportErrno)
+{
+  EXPECT_EQ(ERR_RGW_BROKEN_PIPE, rgw_http_error_map_key(EPIPE));
+  EXPECT_EQ(ERR_RGW_CONNECTION_ABORTED, rgw_http_error_map_key(ECONNABORTED));
+  EXPECT_EQ(ERR_RGW_REQUEST_ABORTED, rgw_http_error_map_key(ECANCELED));
+  EXPECT_EQ(ERR_INTERNAL_ERROR, rgw_http_error_map_key(EIO));
+  EXPECT_EQ(ERR_QUOTA_EXCEEDED, rgw_http_error_map_key(ERR_QUOTA_EXCEEDED));
+}
+
+TEST(RGWHttpErrors, OpsLogEntryEncodesErrorRet)
+{
+  rgw_log_entry entry;
+  entry.error_code = "ConnectionReset";
+  entry.error_ret = -ECONNRESET;
+
+  bufferlist bl;
+  encode(entry, bl);
+
+  rgw_log_entry decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+
+  EXPECT_EQ(entry.error_code, decoded.error_code);
+  EXPECT_EQ(entry.error_ret, decoded.error_ret);
 }
