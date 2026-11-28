@@ -2,7 +2,8 @@ from typing import Dict
 from unittest import TestCase, mock
 import errno
 
-from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module
+from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module, \
+    CRUSH_RULE_METADATA
 import json
 import threading
 
@@ -1067,3 +1068,82 @@ class TestRgwZoneIds(TestCase):
         self.assertEqual(
             Module.get_rgw_zone_ids(self.module),
             {'1': 'z1', 'a': 'z1', '2': 'z2', 'b': 'z2'})
+
+
+class TestCrushRuleMetadata(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock(spec=Module)
+        self.module.metrics = {
+            'crush_rule_metadata': Metric(
+                'untyped', 'crush_rule_metadata', '', CRUSH_RULE_METADATA),
+        }
+
+    @staticmethod
+    def _rule(rule_id, name, rule_type, takes):
+        steps = []
+        for item_name in takes:
+            steps += [
+                {'op': 'take', 'item': -1, 'item_name': item_name},
+                {'op': 'chooseleaf_firstn', 'num': 0, 'type': 'host'},
+                {'op': 'emit'},
+            ]
+        return {'rule_id': rule_id, 'rule_name': name, 'type': rule_type,
+                'steps': steps}
+
+    def _collect(self, rules):
+        Module.get_crush_rule_metadata(self.module, {'rules': rules})
+        return self.module.metrics['crush_rule_metadata'].value
+
+    def test_no_device_class(self):
+        self.assertEqual(
+            self._collect([self._rule(0, 'replicated_rule', 1, ['default'])]),
+            {(0, 'replicated_rule', 'replicated', ''): 1})
+
+    def test_device_class(self):
+        self.assertEqual(
+            self._collect([self._rule(1, 'ssd_rule', 1, ['default~ssd'])]),
+            {(1, 'ssd_rule', 'replicated', 'ssd'): 1})
+
+    def test_rule_types(self):
+        rules = [self._rule(i, f'r{i}', i, ['default']) for i in (1, 3, 4, 5, 2)]
+        self.assertEqual(
+            self._collect(rules),
+            {
+                (1, 'r1', 'replicated', ''): 1,
+                (3, 'r3', 'erasure', ''): 1,
+                (4, 'r4', 'msr_firstn', ''): 1,
+                (5, 'r5', 'msr_indep', ''): 1,
+                (2, 'r2', 'unknown', ''): 1,
+            })
+
+    def test_one_series_per_device_class(self):
+        rule = self._rule(2, 'hybrid', 1, ['default~ssd', 'default~hdd'])
+        self.assertEqual(
+            self._collect([rule]),
+            {
+                (2, 'hybrid', 'replicated', 'hdd'): 1,
+                (2, 'hybrid', 'replicated', 'ssd'): 1,
+            })
+
+    def test_repeated_device_class_reported_once(self):
+        rule = self._rule(3, 'two_roots', 1, ['dc1~ssd', 'dc2~ssd'])
+        self.assertEqual(
+            self._collect([rule]),
+            {(3, 'two_roots', 'replicated', 'ssd'): 1})
+
+    def test_mixed_class_and_no_class(self):
+        rule = self._rule(4, 'mixed', 1, ['default~ssd', 'default'])
+        self.assertEqual(
+            self._collect([rule]),
+            {
+                (4, 'mixed', 'replicated', ''): 1,
+                (4, 'mixed', 'replicated', 'ssd'): 1,
+            })
+
+    def test_rule_without_name_or_take(self):
+        self.assertEqual(
+            self._collect([{'rule_id': 5, 'type': 1, 'steps': []}]),
+            {(5, '', 'replicated', ''): 1})
+
+    def test_no_rules(self):
+        self.assertEqual(self._collect([]), {})

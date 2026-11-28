@@ -398,6 +398,20 @@ Pools have a ``ceph_pool_metadata`` metric of the following form:
 
 The ``application`` label exists in Tentacle and later releases.
 
+CRUSH rules have a ``ceph_crush_rule_metadata`` metric of the following form:
+
+::
+
+    ceph_crush_rule_metadata{rule_id="1",rule_name="ssd_rule",type="replicated",device_class="ssd"} 1.0
+
+``type`` is one of ``replicated``, ``erasure``, ``msr_firstn`` or
+``msr_indep``. ``device_class`` is the device class the rule is restricted to,
+and is empty for a rule that takes from a root without a device class. A rule
+with several ``take`` steps that use different device classes is reported once
+per device class, so a query that joins on ``rule_id`` to read ``rule_name``
+has to leave ``device_class`` out, for example with
+``max by (rule_id, rule_name) (ceph_crush_rule_metadata)``.
+
 OSDs have a ``ceph_osd_metadata`` metric of the following form:
 
 ::

@@ -1,5 +1,9 @@
 >=22.0.0
 
+* mgr/prometheus: CRUSH rules are now exported as the new
+  ``ceph_crush_rule_metadata`` metric, with the rule's id, name, type and
+  device class as labels.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to

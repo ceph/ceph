@@ -172,6 +172,16 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode', 'application')
 
+CRUSH_RULE_METADATA = ('rule_id', 'rule_name', 'type', 'device_class')
+
+# enum crush_rule_type in src/crush/crush.h
+CRUSH_RULE_TYPES = {
+    1: 'replicated',
+    3: 'erasure',
+    4: 'msr_firstn',
+    5: 'msr_indep',
+}
+
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id', 'zone_id')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
@@ -965,6 +975,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             POOL_METADATA
         )
 
+        metrics['crush_rule_metadata'] = Metric(
+            'untyped',
+            'crush_rule_metadata',
+            'CRUSH rule Metadata',
+            CRUSH_RULE_METADATA
+        )
+
         metrics['rgw_metadata'] = Metric(
             'untyped',
             'rgw_metadata',
@@ -1526,6 +1543,26 @@ class Module(MgrModule, OrchestratorClientMixin):
         return ret
 
     @profile_method()
+    def get_crush_rule_metadata(self, osd_map_crush: Dict[str, Any]) -> None:
+        for rule in osd_map_crush.get('rules', []):
+            # A rule restricted to a device class takes from a shadow root
+            # named <root>~<class>. A rule may have several take steps, each
+            # with its own class; report one series per class.
+            device_classes = set()
+            for step in rule.get('steps', []):
+                if step.get('op') == 'take':
+                    device_classes.add(
+                        step.get('item_name', '').partition('~')[2])
+            for device_class in sorted(device_classes) or ['']:
+                self.metrics['crush_rule_metadata'].set(
+                    1, (
+                        rule['rule_id'],
+                        rule.get('rule_name', ''),
+                        CRUSH_RULE_TYPES.get(rule.get('type'), 'unknown'),
+                        device_class,
+                    ),
+                )
+
     def get_metadata_and_osd_status(self) -> None:
         osd_map = self.get('osd_map')
 
@@ -1542,7 +1579,10 @@ class Module(MgrModule, OrchestratorClientMixin):
                 int(flag in osd_flags)
             )
 
-        osd_devices = self.get('osd_map_crush')['devices']
+        osd_map_crush = self.get('osd_map_crush')
+        self.get_crush_rule_metadata(osd_map_crush)
+
+        osd_devices = osd_map_crush['devices']
         servers = self.get_service_list()
         for osd in osd_map['osds']:
             # id can be used to link osd metrics and metadata
