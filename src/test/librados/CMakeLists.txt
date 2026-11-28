@@ -74,6 +74,10 @@ add_executable(ceph_test_rados_api_pool
   pool.cc)
 target_link_libraries(ceph_test_rados_api_pool
   librados ${UNITTEST_LIBS} radostest)
+add_executable(ceph_test_rados_api_pool_pp
+  pool_cxx.cc)
+target_link_libraries(ceph_test_rados_api_pool_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_stat
   stat.cc)
@@ -176,6 +180,7 @@ install(TARGETS
   ceph_test_rados_api_misc
   ceph_test_rados_api_misc_pp
   ceph_test_rados_api_pool
+  ceph_test_rados_api_pool_pp
   ceph_test_rados_api_service
   ceph_test_rados_api_service_pp
   ceph_test_rados_api_snapshots
@@ -193,7 +198,7 @@ add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados)
-target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES}
+target_link_libraries(unittest_librados librados ceph-common ${BLKID_LIBRARIES}
 	${GSSAPI_LIBRARIES})
 
 # unittest_librados_config
