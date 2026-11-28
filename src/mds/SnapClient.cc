@@ -98,7 +98,7 @@ void SnapClient::handle_query_result(const cref_t<MMDSTableRequest> &m)
 	++p;
       } else {
 	// pending update/destroy have been committed.
-	committing_tids.erase(p++);
+	p = committing_tids.erase(p);
       }
     }
   }

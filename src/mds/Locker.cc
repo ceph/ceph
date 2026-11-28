@@ -723,7 +723,7 @@ void Locker::request_drop_remote_locks(const MDRequestRef& mdr)
       dout(10) << "request_drop_remote_locks forgetting lock " << *lock
 	       << " on " << lock->get_parent() << dendl;
       lock->put_xlock();
-      mdr->locks.erase(it++);
+      it = mdr->locks.erase(it);
     } else if (it->is_remote_wrlock()) {
       dout(10) << "request_drop_remote_locks forgetting remote_wrlock " << *lock
 	       << " on mds." << it->wrlock_target << " on " << *lock->get_parent() << dendl;
@@ -731,7 +731,7 @@ void Locker::request_drop_remote_locks(const MDRequestRef& mdr)
 	it->clear_remote_wrlock();
 	++it;
       } else {
-	mdr->locks.erase(it++);
+	it = mdr->locks.erase(it);
       }
     } else {
       ++it;
@@ -816,7 +816,7 @@ void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
 	ceph_assert(lock->get_sm()->can_remote_xlock);
 	peers.insert(obj->authority().first);
 	lock->put_xlock();
-	mut->locks.erase(it++);
+	it = mut->locks.erase(it);
       }
     } else if (it->is_wrlock() || it->is_remote_wrlock()) {
       if (it->is_remote_wrlock()) {
@@ -829,7 +829,7 @@ void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
 	if (ni)
 	  pneed_issue->insert(static_cast<CInode*>(obj));
       } else {
-	mut->locks.erase(it++);
+	it = mut->locks.erase(it);
       }
     } else if (drop_rdlocks && it->is_rdlock()) {
       bool ni = false;
@@ -1235,7 +1235,7 @@ void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layou
     }
     if (lock_flag) {
       lock_cache->emplace_lock(it->lock, lock_flag);
-      mdr->locks.erase(it++);
+      it = mdr->locks.erase(it);
     } else {
       ++it;
     }
@@ -4504,7 +4504,7 @@ std::set<client_t> Locker::get_late_revoking_clients(double timeout)
     for (auto it = revoking_caps_by_client.begin();
 	 it != revoking_caps_by_client.end(); ) {
       if (it->second.empty()) {
-	revoking_caps_by_client.erase(it++);
+	it = revoking_caps_by_client.erase(it);
 	continue;
       }
       if (any_late_revoking(it->second))
