@@ -145,14 +145,12 @@ describe('ServiceFormComponent', () => {
 
     it('should test unmanaged', () => {
       formHelper.setValue('service_type', 'mgr');
-      formHelper.setValue('service_id', 'svc');
       formHelper.setValue('placement', 'label');
       formHelper.setValue('label', 'bar');
       formHelper.setValue('unmanaged', true);
       component.onSubmit();
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'mgr',
-        service_id: 'svc',
         placement: {},
         unmanaged: true
       });
@@ -171,6 +169,32 @@ describe('ServiceFormComponent', () => {
           });
         }
       );
+    });
+
+    it('should prefill fixed name and omit service_id for singleton services like cephfs-mirror', () => {
+      formHelper.setValue('service_type', 'cephfs-mirror');
+      component.onServiceTypeChange('cephfs-mirror');
+      expect(form.get('service_id').value).toBe('cephfs-mirror');
+      component.onSubmit();
+      expect(cephServiceService.create).toHaveBeenCalledWith({
+        service_type: 'cephfs-mirror',
+        placement: {
+          count: 1
+        },
+        unmanaged: false
+      });
+    });
+
+    it('should keep service_id when it equals the type for prefixed services', () => {
+      formHelper.setValue('service_type', 'mds');
+      formHelper.setValue('service_id', 'mds');
+      component.onSubmit();
+      expect(cephServiceService.create).toHaveBeenCalledWith({
+        service_type: 'mds',
+        service_id: 'mds',
+        placement: {},
+        unmanaged: false
+      });
     });
 
     describe('should test service grafana', () => {

@@ -238,11 +238,9 @@
             </div>
           } @else {
             <cds-text-label
-              [invalid]="
-                serviceForm.controls.service_id.invalid && serviceForm.controls.service_id.dirty
-              "
-              [disabled]="editing"
-              [invalidText]="serviceIdError"
+              [disabled]="true"
+              helperText="This service type uses a fixed name and does not support a custom service id."
+              i18n-helperText
             >
               Service name
               <input
@@ -250,9 +248,6 @@
                 type="text"
                 id="service_id"
                 formControlName="service_id"
-                [invalid]="
-                  serviceForm.controls.service_id.invalid && serviceForm.controls.service_id.dirty
-                "
               />
             </cds-text-label>
           }
