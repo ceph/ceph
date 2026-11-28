@@ -304,6 +304,9 @@ For RGW services, this can be enabled by applying a spec file such as:
     ssl: true
     certificate_source: cephadm-signed
     rgw_frontend_port: 8080
+    rgw_realm: myrealm
+    rgw_zonegroup: myzonegroup
+    rgw_zone: myzone
     wildcard_enabled: true  # Enables wildcard SANs in the certificate
     zonegroup_hostnames:
     - s3.cephlab.com
@@ -317,6 +320,12 @@ Then apply this YAML document:
 The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in the self-signed certificate,
 allowing access to buckets in virtual host mode. By default, this flag is disabled.
 example: wildcard SAN - (``*.s3.cephlab.com``)
+
+Cephadm also adds the ``zonegroup_hostnames`` to the zonegroup by running
+``ceph rgw zonegroup modify``, and enables the ``rgw`` Manager module if it is
+not already enabled. This requires ``rgw_realm``, ``rgw_zonegroup``, and
+``rgw_zone`` in the spec. If any of them is missing, the hostnames are not
+added and cephadm raises the ``CEPHADM_APPLY_SPEC_FAIL`` health warning.
 
 Cephadm ``ceph orch`` specs for RGW services now support the following optional configuration:
 
