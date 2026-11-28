@@ -196,6 +196,11 @@ void usage()
   cout << "  bucket set-min-shards            set the minimum number of shards that dynamic resharding will consider for a bucket\n";
   cout << "  bucket rewrite                   rewrite all objects in the specified bucket\n";
   cout << "  bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote\n";
+  cout << "  bucket sync info                 show bucket sync sources and their sync status\n";
+  cout << "  bucket sync status               show bucket sync status\n";
+  cout << "  bucket sync markers              show bucket sync markers\n";
+  cout << "  bucket sync init                 init bucket sync\n";
+  cout << "  bucket sync run                  run bucket sync\n";
   cout << "  bucket sync disable              disable bucket sync\n";
   cout << "  bucket sync enable               enable bucket sync\n";
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
