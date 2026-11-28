@@ -45,6 +45,7 @@ target_link_libraries(unittest_mgr_mgrcap global)
 add_executable(unittest_mgr_pyformatter
   test_pyformatter.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/PyFormatter.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/Gil.cc
 )
 add_ceph_unittest(unittest_mgr_pyformatter)
 target_link_libraries(unittest_mgr_pyformatter

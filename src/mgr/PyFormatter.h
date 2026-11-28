@@ -31,6 +31,8 @@
 #include "common/JSONFormatter.h"
 #include "include/ceph_assert.h"
 
+#include "Gil.h"
+
 class PyFormatter : public ceph::Formatter
 {
 public:
@@ -40,6 +42,7 @@ public:
   {
     // It is forbidden to instantiate me outside of the GIL,
     // because I construct python objects right away
+    debug_assert_gil();
 
     // Initialise cursor to an empty dict
     if (!array) {
@@ -51,6 +54,7 @@ public:
 
   ~PyFormatter() override
   {
+    debug_assert_gil();
     cursor = NULL;
     Py_DECREF(root);
     root = NULL;
@@ -64,6 +68,7 @@ public:
 
   void reset() override
   {
+    debug_assert_gil();
     const bool array = PyList_Check(root);
     Py_DECREF(root);
     if (array) {
@@ -117,6 +122,7 @@ public:
 
   virtual PyObject *get()
   {
+    debug_assert_gil();
     finish_pending_streams();
 
     Py_INCREF(root);
@@ -147,6 +153,7 @@ class PyFormatterRO : public PyFormatter {
 public:
   using PyFormatter::PyFormatter;
   PyObject* get() override {
+    debug_assert_gil();
     finish_pending_streams();
     if (!is_converted_to_readonly) {
       convert_to_readonly();

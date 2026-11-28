@@ -5,6 +5,7 @@
 
 #include "global/global_init.h"
 #include "gtest/gtest.h"
+#include "include/coredumpctl.h"
 #include "mgr/PyFormatter.h"
 
 #include "TestMgr.h"
@@ -665,6 +666,45 @@ TEST_F(PyRuntime, PyFormatterRO_ReadonlyBehavior) {
   Py_DECREF(root);
 }
 
+#ifdef CEPH_DEBUG_MUTEX
+// Only builds with lock debugging check that the GIL is held.
+static const char no_gil[] = "FAILED ceph_assert\\(ts != nullptr\\)";
+
+TEST(PyFormatterDeathTest, GetWithoutGil)
+{
+  PrCtl unset_dumpable;
+  PyFormatter f;
+  EXPECT_DEATH({
+    PyThreadState *save = PyEval_SaveThread();
+    PyObject *obj = f.get();
+    PyEval_RestoreThread(save);
+    Py_DECREF(obj);
+  }, no_gil);
+}
+
+TEST(PyFormatterDeathTest, ReadOnlyGetWithoutGil)
+{
+  PrCtl unset_dumpable;
+  PyFormatterRO f;
+  EXPECT_DEATH({
+    PyThreadState *save = PyEval_SaveThread();
+    PyObject *obj = f.get();
+    PyEval_RestoreThread(save);
+    Py_DECREF(obj);
+  }, no_gil);
+}
+
+TEST(PyFormatterDeathTest, DumpWithoutGil)
+{
+  PrCtl unset_dumpable;
+  PyFormatter f;
+  EXPECT_DEATH({
+    PyThreadState *save = PyEval_SaveThread();
+    f.dump_int("x", 1);
+    PyEval_RestoreThread(save);
+  }, no_gil);
+}
+#endif
 
 int
 main(int argc, char* argv[])

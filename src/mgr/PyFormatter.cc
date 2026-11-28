@@ -31,6 +31,7 @@
 
 void PyFormatter::open_array_section(std::string_view name)
 {
+  debug_assert_gil();
   PyObject *list = PyList_New(0);
   dump_pyobject(name, list);
   stack.push(cursor);
@@ -39,6 +40,7 @@ void PyFormatter::open_array_section(std::string_view name)
 
 void PyFormatter::open_object_section(std::string_view name)
 {
+  debug_assert_gil();
   PyObject *dict = PyDict_New();
   dump_pyobject(name, dict);
   stack.push(cursor);
@@ -52,6 +54,7 @@ void PyFormatter::dump_null(std::string_view name)
 
 void PyFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
+  debug_assert_gil();
   PyObject *p = PyLong_FromUnsignedLong(u);
   ceph_assert(p);
   dump_pyobject(name, p);
@@ -59,6 +62,7 @@ void PyFormatter::dump_unsigned(std::string_view name, uint64_t u)
 
 void PyFormatter::dump_int(std::string_view name, int64_t u)
 {
+  debug_assert_gil();
   PyObject *p = PyLong_FromLongLong(u);
   ceph_assert(p);
   dump_pyobject(name, p);
@@ -66,11 +70,13 @@ void PyFormatter::dump_int(std::string_view name, int64_t u)
 
 void PyFormatter::dump_float(std::string_view name, double d)
 {
+  debug_assert_gil();
   dump_pyobject(name, PyFloat_FromDouble(d));
 }
 
 void PyFormatter::dump_string(std::string_view name, std::string_view s)
 {
+  debug_assert_gil();
   PyObject *p = PyUnicode_FromStringAndSize(s.data(), s.size());
   if (!p) {
     PyErr_Clear();
@@ -81,6 +87,7 @@ void PyFormatter::dump_string(std::string_view name, std::string_view s)
 
 void PyFormatter::dump_bool(std::string_view name, bool b)
 {
+  debug_assert_gil();
   if (b) {
     Py_INCREF(Py_True);
     dump_pyobject(name, Py_True);
@@ -106,6 +113,7 @@ std::ostream& PyFormatter::dump_stream(std::string_view name)
 
 void PyFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
+  debug_assert_gil();
   char buf[LARGE_SIZE];
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
@@ -117,6 +125,7 @@ void PyFormatter::dump_format_va(std::string_view name, const char *ns, bool quo
  */
 void PyFormatter::dump_pyobject(std::string_view name, PyObject *p)
 {
+  debug_assert_gil();
   if (!p) {
     ceph_abort_msg("PyFormatter::dump_pyobject received null PyObject");
   }
