@@ -230,7 +230,7 @@ private:
     epoch_t e = osdmap.get_epoch();
     dout(10) << "sending beacon at e" << e << dendl;
     monc.send_mon_message(new MOSDBeacon(
-      e, e, utime_t(), cct->_conf->osd_beacon_report_interval));
+      e, e, 0, utime_t(), cct->_conf->osd_beacon_report_interval));
   }
 
   // recompute the PGs we are acting primary for, once per osdmap epoch
