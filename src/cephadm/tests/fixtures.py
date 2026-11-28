@@ -1,5 +1,5 @@
 import contextlib
-import mock
+from unittest import mock
 import os
 import pytest
 import time

@@ -4,7 +4,7 @@ import contextlib
 import copy
 import errno
 import json
-import mock
+from unittest import mock
 import os
 import pytest
 import socket
