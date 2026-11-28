@@ -8,8 +8,13 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# The legacy positional syntax of osd pool create keeps working: the
-# parameters added for stretch pools can only be given by name.
+# osd pool create still takes its first parameters by position, as in
+# earlier releases; the parameters added for pools over zones can only be
+# given by name. Erasure coded pool p1 is given pg_num, pgp_num, the type,
+# the profile (default), the rule (erasure-code) and expected_num_objects
+# (1000) by position. Replicated pool p2 is given replicated_rule and 1000
+# one place earlier, where the profile and the rule go, as earlier releases
+# took them. Both pools get expected_num_objects 1000.
 function TEST_legacy_positional_pool_create() {
     local dir=$1
 

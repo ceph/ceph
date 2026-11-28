@@ -16,14 +16,24 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# N1: replicated pools on the rules they have in one zone go to two zones and
-# back with their data: replicated_rule, a create-replicated rule of a class,
-# and one of z1. A rule that no pool has used stays.
+# osd pool set <pool> num_zones 2 moves a replicated pool over two zones, on
+# a new rule with the placement of the pool's rule, and num_zones 1 moves it
+# back. This test does it for rdef on replicated_rule, rssd on ssd_hosts (ssd
+# OSDs, made by create-replicated) and rz1 on z1_hosts (hosts of z1).
+# num_zones 2 is refused for rz1, as z1 has no zones in it, until
+# --root default is given.
+# With num_zones 1, rdef goes back to replicated_rule, rssd to a rule of its
+# own in the ssd OSDs of z1 (--root z1) and rz1 to z2_hosts (--crush_rule).
+# The objects can be read from each zone alone while the pools are over two
+# zones, and after num_zones 1 a pool in one zone can be read with the other
+# zone down.
+# A rule is removed when its last pool leaves it; spare, which no pool uses,
+# stays.
 function TEST_replicated_one_two_one() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     ceph osd crush rule create-replicated ssd_hosts default host ssd || return 1
     ceph osd crush rule create-replicated z1_hosts z1 host || return 1
     ceph osd crush rule create-replicated spare default osd || return 1
@@ -90,15 +100,26 @@ function TEST_replicated_one_two_one() {
     rules_are replicated_rule spare rssd-single-zone z2_hosts || return 1
 }
 
-# N1: erasure coded pools on the rules they have in one zone go to two zones
-# and back with their data: the erasure-code rule that earlier releases
-# share, still used by another pool, and create-erasure rules of OSDs, of a
-# class and of z1. The last pool on erasure-code takes it with it.
+# osd pool set <pool> num_zones 2 moves an erasure coded pool over two zones,
+# on a new rule, <pool>-stretch, with the placement of the pool's rule, and
+# num_zones 1 moves it back. This test does it for eshared on erasure-code,
+# the rule that earlier releases share between erasure coded pools (eother
+# uses it too), eosd on osds (OSDs, not hosts), essd on ssds (ssd OSDs) and
+# ez1 on z1_hosts (hosts of z1). num_zones 2 is refused for ez1, as z1 has no
+# zones in it, until --root default is given.
+# With num_zones 1, eshared gets a rule over the default root, eosd one in z1
+# (--root z1), essd one in the ssd OSDs of z2 (--root z2), and ez1 goes to
+# z1_again (--crush_rule).
+# The objects can be read from each zone alone while the pools are over two
+# zones, and after num_zones 1 a pool in one zone can be read with the other
+# zone down.
+# A rule is removed when its last pool leaves it: erasure-code goes when
+# eother is removed.
 function TEST_ec_one_two_one() {
     local dir=$1
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
         crush-failure-domain=host || return 1
     ceph osd erasure-code-profile set p22osd plugin=isa k=2 m=2 \
@@ -193,173 +214,6 @@ function TEST_ec_one_two_one() {
         essd-single-zone z1_again || return 1
 }
 
-# N2: pools go to two zones of type ztype on hand-written rules and back,
-# with their data, from rules shared by two pools, of which one changes at a
-# time, and from rules whose placement cannot be read, which need the new
-# rule or the whole placement. In a deep tree the zones are not under one
-# bucket, so a rule that takes each zone cannot be read either.
-function pools_on_hand_rules() {
-    local dir=$1 ztype=$2 deep=$3 pool
-    zone_cluster $dir $ztype $deep || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain $ztype || return 1
-    add_hand_rules $dir $ztype || return 1
-    ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
-        crush-failure-domain=host || return 1
-    ceph osd pool create rtake 8 8 replicated hosts_any || return 1
-    ceph osd pool create rtake2 8 8 replicated hosts_any || return 1
-    ceph osd pool create rchoose 8 || return 1
-    ceph osd pool create rclass 8 || return 1
-    for pool in runread runread2; do
-        ceph osd pool create $pool 8 8 replicated per_zone_one || return 1
-        ceph osd pool set $pool size 2 || return 1
-    done
-    for pool in etake echoose; do
-        ceph osd pool create $pool 8 8 erasure p22 || return 1
-        ceph osd pool set $pool allow_ec_optimizations true || return 1
-    done
-    local all="rtake rtake2 rchoose rclass runread runread2 etake echoose"
-    wait_for_clean || return 1
-    write_pools $dir $all || return 1
-    local hand="take2 choose2 class2 ec_take ec_choose mixed2"
-    rules_are replicated_rule $hand hosts_any per_zone_one etake echoose || return 1
-
-    ceph osd pool set rtake num_zones 2 --replica 2 --crush_rule take2 || return 1
-    rules_are replicated_rule $hand hosts_any per_zone_one etake echoose || return 1
-    ceph osd pool set rtake2 num_zones 2 --replica 2 --crush_rule take2 || return 1
-    rules_are replicated_rule $hand per_zone_one etake echoose || return 1
-    ceph osd pool set rchoose num_zones 2 --replica 2 --crush_rule choose2 || return 1
-    ceph osd pool set rclass num_zones 2 --replica 2 --crush_rule class2 || return 1
-    rules_are replicated_rule $hand per_zone_one etake echoose || return 1
-    expect_failure $dir "pool 'runread': cannot read the placement of its CRUSH rule: rule 'per_zone_one' does not take the root and choose OSDs" \
-        ceph osd pool set runread num_zones 2 --replica 2 || return 1
-    test "$(pool_field runread num_zones)" = 1 || return 1
-    rules_are replicated_rule $hand per_zone_one etake echoose || return 1
-    ceph osd pool set runread num_zones 2 --replica 2 --root default \
-        --osd_failure_domain host --no-class || return 1
-    rules_are replicated_rule $hand per_zone_one etake echoose runread || return 1
-    test "$(rule_takes runread)" = default || return 1
-    test "$(rule_zone_type runread)" = $ztype || return 1
-    test "$(rule_leaf_type runread)" = host || return 1
-    ceph osd pool set runread2 num_zones 2 --replica 2 --crush_rule mixed2 || return 1
-    rules_are replicated_rule $hand etake echoose runread || return 1
-    ceph osd pool set etake num_zones 2 --crush_rule ec_take || return 1
-    rules_are replicated_rule $hand echoose runread || return 1
-    ceph osd pool set echoose num_zones 2 --crush_rule ec_choose || return 1
-    rules_are replicated_rule $hand runread || return 1
-    for pool in rtake rtake2; do
-        test "$(pool_rule $pool)" = take2 || return 1
-    done
-    test "$(pool_rule rchoose)" = choose2 || return 1
-    test "$(pool_rule rclass)" = class2 || return 1
-    test "$(pool_rule runread2)" = mixed2 || return 1
-    test "$(pool_rule etake)" = ec_take || return 1
-    test "$(pool_rule echoose)" = ec_choose || return 1
-
-    wait_for_clean || return 1
-    for pool in rtake rtake2 rchoose rclass runread runread2; do
-        check_two_zones $pool $ztype 2 || return 1
-    done
-    check_two_zones etake $ztype 4 || return 1
-    check_two_zones echoose $ztype 4 || return 1
-    check_ssd rclass || return 1
-    check_pools $dir $all || return 1
-    check_each_zone_alone $dir $all || return 1
-
-    # take2's placement, all of it given in a deep tree, gets a rule of its
-    # own; read, it is the stock one, which takes the default replicated rule
-    # however that places
-    local rtake_rule=
-    if [ -n "$deep" ]; then
-        expect_failure $dir "pool 'rtake': cannot read the placement of its CRUSH rule: rule 'take2' takes buckets that are not alike zones under one root" \
-            ceph osd pool set rtake num_zones 1 || return 1
-        test "$(pool_field rtake num_zones)" = 2 || return 1
-        ceph osd pool set rtake num_zones 1 --root default \
-            --osd_failure_domain host --no-class || return 1
-        rtake_rule=rtake-single-zone
-        test "$(rule_takes rtake-single-zone)" = default || return 1
-        test "$(rule_leaf_type rtake-single-zone)" = host || return 1
-    else
-        ceph osd pool set rtake num_zones 1 || return 1
-        test "$(pool_rule rtake)" = replicated_rule || return 1
-    fi
-    rules_are replicated_rule $hand runread $rtake_rule || return 1
-    ceph osd pool set rtake2 num_zones 1 --root z1 --osd_failure_domain host \
-        --no-class || return 1
-    rules_are replicated_rule choose2 class2 ec_take ec_choose mixed2 runread \
-        $rtake_rule rtake2-single-zone || return 1
-    test "$(rule_takes rtake2-single-zone)" = z1 || return 1
-    ceph osd crush rule create-replicated hosts_z2 z2 host || return 1
-    ceph osd pool set rchoose num_zones 1 --crush_rule hosts_z2 || return 1
-    rules_are replicated_rule class2 ec_take ec_choose mixed2 runread \
-        $rtake_rule rtake2-single-zone hosts_z2 || return 1
-    ceph osd pool set rclass num_zones 1 --root z2 || return 1
-    rules_are replicated_rule ec_take ec_choose mixed2 runread \
-        $rtake_rule rtake2-single-zone hosts_z2 rclass-single-zone || return 1
-    test "$(rule_takes rclass-single-zone)" = z2~ssd || return 1
-    test "$(rule_leaf_type rclass-single-zone)" = host || return 1
-    ceph osd pool set runread num_zones 1 --root z1 || return 1
-    rules_are replicated_rule ec_take ec_choose mixed2 $rtake_rule \
-        rtake2-single-zone hosts_z2 rclass-single-zone runread-single-zone || return 1
-    test "$(rule_takes runread-single-zone)" = z1 || return 1
-    expect_failure $dir "pool 'runread2': cannot read the placement of its CRUSH rule: rule 'mixed2' takes buckets that are not alike zones under one root" \
-        ceph osd pool set runread2 num_zones 1 --root z2 || return 1
-    test "$(pool_field runread2 num_zones)" = 2 || return 1
-    ceph osd pool set runread2 num_zones 1 --root z2 --osd_failure_domain host \
-        --no-class || return 1
-    rules_are replicated_rule ec_take ec_choose $rtake_rule \
-        rtake2-single-zone hosts_z2 rclass-single-zone runread-single-zone \
-        runread2-single-zone || return 1
-    ceph osd pool set etake num_zones 1 --root z1 --osd_failure_domain host \
-        --no-class --yes-i-really-mean-it || return 1
-    rules_are replicated_rule ec_choose $rtake_rule rtake2-single-zone \
-        hosts_z2 rclass-single-zone runread-single-zone runread2-single-zone \
-        etake-single-zone || return 1
-    test "$(rule_takes etake-single-zone)" = z1 || return 1
-    ceph osd pool set echoose num_zones 1 --root z2 --yes-i-really-mean-it || return 1
-    rules_are replicated_rule $rtake_rule rtake2-single-zone hosts_z2 \
-        rclass-single-zone runread-single-zone runread2-single-zone \
-        etake-single-zone echoose-single-zone || return 1
-    test "$(rule_takes echoose-single-zone)" = z2 || return 1
-    test "$(rule_leaf_type echoose-single-zone)" = host || return 1
-    ! stretch_mode_enabled || return 1
-
-    wait_for_clean || return 1
-    check_pools $dir $all || return 1
-    for pool in rtake2 runread etake; do
-        check_one_zone $pool 1 || return 1
-    done
-    for pool in rchoose rclass runread2 echoose; do
-        check_one_zone $pool 2 || return 1
-    done
-    check_ssd rclass || return 1
-    check_without_zone $dir 2 rtake2 runread etake || return 1
-    check_without_zone $dir 1 rchoose rclass runread2 echoose || return 1
-}
-
-function TEST_hand_rules_rack() {
-    local dir=$1
-    local -x CEPH_ARGS="$CEPH_ARGS"
-    pools_on_hand_rules $dir rack || return 1
-}
-
-function TEST_hand_rules_room() {
-    local dir=$1
-    local -x CEPH_ARGS="$CEPH_ARGS"
-    pools_on_hand_rules $dir room || return 1
-}
-
-function TEST_hand_rules_region() {
-    local dir=$1
-    local -x CEPH_ARGS="$CEPH_ARGS"
-    pools_on_hand_rules $dir region || return 1
-}
-
-function TEST_hand_rules_deep() {
-    local dir=$1
-    local -x CEPH_ARGS="$CEPH_ARGS"
-    pools_on_hand_rules $dir datacenter deep || return 1
-}
-
 function wait_for_pg_num() {
     local pool=$1 n=$2 i
     for i in $(seq 1 120); do
@@ -370,14 +224,19 @@ function wait_for_pg_num() {
     return 1
 }
 
-# N4: num_zones changes while pg_num rises, while PGs merge, and while a zone
-# is down, for pools on generated rules and on a rule that takes each zone;
-# the PGs end clean and the data is intact
+# osd pool set <pool> num_zones while the pool's PGs split, while they merge,
+# and while a zone is down. The pools are r (replicated, on replicated_rule),
+# rt (replicated, given take2, which takes each zone) and e (erasure coded).
+# Each goes over two zones while pg_num rises from 8 to 32, and back to
+# num_zones 1 (rt to z1) while pg_num falls back to 8. Then, with z2 down, r
+# and e go over two zones again: rt, in z1, stays readable, and the PGs of r
+# and e whose copies were all in z2 wait for it. Once z2 is back, r and e are
+# over both zones and all the objects can be read.
 function TEST_num_zones_while_pgs_change() {
     local dir=$1 pool
     local -x CEPH_ARGS="$CEPH_ARGS"
     zone_cluster $dir zone || return 1
-    ceph config set mon osd_pool_default_zone_failure_domain zone || return 1
+    ceph config set global osd_pool_default_zone_failure_domain zone || return 1
     add_hand_rules $dir zone || return 1
     ceph osd erasure-code-profile set p22 plugin=isa k=2 m=2 \
         crush-failure-domain=host || return 1

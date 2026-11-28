@@ -168,7 +168,11 @@ uint64_t ceph_release_features(int r)
 		return req;
 
 	req |= CEPH_FEATUREMASK_CRUSH_MSR;
-	if (r <= CEPH_RELEASE_SQUID)
+	if (r <= CEPH_RELEASE_UMBRELLA) // tentacle and umbrella added nothing
+		return req;
+
+	req |= CEPH_FEATUREMASK_POOL_MIGRATION; // and pools over zones
+	if (r <= CEPH_RELEASE_VAMPIRE)
 		return req;
 
 	return req;

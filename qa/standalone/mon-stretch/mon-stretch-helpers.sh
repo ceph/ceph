@@ -243,6 +243,7 @@ function check_one_zone() {
     test "$(pool_field $pool peering_crush_bucket_barrier)" = 0 || return 1
     flush_pg_stats > /dev/null || return 1
     ceph pg ls-by-pool $pool -f json | jq -e --argjson f $first '
+        (.pg_stats | length) > 0 and
         [.pg_stats[].acting[] | select(. < $f or . >= $f + 4)] == []' > /dev/null || {
         ceph pg ls-by-pool $pool
         return 1
@@ -254,7 +255,7 @@ function check_ssd() {
     local pool=$1
     flush_pg_stats > /dev/null || return 1
     ceph pg ls-by-pool $pool -f json | jq -e --argjson ssd "$(ceph osd crush class ls-osd ssd -f json)" '
-        [.pg_stats[].acting[]] - $ssd == []' > /dev/null
+        (.pg_stats | length) > 0 and [.pg_stats[].acting[]] - $ssd == []' > /dev/null
 }
 
 function zone_mon() {
@@ -335,6 +336,27 @@ function check_without_zone() {
 
 function stretch_mode_enabled() {
     ceph osd dump -f json | jq -e .stretch_mode.stretch_mode_enabled > /dev/null
+}
+
+function default_value() {
+    ceph osd pool default get -f json | jq -r ".$1.value"
+}
+
+# the cluster stretch flags are off, the pool defaults and the given pools
+# are back to one zone of 3, pool ec is on ec-single-zone, and the PGs are
+# clean
+function check_disabled() {
+    local pool
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+    ! stretch_mode_enabled || return 1
+    test "$(default_value num_zones)" = 1 || return 1
+    test "$(default_value replica)" = 3 || return 1
+    for pool in "$@"; do
+        test "$(pool_field $pool num_zones)" = 1 || return 1
+        test "$(pool_field $pool size)" = 3 || return 1
+    done
+    test "$(pool_rule ec)" = ec-single-zone || return 1
+    wait_for_clean || return 1
 }
 
 # hand-written rules over zones z1 and z2 of type ztype: take2 takes each zone,

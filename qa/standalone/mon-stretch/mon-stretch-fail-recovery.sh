@@ -147,6 +147,15 @@ EOF
     teardown $dir || return 1
 }
 
+# An erasure coded pool over two zones stays readable when one zone is
+# lost, and recovers onto OSDs that replace the lost ones. Pool
+# stretched_rbdpool is created with --num_zones 2 --k 2 --m 1: 3 shards in
+# each of the zones iris and pze, of 3 hosts with one OSD each. Monitors a
+# and b are in iris, c and d in pze, and e, which may not lead, in neither.
+# An object is written, and pze's two monitors and three OSDs are killed:
+# the object reads back from iris alone. Three new OSDs then join pze's
+# hosts and the dead ones are marked out, and the PGs must go clean with
+# the object intact.
 TEST_ec_stretched_cluster_failover_add_three_osds(){
     local dir=$1
     local OSDS=6

@@ -11,7 +11,12 @@ function run() {
     run_stretch_tests "$@"
 }
 
-# A stretch pool create that fails must not leave the monitors in stretch mode
+# osd pool create of the first pool over two zones sets the cluster
+# stretch flags, in the OSDMap and the monmap, and a tiebreaker monitor in
+# the monmap. When the create is refused, the monmap must not keep them. Here
+# the OSDs of dc2 weigh twice as much as those of dc1, so erasure coded pool
+# data0 (k=2 m=1) over the two datacenters is refused, as their weights
+# differ too much. The monmap then has no stretch flag and no tiebreaker.
 function TEST_failed_stretch_pool_create_leaves_mons() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -28,7 +33,11 @@ function TEST_failed_stretch_pool_create_leaves_mons() {
     test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = "" || return 1
 }
 
-# A refused num_zones change must not leave the monitors in stretch mode
+# osd pool set <pool> num_zones 2 for the first pool over two zones sets
+# the cluster stretch flags too, and when it is refused the monmap must not
+# keep them. With the OSDs of dc2 weighing twice as much as those of dc1, it
+# is refused for erasure coded pool data0 (k=2 m=1), and the monmap then
+# has no stretch flag and no tiebreaker.
 function TEST_failed_stretch_pool_set_leaves_mons() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -47,7 +56,13 @@ function TEST_failed_stretch_pool_set_leaves_mons() {
     test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = "" || return 1
 }
 
-# The monitors enter stretch mode in the same commit as the pool
+# The monmap's stretch flag is set in the same commit as the OSDMap that
+# creates the first pool over two zones. With the monitors' proposals
+# delayed (paxos_propose_interval and paxos_min_wait 10), erasure coded
+# pool data0 is created over the datacenters dc1 and dc2. While the create
+# runs, the monitors' report, which holds both maps at one commit, is read
+# every second: whenever its monmap has the stretch flag, its OSDMap must
+# have data0. At the end the monmap has the stretch flag.
 function TEST_stretch_pool_create_commits_with_mons() {
     local dir=$1
     two_zone_cluster $dir || return 1

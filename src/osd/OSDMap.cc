@@ -2042,12 +2042,18 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
-    if (pool.second.is_migrating()) {
-      features |= CEPH_FEATUREMASK_SERVER_VAMPIRE;
-    }
+  }
+  // once the operator requires clients that can follow a pool migration,
+  // the others stay out, after a migration too: a client that holds a
+  // migrated pool's old id cannot follow the redirect. MDSs are clients of
+  // the OSDs, which require this of everything but mons and OSDs
+  if ((entity_type == CEPH_ENTITY_TYPE_CLIENT ||
+       entity_type == CEPH_ENTITY_TYPE_MDS) &&
+      test_flag(CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)) {
+    features |= CEPH_FEATUREMASK_POOL_MIGRATION;
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
-          CEPH_FEATUREMASK_SERVER_VAMPIRE;
+          CEPH_FEATUREMASK_POOL_MIGRATION;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
@@ -2106,6 +2112,9 @@ ceph_release_t OSDMap::get_min_compat_client() const
 
   if (HAVE_FEATURE(f, SERVER_VAMPIRE)) {
     return ceph_release_t::vampire;
+  }
+  if (HAVE_FEATURE(f, POOL_MIGRATION)) {
+    return POOL_MIGRATION_MIN_COMPAT_CLIENT;
   }
   if (HAVE_FEATURE(f, CRUSH_MSR)) {
     return ceph_release_t::squid;        // v19.2.0
@@ -2403,7 +2412,7 @@ bool OSDMap::check_pg_upmaps(
     }
     if (!keeps_zone_blocks(*pi, crush_rule, up)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " upmap " << up
-                    << " puts a zone block in more than one zone"
+                    << " does not keep the pool's zone blocks"
                     << dendl;
       to_cancel->push_back(pg);
       continue;
@@ -3350,18 +3359,23 @@ bool OSDMap::acting_set_writeable(const pg_pool_t& pool,
 bool OSDMap::keeps_zone_blocks(const pg_pool_t& pool, int crush_rule,
                                const std::vector<int>& up) const
 {
-  if (!pool.is_erasure() || !pool.is_stretch_pool() ||
-      pool.get_num_zones() <= 1) {
+  if (!pool.is_stretch_pool() || pool.get_num_zones() <= 1) {
     return true;
   }
-  std::map<int, int> block_zone, zone_block;
+  std::map<int, int> block_zone, zone_block, zone_osds;
   for (unsigned i = 0; i < up.size(); ++i) {
     if (up[i] == CRUSH_ITEM_NONE) {
       continue;
     }
-    const int block = pool.get_shard_zone(shard_id_t(i));
     const int zone = crush->get_parent_of_type(
       up[i], pool.peering_crush_bucket_barrier, crush_rule);
+    if (!pool.is_erasure()) {
+      if (++zone_osds[zone] > pool.get_zone_size()) {
+        return false;
+      }
+      continue;
+    }
+    const int block = pool.get_shard_zone(shard_id_t(i));
     if (block_zone.emplace(block, zone).first->second != zone ||
         zone_block.emplace(zone, block).first->second != block) {
       return false;
@@ -4804,6 +4818,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",noautoscale";
   if (f & CEPH_OSDMAP_STRETCH_ZONES)
     s += ",stretch_zones";
+  if (f & CEPH_OSDMAP_REQUIRE_POOL_MIGRATION)
+    s += ",require_pool_migration";
   if (s.length())
     s.erase(0, 1);
   return s;

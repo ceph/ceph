@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -ex
-# The librados API tests that need a CRUSH map with two zones, which skip
-# themselves elsewhere: put half of the OSDs in each of two datacenters, the
-# default zone type, one OSD to a host, and the monitors in the two zones and
-# a tiebreaker datacenter, as a pool over zones needs; then run them.
+# ceph_test_rados_api_split_op_pp and ceph_test_rados_api_ec_pool_create_pp
+# have tests that create pools over two zones, which they skip unless the
+# CRUSH map has two buckets of the zone type, datacenter by default. This
+# script gives the cluster that map, then runs both: half of the OSDs go to
+# datacenter zone-a and half to zone-b, each OSD on a host of its own. The
+# monitors alternate between zone-a and zone-b, and the last one goes to
+# zone-tiebreaker, which has no OSDs, as the tiebreaker that a pool over
+# zones needs. The rados/singleton rados-api-zones job runs it.
 
 mons=($(ceph mon dump | sed -n 's/^[0-9]*: .* mon\.\([^ ]*\)$/\1/p'))
 [ ${#mons[@]} -ge 3 ]

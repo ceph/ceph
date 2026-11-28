@@ -19,12 +19,18 @@ function run() {
     run_stretch_tests $dir "$@"
 }
 
+# osd pool create <pool> --num_zones 2 --rule <rule> needs a rule that
+# places the pool in both zones, here the datacenters dc1 and dc2.
+# replicated_rule, which places copies anywhere under the root, is refused
+# for pool bad, which is not created, and the cluster stretch flags stay
+# off. two_dc, which chooses 2 datacenters and 2 hosts in each, is accepted
+# for pool good, which is then over two zones.
 function TEST_pool_create_rule_must_span_zones() {
     local dir=$1
 
     two_zone_cluster $dir 2 || return 1
 
-    # replicated_rule chooses hosts anywhere under the root
+    # replicated_rule chooses OSDs anywhere under the root
     ! ceph osd pool create bad --num_zones 2 --replica 2 --rule replicated_rule \
         > $dir/out 2>&1 || return 1
     grep "does not place the pool in 2 buckets of type datacenter" $dir/out || return 1
@@ -36,7 +42,13 @@ function TEST_pool_create_rule_must_span_zones() {
     test "$(pool_field good num_zones)" = 2 || return 1
 }
 
-# osd pool set crush_rule checks the rule of a pool over two zones as create does
+# osd pool set <pool> crush_rule <rule> checks the rule of a pool over two
+# zones as osd pool create does. Pool p is created over the datacenters dc1
+# and dc2 with --num_zones 2 --replica 2. replicated_rule (copies anywhere
+# under the root) is refused, as it does not place p in two datacenters, and
+# so is one_per_dc (one host in each datacenter), as it does not place 2
+# copies in each; p keeps its rule. two_per_dc (2 hosts in each datacenter)
+# is accepted.
 function TEST_pool_set_rule_must_span_zones() {
     local dir=$1
 
@@ -55,7 +67,11 @@ function TEST_pool_set_rule_must_span_zones() {
     ceph osd pool set p crush_rule two_per_dc || return 1
 }
 
-# min_size of a pool over two zones counts the copies in each zone
+# For a pool over two zones, osd pool create --min_size counts the copies in
+# each zone, as --replica does. Pool s, created over the datacenters dc1 and
+# dc2 with --num_zones 2 --replica 2 --min_size 2, gets size 4 and min_size
+# 2. s2, with --min_size 3, is refused, as min_size cannot be more than
+# replica, and is not created.
 function TEST_pool_create_min_size_per_zone() {
     local dir=$1
 
@@ -70,8 +86,14 @@ function TEST_pool_create_min_size_per_zone() {
     ! ceph osd pool ls | grep -qx s2 || return 1
 }
 
-# A rule that already has the pool's name, left by a pool that was renamed,
-# must also place a pool over two zones in both zones
+# osd pool create <pool> --num_zones 2 uses the rule that has the pool's
+# name, if there is one, and refuses it unless it places the pool in both
+# zones, the datacenters dc1 and dc2. Erasure coded pool e is created in one
+# zone, with a rule named e, and renamed e_old, which keeps the rule.
+# Creating e again with --num_zones 2 is refused, as rule e does not place it
+# in two datacenters. Replicated pool r is refused the same way with rule r,
+# made by create-replicated over hosts under the root. Neither pool is
+# created, and the cluster stretch flags stay off.
 function TEST_pool_create_existing_rule_must_span_zones() {
     local dir=$1
 
@@ -93,8 +115,13 @@ function TEST_pool_create_existing_rule_must_span_zones() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
 }
 
-# A rule left with the pool's name by an earlier pool over two zones must
-# place this pool's own share of shards in each zone
+# The rule that has the pool's name, when osd pool create --num_zones 2 finds
+# one, must also place the new pool's number of shards in each zone, the
+# datacenters dc1 and dc2. Erasure coded pool e is created over two zones
+# with k=2 m=2, so its rule, e, places 4 shards in each datacenter, and is
+# renamed e_old. Creating e again over two zones with k=2 m=1, which needs 3
+# shards in each, is refused and leaves no pool. Pool f, created the same
+# way under a name that has no rule, is created.
 function TEST_pool_create_existing_rule_zone_size() {
     local dir=$1
 
@@ -109,8 +136,11 @@ function TEST_pool_create_existing_rule_zone_size() {
     ceph osd pool create f erasure --k 2 --m 1 --num_zones 2 || return 1
 }
 
-# A pool over two zones needs an erasure code profile that supports FastEC,
-# and a refused create leaves no pool and stretch mode off
+# An erasure coded pool over two zones needs a profile that supports FastEC.
+# osd pool create --num_zones 2 refuses pool c, with profile cauchy
+# (jerasure with technique cauchy_good), and pool l, with profile lrc (the
+# LRC plugin), each with its own message. Neither pool is created, and the
+# cluster stretch flags, in the OSDMap and the monmap, stay off.
 function TEST_pool_create_zones_need_fast_ec() {
     local dir=$1
 
@@ -133,8 +163,15 @@ function TEST_pool_create_zones_need_fast_ec() {
     test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
 }
 
-# An individual stretch pool ('osd pool stretch set' while stretch mode is
-# off) and stretch mode cannot be combined
+# osd pool stretch set makes an individual stretch pool: a pool given
+# stretch settings of its own while the cluster stretch flags are off. It
+# cannot be combined with pools over zones or with global stretch mode.
+# With pool ind on two_dc (2 hosts in each of the datacenters dc1 and dc2)
+# made an individual stretch pool, osd pool create p --num_zones 2, osd pool
+# set q num_zones 2 and mon enable_stretch_mode are each refused. ind keeps
+# its settings and the cluster stretch flags stay off. After osd pool
+# stretch unset ind, p is created over two zones and sets the cluster
+# stretch flags.
 function TEST_individual_stretch_pool_blocks_stretch_mode() {
     local dir=$1
 
@@ -162,8 +199,13 @@ function TEST_individual_stretch_pool_blocks_stretch_mode() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
 }
 
-# osd pool stretch unset on an individual stretch pool, while stretch mode is
-# off, keeps the monitors' settings and leaves the pool with no mandatory zone
+# osd pool stretch unset, for an individual stretch pool while the cluster
+# stretch flags are off, must leave the monitors' settings alone and the
+# pool with no mandatory zone. The monitors use election strategy disallow,
+# with c a disallowed leader. Pool ind, on two_dc (2 hosts in each of the
+# datacenters dc1 and dc2), is made an individual stretch pool, which keeps
+# num_zones 1, and is then unset: c is still a disallowed leader, and ind's
+# peering_crush_bucket_mandatory_member is none.
 function TEST_individual_stretch_pool_to_one_zone() {
     local dir=$1
 
@@ -180,7 +222,14 @@ function TEST_individual_stretch_pool_to_one_zone() {
     test "$(pool_field ind peering_crush_bucket_mandatory_member)" = $CRUSH_ITEM_NONE || return 1
 }
 
-# What osd pool create gives an EC pool over two zones
+# osd pool create <pool> erasure --num_zones 2 makes a pool with k+m shards
+# in each zone, the datacenters dc1 and dc2. Pool e, with k=2 m=2, gets size
+# 8, min_size 3, num_zones 2, a peering_crush_bucket_count and
+# peering_crush_bucket_target of 2, shards 1 and 5 as its nonprimary_shards,
+# and a stripe width of 32 KiB, FastEC's 16 KiB stripe unit in each of the 2
+# data chunks. It sets the cluster stretch flags. Once its PGs are clean, the
+# first 4 shards of every PG are in one datacenter and the last 4 in the
+# other.
 function TEST_pool_create_two_zone_ec_fields() {
     local dir=$1
 
@@ -210,8 +259,13 @@ function TEST_pool_create_two_zone_ec_fields() {
     done
 }
 
-# A pool over two zones joins stretch mode as it is: the zone weights are
-# checked only when stretch mode is entered
+# The zones' CRUSH weights are checked when the cluster stretch flags are
+# set, and not when more pools go over the zones later. Pool first, created
+# with --num_zones 2 over the datacenters dc1 and dc2, sets the flags. osd.0
+# and osd.1, two of dc1's 3 OSDs, are then reweighted to 0.1, so the zones'
+# weights are far apart. Pool second is still created over two zones, and
+# pool third, created in one zone, still moves to two with osd pool set
+# third num_zones 2.
 function TEST_join_stretch_mode_with_uneven_zone_weights() {
     local dir=$1
 
