@@ -140,7 +140,7 @@ function init_zone_in_existing_zg {
 }
 
 function init_first_zone_in_peer_zg {
-  [ $# -ne 8 ] && echo "init_first_zone_in_slave_zg() needs 8 params" && exit 1
+  [ $# -ne 8 ] && echo "init_first_zone_in_peer_zg() needs 8 params" && exit 1
 
   cid=$1
   realm=$2
