@@ -8137,6 +8137,12 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
+  if (bucket_info.versioned() && obj.key.instance.empty()) {
+    // The data key is normalized, but replication must explicitly fetch the
+    // null version instead of following the source's current-version OLH.
+    index_op.set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP | RGW_BILOG_NULL_VERSION);
+  }
+
   if (state) {
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
@@ -11498,7 +11504,7 @@ int RGWRados::cls_obj_complete_op(const DoutPrefixProvider* dpp,
       rgw_bucket_dir_entry bilog_ent = ent;
       bilog_ent.ver = ver;
       bilog_handler.add_maybe_flush(
-        op_issuer.op, bilog_ent, zones_trace);
+        op_issuer.op, bilog_ent, zones_trace, bilog_flags);
       int flush_r = bilog_handler.flush(y);
       if (flush_r < 0) {
         ldout_bitx_c(bitx, cct, 0) << "ERROR: " << __func__

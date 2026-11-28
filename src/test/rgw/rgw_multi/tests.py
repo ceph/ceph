@@ -6903,6 +6903,120 @@ def test_copy_obj_perm_check_between_zonegroups(zonegroup):
             assert e.response['Error']['Code'] == 'AccessDenied'
 
 
+def test_object_lock_null_version_metadata_sync():
+    """Metadata sync must fetch the null version, even with a newer sibling."""
+    from datetime import timedelta, timezone
+
+    def retain_until(seconds):
+        return datetime.now(timezone.utc) + timedelta(seconds=seconds)
+
+    def delete_denied(zone, bucket, bypass=False):
+        try:
+            zone.s3_client.delete_object(
+                Bucket=bucket, Key="legacy", VersionId="null",
+                BypassGovernanceRetention=bypass)
+        except ClientError as error:
+            eq(error.response["Error"]["Code"], "AccessDenied")
+        else:
+            raise AssertionError("protected null version was deleted")
+
+    zonegroup = realm.master_zonegroup()
+    conns = ZonegroupConns(zonegroup)
+    zones = [z for z in conns.rw_zones if z.zone.has_buckets()]
+    if len(zones) < 2:
+        raise SkipTest('requires two writable zones')
+
+    def read_version(zone, bucket, version):
+        response = zone.s3_client.get_object(
+            Bucket=bucket, Key='legacy', VersionId=version)
+        try:
+            data = response['Body'].read()
+        finally:
+            response['Body'].close()
+        return data, response['LastModified'], response['ETag']
+
+    def metadata(zone, bucket, version):
+        args = dict(Bucket=bucket, Key='legacy', VersionId=version)
+        head = zone.s3_client.head_object(**args)
+        return (head.get('ObjectLockMode'), head.get('ObjectLockRetainUntilDate'),
+                head.get('ObjectLockLegalHoldStatus'),
+                zone.s3_client.get_object_tagging(**args)['TagSet'],
+                zone.s3_client.get_object_acl(**args)['Grants'])
+
+    def listing(zone, bucket):
+        response = zone.s3_client.list_object_versions(Bucket=bucket)
+        return [(v['VersionId'], v['IsLatest']) for v in response.get('Versions', [])]
+
+    for origin in zones:
+        peer = next(z for z in zones if z != origin)
+        for noncurrent in (False, True):
+            bucket = gen_bucket_name()
+            conns.master_zone.s3_client.create_bucket(Bucket=bucket)
+            zonegroup_meta_checkpoint(zonegroup)
+            origin.s3_client.put_object(Bucket=bucket, Key='legacy', Body=b'older null data')
+            for zone in zones:
+                if zone != origin:
+                    zone_bucket_checkpoint(zone.zone, origin.zone, bucket)
+
+            conns.master_zone.s3_client.put_bucket_versioning(
+                Bucket=bucket, VersioningConfiguration={'Status': 'Enabled'})
+            conns.master_zone.s3_client.put_object_lock_configuration(
+                Bucket=bucket, ObjectLockConfiguration={'ObjectLockEnabled': 'Enabled'})
+            zonegroup_meta_checkpoint(zonegroup)
+
+            sibling = None
+            if noncurrent:
+                sibling = origin.s3_client.put_object(
+                    Bucket=bucket, Key='legacy', Body=b'newer named data')['VersionId']
+                for zone in zones:
+                    if zone != origin:
+                        zone_bucket_checkpoint(zone.zone, origin.zone, bucket)
+
+            expected_data = read_version(origin, bucket, 'null')
+            expected_listing = listing(origin, bucket)
+            expected_sibling = read_version(origin, bucket, sibling) if sibling else None
+            sibling_metadata = metadata(origin, bucket, sibling) if sibling else None
+            args = dict(Bucket=bucket, Key='legacy', VersionId='null')
+
+            def verify(writer):
+                expected_meta = metadata(writer, bucket, 'null')
+                for zone in zones:
+                    if zone != writer:
+                        zone_bucket_checkpoint(zone.zone, writer.zone, bucket)
+                    eq(read_version(zone, bucket, 'null'), expected_data)
+                    eq(metadata(zone, bucket, 'null'), expected_meta)
+                    eq(listing(zone, bucket), expected_listing)
+                    if sibling:
+                        eq(read_version(zone, bucket, sibling), expected_sibling)
+                        eq(metadata(zone, bucket, sibling), sibling_metadata)
+
+            verify(origin)
+            for writer, seconds in ((origin, 600), (peer, 1200)):
+                writer.s3_client.put_object_retention(
+                    **args, Retention={'Mode': 'GOVERNANCE',
+                                       'RetainUntilDate': retain_until(seconds)})
+                verify(writer)
+                for zone in zones:
+                    delete_denied(zone, bucket)
+
+            for writer, status in ((peer, 'ON'), (origin, 'OFF')):
+                writer.s3_client.put_object_legal_hold(**args, LegalHold={'Status': status})
+                verify(writer)
+                if status == 'ON':
+                    for zone in zones:
+                        delete_denied(zone, bucket, bypass=True)
+
+            origin.s3_client.put_object_tagging(
+                **args, Tagging={'TagSet': [{'Key': 'version', 'Value': 'null'}]})
+            verify(origin)
+            peer.s3_client.delete_object_tagging(**args)
+            verify(peer)
+            peer.s3_client.put_object_acl(**args, ACL='public-read')
+            verify(peer)
+            origin.s3_client.put_object_acl(**args, ACL='private')
+            verify(origin)
+
+
 def test_object_lock_sync():
     lock_config = {
         'ObjectLockEnabled': 'Enabled',

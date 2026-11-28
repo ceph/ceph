@@ -144,7 +144,8 @@ public:
   // disk-state correction entry — built during check_disk_state reconciliation.
   void add_maybe_flush(RGWModifyOp op,
                        const rgw_bucket_dir_entry& list_state,
-                       rgw_zone_set zones_trace);
+                       rgw_zone_set zones_trace,
+                       uint16_t bilog_flags = 0);
 
   int flush(optional_yield y);
   int flush();
