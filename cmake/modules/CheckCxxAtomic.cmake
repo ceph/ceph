@@ -43,11 +43,12 @@ int main() {
   std::atomic<tagged_ptr> ptr;
   atomic16(&ptr);
 #endif
-  std::atomic<uint8_t> w1;
-  std::atomic<uint16_t> w2;
-  std::atomic<uint32_t> w4;
-  std::atomic<uint64_t> w8;
-  return w1 + w2 + w4 + w8;
+  // Loads may link even when read-modify-write operations need libatomic.
+  std::atomic<uint8_t> w1{0};
+  std::atomic<uint16_t> w2{0};
+  std::atomic<uint32_t> w4{0};
+  std::atomic<uint64_t> w8{0};
+  return ++w1 + ++w2 + ++w4 + ++w8;
 }
 " ${var})
 endfunction(check_cxx_atomics)
