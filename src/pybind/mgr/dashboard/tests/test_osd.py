@@ -317,6 +317,71 @@ class OsdTest(ControllerTestCase):
                     self.assertEqual(osd['host']['id'], -3)
                     self.assertEqual(osd['host']['name'], 'ceph-1')
 
+    def _mock_osd_list_two_hosts(self):
+        """
+        OSDs 0 and 1 (hdd) on host ceph-1, OSD 2 (ssd) on host ceph-2.
+        OSD 1 is the largest; OSD 2 is out and down with the noout flag.
+        """
+        osd_ids = [0, 1, 2]
+        tree_nodes = [
+            OsdHelper._gen_osdmap_tree_node(-1, 'root', [-3, -5]),
+            OsdHelper._gen_osdmap_tree_node(-3, 'host', [0, 1]),
+            dict(OsdHelper._gen_osdmap_tree_node(-5, 'host', [2]), name='ceph-2'),
+            OsdHelper._gen_osdmap_tree_node(0, 'osd'),
+            OsdHelper._gen_osdmap_tree_node(1, 'osd'),
+            dict(OsdHelper._gen_osdmap_tree_node(2, 'osd'), device_class='ssd'),
+        ]
+        osd_map = {
+            int(osd_id): osd
+            for osd_id, osd in OsdHelper.gen_osdmap(osd_ids).items()
+        }
+        # the mgr hands 'state' over as a tuple, not a list
+        osd_map[2].update({'up': 0, 'in': 0, 'state': ('exists', 'noout')})
+        osd_stats = OsdHelper.gen_osd_stats(osd_ids)
+        osd_stats[1] = OsdHelper._gen_osd_stats(1, {'statfs.total': 2 * 10804518912})
+        return mock.patch.multiple(OsdHelper, gen_osdmap=mock.Mock(return_value=osd_map),
+                                   gen_osdmap_tree_nodes=mock.Mock(return_value=tree_nodes),
+                                   gen_osd_stats=mock.Mock(return_value=osd_stats))
+
+    def _osd_list_ids(self, query):
+        self._get('/api/osd' + query, version=APIVersion(1, 1))
+        self.assertStatus(200)
+        return [osd['id'] for osd in self.json_body()]
+
+    def test_osd_list_search_by_column(self):
+        osd_ids = [0, 1, 2]
+        with self._mock_osd_list_two_hosts():
+            with self._mock_osd_list(osd_stat_ids=osd_ids, osdmap_tree_node_ids=osd_ids,
+                                     osdmap_ids=osd_ids):
+                # host; the total count follows the search (it is what the table pages by)
+                self.assertEqual(self._osd_list_ids('?search=ceph-2'), [2])
+                self.assertHeader('X-Total-Count', '1')
+                # device class
+                self.assertEqual(self._osd_list_ids('?search=ssd'), [2])
+                self.assertEqual(self._osd_list_ids('?search=hdd'), [0, 1])
+                # status (in/out, up/down) and flags
+                self.assertEqual(self._osd_list_ids('?search=down'), [2])
+                self.assertEqual(self._osd_list_ids('?search=out'), [2])
+                self.assertEqual(self._osd_list_ids('?search=noout'), [2])
+                # id still works (and "1" also matches host ceph-1)
+                self.assertEqual(self._osd_list_ids('?search=1'), [0, 1])
+                # an OSD matching several columns is listed once
+                self.assertEqual(self._osd_list_ids('?search=ceph'), [0, 1, 2])
+                self.assertHeader('X-Total-Count', '3')
+
+    def test_osd_list_sort_is_global_not_per_page(self):
+        osd_ids = [0, 1, 2]
+        with self._mock_osd_list_two_hosts():
+            with self._mock_osd_list(osd_stat_ids=osd_ids, osdmap_tree_node_ids=osd_ids,
+                                     osdmap_ids=osd_ids):
+                # one OSD per page: the first page must hold the global first item
+                self.assertEqual(self._osd_list_ids('?limit=1&sort=-host.name'), [2])
+                self.assertEqual(self._osd_list_ids('?limit=1&sort=-tree.device_class'), [2])
+                self.assertEqual(self._osd_list_ids('?limit=1&sort=-stats.stat_bytes'), [1])
+                self.assertEqual(self._osd_list_ids('?limit=1&sort=%2Bstats.numpg'), [0])
+                self.assertEqual(self._osd_list_ids('?limit=1&sort=%2BcollectedStates'), [0])
+                self.assertEqual(self._osd_list_ids('?limit=1&offset=2&sort=%2Bhost.name'), [2])
+
     @mock.patch('dashboard.controllers.osd.CephService')
     def test_osd_scrub(self, ceph_service):
         self._task_post('/api/osd/1/scrub', {'deep': True})
