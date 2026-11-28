@@ -3,10 +3,37 @@
 
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "include/Context.h"
+#include "librbd/io/AioCompletion.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/io/ReadResult.h"
 
 namespace librbd {
 namespace io {
+
+asio::ContextWQ::Channel
+ObjectDispatchSpec::channel_from_on_finish(Context* on_finish) {
+  if (on_finish == nullptr) {
+    return nullptr;
+  }
+  if (auto* req = dynamic_cast<C_AioRequest*>(on_finish)) {
+    return req->get_completion_channel();
+  }
+  if (auto* req = dynamic_cast<ReadResult::C_ObjectReadRequest*>(on_finish)) {
+    if (req->aio_completion != nullptr) {
+      return req->aio_completion->get_completion_channel();
+    }
+  }
+  return nullptr;
+}
+
+asio::ContextWQ::Channel
+ObjectDispatchSpec::saved_completion_channel(Context* ctx) {
+  auto* dispatcher = dynamic_cast<C_Dispatcher*>(ctx);
+  if (dispatcher == nullptr || dispatcher->object_dispatch_spec == nullptr) {
+    return nullptr;
+  }
+  return dispatcher->object_dispatch_spec->completion_channel;
+}
 
 void ObjectDispatchSpec::C_Dispatcher::complete(int r) {
   if (r < 0) {
