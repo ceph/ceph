@@ -297,6 +297,8 @@ const uint32_t MAX_POOL_APPLICATIONS = 4;
 const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
 const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
 
+const int64_t REPLICA_READ_PCT_UPDATE_DELAY = 5;
+
 bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
   // Note: this doesn't include support for the application tag match
   if ((grant.spec.allow & OSD_CAP_W) != 0) {
@@ -5934,7 +5936,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP, NUM_ZONES, REPLICA };
+    SUPPORTS_OMAP, NUM_ZONES, REPLICA, PCT_UPDATE_DELAY };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6810,6 +6812,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
       {"read_ratio", READ_RATIO},
+      {"pct_update_delay", PCT_UPDATE_DELAY},
       {"allow_ec_optimizations", EC_OPTIMIZATIONS},
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
@@ -6834,7 +6837,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
-      READ_RATIO
+      READ_RATIO, PCT_UPDATE_DELAY
     };
 
     choices_set_t selected_choices;
@@ -7063,6 +7066,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+          case PCT_UPDATE_DELAY:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -7250,6 +7254,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+          case PCT_UPDATE_DELAY:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -9721,6 +9726,13 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
   }
 
+  // Replica reads bounce with EAGAIN until the primary propagates
+  // pg_committed_to, so bound how long a pool can leave them bouncing.
+  if (pool_type == pg_pool_t::TYPE_REPLICATED &&
+      g_conf().get_val<string>("rados_replica_read_policy") != "default") {
+    pi->opts.set(pool_opts_t::PCT_UPDATE_DELAY, REPLICA_READ_PCT_UPDATE_DELAY);
+  }
+
   pi->cache_target_dirty_ratio_micro =
     g_conf()->osd_pool_default_cache_target_dirty_ratio * 1000000;
   pi->cache_target_dirty_high_ratio_micro =
@@ -10907,7 +10919,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   }
 
   if (!p.is_replicated() &&
-      (var == "read_ratio")) {
+      (var == "read_ratio" || var == "pct_update_delay")) {
     return -EACCES;
   }
 

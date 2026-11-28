@@ -49,20 +49,8 @@
 #include "osd/osd_types.h"
 #include "osdc/Objecter.h"
 #include "osdc/SplitOp.h"
-#include "test/osd/MockConnection.h"
+#include "test/osdc/RecordingConnection.h"
 #include "test/osd/OSDMapTestHelpers.h"
-
-class RecordingConnection : public MockConnection {
-public:
-  using MockConnection::MockConnection;
-  std::vector<MessageRef> sent;
-
-protected:
-  int send_msg(MessageRef&& m) override {
-    sent.push_back(std::move(m));
-    return 0;
-  }
-};
 
 class TestSplitOpMapChange : public ::testing::Test {
 protected:

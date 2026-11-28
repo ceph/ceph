@@ -335,6 +335,7 @@ private:
 
   void handle_monmap(MMonMap *m);
   void handle_config(MConfig *m);
+  void _apply_config(ceph::ref_t<MConfig> config);
 
   void handle_auth(MAuthReply *m);
 
@@ -360,6 +361,9 @@ private:
 
   bool want_bootstrap_config = false;
   ceph::ref_t<MConfig> bootstrap_config;
+
+  // Config to apply once the monmap is received with min_mon_release.
+  ceph::ref_t<MConfig> deferred_config;
 
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;

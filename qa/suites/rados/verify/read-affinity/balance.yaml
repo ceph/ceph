@@ -4,5 +4,5 @@ overrides:
       osd:
         crush location: 'root=default host=host-$id'
       client:
-        rados replica read policy: balance
+        rados_replica_read_policy: balance
 

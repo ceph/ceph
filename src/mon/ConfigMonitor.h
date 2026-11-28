@@ -26,6 +26,10 @@ class ConfigMonitor : public PaxosService
 
   void encode_pending_to_kvmon();
 
+  void propose_pending_config();
+
+  bool prepare_format_upgrade();
+
   // Whether pending changes any value.
   bool has_pending_changes() const;
   // default_profile is set to the new default EC profile if k or m change.
@@ -47,6 +51,8 @@ public:
 
   void load_config();
   void load_changeset(version_t v, ConfigChangeSet *ch);
+
+  void upgrade_format() override;
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;

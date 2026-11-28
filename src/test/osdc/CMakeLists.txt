@@ -52,3 +52,15 @@ add_executable(unittest_crimson_core_route
   )
 add_ceph_unittest(unittest_crimson_core_route)
 target_link_libraries(unittest_crimson_core_route global ${BLKID_LIBRARIES})
+
+# unittest_objclass_read_flags
+# Drives librados' own IoCtxImpl and public API, so it needs librados_impl
+# and librados as well as osdc, and cls_lock_client for a real object class
+# client to call through.
+add_executable(unittest_objclass_read_flags
+  test_objclass_read_flags.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_objclass_read_flags)
+target_link_libraries(unittest_objclass_read_flags
+  librados_impl librados cls_lock_client osdc global ${BLKID_LIBRARIES})

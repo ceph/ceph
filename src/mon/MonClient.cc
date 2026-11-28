@@ -126,6 +126,23 @@ int MonClient::get_monmap()
   return 0;
 }
 
+static std::map<std::string, std::string, std::less<>>
+apply_config_upgrade_defaults(
+    std::map<std::string, std::string, std::less<>> config,
+    ceph_release_t min_mon_release)
+{
+  if (config.find("rados_replica_read_policy") == config.end()) {
+    if (min_mon_release == ceph_release_t::unknown) {
+      // Value to use before monmap received from the cluster
+      config["rados_replica_read_policy"] = "default";
+    } else if (min_mon_release <= ceph_release_t::umbrella &&
+               ceph_release() > ceph_release_t::umbrella) {
+      config["rados_replica_read_policy"] = "default";
+    }
+  }
+  return config;
+}
+
 int MonClient::get_monmap_and_config()
 {
   ldout(cct, 10) << __func__ << dendl;
@@ -167,6 +184,7 @@ int MonClient::get_monmap_and_config()
   });
 
   ceph::ref_t<MConfig> config;
+  ceph_release_t min_mon_release{ceph_release_t::unknown};
   while (tries-- > 0) {
     r = init();
     if (r < 0) {
@@ -196,14 +214,24 @@ int MonClient::get_monmap_and_config()
 	}
       }
 
-      if (bootstrap_config) {
+      if (bootstrap_config && monmap.get_epoch()) {
 	ldout(cct,10) << __func__ << " success" << dendl;
 	config = std::move(bootstrap_config);
+	min_mon_release = monmap.min_mon_release;
 	r = 0;
 	break;
       }
+
+      std::string missing;
+      if (!bootstrap_config) {
+	missing = "MConfig not received";
+      }
+      if (!monmap.get_epoch()) {
+	missing += missing.empty() ? "MMonMap not received"
+				   : " and MMonMap not received";
+      }
+      lderr(cct) << __func__ << " failed to get config: " << missing << dendl;
     }
-    lderr(cct) << __func__ << " failed to get config" << dendl;
     shutdown();
     continue;
   }
@@ -211,7 +239,9 @@ int MonClient::get_monmap_and_config()
   if (config) {
     // apply the bootstrap config to ensure its applied prior to completing
     // the bootstrap
-    cct->_conf.set_mon_vals(cct, config->config, config_cb);
+    cct->_conf.set_mon_vals(
+        cct, apply_config_upgrade_defaults(config->config, min_mon_release),
+        config_cb);
   }
 
   shutdown();
@@ -498,6 +528,12 @@ void MonClient::handle_monmap(MMonMap *m)
   map_cond.notify_all();
   want_monmap = false;
 
+  if (deferred_config) {
+    ldout(cct, 10) << " re-applying config with known min_mon_release "
+     << monmap.min_mon_release << dendl;
+    _apply_config(std::move(deferred_config));
+  }
+
   if (authenticate_err == 1) {
     _finish_auth(0);
   }
@@ -507,25 +543,46 @@ void MonClient::handle_config(MConfig *m)
 {
   ldout(cct,10) << __func__ << " " << *m << dendl;
 
+  auto config = ceph::ref_t<MConfig>(m, false);
+
   if (want_bootstrap_config) {
     // get_monmap_and_config is waiting for config which it will apply
     // synchronously
-    bootstrap_config = ceph::ref_t<MConfig>(m, false);
+    bootstrap_config = std::move(config);
     map_cond.notify_all();
     return;
   }
 
+  if (monmap.min_mon_release == ceph_release_t::unknown) {
+    // Retain the config so it can be re-applied once the monmap is received
+    ldout(cct, 10) << __func__ << " no monmap yet, will re-apply config once "
+		   << "min_mon_release is known" << dendl;
+    deferred_config = config;
+  } else {
+    deferred_config.reset();
+  }
+
+  _apply_config(std::move(config));
+}
+
+void MonClient::_apply_config(ceph::ref_t<MConfig> config)
+{
+  ceph_assert(ceph_mutex_is_locked(monc_lock));
   // Take the sledgehammer approach to ensuring we don't depend on
   // anything in MonClient.
   boost::asio::post(finish_strand,
-		    [m, cct = boost::intrusive_ptr<CephContext>(cct),
+		    [m = std::move(config),
+		     cct = boost::intrusive_ptr<CephContext>(cct),
 		     config_notify_cb = config_notify_cb,
-		     config_cb = config_cb]() {
-		      cct->_conf.set_mon_vals(cct.get(), m->config, config_cb);
+		     config_cb = config_cb,
+		     min_mon_release = monmap.min_mon_release]() {
+		      cct->_conf.set_mon_vals(cct.get(),
+		                              apply_config_upgrade_defaults(
+		                                  m->config, min_mon_release),
+		                              config_cb);
 		      if (config_notify_cb) {
 			config_notify_cb();
 		      }
-		      m->put();
 		    });
 }
 
@@ -614,6 +671,8 @@ void MonClient::shutdown()
 
   active_con.reset();
   pending_cons.clear();
+  deferred_config.reset();
+  bootstrap_config.reset();
 
   auth.reset();
   global_id = 0;
