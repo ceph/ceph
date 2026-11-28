@@ -13,6 +13,9 @@
  * 
  */
 
+#include <utility>
+#include <iterator>
+
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
@@ -112,7 +115,8 @@ namespace rados {
         return ioctx->operate(oid, &op);
       }
 
-      int list_locks(IoCtx *ioctx, const std::string& oid, std::list<std::string> *locks)
+      int list_locks(IoCtx *ioctx, const std::string& oid,
+                     std::vector<std::string>& locks)
       {
         bufferlist in, out;
         int r = ioctx->exec(oid, method::list_locks, in, out);
@@ -127,7 +131,21 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *locks = ret.locks;
+        locks = std::move(ret.locks);
+
+        return 0;
+      }
+
+      int list_locks(IoCtx *ioctx, const std::string& oid,
+                     std::list<std::string> *locks)
+      {
+        std::vector<std::string> result;
+        const int r = list_locks(ioctx, oid, result);
+        if (r < 0)
+          return r;
+
+        locks->assign(std::make_move_iterator(std::begin(result)),
+                      std::make_move_iterator(std::end(result)));
 
         return 0;
       }

@@ -117,7 +117,7 @@ void rgw_pubsub_s3_notification::dump_xml(Formatter *f) const {
 }
 
 bool rgw_pubsub_s3_notifications::decode_xml(XMLObj *obj) {
-  do_decode_xml_obj(list, "TopicConfiguration", obj);
+  do_decode_xml_obj(entries, "TopicConfiguration", obj);
   return true;
 }
 
@@ -125,7 +125,7 @@ rgw_pubsub_s3_notification::rgw_pubsub_s3_notification(const rgw_pubsub_topic_fi
     id(topic_filter.s3_id), events(topic_filter.events), topic_arn(topic_filter.topic.arn), filter(topic_filter.s3_filter) {} 
 
 void rgw_pubsub_s3_notifications::dump_xml(Formatter *f) const {
-  do_encode_xml("NotificationConfiguration", list, "TopicConfiguration", f);
+  do_encode_xml("NotificationConfiguration", entries, "TopicConfiguration", f);
 }
 
 void rgw_pubsub_s3_event::dump(Formatter *f) const {
@@ -402,7 +402,7 @@ int RGWPubSub::get_topics_v2(const DoutPrefixProvider* dpp,
   if (max_items > 1000) {
     max_items = 1000;
   }
-  std::list<std::string> topics;
+  std::vector<std::string> topics;
   bool truncated = false;
   ret = driver->meta_list_keys_next(dpp, handle, max_items, topics, &truncated);
   if (ret < 0) {

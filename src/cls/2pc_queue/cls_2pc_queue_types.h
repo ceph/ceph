@@ -10,6 +10,7 @@
 #include "include/rados/cls_traits.hpp"
 #include "cls_2pc_queue_const.h"
 
+#include <vector>
 #include <unordered_map>
 
 struct cls_2pc_reservation
@@ -48,8 +49,8 @@ struct cls_2pc_reservation
     f->dump_stream("timestamp") << timestamp;
   }
 
-  static std::list<cls_2pc_reservation> generate_test_instances() {
-    std::list<cls_2pc_reservation> ls;
+  static std::vector<cls_2pc_reservation> generate_test_instances() {
+    std::vector<cls_2pc_reservation> ls;
     ls.emplace_back();
     ls.back().size = 0;
     ls.emplace_back();
@@ -115,8 +116,8 @@ struct cls_2pc_urgent_data
     f->dump_bool("has_xattrs", has_xattrs);
   }
 
-  static std::list<cls_2pc_urgent_data> generate_test_instances() {
-    std::list<cls_2pc_urgent_data> ls;
+  static std::vector<cls_2pc_urgent_data> generate_test_instances() {
+    std::vector<cls_2pc_urgent_data> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().reserved_size = 123;

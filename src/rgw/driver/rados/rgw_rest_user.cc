@@ -266,9 +266,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   }
 
   if (!placement_tags_str.empty()) {
-    list<string> placement_tags_list;
-    get_str_list(placement_tags_str, ",", placement_tags_list);
-    op_state.set_placement_tags(placement_tags_list);
+    op_state.set_placement_tags(get_str_vec(placement_tags_str, ","));
   }
 
   if (!s->penv.site->is_meta_master()) {
@@ -424,9 +422,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   }
 
   if (!placement_tags_str.empty()) {
-    list<string> placement_tags_list;
-    get_str_list(placement_tags_str, ",", placement_tags_list);
-    op_state.set_placement_tags(placement_tags_list);
+    op_state.set_placement_tags(get_str_vec(placement_tags_str, ","));
   }
   
   if (!s->penv.site->is_meta_master()) {
@@ -1185,4 +1181,3 @@ RGWOp *RGWHandler_User::op_delete()
 
   return new RGWOp_User_Remove;
 }
-

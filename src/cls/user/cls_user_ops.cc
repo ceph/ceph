@@ -5,7 +5,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 
-using std::list;
+using std::vector;
 
 using ceph::Formatter;
 
@@ -16,9 +16,9 @@ void cls_user_set_buckets_op::dump(Formatter *f) const
   encode_json("time", utime_t(time), f);
 }
 
-list<cls_user_set_buckets_op> cls_user_set_buckets_op::generate_test_instances()
+vector<cls_user_set_buckets_op> cls_user_set_buckets_op::generate_test_instances()
 {
-  list<cls_user_set_buckets_op> ls;
+  vector<cls_user_set_buckets_op> ls;
   ls.emplace_back();
   cls_user_set_buckets_op op;
   for (int i = 0; i < 3; i++) {
@@ -37,9 +37,9 @@ void cls_user_remove_bucket_op::dump(Formatter *f) const
   encode_json("bucket", bucket, f);
 }
 
-list<cls_user_remove_bucket_op> cls_user_remove_bucket_op::generate_test_instances()
+vector<cls_user_remove_bucket_op> cls_user_remove_bucket_op::generate_test_instances()
 {
-  list<cls_user_remove_bucket_op> ls;
+  vector<cls_user_remove_bucket_op> ls;
   ls.emplace_back();
   cls_user_remove_bucket_op op;
   cls_user_gen_test_bucket(&op.bucket, 0);
@@ -53,9 +53,9 @@ void cls_user_list_buckets_op::dump(Formatter *f) const
   encode_json("max_entries", max_entries, f);
 }
 
-list<cls_user_list_buckets_op> cls_user_list_buckets_op::generate_test_instances()
+vector<cls_user_list_buckets_op> cls_user_list_buckets_op::generate_test_instances()
 {
-  list<cls_user_list_buckets_op> ls;
+  vector<cls_user_list_buckets_op> ls;
   ls.emplace_back();
   cls_user_list_buckets_op op;;
   op.marker = "marker";
@@ -71,9 +71,9 @@ void cls_user_list_buckets_ret::dump(Formatter *f) const
   encode_json("truncated", truncated, f);
 }
 
-list<cls_user_list_buckets_ret> cls_user_list_buckets_ret::generate_test_instances()
+vector<cls_user_list_buckets_ret> cls_user_list_buckets_ret::generate_test_instances()
 {
-  list<cls_user_list_buckets_ret> ls;
+  vector<cls_user_list_buckets_ret> ls;
   ls.emplace_back();
   cls_user_list_buckets_ret ret;;
   for (int i = 0; i < 3; i++) {
@@ -92,9 +92,9 @@ void cls_user_get_header_op::dump(Formatter *f) const
   // empty!
 }
 
-list<cls_user_get_header_op> cls_user_get_header_op::generate_test_instances()
+vector<cls_user_get_header_op> cls_user_get_header_op::generate_test_instances()
 {
-  list<cls_user_get_header_op> ls;
+  vector<cls_user_get_header_op> ls;
   ls.emplace_back();
   return ls;
 }
@@ -104,9 +104,9 @@ void cls_user_get_header_ret::dump(Formatter *f) const
   encode_json("header", header, f);
 }
 
-list<cls_user_get_header_ret> cls_user_get_header_ret::generate_test_instances()
+vector<cls_user_get_header_ret> cls_user_get_header_ret::generate_test_instances()
 {
-  list<cls_user_get_header_ret> ls;
+  vector<cls_user_get_header_ret> ls;
   ls.emplace_back();
   cls_user_get_header_ret ret;
   cls_user_gen_test_header(&ret.header);
@@ -119,9 +119,9 @@ void cls_user_complete_stats_sync_op::dump(Formatter *f) const
   encode_json("time", utime_t(time), f);
 }
 
-list<cls_user_complete_stats_sync_op> cls_user_complete_stats_sync_op::generate_test_instances()
+vector<cls_user_complete_stats_sync_op> cls_user_complete_stats_sync_op::generate_test_instances()
 {
-  list<cls_user_complete_stats_sync_op> ls;
+  vector<cls_user_complete_stats_sync_op> ls;
   ls.emplace_back();
   cls_user_complete_stats_sync_op op;
   op.time = utime_t(12345, 0).to_real_time();
@@ -137,9 +137,9 @@ void cls_user_account_resource_add_op::dump(Formatter *f) const
   encode_json("limit", limit, f);
 }
 
-std::list<cls_user_account_resource_add_op> cls_user_account_resource_add_op::generate_test_instances()
+std::vector<cls_user_account_resource_add_op> cls_user_account_resource_add_op::generate_test_instances()
 {
-  std::list<cls_user_account_resource_add_op> ls;
+  std::vector<cls_user_account_resource_add_op> ls;
   ls.emplace_back();
   cls_user_account_resource_add_op op;
   cls_user_gen_test_resource(op.entry);
@@ -152,9 +152,9 @@ void cls_user_account_resource_get_op::dump(Formatter *f) const
   encode_json("name", name, f);
 }
 
-std::list<cls_user_account_resource_get_op> cls_user_account_resource_get_op::generate_test_instances()
+std::vector<cls_user_account_resource_get_op> cls_user_account_resource_get_op::generate_test_instances()
 {
-  std::list<cls_user_account_resource_get_op> ls;
+  std::vector<cls_user_account_resource_get_op> ls;
   ls.emplace_back();
   cls_user_account_resource_get_op op;
   op.name = "name";
@@ -167,9 +167,9 @@ void cls_user_account_resource_get_ret::dump(Formatter *f) const
   encode_json("entry", entry, f);
 }
 
-std::list<cls_user_account_resource_get_ret> cls_user_account_resource_get_ret::generate_test_instances()
+std::vector<cls_user_account_resource_get_ret> cls_user_account_resource_get_ret::generate_test_instances()
 {
-  std::list<cls_user_account_resource_get_ret> ls;
+  std::vector<cls_user_account_resource_get_ret> ls;
   ls.emplace_back();
   cls_user_account_resource_get_ret ret;
   cls_user_gen_test_resource(ret.entry);
@@ -182,9 +182,9 @@ void cls_user_account_resource_rm_op::dump(Formatter *f) const
   encode_json("name", name, f);
 }
 
-std::list<cls_user_account_resource_rm_op> cls_user_account_resource_rm_op::generate_test_instances()
+std::vector<cls_user_account_resource_rm_op> cls_user_account_resource_rm_op::generate_test_instances()
 {
-  std::list<cls_user_account_resource_rm_op> ls;
+  std::vector<cls_user_account_resource_rm_op> ls;
   ls.emplace_back();
   cls_user_account_resource_rm_op op;
   op.name = "name";
@@ -199,9 +199,9 @@ void cls_user_account_resource_list_op::dump(Formatter *f) const
   encode_json("max_entries", max_entries, f);
 }
 
-std::list<cls_user_account_resource_list_op> cls_user_account_resource_list_op::generate_test_instances()
+std::vector<cls_user_account_resource_list_op> cls_user_account_resource_list_op::generate_test_instances()
 {
-  std::list<cls_user_account_resource_list_op> ls;
+  std::vector<cls_user_account_resource_list_op> ls;
   ls.emplace_back();
   cls_user_account_resource_list_op op;
   op.marker = "marker";
@@ -218,9 +218,9 @@ void cls_user_account_resource_list_ret::dump(Formatter *f) const
   encode_json("marker", marker, f);
 }
 
-std::list<cls_user_account_resource_list_ret> cls_user_account_resource_list_ret::generate_test_instances()
+std::vector<cls_user_account_resource_list_ret> cls_user_account_resource_list_ret::generate_test_instances()
 {
-  std::list<cls_user_account_resource_list_ret> ls;
+  std::vector<cls_user_account_resource_list_ret> ls;
   ls.emplace_back();
   cls_user_account_resource_list_ret ret;
   cls_user_gen_test_resource(ret.entries.emplace_back());

@@ -2,9 +2,10 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <cerrno>
-#include <iostream>
-#include <sstream>
 #include <string>
+#include <vector>
+#include <sstream>
+#include <iostream>
 
 #include <fmt/format.h>
 
@@ -85,7 +86,7 @@ struct TempPool {
 int run(RGWCoroutine* cr) {
   RGWCoroutinesManager cr_mgr{store->ctx(),
                               store->getRados()->get_cr_registry()};
-  std::list<RGWCoroutinesStack *> stacks;
+  std::vector<RGWCoroutinesStack *> stacks;
   auto stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
   stack->call(cr);
   stacks.push_back(stack);

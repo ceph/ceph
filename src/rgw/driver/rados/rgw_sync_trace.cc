@@ -4,7 +4,9 @@
 #ifndef CEPH_RGW_SYNC_TRACE_H
 #define CEPH_RGW_SYNC_TRACE_H
 
+#include <array>
 #include <regex>
+#include <string_view>
 
 #include "common/debug.h"
 #include "common/ceph_json.h"
@@ -142,15 +144,30 @@ RGWSyncTraceManager::~RGWSyncTraceManager()
 
 int RGWSyncTraceManager::hook_to_admin_command()
 {
+  struct admin_command final {
+    std::string_view description;
+    std::string_view help;
+  };
+
+  static constexpr std::array admin_commands {
+    admin_command {
+      "sync trace show name=search,type=CephString,req=false",
+      "sync trace show [filter_str]: show current multisite tracing information"},
+    admin_command {
+      "sync trace history name=search,type=CephString,req=false",
+      "sync trace history [filter_str]: show history of multisite tracing information"},
+    admin_command {
+      "sync trace active name=search,type=CephString,req=false",
+      "show active multisite sync entities information"},
+    admin_command {
+      "sync trace active_short name=search,type=CephString,req=false",
+      "show active multisite sync entities entries"}
+  };
+
   AdminSocket *admin_socket = cct->get_admin_socket();
 
-  admin_commands = { { "sync trace show name=search,type=CephString,req=false", "sync trace show [filter_str]: show current multisite tracing information" },
-                     { "sync trace history name=search,type=CephString,req=false", "sync trace history [filter_str]: show history of multisite tracing information" },
-                     { "sync trace active name=search,type=CephString,req=false", "show active multisite sync entities information" },
-                     { "sync trace active_short name=search,type=CephString,req=false", "show active multisite sync entities entries" } };
-  for (auto cmd : admin_commands) {
-    int r = admin_socket->register_command(cmd[0], this,
-                                           cmd[1]);
+  for (const auto& [description, help] : admin_commands) {
+    int r = admin_socket->register_command(description, this, help);
     if (r < 0) {
       lderr(cct) << "ERROR: fail to register admin socket command (r=" << r << ")" << dendl;
       return r;

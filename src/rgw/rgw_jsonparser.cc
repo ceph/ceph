@@ -30,32 +30,6 @@ void dump_array(JSONObj *obj)
 
 }
                                   
-struct Key {
-  string user;
-  string access_key;
-  string secret_key;
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("user", user, obj);
-    JSONDecoder::decode_json("access_key", access_key, obj);
-    JSONDecoder::decode_json("secret_key", secret_key, obj);
-  }
-};
-
-struct UserInfo {
-  string uid;
-  string display_name;
-  int max_buckets;
-  list<Key> keys;
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("user_id", uid, obj);
-    JSONDecoder::decode_json("display_name", display_name, obj);
-    JSONDecoder::decode_json("max_buckets", max_buckets, obj);
-    JSONDecoder::decode_json("keys", keys, obj);
-  }
-};
-
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -132,4 +106,3 @@ int main(int argc, char **argv) {
 
   std::cout << std::endl;
 }
-

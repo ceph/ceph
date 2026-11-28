@@ -5,8 +5,8 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
-using std::list;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -61,9 +61,9 @@ void rgw_zone_set::dump(Formatter *f) const
   encode_json("entries", entries, f);
 }
 
-list<rgw_zone_set> rgw_zone_set::generate_test_instances()
+vector<rgw_zone_set> rgw_zone_set::generate_test_instances()
 {
-  list<rgw_zone_set> o;
+  vector<rgw_zone_set> o;
   o.emplace_back();
   o.emplace_back();
   std::optional<string> loc_key = "loc_key";
@@ -145,9 +145,9 @@ std::string_view to_string(RGWObjCategory c)
   }
 }
 
-list<rgw_bucket_pending_info> rgw_bucket_pending_info::generate_test_instances()
+vector<rgw_bucket_pending_info> rgw_bucket_pending_info::generate_test_instances()
 {
-  list<rgw_bucket_pending_info> o;
+  vector<rgw_bucket_pending_info> o;
   rgw_bucket_pending_info i;
   i.state = CLS_RGW_STATE_COMPLETE;
   i.op = CLS_RGW_OP_DEL;
@@ -179,9 +179,9 @@ void cls_rgw_obj_key::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("instance", instance, obj);
 }
 
-list<rgw_bucket_dir_entry_meta> rgw_bucket_dir_entry_meta::generate_test_instances()
+vector<rgw_bucket_dir_entry_meta> rgw_bucket_dir_entry_meta::generate_test_instances()
 {
-  list<rgw_bucket_dir_entry_meta> o;
+  vector<rgw_bucket_dir_entry_meta> o;
   rgw_bucket_dir_entry_meta m;
   m.category = RGWObjCategory::Main;
   m.size = 100;
@@ -238,9 +238,9 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("restore_expiry_date", restore_expiry_date, obj);
 }
 
-list<rgw_bucket_dir_entry> rgw_bucket_dir_entry::generate_test_instances()
+vector<rgw_bucket_dir_entry> rgw_bucket_dir_entry::generate_test_instances()
 {
-  list<rgw_bucket_dir_entry> o;
+  vector<rgw_bucket_dir_entry> o;
 
   for (auto& m : rgw_bucket_dir_entry_meta::generate_test_instances()) {
     rgw_bucket_dir_entry e;
@@ -269,9 +269,9 @@ void rgw_bucket_entry_ver::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("epoch", epoch, obj);
 }
 
-list<rgw_bucket_entry_ver> rgw_bucket_entry_ver::generate_test_instances()
+vector<rgw_bucket_entry_ver> rgw_bucket_entry_ver::generate_test_instances()
 {
-  list<rgw_bucket_entry_ver> ls;
+  vector<rgw_bucket_entry_ver> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().pool = 123;
@@ -455,10 +455,10 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
   return false;
 }
 
-list<rgw_cls_bi_entry> rgw_cls_bi_entry::generate_test_instances()
+vector<rgw_cls_bi_entry> rgw_cls_bi_entry::generate_test_instances()
 {
   using ceph::encode;
-  list<rgw_cls_bi_entry> o;
+  vector<rgw_cls_bi_entry> o;
   rgw_cls_bi_entry m;
   rgw_bucket_olh_entry entry;
   entry.delete_marker = true;
@@ -501,9 +501,9 @@ void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("pending_removal", pending_removal, obj);
 }
 
-list<rgw_bucket_olh_entry> rgw_bucket_olh_entry::generate_test_instances()
+vector<rgw_bucket_olh_entry> rgw_bucket_olh_entry::generate_test_instances()
 {
-  list<rgw_bucket_olh_entry> o;
+  vector<rgw_bucket_olh_entry> o;
   rgw_bucket_olh_entry entry;
   entry.delete_marker = true;
   entry.epoch = 1234;
@@ -527,9 +527,9 @@ void rgw_bucket_deleted_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("key", key, obj);
 }
 
-list<rgw_bucket_deleted_entry> rgw_bucket_deleted_entry::generate_test_instances()
+vector<rgw_bucket_deleted_entry> rgw_bucket_deleted_entry::generate_test_instances()
 {
-  list<rgw_bucket_deleted_entry> o;
+  vector<rgw_bucket_deleted_entry> o;
   rgw_bucket_deleted_entry entry;
   entry.key.name = "key.name";
   entry.key.instance = "key.instance";
@@ -538,9 +538,9 @@ list<rgw_bucket_deleted_entry> rgw_bucket_deleted_entry::generate_test_instances
   return o;
 }
 
-list<rgw_bucket_olh_log_entry> rgw_bucket_olh_log_entry::generate_test_instances()
+vector<rgw_bucket_olh_log_entry> rgw_bucket_olh_log_entry::generate_test_instances()
 {
-  list<rgw_bucket_olh_log_entry> o;
+  vector<rgw_bucket_olh_log_entry> o;
   rgw_bucket_olh_log_entry entry;
   entry.epoch = 1234;
   entry.op = CLS_RGW_OLH_OP_LINK_OLH;
@@ -664,9 +664,9 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   encode_json("zones_trace", zones_trace, f);
 }
 
-list<rgw_bi_log_entry> rgw_bi_log_entry::generate_test_instances()
+vector<rgw_bi_log_entry> rgw_bi_log_entry::generate_test_instances()
 {
-  list<rgw_bi_log_entry> ls;
+  vector<rgw_bi_log_entry> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().id = "midf";
@@ -679,9 +679,9 @@ list<rgw_bi_log_entry> rgw_bi_log_entry::generate_test_instances()
   return ls;
 }
 
-list<rgw_bucket_category_stats> rgw_bucket_category_stats::generate_test_instances()
+vector<rgw_bucket_category_stats> rgw_bucket_category_stats::generate_test_instances()
 {
-  list<rgw_bucket_category_stats> o;
+  vector<rgw_bucket_category_stats> o;
   rgw_bucket_category_stats s;
   s.total_size = 1024;
   s.total_size_rounded = 4096;
@@ -700,10 +700,10 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
   f->dump_unsigned("actual_size", actual_size);
 }
 
-list<rgw_bucket_dir_header> rgw_bucket_dir_header::generate_test_instances()
+vector<rgw_bucket_dir_header> rgw_bucket_dir_header::generate_test_instances()
 {
-  list<rgw_bucket_dir_header> o;
-  list<rgw_bucket_category_stats> l = rgw_bucket_category_stats::generate_test_instances();
+  vector<rgw_bucket_dir_header> o;
+  vector<rgw_bucket_category_stats> l = rgw_bucket_category_stats::generate_test_instances();
 
 
   uint8_t i = 0;
@@ -736,26 +736,15 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
   f->dump_int("reshardlog_entries", reshardlog_entries);
 }
 
-list<rgw_bucket_dir> rgw_bucket_dir::generate_test_instances()
+vector<rgw_bucket_dir> rgw_bucket_dir::generate_test_instances()
 {
-  list<rgw_bucket_dir> o;
+  vector<rgw_bucket_dir> o;
 
-  list<rgw_bucket_dir_header> l = rgw_bucket_dir_header::generate_test_instances();
+  vector<rgw_bucket_dir_header> l = rgw_bucket_dir_header::generate_test_instances();
 
-  for (auto iter = l.begin(); iter != l.end(); ++iter) {
-    rgw_bucket_dir d;
-    rgw_bucket_dir_header& h = *iter;
+  for (const auto& h : l) {
+    auto& d = o.emplace_back();
     d.header = h;
-
-    list<rgw_bucket_dir_entry *> el;
-    for (auto eiter = el.begin(); eiter != el.end(); ++eiter) {
-      rgw_bucket_dir_entry *e = *eiter;
-      d.m[e->key.name] = *e;
-
-      delete e;
-    }
-
-    o.push_back(std::move(d));
   }
 
   o.emplace_back();
@@ -778,9 +767,9 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->close_section();
 }
 
-list<rgw_s3select_usage_data> rgw_s3select_usage_data::generate_test_instances()
+vector<rgw_s3select_usage_data> rgw_s3select_usage_data::generate_test_instances()
 {
-  list<rgw_s3select_usage_data> o;
+  vector<rgw_s3select_usage_data> o;
   rgw_s3select_usage_data s;
   s.bytes_processed = 1024;
   s.bytes_returned = 512;
@@ -795,9 +784,9 @@ void rgw_s3select_usage_data::dump(Formatter *f) const
   f->dump_unsigned("bytes_returned", bytes_returned);
 }
 
-list<rgw_usage_data> rgw_usage_data::generate_test_instances()
+vector<rgw_usage_data> rgw_usage_data::generate_test_instances()
 {
-  list<rgw_usage_data> o;
+  vector<rgw_usage_data> o;
   rgw_usage_data s;
   s.bytes_sent = 1024;
   s.bytes_received = 1024;
@@ -816,9 +805,9 @@ void rgw_usage_data::dump(Formatter *f) const
   f->dump_int("successful_ops", successful_ops);
 }
 
-list<rgw_usage_log_info> rgw_usage_log_info::generate_test_instances()
+vector<rgw_usage_log_info> rgw_usage_log_info::generate_test_instances()
 {
-  list<rgw_usage_log_info> o;
+  vector<rgw_usage_log_info> o;
   rgw_usage_log_info s;
   std::string owner = "owner";
   std::string payer = "payer";
@@ -836,9 +825,9 @@ void rgw_usage_log_info::dump(Formatter *f) const
   encode_json("entries", entries, f);
 }
 
-list<rgw_user_bucket> rgw_user_bucket::generate_test_instances()
+vector<rgw_user_bucket> rgw_user_bucket::generate_test_instances()
 {
-  list<rgw_user_bucket> o;
+  vector<rgw_user_bucket> o;
   rgw_user_bucket s;
   s.user = "user";
   s.bucket = "bucket";
@@ -888,9 +877,9 @@ void rgw_usage_log_entry::dump(Formatter *f) const
   f->close_section();
 }
 
-list<rgw_usage_log_entry> rgw_usage_log_entry::generate_test_instances()
+vector<rgw_usage_log_entry> rgw_usage_log_entry::generate_test_instances()
 {
-  list<rgw_usage_log_entry> o;
+  vector<rgw_usage_log_entry> o;
   rgw_usage_log_entry entry;
   rgw_usage_data usage_data{1024, 2048};
   rgw_s3select_usage_data s3select_usage_data{8192, 4096};
@@ -944,9 +933,9 @@ void cls_rgw_reshard_entry::dump(Formatter *f) const
   encode_json("initiator", to_string(initiator), f);
 }
 
-list<cls_rgw_reshard_entry> cls_rgw_reshard_entry::generate_test_instances()
+vector<cls_rgw_reshard_entry> cls_rgw_reshard_entry::generate_test_instances()
 {
-  list<cls_rgw_reshard_entry> ls;
+  vector<cls_rgw_reshard_entry> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
@@ -963,9 +952,9 @@ void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
   encode_json("reshard_status", to_string(reshard_status), f);
 }
 
-list<cls_rgw_bucket_instance_entry> cls_rgw_bucket_instance_entry::generate_test_instances()
+vector<cls_rgw_bucket_instance_entry> cls_rgw_bucket_instance_entry::generate_test_instances()
 {
-  list<cls_rgw_bucket_instance_entry> ls;
+  vector<cls_rgw_bucket_instance_entry> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().reshard_status = RESHARD_STATUS::IN_PROGRESS;
@@ -979,9 +968,9 @@ void cls_rgw_lc_entry::dump(Formatter *f) const
   encode_json("status", status, f);
 }
 
-list<cls_rgw_lc_entry> cls_rgw_lc_entry::generate_test_instances()
+vector<cls_rgw_lc_entry> cls_rgw_lc_entry::generate_test_instances()
 {
-  list<cls_rgw_lc_entry> o;
+  vector<cls_rgw_lc_entry> o;
   cls_rgw_lc_entry s;
   s.bucket = "bucket";
   s.start_time = 10;
@@ -997,7 +986,7 @@ void cls_rgw_lc_obj_head::dump(Formatter *f) const
   encode_json("marker", marker, f);
 }
 
-list<cls_rgw_lc_obj_head> cls_rgw_lc_obj_head::generate_test_instances()
+vector<cls_rgw_lc_obj_head> cls_rgw_lc_obj_head::generate_test_instances()
 {
   return {};
 }

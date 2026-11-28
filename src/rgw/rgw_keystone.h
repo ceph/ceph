@@ -152,12 +152,12 @@ public:
   class Role {
   public:
     Role() : is_admin(false), is_system_reader(false) { }
-    Role(const Role &r) {
-      id = r.id;
-      name = r.name;
-      is_admin = r.is_admin;
-      is_system_reader = r.is_system_reader;
-    }
+    Role(const Role&) = default;
+    Role(Role&&) noexcept = default;
+
+    Role& operator=(const Role&) = default;
+    Role& operator=(Role&&) noexcept = default;
+
     std::string id;
     std::string name;
     bool is_admin;
@@ -185,7 +185,7 @@ public:
   Token token;
   Project project;
   User user;
-  std::list<Role> roles;
+  std::vector<Role> roles;
   /* Permission tier for the token, computed once
   * in update_roles(): the most permissive accepted
   * role wins.

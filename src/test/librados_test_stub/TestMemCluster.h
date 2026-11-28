@@ -15,6 +15,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace librados {
 
@@ -80,7 +81,7 @@ public:
   int pool_create(const std::string &pool_name);
   int pool_delete(const std::string &pool_name);
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
-  int pool_list(std::list<std::pair<int64_t, std::string> >& v);
+  int pool_list(std::vector<std::pair<int64_t, std::string>>& pools);
   int64_t pool_lookup(const std::string &name);
   int pool_reverse_lookup(int64_t id, std::string *name);
 

@@ -623,7 +623,7 @@ struct ReshardStatusReader : rgwrados::shard_io::RadosReader {
 int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp,
                                                 optional_yield y,
                                                 const RGWBucketInfo& bucket_info,
-                                                list<cls_rgw_bucket_instance_entry> *status)
+                                                std::vector<cls_rgw_bucket_instance_entry>& status)
 {
   map<int, string> bucket_objs;
 
@@ -663,13 +663,13 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp,
   }
 
   try {
-    std::transform(buffers.begin(), buffers.end(),
-                   std::back_inserter(*status),
-                   [] (const auto& kv) {
-                     cls_rgw_bucket_instance_entry entry;
-                     cls_rgw_get_bucket_resharding_decode(kv.second, entry);
-                     return entry;
-                   });
+    status.reserve(std::size(status) + std::size(buffers));
+    std::ranges::transform(buffers, std::back_inserter(status),
+                           [] (const auto& kv) {
+                             cls_rgw_bucket_instance_entry entry;
+                             cls_rgw_get_bucket_resharding_decode(kv.second, entry);
+                             return entry;
+                           });
   } catch (const ceph::buffer::error&) {
     return -EIO;
   }

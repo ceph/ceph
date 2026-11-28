@@ -17,8 +17,9 @@
 #pragma once
 
 #include <map>
-#include <optional>
 #include <string>
+#include <vector>
+#include <optional>
 #include <string_view>
 
 #include "include/neorados/RADOS.hpp"
@@ -61,7 +62,7 @@ public:
                        int shard_id,
                        std::string& marker,
                        uint32_t max,
-                       std::list<rgw_bi_log_entry>& result,
+                       std::vector<rgw_bi_log_entry>& result,
                        bool *truncated) = 0;
   virtual int get_log_status(const DoutPrefixProvider *dpp,
                              const RGWBucketInfo& bucket_info,
@@ -117,7 +118,7 @@ public:
                int shard_id,
                std::string& marker,
                uint32_t max,
-               std::list<rgw_bi_log_entry>& result,
+               std::vector<rgw_bi_log_entry>& result,
                bool *truncated) override;
   int get_log_status(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,
@@ -157,7 +158,7 @@ public:
                int shard_id,
                std::string& marker,
                uint32_t max,
-               std::list<rgw_bi_log_entry>& result,
+               std::vector<rgw_bi_log_entry>& result,
                bool *truncated) override;
   int get_log_status(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,
@@ -215,7 +216,7 @@ public:
                int shard_id,
                std::string& marker,
                uint32_t max,
-               std::list<rgw_bi_log_entry>& result,
+               std::vector<rgw_bi_log_entry>& result,
                bool *truncated) override;
   int get_log_status(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "driver/rados/rgw_datalog.h"
 #include "driver/rados/rgw_service.h"
 #include "driver/rados/rgw_tools.h"
@@ -134,7 +136,7 @@ public:
 
   int get_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
                          const RGWBucketInfo& bucket_info,
-                         std::list<cls_rgw_bucket_instance_entry> *status);
+                         std::vector<cls_rgw_bucket_instance_entry>& status);
   int set_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
                          const RGWBucketInfo& bucket_info,
                          cls_rgw_reshard_status status);

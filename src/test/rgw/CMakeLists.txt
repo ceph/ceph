@@ -126,6 +126,12 @@ add_executable(unittest_rgw_cors
 add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
+# unittest_rgw_flag_parsing
+add_executable(unittest_rgw_flag_parsing
+  test_rgw_flag_parsing.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_flag_parsing)
+target_link_libraries(unittest_rgw_flag_parsing ${rgw_libs})
 
 # unittest_rgw_frontend_type
 add_executable(unittest_rgw_frontend_type
@@ -133,6 +139,11 @@ add_executable(unittest_rgw_frontend_type
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_frontend_type)
 target_link_libraries(unittest_rgw_frontend_type ${rgw_libs} heap_profiler)
+
+# unittest_rgw_formats
+add_executable(unittest_rgw_formats test_rgw_formats.cc)
+add_ceph_unittest(unittest_rgw_formats)
+target_link_libraries(unittest_rgw_formats ${rgw_libs})
 
 
 # unittest_rgw_bucket_sync_cache
@@ -149,6 +160,13 @@ target_link_libraries(unittest_rgw_period_history ${rgw_libs})
 add_executable(unittest_rgw_zone test_rgw_zone.cc)
 add_ceph_unittest(unittest_rgw_zone)
 target_link_libraries(unittest_rgw_zone ${rgw_libs})
+
+# unittest_rgw_user_info
+add_executable(unittest_rgw_user_info
+  test_rgw_user_info.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_user_info)
+target_link_libraries(unittest_rgw_user_info ${rgw_libs})
 
 # unittest_rgw_compression
 add_executable(unittest_rgw_compression

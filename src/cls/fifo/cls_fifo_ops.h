@@ -79,8 +79,8 @@ struct create_meta
     f->dump_unsigned("max_entry_size", max_entry_size);
     f->dump_bool("exclusive", exclusive);
   }
-  static std::list<create_meta> generate_test_instances() {
-    std::list<create_meta> o;
+  static std::vector<create_meta> generate_test_instances() {
+    std::vector<create_meta> o;
     o.emplace_back();
     o.emplace_back();
     o.back().id = "id";
@@ -116,8 +116,8 @@ struct get_meta
   void dump(ceph::Formatter *f) const {
     f->dump_object("version", version.value_or(objv()));
   }
-  static std::list<get_meta> generate_test_instances() {
-    std::list<get_meta> o;
+  static std::vector<get_meta> generate_test_instances() {
+    std::vector<get_meta> o;
     o.emplace_back();
     o.emplace_back();
     objv v1;
@@ -155,8 +155,8 @@ struct get_meta_reply
     f->dump_unsigned("part_header_size", part_header_size);
     f->dump_unsigned("part_entry_overhead", part_entry_overhead);
   }
-  static std::list<get_meta_reply> generate_test_instances() {
-    std::list<get_meta_reply> o;
+  static std::vector<get_meta_reply> generate_test_instances() {
+    std::vector<get_meta_reply> o;
     o.emplace_back();
     o.emplace_back();
     o.back().info = fifo::info();

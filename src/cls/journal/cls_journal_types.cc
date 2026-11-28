@@ -33,8 +33,8 @@ void ObjectPosition::dump(Formatter *f) const {
   f->dump_unsigned("entry_tid", entry_tid);
 }
 
-std::list<ObjectPosition> ObjectPosition::generate_test_instances() {
-  std::list<ObjectPosition> o;
+std::vector<ObjectPosition> ObjectPosition::generate_test_instances() {
+  std::vector<ObjectPosition> o;
   o.emplace_back();
   o.push_back(ObjectPosition(1, 2, 3));
   return o;
@@ -62,8 +62,8 @@ void ObjectSetPosition::dump(Formatter *f) const {
   f->close_section();
 }
 
-std::list<ObjectSetPosition> ObjectSetPosition::generate_test_instances() {
-  std::list<ObjectSetPosition> o;
+std::vector<ObjectSetPosition> ObjectSetPosition::generate_test_instances() {
+  std::vector<ObjectSetPosition> o;
   o.emplace_back();
   o.push_back(ObjectSetPosition({{0, 1, 120}, {121, 2, 121}}));
   return o;
@@ -104,8 +104,8 @@ void Client::dump(Formatter *f) const {
   f->dump_string("state", stringify(state));
 }
 
-std::list<Client> Client::generate_test_instances() {
-  std::list<Client> o;
+std::vector<Client> Client::generate_test_instances() {
+  std::vector<Client> o;
   bufferlist data;
   data.append(std::string(128, '1'));
 
@@ -140,8 +140,8 @@ void Tag::dump(Formatter *f) const {
   f->dump_string("data", data_ss.str());
 }
 
-std::list<Tag> Tag::generate_test_instances() {
-  std::list<Tag> o;
+std::vector<Tag> Tag::generate_test_instances() {
+  std::vector<Tag> o;
   o.emplace_back();
 
   bufferlist data;

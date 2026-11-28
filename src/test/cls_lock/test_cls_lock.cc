@@ -13,7 +13,10 @@
  * 
  */
 
+#include <list>
+#include <vector>
 #include <iostream>
+#include <iterator>
 #include <errno.h>
 
 #include "include/types.h"
@@ -35,6 +38,46 @@ using ceph::test::PoolType;
 using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
 using ceph::test::destroy_pool_by_type;
+
+namespace {
+
+ceph::buffer::list encode_legacy_lock_list(
+  const std::list<std::string>& locks)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(locks, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+} // namespace
+
+TEST(ClsLockEncoding, LockListRemainsWireCompatible)
+{
+  const std::list<std::string> legacy_locks = {
+    "first",
+    "second",
+    "third"
+  };
+
+  cls_lock_list_locks_reply reply;
+  reply.locks.assign(std::cbegin(legacy_locks), std::cend(legacy_locks));
+
+  ceph::buffer::list current_bytes;
+  encode(reply, current_bytes);
+  const auto legacy_bytes = encode_legacy_lock_list(legacy_locks);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  cls_lock_list_locks_reply decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decode(decoded, cursor);
+
+  ceph::buffer::list decoded_bytes;
+  encode(decoded, decoded_bytes);
+  EXPECT_TRUE(decoded_bytes.contents_equal(legacy_bytes));
+}
 
 void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers,
 	       ClsLockType *assert_type, string *assert_tag)
@@ -112,11 +155,11 @@ TEST_P(TestClsLock, TestMultiLocking) {
   ASSERT_EQ(-EBUSY, l2.lock_exclusive(&ioctx2, oid));
   ASSERT_EQ(-EBUSY, l2.lock_shared(&ioctx2, oid));
 
-  list<string> locks;
-  ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
+  vector<string> locks;
+  ASSERT_EQ(0, list_locks(&ioctx, oid, locks));
 
   ASSERT_EQ(1, (int)locks.size());
-  list<string>::iterator iter = locks.begin();
+  auto iter = std::begin(locks);
   map<locker_id_t, locker_info_t> lockers;
   lock_info(&ioctx, oid, *iter, lockers, &lock_type_exclusive, NULL);
 
@@ -125,16 +168,16 @@ TEST_P(TestClsLock, TestMultiLocking) {
   /* test unlock */
   ASSERT_EQ(0, l.unlock(&ioctx, oid));
   locks.clear();
-  ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
+  ASSERT_EQ(0, list_locks(&ioctx, oid, locks));
 
   /* test shared lock */
   ASSERT_EQ(0, l2.lock_shared(&ioctx2, oid));
   ASSERT_EQ(0, l.lock_shared(&ioctx, oid));
 
   locks.clear();
-  ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
+  ASSERT_EQ(0, list_locks(&ioctx, oid, locks));
   ASSERT_EQ(1, (int)locks.size());
-  iter = locks.begin();
+  iter = std::begin(locks);
   lock_info(&ioctx, oid, *iter, lockers, &lock_type_shared, NULL);
   ASSERT_EQ(2, (int)lockers.size());
 

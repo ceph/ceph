@@ -1289,8 +1289,8 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   }
 
   if (cmd.compare("list") == 0) {
-    list<string> locks;
-    int ret = rados::cls::lock::list_locks(ioctx, oid, &locks);
+    vector<string> locks;
+    int ret = rados::cls::lock::list_locks(ioctx, oid, locks);
     if (ret < 0) {
       cerr << "ERROR: rados_list_locks(): " << cpp_strerror(ret) << std::endl;
       return ret;
@@ -1299,10 +1299,9 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     formatter->open_object_section("object");
     formatter->dump_string("objname", oid);
     formatter->open_array_section("locks");
-    list<string>::iterator iter;
-    for (iter = locks.begin(); iter != locks.end(); ++iter) {
+    for (const auto& lock : locks) {
       formatter->open_object_section("lock");
-      formatter->dump_string("name", *iter);
+      formatter->dump_string("name", lock);
       formatter->close_section();
     }
     formatter->close_section();

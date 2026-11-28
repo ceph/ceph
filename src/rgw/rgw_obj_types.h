@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <vector>
 #include <fmt/format.h>
 
 #include "rgw_pool_types.h"
@@ -88,8 +89,8 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
     f->dump_string("instance", instance);
   }
   void decode_json(JSONObj *obj);
-  static std::list<rgw_obj_index_key> generate_test_instances() {
-    std::list<rgw_obj_index_key> ls;
+  static std::vector<rgw_obj_index_key> generate_test_instances() {
+    std::vector<rgw_obj_index_key> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().name = "name";
@@ -475,7 +476,7 @@ struct rgw_raw_obj {
   }
 
   void dump(Formatter *f) const;
-  static std::list<rgw_raw_obj> generate_test_instances();
+  static std::vector<rgw_raw_obj> generate_test_instances();
   void decode_json(JSONObj *obj);
 
   inline std::string to_str() const {
@@ -596,7 +597,7 @@ struct rgw_obj {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static std::list<rgw_obj> generate_test_instances();
+  static std::vector<rgw_obj> generate_test_instances();
 
   bool operator==(const rgw_obj& o) const {
     return (key == o.key) &&

@@ -2,8 +2,10 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <errno.h>
-#include <algorithm>
+
 #include <cctype>
+#include <iterator>
+#include <algorithm>
 
 #include "include/utime.h"
 #include "objclass/objclass.h"
@@ -138,9 +140,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     return ret;
   }
 
-  for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
-    cls_user_bucket_entry& update_entry = *iter;
-
+  for (auto& update_entry : op.entries) {
     string key;
 
     get_key_by_bucket_name(update_entry.bucket.name, &key);
@@ -324,6 +324,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
           match_prefix.c_str());
 
   auto& entries = ret.entries;
+  entries.reserve(std::size(keys));
   auto iter = keys.begin();
 
   string marker;
@@ -342,7 +343,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     try {
       cls_user_bucket_entry e;
       decode(e, biter);
-      entries.push_back(e);
+      entries.push_back(std::move(e));
     } catch (ceph::buffer::error& err) {
       CLS_LOG(0, "ERROR: cls_user_list: could not decode entry, index=%s", index.c_str());
     }

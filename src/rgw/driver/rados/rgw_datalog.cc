@@ -91,8 +91,8 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("gen", gen, obj);
 }
 
-std::list<rgw_data_change> rgw_data_change::generate_test_instances() {
-  std::list<rgw_data_change> l;
+std::vector<rgw_data_change> rgw_data_change::generate_test_instances() {
+  std::vector<rgw_data_change> l;
   l.emplace_back();
   l.emplace_back();
   l.back().entity_type = ENTITY_TYPE_BUCKET;

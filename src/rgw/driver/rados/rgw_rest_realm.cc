@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <vector>
 #include <optional>
 #include "common/errno.h"
 #include "rgw_rest_realm.h"
@@ -326,7 +327,7 @@ void RGWOp_Realm_Get::send_response()
 // GET /admin/realm?list
 class RGWOp_Realm_List : public RGWRESTOp {
   std::string default_id;
-  std::list<std::string> realms;
+  std::vector<std::string> realms;
 public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);

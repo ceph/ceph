@@ -1,10 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <list>
 #include <map>
 #include <string>
+#include <vector>
 #include <iostream>
+#include <iterator>
+#include <optional>
+
 #include <boost/algorithm/string.hpp>
 
 #include "common/ceph_json.h"
@@ -18,17 +21,42 @@
 
 using namespace std;
 
-bool pop_front(list<string>& l, string *s)
-{
-  if (l.empty()) {
-    return false;
-  }
-  *s = l.front();
-  l.pop_front();
-  return true;
-}
+namespace {
 
-map<string, int> operator_map = {
+class ESQueryStack {
+  vector<string> values;
+
+public:
+  explicit ESQueryStack(vector<string> source)
+    : values(std::move(source)) {}
+
+  bool peek(string& dest) const {
+    if (done()) {
+      return false;
+    }
+
+    dest = values.back();
+
+    return true;
+  }
+
+  bool pop(string& dest) {
+    if (done()) {
+      return false;
+    }
+
+    dest = std::move(values.back());
+    values.pop_back();
+
+    return true;
+  }
+
+  bool done() const noexcept {
+    return std::empty(values);
+  }
+};
+
+const map<string, int> operator_map = {
   { "or",  1 },
   { "and", 2 },
   { "<",   3 },
@@ -36,7 +64,7 @@ map<string, int> operator_map = {
   { "==",  3 },
   { "!=",  3 },
   { ">=",  3 },
-  { ">",   3 },
+  { ">",   3 }
 };
 
 bool is_operator(const string& s)
@@ -59,61 +87,84 @@ int check_precedence(const string& op1, const string& op2)
   return operand_value(op1) - operand_value(op2);
 }
 
-static bool infix_to_prefix(list<string>& source, list<string> *out)
+optional<vector<string>> infix_to_prefix(vector<string> source)
 {
-  list<string> operator_stack;
-  list<string> operand_stack;
+  vector<string> operator_stack;
+  vector<string> operand_stack;
+  operator_stack.reserve(1 + std::size(source));
+  operand_stack.reserve(std::size(source));
+  source.reserve(1 + std::size(source));
 
-  operator_stack.push_front("(");
+  operator_stack.emplace_back("(");
   source.push_back(")");
 
-  for (string& entity : source) {
-    if (entity == "(") {
-      operator_stack.push_front(entity);
-    } else if (entity == ")") {
-      string popped_operator;
-      if (!pop_front(operator_stack, &popped_operator)) {
-        return false;
-      }
-
-      while (popped_operator != "(") {
-        operand_stack.push_front(popped_operator);
-        if (!pop_front(operator_stack, &popped_operator)) {
-          return false;
-        }
-      }
-
-    } else if (is_operator(entity)) {
-      string popped_operator;
-      if (!pop_front(operator_stack, &popped_operator)) {
-        return false;
-      }
-
-      int precedence = check_precedence(popped_operator, entity);
-
-      while (precedence >= 0) {
-        operand_stack.push_front(popped_operator);
-        if (!pop_front(operator_stack, &popped_operator)) {
-          return false;
-        }
-        precedence = check_precedence(popped_operator, entity);
-      }
-
-      operator_stack.push_front(popped_operator);
-      operator_stack.push_front(entity);
-    } else {
-      operand_stack.push_front(entity);
+  auto pop_operator = [&operator_stack]() -> optional<string> {
+    if (operator_stack.empty()) {
+      return nullopt;
     }
 
+    auto value = std::move(operator_stack.back());
+    operator_stack.pop_back();
+
+    return value;
+  };
+
+  for (auto& entity : source) {
+    if (entity == "(") {
+      operator_stack.push_back(std::move(entity));
+      continue;
+    }
+
+    if (entity == ")") {
+      auto popped_operator = pop_operator();
+      if (!popped_operator) {
+        return nullopt;
+      }
+
+      while (*popped_operator != "(") {
+        operand_stack.push_back(std::move(*popped_operator));
+        popped_operator = pop_operator();
+        if (!popped_operator) {
+          return nullopt;
+        }
+      }
+
+      continue;
+    }
+
+    if (is_operator(entity)) {
+      auto popped_operator = pop_operator();
+      if (!popped_operator) {
+        return nullopt;
+      }
+
+      int precedence = check_precedence(*popped_operator, entity);
+
+      while (precedence >= 0) {
+        operand_stack.push_back(std::move(*popped_operator));
+        popped_operator = pop_operator();
+        if (!popped_operator) {
+          return nullopt;
+        }
+        precedence = check_precedence(*popped_operator, entity);
+      }
+
+      operator_stack.push_back(std::move(*popped_operator));
+      operator_stack.push_back(std::move(entity));
+      continue;
+    }
+
+    operand_stack.push_back(std::move(entity));
   }
 
   if (!operator_stack.empty()) {
-    return false;
+    return nullopt;
   }
 
-  out->swap(operand_stack);
-  return true;
+  return operand_stack;
 }
+
+} // namespace
 
 class ESQueryNode {
 protected:
@@ -137,7 +188,7 @@ public:
   explicit ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   ESQueryNode_Bool(ESQueryCompiler *compiler, const string& _op, ESQueryNode *_first, ESQueryNode *_second) :ESQueryNode(compiler), op(_op), first(_first), second(_second) {}
   bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
-    bool valid = s->pop(&op);
+    bool valid = s->pop(op);
     if (!valid) {
       *perr = "incorrect expression";
       return false;
@@ -266,9 +317,9 @@ public:
     delete val;
   }
   virtual bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
-    bool valid = s->pop(&op) &&
-      s->pop(&str_val) &&
-      s->pop(&field);
+    bool valid = s->pop(op) &&
+      s->pop(str_val) &&
+      s->pop(field);
     if (!valid) {
       *perr = "invalid expression";
       return false;
@@ -459,7 +510,7 @@ static bool is_bool_op(const string& str)
 static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode, string *perr)
 {
   string op;
-  bool valid = s->peek(&op);
+  bool valid = s->peek(op);
   if (!valid) {
     *perr = "incorrect expression";
     return false;
@@ -626,7 +677,7 @@ bool ESInfixQueryParser::parse_close_bracket() {
   return parse_specific_char(")");
 }
 
-bool ESInfixQueryParser::parse(list<string> *result) {
+bool ESInfixQueryParser::parse(vector<string>& result) {
   /*
    * expression: [(]<condition>[[and/or]<condition>][)][and/or]...
    */
@@ -640,25 +691,28 @@ bool ESInfixQueryParser::parse(list<string> *result) {
     parse_and_or();
   }
 
-  result->swap(args);
+  result.swap(args);
 
   return true;
 }
 
-bool ESQueryCompiler::convert(list<string>& infix, string *perr) {
-  list<string> prefix;
-  if (!infix_to_prefix(infix, &prefix)) {
+bool ESQueryCompiler::convert(vector<string> infix, string *perr) {
+  auto prefix = infix_to_prefix(std::move(infix));
+  if (!prefix) {
     *perr = "invalid query";
     return false;
   }
-  stack.assign(prefix);
+
+  ESQueryStack stack {std::move(*prefix)};
   if (!alloc_node(this, &stack, &query_root, perr)) {
     return false;
   }
+
   if (!stack.done()) {
     *perr = "invalid query";
     return false;
   }
+
   return true;
 }
 
@@ -667,17 +721,17 @@ ESQueryCompiler::~ESQueryCompiler() {
 }
 
 bool ESQueryCompiler::compile(string *perr) {
-  list<string> infix;
-  if (!parser.parse(&infix)) {
+  vector<string> infix;
+  if (!parser.parse(infix)) {
     *perr = "failed to parse query";
     return false;
   }
 
-  if (!convert(infix, perr)) {
+  if (!convert(std::move(infix), perr)) {
     return false;
   }
 
-  for (auto& c : eq_conds) {
+  for (const auto& c : eq_conds) {
     ESQueryNode_Op_Equal *eq_node = new ESQueryNode_Op_Equal(this, c.first, c.second);
     eq_node->set_allow_restricted(true); /* can access restricted fields */
     ESQueryNode *effective_node;
@@ -694,4 +748,3 @@ bool ESQueryCompiler::compile(string *perr) {
 void ESQueryCompiler::dump(Formatter *f) const {
   encode_json("query", *query_root, f);
 }
-

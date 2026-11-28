@@ -3,13 +3,17 @@
 
 #pragma once
 
+#include <ranges>
+#include <vector>
+
+#include <boost/container/flat_map.hpp>
+#include <boost/container/small_vector.hpp>
+
 #include "common/versioned_variant.h"
+#include "rgw_notify_event_type.h"
+#include "rgw_s3_filter.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_zone.h"
-#include "rgw_notify_event_type.h"
-#include <boost/container/flat_map.hpp>
-#include "rgw_s3_filter.h"
-#include <ranges>
 
 class XMLObj;
 
@@ -78,7 +82,8 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv);
 bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType event);
 
 struct rgw_pubsub_s3_notifications {
-  std::list<rgw_pubsub_s3_notification> list;
+  // Most buckets have only a few notification configurations; larger sets spill:
+  boost::container::small_vector<rgw_pubsub_s3_notification, 4> entries;
   bool decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 };

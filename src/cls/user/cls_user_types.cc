@@ -6,8 +6,8 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
-using std::list;
 using std::string;
+using std::vector;
 
 using ceph::Formatter;
 using ceph::bufferlist;
@@ -30,9 +30,9 @@ void cls_user_bucket::dump(Formatter *f) const
   encode_json("bucket_id", bucket_id,f);
 }
 
-list<cls_user_bucket> cls_user_bucket::generate_test_instances()
+vector<cls_user_bucket> cls_user_bucket::generate_test_instances()
 {
-  list<cls_user_bucket> ls;
+  vector<cls_user_bucket> ls;
   ls.emplace_back();
   cls_user_bucket b;
   cls_user_gen_test_bucket(&b, 0);
@@ -60,9 +60,9 @@ void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i)
   entry->user_stats_sync = true;
 }
 
-list<cls_user_bucket_entry> cls_user_bucket_entry::generate_test_instances()
+vector<cls_user_bucket_entry> cls_user_bucket_entry::generate_test_instances()
 {
-  list<cls_user_bucket_entry> ls;
+  vector<cls_user_bucket_entry> ls;
   ls.emplace_back();
   cls_user_bucket_entry entry;
   cls_user_gen_test_bucket_entry(&entry, 0);
@@ -84,9 +84,9 @@ void cls_user_stats::dump(Formatter *f) const
   f->dump_int("total_bytes_rounded", total_bytes_rounded);
 }
 
-list<cls_user_stats> cls_user_stats::generate_test_instances()
+vector<cls_user_stats> cls_user_stats::generate_test_instances()
 {
-  list<cls_user_stats> ls;
+  vector<cls_user_stats> ls;
   ls.emplace_back();
   cls_user_stats s;
   cls_user_gen_test_stats(&s);
@@ -108,9 +108,9 @@ void cls_user_header::dump(Formatter *f) const
   encode_json("last_stats_update", utime_t(last_stats_update), f);
 }
 
-list<cls_user_header> cls_user_header::generate_test_instances()
+vector<cls_user_header> cls_user_header::generate_test_instances()
 {
-  list<cls_user_header> ls;
+  vector<cls_user_header> ls;
   ls.emplace_back();
   cls_user_header h;
   cls_user_gen_test_header(&h);
@@ -124,9 +124,9 @@ void cls_user_account_header::dump(ceph::Formatter* f) const
   encode_json("count", count, f);
 }
 
-std::list<cls_user_account_header> cls_user_account_header::generate_test_instances()
+std::vector<cls_user_account_header> cls_user_account_header::generate_test_instances()
 {
-  std::list<cls_user_account_header> ls;
+  std::vector<cls_user_account_header> ls;
   ls.emplace_back();
   return ls;
 }
@@ -144,9 +144,9 @@ void cls_user_gen_test_resource(cls_user_account_resource& r)
   r.path = "path";
 }
 
-std::list<cls_user_account_resource> cls_user_account_resource::generate_test_instances()
+std::vector<cls_user_account_resource> cls_user_account_resource::generate_test_instances()
 {
-  std::list<cls_user_account_resource> ls;
+  std::vector<cls_user_account_resource> ls;
   ls.emplace_back();
   cls_user_account_resource p;
   cls_user_gen_test_resource(p);

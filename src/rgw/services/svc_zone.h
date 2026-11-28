@@ -142,10 +142,24 @@ public:
   bool can_reshard() const;
   bool is_syncing_bucket_meta() const;
 
+  int list_zonegroups(const DoutPrefixProvider *dpp, std::vector<std::string>& zonegroups);
+  [[deprecated("prefer the std::vector<> overload")]]
   int list_zonegroups(const DoutPrefixProvider *dpp, std::list<std::string>& zonegroups);
+
+  int list_regions(const DoutPrefixProvider *dpp, std::vector<std::string>& regions);
+  [[deprecated("prefer the std::vector<> overload")]]
   int list_regions(const DoutPrefixProvider *dpp, std::list<std::string>& regions);
-  int list_zones(const DoutPrefixProvider *dpp, std::list<std::string>& zones);
-  int list_realms(const DoutPrefixProvider *dpp, std::list<std::string>& realms);
+
+  int list_zones(const DoutPrefixProvider *dpp, std::vector<std::string>& zones);
+  int list_realms(const DoutPrefixProvider *dpp, std::vector<std::string>& realms);
+
+  int list_periods(const DoutPrefixProvider *dpp, std::vector<std::string>& periods);
+  [[deprecated("prefer the std::vector<> overload")]]
   int list_periods(const DoutPrefixProvider *dpp, std::list<std::string>& periods);
-  int list_periods(const DoutPrefixProvider *dpp, const std::string& current_period, std::list<std::string>& periods, optional_yield y);
+
+  int list_periods(const DoutPrefixProvider *dpp, const std::string& current_period,
+                   std::vector<std::string>& periods, optional_yield y);
+  [[deprecated("prefer the std::vector<> overload")]]
+  int list_periods(const DoutPrefixProvider *dpp, const std::string& current_period,
+                   std::list<std::string>& periods, optional_yield y);
 };

@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <vector>
+
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {
   return (bytes + 1023) / 1024;
@@ -73,7 +75,7 @@ struct RGWQuotaInfo {
   }
 
   void dump(Formatter *f) const;
-  static std::list<RGWQuotaInfo> generate_test_instances();
+  static std::vector<RGWQuotaInfo> generate_test_instances();
   void decode_json(JSONObj *obj);
 
 };

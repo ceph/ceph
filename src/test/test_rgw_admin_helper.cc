@@ -93,10 +93,9 @@ namespace admin_helper
             struct curl_slist *slist = NULL;
             slist = curl_slist_append(slist, auth.c_str());
             slist = curl_slist_append(slist, http_date.c_str());
-            for (list<string>::iterator it = extra_hdrs.begin();
-                 it != extra_hdrs.end(); ++it)
+            for (const auto& extra_header : extra_hdrs)
             {
-                slist = curl_slist_append(slist, (*it).c_str());
+                slist = curl_slist_append(slist, extra_header.c_str());
             }
             if (read_function)
                 curl_slist_append(slist, "Expect:");
@@ -306,17 +305,16 @@ namespace admin_helper
         if (pid == 0)
         {
             /* child */
-            list<string> l;
-            get_str_list(cmd, " \t", l);
+            vector<string> l;
+            get_str_vec(cmd, " \t", l);
 	    // One extra for argv[0] and one for the NULL.
             std::vector<char*> argv(l.size() + 2);
             unsigned loop = 1;
 
             argv[0] = (char *)"radosgw-admin";
-            for (list<string>::iterator it = l.begin();
-                 it != l.end(); ++it)
+            for (const auto& argument : l)
             {
-                argv[loop++] = (char *)(*it).c_str();
+                argv[loop++] = (char *)argument.c_str();
             }
             argv[loop] = NULL;
             if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout))

@@ -82,8 +82,8 @@ bool rgw_sync_pipe_filter::check_prefix(const std::string& obj_name) const
   return true;
 }
 
-void rgw_sync_pipe_filter::set_tags(std::list<std::string>& tags_add,
-                                    std::list<std::string>& tags_rm)
+void rgw_sync_pipe_filter::set_tags(const std::vector<std::string>& tags_add,
+                                    const std::vector<std::string>& tags_rm)
 {
   for (auto& t : tags_rm) {
     rgw_sync_pipe_filter_tag tag;
@@ -789,9 +789,9 @@ void rgw_sync_policy_info::dump(Formatter *f) const
   }
 }
 
-list<rgw_sync_policy_info> rgw_sync_policy_info::generate_test_instances()
+vector<rgw_sync_policy_info> rgw_sync_policy_info::generate_test_instances()
 {
-  list<rgw_sync_policy_info> o;
+  vector<rgw_sync_policy_info> o;
   o.emplace_back();
   return o;
 }
@@ -806,4 +806,3 @@ void rgw_sync_policy_info::decode_json(JSONObj *obj)
     groups.emplace(std::make_pair(group.id, std::move(group)));
   }
 }
-

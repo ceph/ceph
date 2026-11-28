@@ -229,7 +229,7 @@ struct rgw_log_entry {
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<rgw_log_entry> generate_test_instances();
+  static std::vector<rgw_log_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 

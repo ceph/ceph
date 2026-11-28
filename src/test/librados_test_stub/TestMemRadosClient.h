@@ -58,7 +58,9 @@ public:
   int pool_create(const std::string &pool_name) override;
   int pool_delete(const std::string &pool_name) override;
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier) override;
-  int pool_list(std::list<std::pair<int64_t, std::string> >& v) override;
+  using TestRadosClient::pool_list;
+  int pool_list(
+    std::vector<std::pair<int64_t, std::string>>& pools) override;
   int64_t pool_lookup(const std::string &name) override;
   int pool_reverse_lookup(int64_t id, std::string *name) override;
 

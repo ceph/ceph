@@ -12,14 +12,67 @@
 #include "test/librados/test_pool_types.h"
 
 #include <errno.h>
+#include <list>
 #include <string>
 #include <vector>
+#include <iterator>
 
 using namespace std;
 using ceph::test::PoolType;
 using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
 using ceph::test::destroy_pool_by_type;
+
+namespace {
+
+ceph::buffer::list encode_legacy_version_op(
+  const obj_version& version,
+  const std::list<obj_version_cond>& conditions)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(version, encoded);
+  encode(conditions, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+template <typename OP_T>
+void expect_condition_wire_compatibility()
+{
+  const std::list<obj_version_cond> legacy_conditions = {
+    {obj_version {12, "first"}, VER_COND_GE},
+    {obj_version {34, "second"}, VER_COND_TAG_NE}
+  };
+
+  OP_T operation;
+  operation.objv = {56, "current"};
+  operation.conds.assign(std::cbegin(legacy_conditions),
+                         std::cend(legacy_conditions));
+
+  ceph::buffer::list current_bytes;
+  encode(operation, current_bytes);
+  const auto legacy_bytes = encode_legacy_version_op(
+    operation.objv, legacy_conditions);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  OP_T decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decode(decoded, cursor);
+
+  ceph::buffer::list decoded_bytes;
+  encode(decoded, decoded_bytes);
+  EXPECT_TRUE(decoded_bytes.contents_equal(legacy_bytes));
+}
+
+} // namespace
+
+TEST(ClsVersionEncoding, ConditionContainersRemainCompatible)
+{
+  expect_condition_wire_compatibility<cls_version_inc_op>();
+  expect_condition_wire_compatibility<cls_version_check_op>();
+}
 
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();

@@ -4,6 +4,8 @@
 #ifndef CEPH_CLS_OTP_OPS_H
 #define CEPH_CLS_OTP_OPS_H
 
+#include <vector>
+
 #include "include/types.h"
 #include "include/utime.h"
 #include "cls/otp/cls_otp_types.h"
@@ -11,7 +13,7 @@
 
 struct cls_otp_set_otp_op
 {
-  std::list<rados::cls::otp::otp_info_t> entries;
+  std::vector<rados::cls::otp::otp_info_t> entries;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
@@ -85,7 +87,7 @@ WRITE_CLASS_ENCODER(cls_otp_get_result_reply)
 
 struct cls_otp_remove_otp_op
 {
-  std::list<std::string> ids;
+  std::vector<std::string> ids;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
@@ -103,7 +105,7 @@ WRITE_CLASS_ENCODER(cls_otp_remove_otp_op)
 struct cls_otp_get_otp_op
 {
   bool get_all{false};
-  std::list<std::string> ids;
+  std::vector<std::string> ids;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
@@ -122,7 +124,7 @@ WRITE_CLASS_ENCODER(cls_otp_get_otp_op)
 
 struct cls_otp_get_otp_reply
 {
-  std::list<rados::cls::otp::otp_info_t> found_entries;
+  std::vector<rados::cls::otp::otp_info_t> found_entries;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
