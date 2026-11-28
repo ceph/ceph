@@ -52,6 +52,15 @@ TEST(features, release_server_feature) {
   EXPECT_NE(need, umbrella_osd & need);
 }
 
+TEST(features, reused_bit_incarnation) {
+  // Luminous to Nautilus still advertise bit 54 as OSD_HITSET_GMT, with
+  // SERVER_JEWEL and SERVER_MIMIC; the bit's new meaning needs an
+  // incarnation that they lack
+  const uint64_t nautilus_client = CEPH_FEATUREMASK_SERVER_NAUTILUS | (1ull << 54);
+  EXPECT_FALSE(HAVE_FEATURE(nautilus_client, OSD_STRETCH_ZONES));
+  EXPECT_TRUE(HAVE_FEATURE(CEPH_FEATURES_ALL, OSD_STRETCH_ZONES));
+}
+
 int main(int argc, char **argv)
 {
   auto args = argv_to_vec(argc, argv);

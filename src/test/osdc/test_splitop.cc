@@ -797,6 +797,40 @@ public:
   ~ReplicaSplitOpProbe() { abort = true; }
 };
 
+// The internal-versions op follows the OSDs' feature, not the release:
+// a backport's OSDs know v2 without the release, and an acting set with an
+// OSD of an earlier release, as in a rolling upgrade, gets v1.
+TEST(SplitOpStrategy, InternalVersionsOpByOsdFeature)
+{
+  using Strategy = ECSplitOpProbe::InternalVersionStrategy;
+  OSDMap map;
+  uuid_d fsid;
+  fsid.generate_random();
+  ASSERT_EQ(0, map.build_simple(g_ceph_context, 1, fsid, 3));
+  auto set_features = [&](int osd, uint64_t features) {
+    OSDMap::Incremental inc(map.get_epoch() + 1);
+    inc.fsid = map.get_fsid();
+    inc.new_xinfo[osd] = map.get_xinfo(osd);
+    inc.new_xinfo[osd].features = features;
+    map.apply_incremental(inc);
+  };
+  const std::vector<int> acting = {0, 1, 2};
+  for (int osd : acting) {
+    set_features(osd, CEPH_FEATURES_ALL);
+  }
+  EXPECT_EQ(Strategy::FromParticipatingShards,
+            SplitOp::internal_version_strategy(map, acting));
+
+  set_features(1, CEPH_FEATURES_ALL & ~CEPH_FEATURE_INTERNAL_VERSIONS_V2);
+  EXPECT_EQ(Strategy::FromPrimaryShard,
+            SplitOp::internal_version_strategy(map, acting));
+
+  // a missing shard has no OSD to ask
+  set_features(1, CEPH_FEATURES_ALL);
+  EXPECT_EQ(Strategy::FromParticipatingShards,
+            SplitOp::internal_version_strategy(map, {0, CRUSH_ITEM_NONE, 2}));
+}
+
 class TestSplitOpInit : public ::testing::Test {
 protected:
   static constexpr int osds_per_zone = 4;
