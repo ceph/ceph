@@ -26,6 +26,7 @@
 #include "include/client_t.h"
 #include "include/cephfs/dump.h"
 #include "include/cephfs/types.h"
+#include "include/encoding_string.h"
 
 #define MDS_PORT_CACHE   0x200
 #define MDS_PORT_LOCKER  0x300

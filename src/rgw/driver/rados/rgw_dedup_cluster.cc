@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <string>
+#include <utility> // for std::to_underlying()
 
 namespace rgw::dedup {
   const char* DEDUP_EPOCH_TOKEN = "EPOCH_TOKEN";
@@ -1292,7 +1293,7 @@ namespace rgw::dedup {
     }
 
     bufferlist urgent_msg_bl;
-    ceph::encode(urgent_msg, urgent_msg_bl);
+    ceph::encode(std::to_underlying(urgent_msg), urgent_msg_bl);
     return dedup_control_bl(store, dpp, urgent_msg, urgent_msg_bl, nullptr, y);
   }
 
@@ -1347,7 +1348,7 @@ namespace rgw::dedup {
 
       // Build the RESTART bufferlist, optionally including the filter
       bufferlist urgent_msg_bl;
-      ceph::encode(URGENT_MSG_RESTART, urgent_msg_bl);
+      ceph::encode(std::to_underlying(URGENT_MSG_RESTART), urgent_msg_bl);
       bool has_filter = (p_filter != nullptr);
       ceph::encode(has_filter, urgent_msg_bl);
       if (has_filter) {
