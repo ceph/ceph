@@ -1157,6 +1157,12 @@ public:
 		       RGWObjectCtx* rctx, RGWObjManifest* manifest,
 		       int part_num, int* parts_count, bool prefetch,
 		       RGWObjState** pstate, RGWObjManifest** pmanifest);
+  // the same, for the part that starts at iter
+  static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
+		       RGWRados* store, RGWBucketInfo& bucket_info,
+		       RGWObjectCtx* rctx, RGWObjManifest* manifest,
+		       RGWObjManifest::obj_iterator iter, bool prefetch,
+		       RGWObjState** pstate, RGWObjManifest** pmanifest);
 
   int on_last_entry_in_listing(const DoutPrefixProvider *dpp,
                                RGWBucketInfo& bucket_info,
@@ -1329,7 +1335,9 @@ public:
                optional_yield y,
                uint64_t src_accounted_size = 0,
                bool log_op = true,
-               bool *pcanceled = nullptr);
+               bool *pcanceled = nullptr,
+               // copy a multipart object part by part, keeping its part layout
+               bool keep_parts = false);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,

@@ -294,6 +294,19 @@ class DataProcessorFactory {
   virtual void finalize_attrs(Attrs& attrs) { /* default implementation does nothing */ }
 
   /*
+   * Like set_writer(), for one part of a multipart source that's copied
+   * part by part. part_src_attrs are the attrs of the source part's head
+   * and part_size the size of its data. Returns -ENOTSUP if the factory
+   * can't process the data part by part.
+   */
+  virtual int set_part_writer(DataProcessor* writer, Attrs& attrs,
+                              const Attrs& part_src_attrs, uint64_t part_size,
+                              const DoutPrefixProvider* dpp, optional_yield y)
+  {
+    return -ENOTSUP;
+  }
+
+  /*
    * Override the accounted size for the bucket index.  Called after
    * finalize_attrs().  Returns the logical object size when the
    * factory knows better than the default heuristic, e.g. after
