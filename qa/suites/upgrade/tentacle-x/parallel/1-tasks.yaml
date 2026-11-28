@@ -64,3 +64,19 @@ tasks:
       client.0:
         - test_upgrade_split_reads.sh verify
 - print: "**** done end upgrade split_reads verify..."
+
+- print: "**** done start subinterpreter remote() fast path check..."
+- cephadm.shell:
+    mon.a:
+      - ceph mgr module enable selftest --force
+      - while ! ceph mgr dump --format=json | jq -e '.available'; do sleep 5; done
+      - |
+        if ceph mgr dump --format=json | jq -e '.available_modules[] | select(.name == "influx") | .can_run'; then
+          ceph mgr module enable influx --force
+          while ! ceph mgr dump --format=json | jq -e '.available'; do sleep 5; done
+          ceph mgr self-test remote-mutation | jq -e '.same_interpreter == true'
+          ceph mgr self-test remote-benchmark
+        else
+          echo "influx cannot run (python3-influxdb not installed?), skipping"
+        fi
+- print: "**** done end subinterpreter remote() fast path check..."
