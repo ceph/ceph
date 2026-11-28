@@ -821,10 +821,6 @@ def get_partitions_facts(sys_block_path):
     return partition_metadata
 
 
-def is_mapper_device(device_name):
-    return device_name.startswith(('/dev/mapper', '/dev/dm-'))
-
-
 def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_path: str = '/sys/dev/block', device: str = '') -> List[List[str]]:
     def holder_inner_loop() -> bool:
         for holder in holders:
