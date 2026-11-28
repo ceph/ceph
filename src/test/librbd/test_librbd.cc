@@ -9961,6 +9961,7 @@ TEST_F(TestLibRBD, Metadata)
   size_t value_len = sizeof(value);
   memset_rand(value, value_len);
 
+  ASSERT_EQ(-EINVAL, rbd_metadata_set(image1, "", "value"));
   ASSERT_EQ(0, rbd_metadata_set(image1, "key1", "value1"));
   ASSERT_EQ(0, rbd_metadata_set(image1, "key2", "value2"));
   ASSERT_EQ(0, rbd_metadata_get(image1, "key1", value, &value_len));
@@ -12491,6 +12492,7 @@ TEST_F(TestLibRBD, PoolMetadata)
   size_t value_len = sizeof(value);
   memset_rand(value, value_len);
 
+  ASSERT_EQ(-EINVAL, rbd_pool_metadata_set(ioctx, "", "value"));
   ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key1", "value1"));
   ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key2", "value2"));
   ASSERT_EQ(0, rbd_pool_metadata_get(ioctx, "key1", value, &value_len));
