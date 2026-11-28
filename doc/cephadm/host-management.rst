@@ -272,6 +272,22 @@ to take a host out of maintenance mode:
    Use this flag only if you're absolutely certain that you know what you're
    doing.
 
+Unless the ``--force`` and ``--yes-i-really-mean-it`` flags are given (see
+the warning above), the ``enter`` command refuses to run in the following
+cases:
+
+* The cluster has only one host. Maintenance mode is not supported on
+  single-host clusters.
+* An upgrade is in progress, including an upgrade that is paused. To work on
+  a host in the middle of an upgrade, stop the upgrade by running
+  ``ceph orch upgrade stop``, put the host into maintenance mode, do the
+  work, take the host out of maintenance mode, and then start the upgrade
+  again with the same image or version. Starting the upgrade again is
+  harmless: cephadm skips the daemons that the stopped upgrade has already
+  upgraded and continues with the rest. Note that ``ceph orch upgrade start``
+  refuses to run while any host is in maintenance mode. See
+  :doc:`/cephadm/upgrade`.
+
 See also :ref:`cephadm-fqdn`.
 
 
