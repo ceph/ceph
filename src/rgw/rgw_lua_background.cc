@@ -3,6 +3,7 @@
 #include "rgw_lua.h"
 #include "rgw_lua_utils.h"
 #include "rgw_perf_counters.h"
+#include "perfglue/heap_profiler.h"
 #include "include/ceph_assert.h"
 #include <concepts>
 #include <lua.hpp>
@@ -169,6 +170,7 @@ const BackgroundMapValue& Background::get_table_value(const std::string& key) co
 void Background::run() {
   ceph_pthread_setname("lua_background");
   const DoutPrefixProvider* const dpp = &dp;
+  ceph::real_time last_idle;
 
   while (!stopped) {
     if (paused) {
@@ -209,6 +211,7 @@ void Background::run() {
       }
     }
     process_scripts();
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     std::unique_lock cond_lock(cond_mutex);
     auto status = cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped || !processing_q.empty();});
     if (status) {

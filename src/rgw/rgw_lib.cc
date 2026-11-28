@@ -19,6 +19,7 @@
 
 #include "include/rados/librgw.h"
 #include "rgw_acl.h"
+#include "perfglue/heap_profiler.h"
 
 #include "include/str_list.h"
 #include "global/signal_handler.h"
@@ -81,6 +82,7 @@ namespace rgw {
     RGWLibFS::write_timer.resume();
 
     /* gc loop */
+    ceph::real_time last_idle;
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
 
@@ -106,6 +108,7 @@ namespace rgw {
 	if (cur_gen != gen)
 	  goto restart; /* invalidated */
       }
+      last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
       cv.wait_for(uniq, std::chrono::seconds(delay_s));
       uniq.unlock();
     }

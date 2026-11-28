@@ -16,6 +16,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "perfglue/heap_profiler.h"
 
 #include "global/global_init.h"
 
@@ -393,6 +394,7 @@ void RGWObjectExpirer::stop_processor()
 
 void *RGWObjectExpirer::OEWorker::entry() {
   utime_t last_run;
+  ceph::real_time last_idle;
   do {
     utime_t start = ceph_clock_now();
     ldpp_dout(this, 2) << "object expiration: start" << dendl;
@@ -416,6 +418,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
 
     secs -= end.sec();
 
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     std::unique_lock l{lock};
     cond.wait_for(l, std::chrono::seconds(secs));
   } while (!oe->going_down());
