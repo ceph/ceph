@@ -105,7 +105,7 @@ bufferlist FrameAssembler::asm_crc_rev0(const preamble_block_t& preamble,
   frame_bl.append(reinterpret_cast<const char*>(&preamble), sizeof(preamble));
   for (size_t i = 0; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
-    epilogue.crc_values[i] = m_with_data_crc ? segment_bls[i].crc32c(-1) : 0;
+    epilogue.crc_values[i] = tx_segment_crc(i, segment_bls[i]);
     if (segment_bls[i].length() > 0) {
       frame_bl.claim_append(segment_bls[i]);
     }
@@ -164,8 +164,7 @@ bufferlist FrameAssembler::asm_crc_rev1(const preamble_block_t& preamble,
 
   for (size_t i = 1; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
-    epilogue.crc_values[i - 1] =
-            m_with_data_crc ? segment_bls[i].crc32c(-1) : 0;
+    epilogue.crc_values[i - 1] = tx_segment_crc(i, segment_bls[i]);
     if (segment_bls[i].length() > 0) {
       frame_bl.claim_append(segment_bls[i]);
     }
@@ -244,6 +243,9 @@ bufferlist FrameAssembler::assemble_frame(Tag tag, bufferlist segment_bls[],
   if (m_compression->tx) {   
     asm_compress(segment_bls);
   }
+  if (is_compressed()) {
+    m_tx_crcs.fill(std::nullopt);
+  }
 
   preamble_block_t preamble;
   fill_preamble(tag, preamble);
@@ -266,10 +268,10 @@ bufferlist FrameAssembler::assemble_frame(Tag tag, bufferlist segment_bls[],
     }
     return asm_secure_rev0(preamble, segment_bls);
   }
-  if (m_is_rev1) {
-    return asm_crc_rev1(preamble, segment_bls);
-  }
-  return asm_crc_rev0(preamble, segment_bls);
+  bufferlist frame_bl = m_is_rev1 ? asm_crc_rev1(preamble, segment_bls)
+                                  : asm_crc_rev0(preamble, segment_bls);
+  m_tx_crcs.fill(std::nullopt);
+  return frame_bl;
 }
 
 Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
@@ -312,6 +314,7 @@ Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
   }
 
   m_descs.resize(preamble->num_segments);
+  m_rx_crcs.fill(std::nullopt);
   for (size_t i = 0; i < m_descs.size(); i++) {
     m_descs[i].logical_len = preamble->segments[i].length;
     m_descs[i].align = preamble->segments[i].alignment;
@@ -334,10 +337,33 @@ bool FrameAssembler::disasm_all_crc_rev0(bufferlist segment_bls[],
   for (size_t i = 0; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
     if (m_with_data_crc) {
-      check_segment_crc(segment_bls[i], epilogue->crc_values[i]);
+      check_rx_segment_crc(i, segment_bls[i], epilogue->crc_values[i]);
     }
   }
   return !(epilogue->late_flags & FRAME_LATE_FLAG_ABORTED);
+}
+
+void FrameAssembler::check_rx_segment_crc(size_t seg_idx,
+                                          const bufferlist& segment_bl,
+                                          uint32_t expected_crc) const {
+  if (!m_rx_crcs[seg_idx]) {
+    check_segment_crc(segment_bl, expected_crc);
+  } else if (*m_rx_crcs[seg_idx] != expected_crc) {
+    throw FrameError(fmt::format(
+        "bad segment crc calculated={} expected={}", *m_rx_crcs[seg_idx],
+        expected_crc));
+  }
+}
+
+uint32_t FrameAssembler::tx_segment_crc(size_t seg_idx,
+                                        bufferlist& segment_bl) const {
+  if (!m_with_data_crc) {
+    return 0;
+  }
+  if (m_tx_crcs[seg_idx]) {
+    return *m_tx_crcs[seg_idx];
+  }
+  return segment_bl.crc32c(-1);
 }
 
 bool FrameAssembler::disasm_all_secure_rev0(bufferlist segment_bls[],
@@ -385,7 +411,7 @@ bool FrameAssembler::disasm_remaining_crc_rev1(bufferlist segment_bls[],
   for (size_t i = 1; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
     if (m_with_data_crc) {
-      check_segment_crc(segment_bls[i], epilogue->crc_values[i - 1]);
+      check_rx_segment_crc(i, segment_bls[i], epilogue->crc_values[i - 1]);
     }
   }
   return check_epilogue_late_status(epilogue->late_status);
