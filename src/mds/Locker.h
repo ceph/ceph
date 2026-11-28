@@ -66,6 +66,7 @@ public:
   void handle_lock(const cref_t<MLock> &m);
 
   void tick();
+  void handle_conf_change(const std::set<std::string>& changed);
 
   bool nudge_log(SimpleLock *lock);
 
@@ -310,6 +311,8 @@ private:
 
   MDSRank *mds;
   MDCache *mdcache;
+
+  bool defer_client_range_shrink;
   xlist<ScatterLock*> updated_filelocks;
 
   // cap messages held back by should_defer_client_caps_for_snap(), in
