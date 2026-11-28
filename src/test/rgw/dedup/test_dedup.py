@@ -14,7 +14,7 @@ import pytest
 import json
 import boto3
 from botocore.exceptions import ClientError
-from boto3.s3.transfer import TransferConfig
+from boto3.s3.transfer import TransferConfig as _TransferConfig
 from dataclasses import dataclass
 import urllib.parse
 import urllib.request
@@ -35,6 +35,18 @@ from . import(
     get_access_key,
     get_secret_key
 )
+
+
+def TransferConfig(*args, **kwargs):
+    # Force the classic transfer manager: on py3.14 boto3's CRT auto-resolver
+    # crashes on the default (unset) preferred_transfer_client (#83660).
+    kwargs.setdefault('preferred_transfer_client', 'classic')
+    try:
+        return _TransferConfig(*args, **kwargs)
+    except TypeError:  # older boto3 without the parameter
+        kwargs.pop('preferred_transfer_client', None)
+        return _TransferConfig(*args, **kwargs)
+
 
 @dataclass
 class Dedup_Stats:
