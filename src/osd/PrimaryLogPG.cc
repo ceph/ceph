@@ -3500,6 +3500,15 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
   ObjectOperation obj_op;
   obj_op.dup(prdop->ops);
 
+  // The proxied request has no handler that could merge a split reply back
+  // together (dup() only wires up outdata), so ask the base tier for the legacy
+  // combined sparse-read format. obj_op.ops is a copy; m->ops is untouched.
+  for (auto& o : obj_op.ops) {
+    if (o.op.op == CEPH_OSD_OP_SPARSE_READ) {
+      o.op.flags = o.op.flags & ~CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA;
+    }
+  }
+
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
       (agent_state && agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL)) {
     for (unsigned i = 0; i < obj_op.ops.size(); i++) {
@@ -4703,11 +4712,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     if (ctx->op->allows_returnvec()) {
       // enforce reasonable bound on the return buffer sizes
       for (auto& i : *ctx->ops) {
-	if (i.outdata.length() > cct->_conf->osd_max_write_op_reply_len) {
+	if (i.outdata.length() + i.outmetadata.length() >
+	    cct->_conf->osd_max_write_op_reply_len) {
 	  dout(10) << __func__ << " op " << i << " outdata overflow" << dendl;
 	  result = -EOVERFLOW;  // overall result is overflow
 	  i.rval = -EOVERFLOW;
 	  i.outdata.clear();
+	  i.outmetadata.clear();
 	}
       }
     } else {
@@ -5882,26 +5893,48 @@ struct FillInVerifyExtent : public Context {
   }
 };
 
+/**
+ * Store the result of a SPARSE_READ in osd_op. This is the only place that
+ * decides the reply format:
+ *  - client set CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA: outmetadata = the
+ *    encoded extent map, outdata = the raw data (no length prefix);
+ *  - otherwise (legacy): outdata = encoded extent map followed by the data
+ *    encoded as a bufferlist (u32 length + bytes).
+ * Any previous content of osd_op.outdata/outmetadata is replaced. @c data is
+ * consumed and must not alias osd_op.outdata.
+ */
+static void set_sparse_read_result(
+  OSDOp& osd_op,
+  const std::map<uint64_t, uint64_t>& extents,
+  bufferlist&& data)
+{
+  osd_op.outdata.clear();
+  osd_op.outmetadata.clear();
+  if (osd_op.op.flags & CEPH_OSD_OP_FLAG_SUPPORT_OUTMETADATA) {
+    encode(extents, osd_op.outmetadata);
+    osd_op.outdata = std::move(data);
+  } else {
+    encode(extents, osd_op.outdata);
+    ::encode_destructively(data, osd_op.outdata);
+  }
+}
+
 struct ToSparseReadResult : public Context {
-  int* result;
-  bufferlist* data_bl;
+  OSDOp* osd_op;
   uint64_t data_offset;
-  ceph_le64* len;
-  ToSparseReadResult(int* result, bufferlist* bl, uint64_t offset,
-		     ceph_le64* len)
-    : result(result), data_bl(bl), data_offset(offset),len(len) {}
+  ToSparseReadResult(OSDOp* osd_op, uint64_t offset)
+    : osd_op(osd_op), data_offset(offset) {}
   void finish(int r) override {
     if (r < 0) {
-      *result = r;
+      osd_op->rval = r;
       return;
     }
-    *result = 0;
-    *len = r;
-    bufferlist outdata;
-    map<uint64_t, uint64_t> extents = {{data_offset, r}};
-    encode(extents, outdata);
-    encode_destructively(*data_bl, outdata);
-    data_bl->swap(outdata);
+    osd_op->rval = 0;
+    osd_op->op.extent.length = r;
+    // the async read stored the raw data in outdata
+    bufferlist data = std::move(osd_op->outdata);
+    set_sparse_read_result(*osd_op, {{data_offset, (uint64_t)r}},
+			   std::move(data));
   }
 };
 
@@ -6454,9 +6487,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
         make_pair(
           boost::make_tuple(offset, length, op.flags),
           make_pair(
-     &osd_op.outdata,
-     new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
-  		   &op.extent.length))));
+            &osd_op.outdata,
+            new ToSparseReadResult(&osd_op, offset))));
       dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
 
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
@@ -6465,10 +6497,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       bytes_read = length;
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
-      map<uint64_t, uint64_t> extents;
-      encode(extents, osd_op.outdata);
-      bufferlist data_bl;
-      encode(data_bl, osd_op.outdata);
+      set_sparse_read_result(osd_op, {}, bufferlist());
     }
   } else {
     // read into a buffer
@@ -6516,8 +6545,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       op.extent.length = r;
     }
 
-    encode(m, osd_op.outdata); // re-encode since it might be modified
-    ::encode_destructively(data_bl, osd_op.outdata);
+    // m is re-encoded since it might have been modified
+    set_sparse_read_result(osd_op, m, std::move(data_bl));
 
     dout(10) << " sparse_read got " << m.size() << " extents and " << r
              << " bytes from object " << soid << dendl;

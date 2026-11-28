@@ -218,6 +218,12 @@ add_executable(unittest_stretch_ec_min_size
 add_ceph_unittest(unittest_stretch_ec_min_size)
 target_link_libraries(unittest_stretch_ec_min_size osd global ${BLKID_LIBRARIES})
 
+# unittest_mosdopreply
+add_executable(unittest_mosdopreply
+  TestMOSDOpReply.cc
+  )
+add_ceph_unittest(unittest_mosdopreply)
+target_link_libraries(unittest_mosdopreply osd global ${BLKID_LIBRARIES})
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -305,6 +311,7 @@ set(OSD_UNITTESTS
   unittest_extent_cache_l
   unittest_hitset
   unittest_mclock_scheduler
+  unittest_mosdopreply
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub
