@@ -455,7 +455,7 @@ def task(ctx, config):
                     )
                 tests[id_] = proc
 
-            watched_process: CephTestRados = CephTestRados(ctx, config, cluster, tests)
+            watched_process = CephTestRados(ctx, config, cluster, tests)
             ctx.ceph[cluster].watched_processes.append(watched_process)
             try:
                 run.wait(tests.values())

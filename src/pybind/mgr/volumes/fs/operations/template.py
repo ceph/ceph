@@ -85,10 +85,6 @@ class SubvolumeOpType(Enum):
 class SubvolumeTemplate(object):
     VERSION = None # type: int
 
-    @staticmethod
-    def version():
-        return SubvolumeTemplate.VERSION
-
     def open(self, op_type):
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 

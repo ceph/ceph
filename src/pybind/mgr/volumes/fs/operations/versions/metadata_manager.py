@@ -7,6 +7,7 @@ import re
 
 import cephfs
 
+from ...utils import to_str
 from ...exception import MetadataMgrException
 
 log = logging.getLogger(__name__)
@@ -64,11 +65,27 @@ class MetadataManager(object):
     CLONE_FAILURE_META_KEY_ERRNO = "errno"
     CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
+    PRE_V3_INCAR_SEC = 'PRE_V3_INCAR'
+    PRE_V3_VERSION_KEY = 'pre_v3_version'
+    PRE_V3_UUID_KEY = 'pre_v3_uuid'
+    PRE_V3_PATH_KEY = 'pre_v3_path'
+
     def __init__(self, fs, config_path, mode):
         self.fs = fs
         self.mode = mode
         self.config_path = config_path
         self.config = configparser.ConfigParser()
+
+    def __str__(self):
+        rv = ''
+        for sec in self.config.sections():
+            rv += f'[{sec}]'
+            for opt, val in self.config.items(sec):
+                rv += f'{opt} = {val}\n'
+            rv += '\n'
+
+        rv += f'meta path = {self.config_path}. meta content - {rv}'
+        return rv
 
     def refresh(self):
         fd = None
@@ -120,7 +137,7 @@ class MetadataManager(object):
         self.update_section_multi(
             MetadataManager.GLOBAL_SECTION, {MetadataManager.GLOBAL_META_KEY_VERSION : str(version),
                                              MetadataManager.GLOBAL_META_KEY_TYPE    : str(typ),
-                                             MetadataManager.GLOBAL_META_KEY_PATH    : str(path),
+                                             MetadataManager.GLOBAL_META_KEY_PATH    : to_str(path),
                                              MetadataManager.GLOBAL_META_KEY_STATE   : str(state)
             })
 
@@ -152,17 +169,32 @@ class MetadataManager(object):
             self.config.set(section, key, str(value))
 
     def update_global_section(self, key, value):
-        self.update_section(MetadataManager.GLOBAL_SECTION, key, str(value))
+        key, value = to_str(key, value)
+        self.update_section(MetadataManager.GLOBAL_SECTION, key, value)
 
-    def get_option(self, section, key):
-        if not self.config.has_section(section):
-            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        if not self.config.has_option(section, key):
-            raise MetadataMgrException(-errno.ENOENT, "no config '{0}' in section '{1}'".format(key, section))
-        return self.config.get(section, key)
+    def remove_global_option(self, key):
+        key = to_str(key)
+        self.remove_option(self.GLOBAL_SECTION, key)
 
-    def get_global_option(self, key):
-        return self.get_option(MetadataManager.GLOBAL_SECTION, key)
+    def get_option(self, sec, key, def_val=''):
+        if not self.config.has_section(sec):
+            if def_val == '':
+                raise MetadataMgrException(-errno.ENOENT,
+                                           f"section '{sec}' does not exist")
+            else:
+                return def_val
+
+        if self.config.has_option(sec, key):
+            return self.config.get(sec, key)
+        else:
+            if def_val == '':
+                raise MetadataMgrException(-errno.ENOENT, f'no conf opt {key} '
+                                           f'in section {sec}')
+            else:
+                return def_val
+
+    def get_global_option(self, key, def_val=''):
+        return self.get_option(MetadataManager.GLOBAL_SECTION, key, def_val)
 
     def list_all_options_from_section(self, section):
         metadata_dict = {}
@@ -198,3 +230,19 @@ class MetadataManager(object):
         sections = self.config.sections()
         r = re.compile('SNAP_METADATA_.*')
         return [section[len("SNAP_METADATA_"):] for section in sections if r.match(section)]
+
+    def add_pre_v3_incar_sec(self, version, uuid, path):
+        version, uuid, path = to_str(version, uuid, path)
+
+        self.add_section(self.PRE_V3_INCAR_SEC)
+
+        self.update_section(self.PRE_V3_INCAR_SEC, self.PRE_V3_VERSION_KEY, version)
+        self.update_section(self.PRE_V3_INCAR_SEC, self.PRE_V3_UUID_KEY, uuid)
+        self.update_section(self.PRE_V3_INCAR_SEC, self.PRE_V3_PATH_KEY, path)
+
+    def rm_pre_v3_incar_sec(self):
+        self.remove_section(self.PRE_V3_INCAR_SEC)
+
+    def get_pre_v3_uuid(self, def_val=''):
+        return self.get_option(self.PRE_V3_INCAR_SEC, self.PRE_V3_UUID_KEY,
+                               def_val)

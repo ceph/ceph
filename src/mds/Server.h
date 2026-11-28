@@ -504,6 +504,7 @@ private:
            xattr_name.rfind("ceph.alternate_name", 0) == 0 ||
            xattr_name == "ceph.quiesce.block"sv ||
            xattr_name == "ceph.dir.subvolume" ||
+           xattr_name == "ceph.dir.subvolume.prevpath"sv ||
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
            xattr_name == "ceph.dir.pin.distributed" ||

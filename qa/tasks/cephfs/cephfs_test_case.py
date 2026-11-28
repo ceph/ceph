@@ -419,16 +419,18 @@ class CephFSTestCase(CephTestCase):
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
 
-    def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None):
+    def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None,
+                      path='/'):
+        client_name = f'client.{client_id}'
         if not (moncap or osdcap or mdscap):
             if self.fs:
-                return self.fs.authorize(client_id, ('/', 'rw'))
+                return self.fs.authorize(client_id, (path, 'rw'))
             else:
                 raise RuntimeError('no caps were passed and the default FS '
                                    'is not created yet to allow client auth '
                                    'for it.')
 
-        cmd = ['auth', 'add', f'client.{client_id}']
+        cmd = ['auth', 'add', client_name]
         if moncap:
             cmd += ['mon', moncap]
         if osdcap:
@@ -437,4 +439,4 @@ class CephFSTestCase(CephTestCase):
             cmd += ['mds', mdscap]
 
         self.run_ceph_cmd(*cmd)
-        return self.get_ceph_cmd_stdout(f'auth get {self.client_name}')
+        return self.get_ceph_cmd_stdout(f'auth get {client_name}')
