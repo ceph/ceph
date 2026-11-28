@@ -370,6 +370,7 @@ int main(int argc, char **argv)
         "free-score, "
         "free-fragmentation, "
         "bluefs-stats, "
+        "bluefs-files, "
         "reshard, "
         "show-sharding, "
         "trim, "
