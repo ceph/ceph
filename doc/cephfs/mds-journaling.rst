@@ -154,3 +154,33 @@ The target maximum number of segments is controlled by:
 
 The MDS will often sit a little above this number due to non-major segments
 awaiting trimming up to the next major segment.
+
+To expire a segment, the MDS writes the backtrace of every inode created or
+moved in it to the data pool, one write per inode. A segment full of new files
+can need thousands of them, and the journal writes of the MDS wait behind them
+on the OSDs. The number of these writes in flight, across all the segments
+being expired, is limited by:
+
+.. confval:: mds_log_expire_backtrace_max_inflight
+
+The limit trades how fast segments expire against how much load the expiry
+puts on the OSDs:
+
+- If it is too low, segments expire more slowly than the MDS writes new ones.
+  The journal then grows past ``mds_log_max_segments`` and the cluster reports
+  the ``MDS_TRIM`` ("behind on trimming") health warning. Raise the limit.
+
+- If it is too high, a burst of creates is followed by a burst of backtrace
+  writes that fills the OSD queues, and journal writes, which go to the
+  metadata pool, wait behind them. Clients then see creates and other updates
+  that take seconds, while the MDS reports slow journal commits. Lower the
+  limit.
+
+Size the limit by the number of OSDs that store the backtraces, that is, the
+OSDs of the first data pool of the file system, and of the data pools that
+file layouts point to. The default of 256 was chosen with three NVMe OSDs,
+that is, about 85 writes per OSD. With more OSDs, the limit can be raised in
+proportion; with slower devices, such as HDDs, it should be lower. When the
+metadata pool is on OSDs of its own, the journal does not compete with the
+backtrace writes and the limit can be higher. The option can be changed at
+runtime.
