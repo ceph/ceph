@@ -18,6 +18,7 @@
 
 #include <dirent.h> // for IFTODT()
 
+#include <deque>
 #include <list>
 #include <map>
 #include <set>
@@ -902,6 +903,23 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
       return -1;
   }
 
+  // O_APPEND writers waiting to become the filelock loner (MClientCaps
+  // FLAG_APPEND), in request order.  The head is the ideal loner; it is
+  // removed once it has been issued Fx.  Only meaningful on the auth.
+  std::deque<client_t> append_excl_queue;
+  client_t append_excl_next();
+  void append_excl_enqueue(client_t c);
+  void append_excl_dequeue(client_t c);
+  bool append_excl_reader_waiting() const;
+  bool append_excl_replica_reader() const;
+  // The loner is an O_APPEND writer taking its turn, which may go on
+  // while other MDSs want caps (see choose_ideal_loner()).
+  bool is_append_excl_loner() const { return append_excl_loner; }
+  void set_append_excl_loner() { append_excl_loner = true; }
+  // Until when the turns wait for the readers on other MDSs, see
+  // Locker::issue_caps(); zero once a turn has started.
+  utime_t append_excl_replica_until;
+
   client_t calc_ideal_loner();
   void set_loner_cap(client_t l);
   bool choose_ideal_loner();
@@ -1165,6 +1183,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // -- caps -- (new)
   // client caps
   client_t loner_cap = -1, want_loner_cap = -1;
+  bool want_loner_append = false, append_excl_loner = false;
 
   /**
    * Return the pool ID where we currently write backtraces for

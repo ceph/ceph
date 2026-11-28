@@ -260,6 +260,22 @@ struct Inode : RefCountedObject {
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   std::map<int,int> open_by_mode;
   std::map<int,int> cap_refs;
+  // O_APPEND writes waiting for their turn as the filelock loner (Fx),
+  // see Client::get_append_caps()
+  int append_waiting = 0;
+  // Appends of this client that got their offset but have not updated
+  // size yet (we drop client_lock while writing, an async one completes
+  // later), and the end of the last one: the next append starts there,
+  // not at size.
+  int append_inflight = 0;
+  uint64_t append_end = 0;
+  // The append turn is kept between the pieces of one write(2) that
+  // the kernel FUSE code splits, see Client::ll_append(): the Fh the
+  // write(2) came through
+  Fh *append_hold = nullptr;
+  uint64_t append_hold_gen = 0;
+  // when a revoke of the Fx kept for the hold was first seen
+  utime_t append_hold_revoked;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
