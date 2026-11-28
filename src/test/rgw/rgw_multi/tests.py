@@ -143,6 +143,24 @@ def check_bucket_instance_metadata(zone, bucket):
 
     return True
 
+def bucket_sync_status_objects(zone, bucket_name):
+    """ the zone's full and per-shard bucket sync status objects for a bucket """
+    zone_json, _ = zone.cluster.admin(['zone', 'get'] + zone.zone_args(), read_only=True)
+    log_pool = json.loads(zone_json)['log_pool']
+    out, _ = zone.cluster.rados(['-p', log_pool, 'ls'])
+    # names hold the bucket key, [tenant/]name:bucket_id
+    return [o for o in out.split()
+            if o.startswith(('bucket.sync-status.', 'bucket.full-sync-status.'))
+            and (':%s:' % bucket_name in o or '/%s:' % bucket_name in o)]
+
+def check_bucket_sync_status_removed(zone, bucket_name):
+    left = bucket_sync_status_objects(zone, bucket_name)
+    if left:
+        log.critical('zone %s kept sync status of deleted bucket %s: %s',
+                     zone.name, bucket_name, left)
+        return False
+    return True
+
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
@@ -2208,6 +2226,7 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
     for zonegroup in realm.current_period.zonegroups:
         zonegroup_conns = ZonegroupConns(zonegroup)
         zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_data_checkpoint(zonegroup_conns)
 
         for zone in zonegroup_conns.zones:
             log.info('trimming on zone=%s', zone.name)
@@ -2221,6 +2240,7 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
         zonegroup_conns = ZonegroupConns(zonegroup)
         for zone in zonegroup_conns.zones:
             assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
+            assert check_bucket_sync_status_removed(zone.zone, test_bucket.name)
 
 @attr('bucket_trim')
 def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
@@ -2270,6 +2290,7 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
     for zonegroup in realm.current_period.zonegroups:
         zonegroup_conns = ZonegroupConns(zonegroup)
         zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_data_checkpoint(zonegroup_conns)
 
         for zone in zonegroup_conns.zones:
             log.info('trimming on zone=%s', zone.name)
@@ -2284,6 +2305,47 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
         zonegroup_conns = ZonegroupConns(zonegroup)
         for zone in zonegroup_conns.zones:
             assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
+            assert check_bucket_sync_status_removed(zone.zone, test_bucket.name)
+
+@attr('bucket_trim')
+def test_bucket_log_trim_after_delete_bucket_removes_sync_status():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', primary.zone.name, name)
+    primary.create_bucket(name)
+    primary.s3_client.put_object(Bucket=name, Key='obj', Body='foo')
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_bucket_checkpoint(zonegroup_conns, name)
+
+    # the zones that pulled the bucket hold sync status for it
+    assert any(bucket_sync_status_objects(zc.zone, name)
+               for zc in zonegroup_conns.zones), \
+        'no zone has sync status for bucket %s' % name
+
+    # empty the bucket and let that sync before deleting the bucket on the
+    # metadata master
+    primary.s3_client.delete_object(Bucket=name, Key='obj')
+    zonegroup_bucket_checkpoint(zonegroup_conns, name)
+    primary.s3_client.delete_bucket(Bucket=name)
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+    for zc in zonegroup_conns.zones:
+        log.info('zone %s sync status before trim: %s', zc.zone.name,
+                 bucket_sync_status_objects(zc.zone, name))
+
+    # bilog trim removes each zone's instance metadata and sync status
+    for _ in range(2):
+        for zc in zonegroup_conns.zones:
+            bilog_autotrim(zc.zone, ['--rgw-sync-log-trim-max-buckets', '50'])
+        time.sleep(config.checkpoint_delay)
+
+    for zc in zonegroup_conns.zones:
+        assert check_bucket_instance_metadata(zc.zone, name)
+        assert check_bucket_sync_status_removed(zc.zone, name)
 
 
 @attr('bucket_trim')
