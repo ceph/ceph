@@ -230,6 +230,7 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_datalog.cc
   driver/rados/rgw_datalog_notify.cc
   driver/rados/rgw_data_sync.cc
+  driver/rados/rgw_bucket_sync_status.cc
   driver/rados/rgw_etag_verifier.cc
   driver/rados/rgw_gc.cc
   driver/rados/rgw_gc_log.cc
