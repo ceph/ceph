@@ -268,6 +268,7 @@ void usage()
   cout << "  zonegroup placement default      set a zonegroup's default placement target\n";
   cout << "  zone create                      create a new zone\n";
   cout << "  zone delete                      remove a zone\n";
+  cout << "  zone default                     set default zone\n";
   cout << "  zone get                         show zone cluster params\n";
   cout << "  zone modify                      modify an existing zone\n";
   cout << "  zone set                         set zone cluster params (requires infile)\n";
