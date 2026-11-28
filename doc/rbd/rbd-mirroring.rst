@@ -69,6 +69,8 @@ Pool<rados_renaming_a_pool>` for instructions on renaming pools.
 See the `rbd`_ manpage for additional details of how to connect to different
 Ceph clusters.
 
+.. _rbd-mirroring-cluster-names:
+
 .. note:: The cluster name in the following examples corresponds to a Ceph
    configuration file of the same name (e.g. /etc/ceph/site-b.conf).  See
    :ref:`ceph-runtime-config` for how to configure multiple clusters.  Note
@@ -210,13 +212,22 @@ the addresses of the peer cluster's monitors, in addition to a keyring for
 ``{client-name}`` located in the default or configured keyring search paths
 (e.g. ``/etc/ceph/{cluster-name}.{client-name}.keyring``).
 
+The ``{cluster-name}`` in a peer specification (``site-b`` in the example
+above) is the peer's site name. The ``rbd-mirror`` daemon also uses it to find
+the peer's configuration file and keyring on the local host, but it is not the
+remote cluster's internal name. Do not give either cluster a vanity name for
+mirroring. Cluster vanity names are deprecated (see :ref:`ceph-metavariables`),
+so both clusters should keep the default name ``ceph``, and existing clusters
+with vanity names should be retrofitted to the default name. See :ref:`the note
+about cluster names <rbd-mirroring-cluster-names>` above.
+
 Alternatively, the peer cluster's monitor and/or client key can be securely
 stored within the local Ceph monitor ``config-key`` store. To specify the
 peer cluster connection attributes when adding a mirroring peer, use the
 ``--remote-mon-host`` and ``--remote-key-file`` optionals. For example::
 
         $ cat <<EOF > remote-key-file
-        AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==
+        AQAeuZdbMMoBChAA1701burm45h4v3dtTREEsw==
         EOF
         $ rbd --cluster site-a mirror pool peer add image-pool client.rbd-mirror-peer@site-b --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file remote-key-file
         $ rbd --cluster site-a mirror pool info image-pool --all
@@ -233,7 +244,7 @@ peer cluster connection attributes when adding a mirroring peer, use the
         Direction: rx-tx
         Client: client.rbd-mirror-peer
         Mon Host: 192.168.1.1,192.168.1.2
-        Key: AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==
+        Key: AQAeuZdbMMoBChAA1701burm45h4v3dtTREEsw==
 
 Remove Cluster Peer
 -------------------
@@ -636,6 +647,80 @@ ID as the daemon instance::
 The ``rbd-mirror`` can also be run in foreground by ``rbd-mirror`` command::
 
   rbd-mirror -f --log-file={log_path}
+
+Containerized and cephadm Deployments
+-------------------------------------
+
+An ``rbd-mirror`` daemon that runs in a container, including one that cephadm
+deploys, can read only the files that are mounted in its container. Cephadm
+mounts the local cluster's configuration file and the daemon's own keyring,
+but no configuration file or keyring for the peer cluster.
+
+The simplest way to give such a daemon what it needs to connect to the peer
+cluster is to store the peer's monitor addresses and CephX key in the local
+cluster's monitor ``config-key`` store. The
+``mirror pool peer bootstrap import`` command does this automatically (see
+`Bootstrap Peers`_), as do the ``--remote-mon-host`` and ``--remote-key-file``
+options of ``mirror pool peer add`` (see `Add Cluster Peer Manually`_). The
+``rbd-mirror`` daemon reads these values from the local cluster, so it does
+not need a configuration file or keyring for the peer cluster. To check that
+they are stored, run ``rbd mirror pool info {pool-name} --all`` and look for
+the ``Mon Host`` and ``Key`` fields.
+
+Cephadm creates a CephX user for each ``rbd-mirror`` daemon that it deploys,
+so the ``ceph auth get-or-create`` and ``systemctl`` steps above are not
+needed. To deploy ``rbd-mirror`` daemons on a cluster that cephadm manages,
+run a command of the following form on that cluster::
+
+        ceph orch apply rbd-mirror --placement={placement-spec}
+
+For example, to deploy one ``rbd-mirror`` daemon on each of two hosts::
+
+        $ ceph orch apply rbd-mirror --placement="host1 host2"
+
+See :ref:`orchestrator-cli-placement-spec` for the placement syntax and
+:ref:`orchestrator-cli-service-spec` for service specifications.
+
+If you prefer to give the daemons a configuration file and keyring for the
+peer cluster instead, add them to the ``rbd-mirror`` service specification
+with ``custom_configs`` (see :ref:`cephadm-custom-config-files`). Name the
+files after the peer's site name. The daemon looks for
+``/etc/ceph/{cluster-name}.conf`` and
+``/etc/ceph/{cluster-name}.{client-name}.keyring``, as described in
+`Add Cluster Peer Manually`_, so files with these names need no other
+settings. Cephadm mounts the local cluster's ``ceph.conf`` and the daemon's
+keyring as individual files, not the whole ``/etc/ceph`` directory, so those
+mounts do not hide the files. For example, for the peer added with
+``client.rbd-mirror-peer@site-b``:
+
+.. code-block:: yaml
+
+    service_type: rbd-mirror
+    placement:
+      hosts:
+        - host1
+        - host2
+    custom_configs:
+      - mount_path: /etc/ceph/site-b.conf
+        content: |
+          [global]
+          mon_host = 192.168.1.1,192.168.1.2
+      - mount_path: /etc/ceph/site-b.client.rbd-mirror-peer.keyring
+        content: |
+          [client.rbd-mirror-peer]
+              key = AQAeuZdbMMoBChAA1701burm45h4v3dtTREEsw==
+
+Apply the specification, and then redeploy the daemons so that cephadm mounts
+the files::
+
+        $ ceph orch apply -i rbd-mirror.yaml
+        $ ceph orch redeploy rbd-mirror
+
+.. note:: With ``custom_configs``, the peer's CephX key is stored in the
+   cephadm service specification and appears in the output of
+   ``ceph orch ls --export``. With the ``config-key`` method, the key is kept
+   in the monitor ``config-key`` store and is not part of the service
+   specification.
 
 .. _rbd: ../../man/8/rbd
 .. _explicitly enabled: #enable-image-mirroring

@@ -764,6 +764,8 @@ false. Examples:
       - argument: "--title=Imported Documents"
 
 
+.. _cephadm-custom-config-files:
+
 Custom Config Files
 ===================
 
