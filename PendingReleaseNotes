@@ -1,5 +1,12 @@
 >=22.0.0
 
+* RADOS: Fixed a potential data corruption bug on Legacy Erasure Coded (EC) pools
+  with EC overwrites enabled (Luminous onwards). Client I/O requests containing
+  both a write and a truncate in the same request (theoretically possible via
+  librbd discard coalescing or concurrent CephFS write/truncate) could cause the
+  last stripe unit of an object to be improperly overwritten with zeros. Fast EC
+  pools, Replicated pools, krbd, and RGW were not affected.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
