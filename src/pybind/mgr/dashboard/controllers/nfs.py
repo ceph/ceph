@@ -59,6 +59,7 @@ EXPORT_SCHEMA = {
     'pseudo': (str, 'Pseudo FS path'),
     'access_type': (str, 'Export access type'),
     'squash': (str, 'Export squash policy'),
+    'sectype': ([str], 'List of authentication methods'),
     'security_label': (str, 'Security label'),
     'protocols': ([int], 'List of protocol types'),
     'transports': ([str], 'List of transport types'),
@@ -107,6 +108,7 @@ CREATE_EXPORT_SCHEMA = {
     'pseudo': (str, 'Pseudo FS path'),
     'access_type': (str, 'Export access type'),
     'squash': (str, 'Export squash policy'),
+    'sectype': ([str], 'List of authentication methods'),
     'security_label': (str, 'Security label'),
     'protocols': ([int], 'List of protocol types'),
     'transports': ([str], 'List of transport types'),
@@ -291,7 +293,7 @@ class NFSGaneshaExports(RESTController):
                  responses={201: EXPORT_SCHEMA})
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def create(self, path, cluster_id, pseudo, access_type,
-               squash, security_label, protocols, transports, fsal, clients) -> Dict[str, Any]:
+               squash, sectype, security_label, protocols, transports, fsal, clients) -> Dict[str, Any]:
         if hasattr(fsal, 'user_id'):
             fsal.pop('user_id')  # mgr/nfs does not let you customize user_id
         raw_ex = {
@@ -300,6 +302,7 @@ class NFSGaneshaExports(RESTController):
             'cluster_id': cluster_id,
             'access_type': access_type,
             'squash': squash,
+            'sectype': sectype,
             'security_label': security_label,
             'protocols': protocols,
             'transports': transports,
@@ -336,7 +339,7 @@ class NFSGaneshaExports(RESTController):
                  responses={200: EXPORT_SCHEMA})
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def set(self, cluster_id, export_id, path, pseudo, access_type,
-            squash, security_label, protocols, transports, fsal, clients) -> Dict[str, Any]:
+            squash, sectype, security_label, protocols, transports, fsal, clients) -> Dict[str, Any]:
 
         if hasattr(fsal, 'user_id'):
             fsal.pop('user_id')  # mgr/nfs does not let you customize user_id
@@ -347,6 +350,7 @@ class NFSGaneshaExports(RESTController):
             'export_id': export_id,
             'access_type': access_type,
             'squash': squash,
+            'sectype': sectype,
             'security_label': security_label,
             'protocols': protocols,
             'transports': transports,
