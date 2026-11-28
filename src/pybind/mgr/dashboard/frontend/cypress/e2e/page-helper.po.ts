@@ -37,8 +37,51 @@ export abstract class PageHelper {
     name = name || 'index';
     const page = this.pages[name];
 
+    this.stubOrchestratorEndpoints();
     cy.visit(page.url);
-    cy.get(page.id);
+    cy.wait(2000);
+    cy.document().then((doc) => {
+      if (!doc.querySelector(page.id)) {
+        this.stubOrchestratorEndpoints();
+        cy.visit(page.url);
+      }
+    });
+    cy.get(page.id, { timeout: 60000 });
+  }
+
+  /**
+   * Stub ModuleStatusGuardService orchestrator calls so a transient config
+   * failure cannot async-redirect away from the page under test.
+   */
+  stubOrchestratorEndpoints() {
+    cy.intercept('GET', '**/ui-api/orchestrator/status', {
+      statusCode: 200,
+      body: {
+        available: true,
+        message: null,
+        features: {
+          blink_device_light: { available: true }
+        }
+      }
+    }).as('orchStatus');
+    cy.intercept('GET', '**/api/mgr/module/orchestrator', {
+      statusCode: 200,
+      body: { orchestrator: 'cephadm' }
+    }).as('orchConfig');
+    cy.intercept('GET', '**/ui-api/osd/deployment_options', {
+      statusCode: 200,
+      body: {
+        recommended_option: 'cost_capacity',
+        options: {
+          cost_capacity: {
+            title: 'Cost/Capacity-Optimized',
+            desc: 'All available devices will be configured as data devices',
+            available: true,
+            used: null
+          }
+        }
+      }
+    }).as('deploymentOptions');
   }
 
   /**

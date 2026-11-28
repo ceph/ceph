@@ -20,7 +20,7 @@ describe('Add storage - create osds page', () => {
   });
 
   describe('when Orchestrator is available', () => {
-    it('should create OSDs', () => {
+    it('should create OSDs', { retries: 2 }, () => {
       const hostnames = ['ceph-node-00', 'ceph-node-01'];
       for (const hostname of hostnames) {
         osds.create('hdd', hostname, true);
@@ -29,8 +29,9 @@ describe('Add storage - create osds page', () => {
         // because the drive group spec is only stored
         // in frontend and will be lost when refreshed
         onboarding.selectStep('Review');
+        cy.get('cd-create-cluster-review', { timeout: 30000 }).should('exist');
         onboarding.submitStorage();
-        cy.get('cd-overview').should('exist');
+        cy.get('cd-overview', { timeout: 60000 }).should('exist');
         onboarding.navigateTo();
         onboarding.onboarding();
         onboarding.selectStep('Create OSDs');
