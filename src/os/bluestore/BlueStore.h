@@ -375,6 +375,7 @@ public:
 
   class SocketHook;
   friend class SocketHook;
+  friend class UT_bluestore_cache_shards;
 
   /////////////////////////////
 
@@ -1099,6 +1100,7 @@ private:
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
   double cache_age_bin_interval = 0; ///< time to wait between cache age bin rotations
+  std::atomic<bool> cache_data_shard_weighted = {true}; ///< size data cache shards by the bytes they hold
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
   std::vector<uint64_t> kv_bins; ///< kv autotune bins
   std::vector<uint64_t> kv_onode_bins; ///< kv onode autotune bins
@@ -1159,8 +1161,10 @@ private:
       virtual uint64_t _get_used_bytes() const = 0;
       virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const = 0;
 
-      virtual int64_t request_cache_bytes(
-          PriorityCache::Priority pri, uint64_t total_cache) const {
+      /// Ask for `scale` of the binned bytes by age and for the rest of the
+      /// bytes used at LAST.
+      int64_t _request_cache_bytes(
+          PriorityCache::Priority pri, double scale) const {
         int64_t assigned = get_cache_bytes(pri);
 
         switch (pri) {
@@ -1172,7 +1176,8 @@ private:
         case PriorityCache::Priority::LAST:
           {
             uint32_t max = get_bin_count();
-	    int64_t request = _get_used_bytes() - _sum_bins(0, max);
+	    int64_t request = _get_used_bytes() -
+	      static_cast<int64_t>(_sum_bins(0, max) * scale);
             return(request > assigned) ? request - assigned : 0;
           }
         default:
@@ -1181,11 +1186,17 @@ private:
             auto prev_pri = static_cast<PriorityCache::Priority>(pri - 1);
             uint64_t start = get_bins(prev_pri);
             uint64_t end = get_bins(pri);
-            int64_t request = _sum_bins(start, end);
+            int64_t request =
+              static_cast<int64_t>(_sum_bins(start, end) * scale);
             return(request > assigned) ? request - assigned : 0;
 	  }
 	}
         return -EOPNOTSUPP;
+      }
+
+      virtual int64_t request_cache_bytes(
+          PriorityCache::Priority pri, uint64_t total_cache) const {
+        return _request_cache_bytes(pri, 1.0);
       }
  
       virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
@@ -1321,6 +1332,81 @@ private:
           bytes += i->sum_bins(start, end);
         }
         return bytes;
+      }
+      /// A shard keeps MIN_EVEN_RATIO of an even split whatever it holds, so
+      /// a shard that receives its first PG can take data before the next
+      /// resize.
+      static constexpr double MIN_EVEN_RATIO = 0.125;
+
+      /// Split `alloc` among the shards: the floor each, the rest in
+      /// proportion to the bytes held. The limits sum to at most alloc; with
+      /// nothing held the split is even, and full shards at the even split
+      /// stay there.
+      static std::vector<uint64_t> weighted_limits(
+          uint64_t alloc, const std::vector<uint64_t>& held) {
+        size_t shards = held.size();
+        std::vector<uint64_t> limits(shards, 0);
+        if (shards == 0) {
+          return limits;
+        }
+        uint64_t even = alloc / shards;
+        uint64_t min_limit = static_cast<uint64_t>(even * MIN_EVEN_RATIO);
+        uint64_t rest = alloc - min_limit * shards;
+        uint64_t total_held = 0;
+        for (auto h : held) {
+          total_held += h;
+        }
+        for (size_t s = 0; s < shards; ++s) {
+          if (total_held == 0) {
+            limits[s] = even;
+          } else {
+            // double: rest * held overflows uint64 past 4 GiB each
+            limits[s] = min_limit + static_cast<uint64_t>(
+              static_cast<double>(rest) * held[s] / total_held);
+          }
+        }
+        return limits;
+      }
+
+      /// The fraction of the bytes held that an even split of `alloc` would
+      /// have held: a shard over its even share counts as full, one under it
+      /// as is.
+      static double even_split_fraction(
+          uint64_t alloc, const std::vector<uint64_t>& held) {
+        size_t shards = held.size();
+        if (shards == 0 || alloc == 0) {
+          return 1.0;
+        }
+        uint64_t even = alloc / shards;
+        uint64_t total = 0;
+        uint64_t capped = 0;
+        for (auto h : held) {
+          total += h;
+          capped += std::min(h, even);
+        }
+        return total ? static_cast<double>(capped) / total : 1.0;
+      }
+
+      // With weighted shard limits the cache can hold its whole commit, and
+      // the autotuner commits what is held plus headroom: asking for all of
+      // it by age would grow the commit at every balance out of the other
+      // caches' age bins. Ask by age only for what an even split would have
+      // held, as before the weighting, and for the rest at LAST, which the
+      // tuner serves from the memory no cache claimed by age. The commit
+      // grows into unclaimed memory and never into another cache's content.
+      int64_t request_cache_bytes(
+          PriorityCache::Priority pri, uint64_t total_cache) const override {
+        if (!store->cache_data_shard_weighted) {
+          return _request_cache_bytes(pri, 1.0);
+        }
+        std::vector<uint64_t> held;
+        held.reserve(store->buffer_cache_shards.size());
+        for (auto i : store->buffer_cache_shards) {
+          // lockless, like _get_used_bytes()
+          held.push_back(i->_get_bytes());
+        }
+        return _request_cache_bytes(
+          pri, even_split_fraction(get_committed_size(), held));
       }
       virtual std::string get_cache_name() const {
         return "BlueStore Data Cache";
