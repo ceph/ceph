@@ -1944,6 +1944,48 @@ def test_keepalived_should_auto_start_keepalive_only_backend():
     assert IngressService.keepalived_should_auto_start(mgr, k, spec)
 
 
+def test_keepalived_auto_start_ignores_stale_daemon_on_unreachable_host():
+    ispec = IngressSpec(
+        service_type='ingress',
+        service_id='nfs.foo',
+        backend_service='nfs.foo',
+        virtual_ip='1.2.3.4/24',
+        keepalive_only=True,
+        placement=PlacementSpec(count=1, hosts=['h1', 'h2']),
+    )
+    live = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='nfs.foo.h2.k',
+        hostname='h2',
+        service_name='ingress.nfs.foo',
+        status=DaemonDescriptionStatus.stopped,
+    )
+    stale = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='nfs.foo.h1.k',
+        hostname='h1',
+        service_name='ingress.nfs.foo',
+    )
+    nfs_d = DaemonDescription(
+        daemon_type='nfs',
+        daemon_id='foo.0.1.h2.x',
+        hostname='h2',
+        service_name='nfs.foo',
+        status=DaemonDescriptionStatus.running,
+    )
+    mgr = MagicMock()
+    mgr.cache.get_schedulable_hosts.return_value = [HostSpec('h1'), HostSpec('h2')]
+    mgr.cache.is_host_unreachable.side_effect = lambda h: h == 'h1'
+    mgr.cache.get_daemons_by_service.side_effect = (
+        lambda n: [live, stale] if n == 'ingress.nfs.foo' else [nfs_d]
+    )
+    assert IngressService.keepalived_should_auto_start(mgr, live, ispec)
+
+    # both hosts reachable: genuine excess, must not auto start
+    mgr.cache.is_host_unreachable.side_effect = lambda h: False
+    assert not IngressService.keepalived_should_auto_start(mgr, live, ispec)
+
+
 def test_tls_dependencies_apply_only_to_haproxy():
     mgr = MagicMock()
     backend_spec = RGWSpec(service_id='foo')
