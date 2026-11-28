@@ -1132,6 +1132,7 @@ endif(WITH_TESTS)
 
 install(PROGRAMS
   rgw-gap-list
+  rgw-gap-list.py
   rgw-gap-list-comparator
   rgw-orphan-list
   rgw-restore-bucket-index

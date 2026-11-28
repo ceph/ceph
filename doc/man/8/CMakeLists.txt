@@ -60,6 +60,7 @@ if(WITH_RADOSGW)
 	radosgw-admin.rst
 	rgw-orphan-list.rst
 	rgw-gap-list.rst
+	rgw-gap-list.py.rst
 	rgw-policy-check.rst
 	rgw-policy-test.rst
 	ceph-diff-sorted.rst
