@@ -28,6 +28,7 @@ namespace {
 
   static const std::string bucket_root = "bucket_root";
   static const std::string database_root = "lmdb_root";
+  static const std::string notif_option = "RedisNotify";
   static const std::string tdir1 = "tdir1";
   static const std::string tdir2 = "tdir2";
 
@@ -185,7 +186,7 @@ protected:
     setup_dir2();
 
     // default tuning
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, notif_option};
   }
 
   static void TearDownTestSuite() {
@@ -239,7 +240,7 @@ protected:
 
   static void SetUpTestSuite() {
     bvec = setup_buckets();
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 2, 1, 1, 1};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, notif_option, 2, 1, 1, 1};
   }
 
   static void TearDownTestSuite() {
@@ -270,7 +271,7 @@ protected:
 
   static void SetUpTestSuite() {
     bvec = setup_buckets();
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 2, 1, 5 /* max partitions */, 1};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, notif_option, 2, 1, 5 /* max partitions */, 1};
   }
   static void TearDownTestSuite() {
     delete bucket_cache;
@@ -310,7 +311,7 @@ protected:
       ofs << "data for " << ttp << std::endl;
       ofs.close();
     }
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, notif_option};
   }
 
   static void TearDownTestSuite() {
@@ -345,7 +346,7 @@ protected:
     sf::path tp{sf::path{bucket_root} / "inotify1"};
     sf::remove_all(tp);
     sf::create_directory(tp);
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, notif_option};
   }
 
   void TearDown() override {
