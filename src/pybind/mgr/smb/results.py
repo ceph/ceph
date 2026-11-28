@@ -249,6 +249,49 @@ class InvalidResourceResult(BaseResult):
         return ds
 
 
+class SubvolumeResolutionErrorResult(BaseResult):
+    """Result for CephFS subvolume resolution failure when the full Share
+    object cannot be retrieved from the store.
+    """
+
+    def __init__(
+        self,
+        msg: str,
+        cluster_id: str = '',
+        share_id: str = '',
+        subvolume_id: str = '',
+        cephfs_volume: str = '',
+        cephfs_subvolumegroup: str = '',
+    ) -> None:
+        cephfs_data: Dict[str, str] = {}
+        if cephfs_volume:
+            cephfs_data['volume'] = cephfs_volume
+        if cephfs_subvolumegroup:
+            cephfs_data['subvolumegroup'] = cephfs_subvolumegroup
+        if subvolume_id:
+            cephfs_data['subvolume'] = subvolume_id
+
+        resource_data: Simplified = {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': cluster_id,
+            'share_id': share_id,
+        }
+        if cephfs_data:
+            resource_data['cephfs'] = cephfs_data
+
+        self.resource_data = resource_data
+        self.success = False
+        self.msg = msg
+
+    def to_simplified(self) -> Simplified:
+        ds: Simplified = {}
+        ds['resource'] = self.resource_data
+        ds['success'] = self.success
+        if self.msg:
+            ds['msg'] = self.msg
+        return ds
+
+
 class ResultGroup:
     """Result of applying multiple smb resource updates to the system."""
 
@@ -284,11 +327,14 @@ class ResultGroup:
             else:
                 others.append(result)
         if match:
-            match.success = self.success
+            # The target's own outcome decides its success. Failures of other
+            # resources (e.g. a share with a now-missing subvolume that gets
+            # re-synced) are reported in additional_results only.
             match.status = {} if match.status is None else match.status
-            match.status['additional_results'] = [
-                r.to_simplified() for r in others
-            ]
+            if others:
+                match.status['additional_results'] = [
+                    r.to_simplified() for r in others
+                ]
             return match
         raise ValueError('no matching result for resource found')
 

@@ -1,3 +1,5 @@
+import errno
+
 import pytest
 
 import smb.enums
@@ -231,6 +233,30 @@ def test_invalid_resource_result_std():
     assert dump['resource'].get('resource_type') == 'ceph.smb.gnopf'
     assert dump['resource'].get('gnopf_id') == 'abc'
     assert dump['msg'] == 'That aint a real thing'
+
+
+def test_subvolume_resolution_error_result():
+    res = smb.results.SubvolumeResolutionErrorResult(
+        msg='Subvolume not found',
+        cluster_id='c1',
+        share_id='s1',
+        subvolume_id='sv1',
+        cephfs_volume='vol1',
+        cephfs_subvolumegroup='svg1',
+    )
+    assert res.mgr_return_value() == -11
+    assert 'for details' in res.mgr_status_value()
+    dump = res.to_simplified()
+    assert dump['success'] is False
+    assert dump['msg'] == 'Subvolume not found'
+    assert dump['resource']['resource_type'] == 'ceph.smb.share'
+    assert dump['resource']['cluster_id'] == 'c1'
+    assert dump['resource']['share_id'] == 's1'
+    assert dump['resource']['cephfs'] == {
+        'volume': 'vol1',
+        'subvolumegroup': 'svg1',
+        'subvolume': 'sv1',
+    }
 
 
 def test_result_group_one():
@@ -481,6 +507,59 @@ def test_result_group_squash():
         dump['additional_results'][0].get('resource').get('resource_type')
         == 'ceph.smb.join.auth'
     )
+
+
+def test_result_group_squash_other_failure_does_not_fail_target():
+    share = smb.resources.Share(
+        cluster_id='c1',
+        share_id='share11',
+        name='share11',
+        cephfs=smb.resources.CephFSStorage(volume='mycephfs', path='/'),
+    )
+    other = smb.resources.Share(
+        cluster_id='c1',
+        share_id='share10',
+        name='share10',
+        cephfs=smb.resources.CephFSStorage(
+            volume='mycephfs', subvolume='sv10', path='/'
+        ),
+    )
+    rg = smb.results.ResultGroup(
+        initial_results=[
+            smb.results.ResourceResult.processed(
+                share, smb.enums.State.REMOVED
+            ),
+            smb.results.ErrorResult(other, msg='Subvolume issue'),
+        ]
+    )
+    squashed = rg.squash(share)
+    assert squashed.success is True
+    assert squashed.mgr_return_value() == 0
+    dump = squashed.to_simplified()
+    assert dump['success'] is True
+    assert dump['state'] == 'removed'
+    assert len(dump['additional_results']) == 1
+    assert dump['additional_results'][0]['success'] is False
+    assert dump['additional_results'][0]['resource']['share_id'] == 'share10'
+
+
+def test_result_group_squash_target_failure_fails():
+    share = smb.resources.Share(
+        cluster_id='c1',
+        share_id='share10',
+        name='share10',
+        cephfs=smb.resources.CephFSStorage(
+            volume='mycephfs', subvolume='sv10', path='/'
+        ),
+    )
+    rg = smb.results.ResultGroup(
+        initial_results=[
+            smb.results.ErrorResult(share, msg='Subvolume issue')
+        ]
+    )
+    squashed = rg.squash(share)
+    assert squashed.success is False
+    assert squashed.mgr_return_value() == -errno.EAGAIN
 
 
 def test_result_group_squash_fail():
