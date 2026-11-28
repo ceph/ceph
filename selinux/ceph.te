@@ -12,7 +12,7 @@ require {
 	type random_device_t;
 	type urandom_device_t;
 	type setfiles_t;
-	type nvme_device_t;
+	type fixed_disk_device_t;
 	type targetd_etc_rw_t;
 	type amqp_port_t;
 	type soundd_port_t;
@@ -117,7 +117,7 @@ sysnet_dns_name_resolve(ceph_t)
 
 udev_read_db(ceph_t)
 
-allow ceph_t nvme_device_t:blk_file { getattr ioctl open read write };
+allow ceph_t fixed_disk_device_t:blk_file { getattr ioctl open read write };
 
 # basis for future security review
 allow ceph_t ceph_var_run_t:sock_file { create unlink write setattr };
