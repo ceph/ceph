@@ -6,10 +6,10 @@ from typing import List, cast, Optional, TYPE_CHECKING
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import IscsiServiceSpec, ServiceSpec
+from ceph.deployment.service_spec import IscsiServiceSpec, ServiceSpec, PlacementSpec
 
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
-from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
+from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext, AuthEntityKind
 from .service_registry import register_cephadm_service
 from .. import utils
 
@@ -33,6 +33,9 @@ def get_trusted_ips(mgr: "CephadmOrchestrator", spec: IscsiServiceSpec) -> str:
 @register_cephadm_service
 class IscsiService(CephService):
     TYPE = 'iscsi'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
 
     def config(self, spec: IscsiServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type

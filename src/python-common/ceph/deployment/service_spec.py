@@ -1,3 +1,4 @@
+import bisect
 import fnmatch
 import os
 import re
@@ -858,56 +859,20 @@ class ServiceSpec(object):
     start the services.
     """
 
-    # list of all service type names that a ServiceSpec can be cast info
-    KNOWN_SERVICE_TYPES = [
-        'agent',
-        'alertmanager',
-        'ceph-exporter',
-        'cephfs-mirror',
-        'container',
-        'crash',
-        'elasticsearch',
-        'grafana',
-        'ingress',
-        'mgmt-gateway',
-        'oauth2-proxy',
-        'iscsi',
-        'jaeger-agent',
-        'jaeger-collector',
-        'jaeger-query',
-        'jaeger-tracing',
-        'loki',
-        'mds',
-        'mgr',
-        'mon',
-        'nfs',
-        'node-exporter',
-        'node-proxy',
-        'nvmeof',
-        'osd',
-        'prometheus',
-        'promtail',
-        'pushgateway',
-        'alloy',
-        'rbd-mirror',
-        'rgw',
-        'smb',
-        'snmp-gateway',
-    ]
+    # Service type names that a ServiceSpec can be cast into, kept sorted.
+    # Filled by register_service_spec() and register_service_types(); do
+    # not edit this list directly.
+    KNOWN_SERVICE_TYPES: List[str] = []
 
-    # list of all service type names that require/get assigned a service_id value.
-    # if a service is not listed here it *will not* be assigned a service_id even
-    # if it is present in the JSON/YAML input
-    REQUIRES_SERVICE_ID = [
-        'container',
-        'ingress',
-        'iscsi',
-        'mds',
-        'nfs',
-        'nvmeof',
-        'rgw',
-        'smb',
-    ]
+    # Service type names that require/get assigned a service_id value. If a
+    # service is not listed here it *will not* be assigned a service_id even
+    # if it is present in the JSON/YAML input. Filled by the same functions
+    # as KNOWN_SERVICE_TYPES.
+    REQUIRES_SERVICE_ID: List[str] = []
+
+    # service type -> ServiceSpec subclass, filled by register_service_spec().
+    # Types without an entry use the class _cls() is called on.
+    _SPEC_CLASSES: Dict[str, Type['ServiceSpec']] = {}
 
     # List of all services that can require TLS certifiactes
     REQUIRES_CERTIFICATES: Dict[str, RequiresCertificatesEntry] = {
@@ -942,38 +907,12 @@ class ServiceSpec(object):
 
     @classmethod
     def _cls(cls: Type[ServiceSpecT], service_type: str) -> Type[ServiceSpecT]:
-        from ceph.deployment.drive_group import DriveGroupSpec
+        if service_type == 'osd':
+            # drive_group imports this module, so it cannot be imported at
+            # the top. Importing it registers DriveGroupSpec for 'osd'.
+            import ceph.deployment.drive_group  # noqa: F401
 
-        ret = {
-            'mon': MONSpec,
-            'rgw': RGWSpec,
-            'nfs': NFSServiceSpec,
-            'osd': DriveGroupSpec,
-            'mds': MDSSpec,
-            'iscsi': IscsiServiceSpec,
-            'nvmeof': NvmeofServiceSpec,
-            'alertmanager': AlertManagerSpec,
-            'ingress': IngressSpec,
-            'mgmt-gateway': MgmtGatewaySpec,
-            'oauth2-proxy': OAuth2ProxySpec,
-            'container': CustomContainerSpec,
-            'grafana': GrafanaSpec,
-            'node-exporter': MonitoringSpec,
-            'ceph-exporter': CephExporterSpec,
-            'prometheus': PrometheusSpec,
-            'loki': MonitoringSpec,
-            'promtail': MonitoringSpec,
-            'alloy': MonitoringSpec,
-            'pushgateway': MonitoringSpec,
-            'snmp-gateway': SNMPGatewaySpec,
-            'elasticsearch': TracingSpec,
-            'jaeger-agent': TracingSpec,
-            'jaeger-collector': TracingSpec,
-            'jaeger-query': TracingSpec,
-            'jaeger-tracing': TracingSpec,
-            'node-proxy': NodeProxySpec,
-            SMBSpec.service_type: SMBSpec,
-        }.get(service_type, cls)
+        ret: Any = ServiceSpec._SPEC_CLASSES.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
         return ret
@@ -1396,6 +1335,51 @@ class ServiceSpec(object):
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
+def register_service_types(*service_types: str, requires_service_id: bool = False) -> None:
+    """
+    Make service types known to ServiceSpec. Use this directly for types
+    that need no ServiceSpec subclass; register_service_spec() calls it
+    for the others.
+    """
+    for service_type in service_types:
+        if service_type not in ServiceSpec.KNOWN_SERVICE_TYPES:
+            bisect.insort(ServiceSpec.KNOWN_SERVICE_TYPES, service_type)
+        if requires_service_id and service_type not in ServiceSpec.REQUIRES_SERVICE_ID:
+            bisect.insort(ServiceSpec.REQUIRES_SERVICE_ID, service_type)
+
+
+def register_service_spec(
+    *service_types: str,
+    requires_service_id: bool = False,
+) -> Callable[[Type[ServiceSpecT]], Type[ServiceSpecT]]:
+    """
+    Class decorator that registers a ServiceSpec subclass as the spec of
+    one or more service types, so that ServiceSpec(service_type) and
+    ServiceSpec.from_json() return an instance of it, and that YAML
+    output works for it.
+    """
+    def decorator(spec_cls: Type[ServiceSpecT]) -> Type[ServiceSpecT]:
+        for service_type in service_types:
+            current = ServiceSpec._SPEC_CLASSES.get(service_type)
+            # A module reload defines a new class with the same name; only
+            # a different class claiming the same type is an error.
+            if current is not None and current.__qualname__ != spec_cls.__qualname__:
+                raise ValueError(
+                    f'service type {service_type!r} is already registered '
+                    f'to {current.__qualname__}')
+            ServiceSpec._SPEC_CLASSES[service_type] = spec_cls
+        register_service_types(*service_types, requires_service_id=requires_service_id)
+        yaml.add_representer(spec_cls, spec_cls.yaml_representer)
+        return spec_cls
+    return decorator
+
+
+# Service types that use the base ServiceSpec. 'osd' is listed here so that
+# it is known without importing drive_group, which registers DriveGroupSpec.
+register_service_types('agent', 'cephfs-mirror', 'crash', 'mgr', 'osd', 'rbd-mirror')
+
+
+@register_service_spec('nfs', requires_service_id=True)
 class NFSServiceSpec(ServiceSpec):
     COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port', 'cluster_qos_port']
     COLOCATION_PORT_FIELDS_WITH_RDMA = [
@@ -1730,9 +1714,7 @@ class NFSServiceSpec(ServiceSpec):
                 )
 
 
-yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('rgw', requires_service_id=True)
 class RGWSpec(ServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
@@ -2138,9 +2120,7 @@ class RGWSpec(ServiceSpec):
                     'metrics_push_timeout must be at least 30 seconds')
 
 
-yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('nvmeof', requires_service_id=True)
 class NvmeofServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'nvmeof',
@@ -2726,9 +2706,7 @@ class NvmeofServiceSpec(ServiceSpec):
                 )
 
 
-yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('iscsi', requires_service_id=True)
 class IscsiServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'iscsi',
@@ -2805,9 +2783,7 @@ class IscsiServiceSpec(ServiceSpec):
         # will be unaffected by the new default value.
 
 
-yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('ingress', requires_service_id=True)
 class IngressSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'ingress',
@@ -2989,9 +2965,7 @@ class IngressSpec(ServiceSpec):
                     ['debug', 'info', 'notice', 'warning', 'err'])
 
 
-yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('mgmt-gateway')
 class MgmtGatewaySpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'mgmt-gateway',
@@ -3130,9 +3104,7 @@ class MgmtGatewaySpec(ServiceSpec):
                 Must be one of {valid_protocols}.")
 
 
-yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('oauth2-proxy')
 class OAuth2ProxySpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'oauth2-proxy',
@@ -3307,9 +3279,6 @@ class OAuth2ProxySpec(ServiceSpec):
                                       "but must be 16, 24, or 32 bytes to create an AES cipher.")
 
 
-yaml.add_representer(OAuth2ProxySpec, ServiceSpec.yaml_representer)
-
-
 class InitContainerSpec(object):
     """An init container is not a service that lives on its own, but rather
     is used to run and exit prior to a service container starting in order
@@ -3407,6 +3376,7 @@ class InitContainerSpec(object):
         return out
 
 
+@register_service_spec('container', requires_service_id=True)
 class CustomContainerSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'container',
@@ -3508,9 +3478,7 @@ class CustomContainerSpec(ServiceSpec):
         return list(self.ports) if self.ports else []
 
 
-yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('node-exporter', 'loki', 'promtail', 'alloy', 'pushgateway')
 class MonitoringSpec(ServiceSpec):
     def __init__(self,
                  service_type: str,
@@ -3564,9 +3532,7 @@ class MonitoringSpec(ServiceSpec):
                     'pushgateway': 9091}[self.service_type]
 
 
-yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('alertmanager')
 class AlertManagerSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'alertmanager',
@@ -3624,9 +3590,7 @@ class AlertManagerSpec(MonitoringSpec):
                 'Port 9094 is reserved for AlertManager cluster listen address')
 
 
-yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('grafana')
 class GrafanaSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'grafana',
@@ -3697,9 +3661,7 @@ class GrafanaSpec(MonitoringSpec):
         return json_dict
 
 
-yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('prometheus')
 class PrometheusSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'prometheus',
@@ -3753,9 +3715,7 @@ class PrometheusSpec(MonitoringSpec):
                 raise SpecValidationError(f"Invalid retention size. Valid units are: {units}")
 
 
-yaml.add_representer(PrometheusSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('snmp-gateway')
 class SNMPGatewaySpec(ServiceSpec):
     class SNMPVersion(str, enum.Enum):
         V2c = 'V2c'
@@ -3907,9 +3867,7 @@ class SNMPGatewaySpec(ServiceSpec):
                 )
 
 
-yaml.add_representer(SNMPGatewaySpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('mds', requires_service_id=True)
 class MDSSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'mds',
@@ -3939,9 +3897,7 @@ class MDSSpec(ServiceSpec):
             raise SpecValidationError('MDS service id cannot start with a numeric digit')
 
 
-yaml.add_representer(MDSSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('mon')
 class MONSpec(ServiceSpec):
     def __init__(self,
                  service_type: str,
@@ -3987,9 +3943,8 @@ class MONSpec(ServiceSpec):
                         raise SpecValidationError(err_str)
 
 
-yaml.add_representer(MONSpec, ServiceSpec.yaml_representer)
-
-
+@register_service_spec('elasticsearch', 'jaeger-agent', 'jaeger-collector',
+                       'jaeger-query', 'jaeger-tracing')
 class TracingSpec(ServiceSpec):
     SERVICE_TYPES = ['elasticsearch', 'jaeger-collector', 'jaeger-query', 'jaeger-agent']
 
@@ -4048,9 +4003,6 @@ class TracingSpec(ServiceSpec):
         return specs
 
 
-yaml.add_representer(TracingSpec, ServiceSpec.yaml_representer)
-
-
 class TunedProfileSpec():
     def __init__(self,
                  profile_name: str,
@@ -4102,6 +4054,7 @@ class TunedProfileSpec():
         return TunedProfileSpec(self.profile_name, self.placement, self.settings.copy())
 
 
+@register_service_spec('ceph-exporter')
 class CephExporterSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'ceph-exporter',
@@ -4154,9 +4107,6 @@ class CephExporterSpec(ServiceSpec):
         if not isinstance(self.stats_period, int):
             raise SpecValidationError(
                     f'stats_period must be an integer. Got {type(self.stats_period)}')
-
-
-yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)
 
 
 class SMBClusterPublicIPSpec:
@@ -4554,6 +4504,7 @@ class SMBExternalCephCluster:
         return out
 
 
+@register_service_spec('smb', requires_service_id=True)
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
     _valid_features = smbconst.FEATURES
@@ -4795,6 +4746,7 @@ class SMBSpec(ServiceSpec):
         return obj
 
 
+@register_service_spec('node-proxy')
 class NodeProxySpec(ServiceSpec):
     def __init__(self,
                  service_type: str,
@@ -4820,7 +4772,3 @@ class NodeProxySpec(ServiceSpec):
             custom_configs=custom_configs,
         )
         self.validate()
-
-
-yaml.add_representer(NodeProxySpec, ServiceSpec.yaml_representer)
-yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)

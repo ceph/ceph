@@ -9,7 +9,7 @@ from ..service_registry import register_cephadm_service
 from cephadm.services.service_registry import service_registry
 from cephadm.tlsobject_types import TLSCredentials
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import ServiceSpec, PrometheusSpec
+from ceph.deployment.service_spec import ServiceSpec, PrometheusSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephadmService, DaemonDeployContext, next_action_for_mgmt_stack_service
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class PrometheusService(CephadmService):
     TYPE = 'prometheus'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 9095
     DEFAULT_MGR_PROMETHEUS_PORT = 9283
     USER_CFG_KEY = 'prometheus/web_user'

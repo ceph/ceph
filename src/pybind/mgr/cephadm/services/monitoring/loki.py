@@ -1,6 +1,7 @@
 from typing import List, Any, Tuple, Dict
 from ..service_registry import register_cephadm_service
 from orchestrator import DaemonDescription
+from ceph.deployment.service_spec import PlacementSpec
 from cephadm.services.cephadmservice import CephadmService, DaemonDeployContext
 from mgr_util import build_url
 import logging
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class LokiService(CephadmService):
     TYPE = 'loki'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 3100
 
     def generate_config(

@@ -1,10 +1,14 @@
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from ceph.deployment.service_spec import PlacementSpec
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 
 
 @register_cephadm_service
 class CrashService(CephService):
     TYPE = 'crash'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_HOST
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(host_pattern='*')
 
     def prepare_create(
             self,

@@ -4,7 +4,7 @@ from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 from ceph.deployment.utils import wrap_ipv6
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
+from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import (
     CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext, get_dashboard_endpoints,
 )
@@ -21,6 +21,7 @@ INTERNAL_CERT_LABEL = 'internal'
 @register_cephadm_service
 class MgmtGatewayService(CephadmService):
     TYPE = 'mgmt-gateway'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     SVC_TEMPLATE_PATH = 'services/mgmt-gateway/nginx.conf.j2'
     EXTERNAL_SVC_TEMPLATE_PATH = 'services/mgmt-gateway/external_server.conf.j2'
     INTERNAL_SVC_TEMPLATE_PATH = 'services/mgmt-gateway/internal_server.conf.j2'

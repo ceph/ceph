@@ -1,11 +1,13 @@
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 
 
 @register_cephadm_service
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure mirroring module is enabled

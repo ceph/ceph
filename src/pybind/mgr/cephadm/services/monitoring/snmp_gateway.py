@@ -1,6 +1,6 @@
 from typing import List, Any, Tuple, Dict, cast
 from ..service_registry import register_cephadm_service
-from ceph.deployment.service_spec import SNMPGatewaySpec
+from ceph.deployment.service_spec import SNMPGatewaySpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmService, DaemonDeployContext
 import logging
 
@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
 
     def generate_config(
             self,

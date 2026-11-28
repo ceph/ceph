@@ -116,6 +116,7 @@ class Ceph(ContainerDaemonForm):
         return daemon_type in cls._daemons and daemon_type not in (
             'osd',
             'crash',
+            'rgw',
         )
 
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:

@@ -6,7 +6,7 @@ from ipaddress import ip_address, IPv6Address
 from dataclasses import replace
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource, ServiceSpec
+from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource, ServiceSpec, PlacementSpec
 
 from orchestrator import (
     OrchestratorError,
@@ -18,7 +18,7 @@ from ceph.cephadm.constants import (
     NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH,
     NVMEOF_ENCRYPTION_KEY_PATH_FILE,
 )
-from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
+from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext, AuthEntityKind
 from .service_registry import register_cephadm_service
 from .. import utils
 if TYPE_CHECKING:
@@ -39,6 +39,9 @@ class NvmeofTLSBundle(NamedTuple):
 @register_cephadm_service
 class NvmeofService(CephService):
     TYPE = 'nvmeof'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    CLIENT_CONFIG_SECTION = True
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     PROMETHEUS_PORT = 10008
 
     @property

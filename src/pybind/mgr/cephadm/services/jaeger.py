@@ -1,7 +1,7 @@
 from dataclasses import replace
 from typing import List, cast, Optional, TYPE_CHECKING
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext
-from ceph.deployment.service_spec import TracingSpec, ServiceSpec
+from ceph.deployment.service_spec import TracingSpec, ServiceSpec, PlacementSpec
 from orchestrator import DaemonDescription
 from .service_registry import register_cephadm_service
 from mgr_util import build_url
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 @register_cephadm_service
 class ElasticSearchService(CephadmService):
     TYPE = 'elasticsearch'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 9200
 
     def prepare_create(
@@ -31,6 +32,7 @@ class ElasticSearchService(CephadmService):
 @register_cephadm_service
 class JaegerAgentService(CephadmService):
     TYPE = 'jaeger-agent'
+    DEFAULT_PLACEMENT = PlacementSpec(host_pattern='*')
     DEFAULT_SERVICE_PORT = 6799
 
     @classmethod
@@ -95,6 +97,7 @@ class JaegerAgentService(CephadmService):
 @register_cephadm_service
 class JaegerCollectorService(CephadmService):
     TYPE = 'jaeger-collector'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 14250
 
     def prepare_create(
@@ -114,6 +117,7 @@ class JaegerCollectorService(CephadmService):
 @register_cephadm_service
 class JaegerQueryService(CephadmService):
     TYPE = 'jaeger-query'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 16686
 
     def prepare_create(

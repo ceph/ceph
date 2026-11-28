@@ -1,7 +1,9 @@
+import copy
 import json
 import logging
 import socket
 from abc import ABCMeta, abstractmethod
+from enum import Enum
 from dataclasses import dataclass
 import ipaddress
 from urllib.parse import urlparse
@@ -10,7 +12,7 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ArgumentList, GeneralArgList, InitContainerSpec, ServiceSpec, CertificateSource, RequiresCertificatesEntry
+from ceph.deployment.service_spec import ArgumentList, GeneralArgList, InitContainerSpec, ServiceSpec, CertificateSource, RequiresCertificatesEntry, PlacementSpec
 from ceph.deployment.utils import wrap_ipv6
 from mgr_util import build_url
 from orchestrator import (
@@ -42,22 +44,37 @@ AuthEntity = NewType('AuthEntity', str)
 RGW_PROFILE_RELEASE = utils.ceph_release_to_major('umbrella')
 
 
+class AuthEntityKind(Enum):
+    """How the cephx entity of a daemon is named, see get_auth_entity()."""
+    # client.<type>.<daemon id>
+    CLIENT_DAEMON_ID = 'client-daemon-id'
+    # client.<type>.<host>, one entity per host
+    CLIENT_HOST = 'client-host'
+    # <type>.<daemon id>, for the core Ceph daemons
+    DAEMON_ID = 'daemon-id'
+    # the shared mon. entity
+    MON = 'mon'
+
+
 def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
     """
     Map the daemon id to a cephx keyring entity name
     """
     # despite this mapping entity names to daemons, self.TYPE within
     # the CephService class refers to service types, not daemon types
-    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
+    from .service_registry import service_registry
+    svc_cls = service_registry.get_service_class(daemon_type)
+    kind = svc_cls.AUTH_ENTITY if svc_cls is not None else None
+    if kind == AuthEntityKind.CLIENT_DAEMON_ID:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
-    elif daemon_type in ['crash', 'agent', 'node-proxy']:
+    elif kind == AuthEntityKind.CLIENT_HOST:
         if host == "":
             raise OrchestratorError(
                 f'Host not provided to generate <{daemon_type}> auth entity name')
         return AuthEntity(f'client.{daemon_type}.{host}')
-    elif daemon_type == 'mon':
+    elif kind == AuthEntityKind.MON:
         return AuthEntity('mon.')
-    elif daemon_type in ['mgr', 'osd', 'mds']:
+    elif kind == AuthEntityKind.DAEMON_ID:
         return AuthEntity(f'{daemon_type}.{daemon_id}')
     else:
         raise OrchestratorError(f"unknown daemon type {daemon_type}")
@@ -297,6 +314,27 @@ class CephadmService(metaclass=ABCMeta):
     """
     Base class for service types. Often providing a create() and config() fn.
     """
+
+    # Per-type facts that helpers outside the service read from the class.
+    # Set them on the subclass instead of adding the type to a list
+    # elsewhere.
+
+    # Naming of the cephx entity of the daemons, see get_auth_entity().
+    # None means the service has no entity of its own.
+    AUTH_ENTITY: Optional[AuthEntityKind] = None
+    # Whether a daemon's config section is client.<daemon name>; otherwise
+    # it is 'mon'. See utils.name_to_config_section().
+    CLIENT_CONFIG_SECTION: bool = False
+    # Placement applied when a spec has none. None means a placement is
+    # required. Use default_placement() to read it.
+    DEFAULT_PLACEMENT: Optional[PlacementSpec] = None
+
+    @classmethod
+    def default_placement(cls) -> Optional[PlacementSpec]:
+        if cls.DEFAULT_PLACEMENT is None:
+            return None
+        # specs keep and may modify their placement; never share ours
+        return copy.deepcopy(cls.DEFAULT_PLACEMENT)
 
     @property
     def needs_monitoring(self) -> bool:

@@ -4,12 +4,12 @@ import random
 import string
 from typing import List, Dict, Any, Tuple, cast, Optional, TYPE_CHECKING
 
-from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MgmtGatewaySpec, MonitorCertSource
+from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MgmtGatewaySpec, MonitorCertSource, PlacementSpec
 from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext, AuthEntityKind
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.schedule import get_placement_hosts
@@ -30,6 +30,8 @@ HAPROXY_LOG_DEP_PREFIXES = ('haproxy_log_target:', 'haproxy_log_level:')
 @register_cephadm_service
 class IngressService(CephService):
     TYPE = 'ingress'
+    AUTH_ENTITY = AuthEntityKind.CLIENT_DAEMON_ID
+    DEFAULT_PLACEMENT = PlacementSpec(count=2)
     MAX_KEEPALIVED_PASS_LEN = 8
 
     @property

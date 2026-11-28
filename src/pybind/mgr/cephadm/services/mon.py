@@ -1,10 +1,10 @@
 import json
 from typing import List, Dict, Any, Tuple, cast
-from ceph.deployment.service_spec import MONSpec, ServiceSpec
+from ceph.deployment.service_spec import MONSpec, ServiceSpec, PlacementSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
 from .service_registry import register_cephadm_service
-from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext
+from .cephadmservice import CephService, CephadmDaemonDeploySpec, DaemonDeployContext, AuthEntityKind
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class MonService(CephService):
     TYPE = 'mon'
+    AUTH_ENTITY = AuthEntityKind.MON
+    DEFAULT_PLACEMENT = PlacementSpec(count=5)
 
     def prepare_create(
             self,

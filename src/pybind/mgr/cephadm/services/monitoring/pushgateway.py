@@ -4,7 +4,7 @@ from typing import List, Any, Tuple, Dict, Optional
 from mgr_module import HandleCommandResult
 from ..service_registry import register_cephadm_service
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmService, DaemonDeployContext, next_action_for_mgmt_stack_service
 from ... import utils
 
@@ -22,6 +22,7 @@ class PushgatewayService(CephadmService):
     scraped directly by Prometheus.
     """
     TYPE = 'pushgateway'
+    DEFAULT_PLACEMENT = PlacementSpec(count=1)
     DEFAULT_SERVICE_PORT = 9091
 
     @property
