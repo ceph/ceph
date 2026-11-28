@@ -40,7 +40,12 @@ class Podman(ContainerEngine):
             [self.path, 'version', '--format', '{{.Client.Version}}'],
             verbosity=CallVerbosity.QUIET,
         )
-        self._version = _parse_podman_version(out)
+        try:
+            self._version = _parse_podman_version(out)
+        except ValueError as e:
+            raise Error(
+                f'Failed to parse podman version: {out.strip()!r}'
+            ) from e
 
     def __str__(self) -> str:
         version = '.'.join(map(str, self.version))
@@ -155,6 +160,17 @@ def check_container_engine(ctx: CephadmContext) -> ContainerEngine:
 
 def _parse_podman_version(version_str):
     # type: (str) -> Tuple[int, ...]
+    # Podman may print incidental notices to stdout before the formatted
+    # version, e.g. the one-shot BoltDB -> SQLite migration message:
+    # "Old database has been renamed to .../bolt_state.db-old ..."
+    # Use the last non-empty line as the version string.
+    candidate = version_str
+    for line in reversed(version_str.splitlines()):
+        stripped = line.strip()
+        if stripped:
+            candidate = stripped
+            break
+
     def to_int(val: str, org_e: Optional[Exception] = None) -> int:
         if not val and org_e:
             raise org_e
@@ -163,7 +179,7 @@ def _parse_podman_version(version_str):
         except ValueError as e:
             return to_int(val[0:-1], org_e or e)
 
-    return tuple(map(to_int, version_str.split('.')))
+    return tuple(map(to_int, candidate.split('.')))
 
 
 def registry_login(
