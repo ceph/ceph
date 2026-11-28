@@ -417,8 +417,10 @@ share_name
     Optional. The public name of the share, visible to clients. If not provided,
     the ``share_id`` will be used automatically
 user_id
-    Optional. The RGW user ID that owns the bucket. If not provided, the system
-    will attempt to determine the bucket owner automatically.
+    Optional. The RGW user ID that owns the bucket, or a user that belongs to
+    the RGW account that owns the bucket. If not provided, the system will
+    attempt to determine the bucket owner automatically. This is not possible
+    for buckets owned by an RGW account; ``user_id`` must be given for those.
 readonly
     Creates a read-only share
 acl_support
@@ -426,6 +428,14 @@ acl_support
     ``default`` or ``disabled``. If not given the cluster's default is used.
     See the description for the `acl_support`_ field of the share spec for
     details.
+
+.. note::
+
+   The RGW user used for a share must be the owner of the bucket (or, for
+   buckets owned by an RGW account, a user of that account). Creating a
+   share, or changing the user of a credential used by a share, fails if the
+   user does not own the bucket. Updating the keys of a credential without
+   changing its user does not re-check bucket ownership.
 
 Examples
 ~~~~~~~~
@@ -1484,9 +1494,11 @@ rgw
     bucket
         Required string. The name of the RGW bucket to be shared
     user_id
-        Optional string. The RGW user ID that owns the bucket. If not provided,
-        the system will automatically determine the bucket owner and fetch the
-        necessary credentials.
+        Optional string. The RGW user ID that owns the bucket, or a user that
+        belongs to the RGW account that owns the bucket. If not provided, the
+        system will automatically determine the bucket owner and fetch the
+        necessary credentials. This is not possible for account-owned buckets;
+        ``user_id`` must be given for those.
     credential_ref
         Optional string. The ``rgw_credential_id`` value of a
         ``ceph.smb.rgw.credential`` resource that contains RGW access and
