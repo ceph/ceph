@@ -1019,7 +1019,10 @@ void rgw_build_iam_environment(req_state* s)
   if (i != m.end()) {
     const string* ip = &(i->second);
     string temp;
-    if (remote_addr_param == "HTTP_X_FORWARDED_FOR") {
+    // the env map is looked up without regard to case, so compare the
+    // option the same way; otherwise a differently-cased spelling finds
+    // the header but keeps the whole proxy chain as the source address
+    if (boost::algorithm::iequals(remote_addr_param, "HTTP_X_FORWARDED_FOR")) {
       const auto comma = ip->find(',');
       if (comma != string::npos) {
 	temp.assign(*ip, 0, comma);
