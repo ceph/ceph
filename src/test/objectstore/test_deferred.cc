@@ -314,6 +314,157 @@ boost::intrusive_ptr<CephContext> setup_env() {
   return cct;
 }
 
+const coll_t replay_cid(spg_t(pg_t(1, 11), shard_id_t::NO_SHARD));
+const ghobject_t replay_hoid(hobject_t("object", "", CEPH_NOSNAP, 1, 11, ""));
+const size_t replay_object_size = 64 * 1024;
+const uint64_t replay_overwrite_offset = 4096;
+const std::string replay_overwrite = "abcdefgh";
+
+/*
+ * Write an object, overwrite a part of it with a deferred write and
+ * terminate as soon as that write is committed.
+ * The overwrite never gets written to the object, it is in the DB only.
+ */
+void overwrite_deferred_and_terminate() {
+  std::unique_ptr<ObjectStore> store;
+  ObjectStore::CollectionHandle ch;
+  std::string const bluestore_dir = "bluestore.test_temp_dir";
+  {
+    string cmd = string("rm -rf ") + bluestore_dir;
+    int r = ::system(cmd.c_str());
+    ceph_assert(r == 0);
+  }
+  ceph_assert(::mkdir(bluestore_dir.c_str(), 0777) == 0);
+  store = ObjectStore::create(g_ceph_context,
+                              "bluestore",
+                              bluestore_dir.c_str(),
+                              "store_test_temp_journal");
+  ceph_assert(store->mkfs() == 0);
+  ceph_assert(store->mount() == 0);
+
+  const PerfCounters* logger = store->get_perf_counters();
+  ch = store->create_new_collection(replay_cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(replay_cid, 0);
+    r = store->queue_transaction(ch, std::move(t));
+    ceph_assert(r == 0);
+  }
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(replay_object_size, '-'));
+    t.write(replay_cid, replay_hoid, 0, bl.length(), bl);
+    t.register_on_commit(&c);
+    r = store->queue_transaction(ch, std::move(t));
+    ceph_assert(r == 0);
+    c.wait();
+  }
+  // the object itself is on the disk
+  ceph_assert(logger->get(l_bluestore_issued_deferred_writes) == 0);
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(replay_overwrite);
+    t.write(replay_cid, replay_hoid, replay_overwrite_offset, bl.length(), bl);
+    t.register_on_commit(new C_do_action([=] {
+      // the overwrite has to be deferred and not submitted yet
+      auto issued = logger->get(l_bluestore_issued_deferred_writes);
+      auto submitted = logger->get(l_bluestore_submitted_deferred_writes);
+      if (issued != 1 || submitted != 0) {
+        std::cerr << "deferred writes issued=" << issued
+                  << " submitted=" << submitted << std::endl;
+        _exit(1);
+      }
+      _exit(0);
+    }));
+    r = store->queue_transaction(ch, std::move(t));
+    ceph_assert(r == 0);
+  }
+  sleep(100);
+  ceph_assert(0 && "should not reach here");
+}
+
+void check_overwritten(ObjectStore* store)
+{
+  std::string expected(replay_object_size, '-');
+  expected.replace(replay_overwrite_offset, replay_overwrite.size(),
+                   replay_overwrite);
+  ObjectStore::CollectionHandle ch = store->open_collection(replay_cid);
+  ceph_assert(ch);
+  bufferlist bl;
+  int r = store->read(ch, replay_hoid, 0, replay_object_size, bl);
+  std::cout << "read returned " << r << std::endl;
+  ceph_assert(r == (int)replay_object_size);
+  ceph_assert(bl.to_str() == expected);
+}
+
+bool has_deferred_keys(ObjectStore* store)
+{
+  BlueStore* bs = dynamic_cast<BlueStore*>(store);
+  ceph_assert(bs);
+  KeyValueDB::Iterator it = bs->get_kv()->get_iterator("L");
+  it->seek_to_first();
+  return it->valid();
+}
+
+/*
+ * The test verifies that an object reads its new content after
+ * a deferred write to it was replayed.
+ * A read-only mount replays the write but has to keep its key,
+ * the next mount removes it.
+ */
+void mount_check_data(bool readonly_first)
+{
+  std::unique_ptr<ObjectStore> store;
+  if (readonly_first) {
+    store = ObjectStore::create(g_ceph_context,
+      "bluestore", "bluestore.test_temp_dir", "store_test_temp_journal");
+    std::cout << "mounting read-only..." << std::endl;
+    ceph_assert(store->mount_readonly() == 0);
+    check_overwritten(store.get());
+    ceph_assert(has_deferred_keys(store.get()));
+    ceph_assert(store->umount_readonly() == 0);
+  }
+  store = ObjectStore::create(g_ceph_context,
+    "bluestore", "bluestore.test_temp_dir", "store_test_temp_journal");
+  std::cout << "mounting..." << std::endl;
+  ceph_assert(store->mount() == 0);
+  check_overwritten(store.get());
+  ceph_assert(!has_deferred_keys(store.get()));
+  ceph_assert(store->umount() == 0);
+  std::cout << "all done and good" << std::endl;
+}
+
+void test_replayed_data(bool readonly_first)
+{
+  pid_t test = fork();
+  if (test == 0) {
+    pid_t child = fork();
+    if (child == 0) {
+      auto cct = setup_env();
+      // do not submit deferred writes periodically
+      g_ceph_context->_conf.set_val_or_die("bluestore_max_defer_interval", "0");
+      g_ceph_context->_conf.apply_changes(nullptr);
+      overwrite_deferred_and_terminate();
+      ceph_assert(false && "should exit() earlier");
+    }
+    int stat;
+    waitpid(child, &stat, 0);
+    ceph_assert(WIFEXITED(stat) && WEXITSTATUS(stat) == 0);
+    {
+      auto cct = setup_env();
+      mount_check_data(readonly_first);
+    }
+    exit(0);
+  }
+  int stat;
+  waitpid(test, &stat, 0);
+  ceph_assert(WIFEXITED(stat) && WEXITSTATUS(stat) == 0);
+}
+
 void say_good_bye() {
   std::cout << "good bye" << std::endl;
 }
@@ -321,6 +472,11 @@ void say_good_bye() {
 int main(int _argc, char **_argv) {
   argc = _argc;
   argv = _argv;
+
+  std::cout << "Testing data of replayed deferred, mount." << std::endl;
+  test_replayed_data(false);
+  std::cout << "Testing data of replayed deferred, mount_readonly." << std::endl;
+  test_replayed_data(true);
 
   pid_t first_test = fork();
   if (first_test == 0) {
