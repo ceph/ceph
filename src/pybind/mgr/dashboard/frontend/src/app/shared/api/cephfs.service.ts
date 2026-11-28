@@ -1,10 +1,9 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { Observable } from 'rxjs';
 
-import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import {
@@ -15,7 +14,6 @@ import {
   MirrorStatusResponse
 } from '../models/cephfs.model';
 
-@cdEncode
 @Injectable({
   providedIn: 'root'
 })
@@ -30,11 +28,11 @@ export class CephfsService {
   }
 
   lsDir(id: number, path?: string, depth: number = 2): Observable<CephfsDir[]> {
-    let apiPath = `${this.baseUiURL}/${id}/ls_dir?depth=${depth}`;
-    if (path) {
-      apiPath += `&path=${encodeURIComponent(path)}`;
-    }
-    return this.http.get<CephfsDir[]>(apiPath).pipe(shareReplay());
+    return this.http
+      .get<CephfsDir[]>(`${this.baseUiURL}/${id}/ls_dir`, {
+        params: path ? { depth, path } : { depth }
+      })
+      .pipe(shareReplay());
   }
 
   getCephfs(id: number) {
@@ -54,35 +52,27 @@ export class CephfsService {
   }
 
   getMdsCounters(id: string) {
-    return this.http.get(`${this.baseURL}/${id}/mds_counters`);
+    return this.http.get(`${this.baseURL}/${encodeURIComponent(id)}/mds_counters`);
   }
 
   getFsRootDirectory(id: string) {
-    return this.http.get(`${this.baseURL}/${id}/get_root_directory`);
+    return this.http.get(`${this.baseURL}/${encodeURIComponent(id)}/get_root_directory`);
   }
 
   mkSnapshot(id: number, path: string, name?: string) {
-    let params = new HttpParams();
-    params = params.append('path', path);
-    if (!_.isUndefined(name)) {
-      params = params.append('name', name);
-    }
-    return this.http.post(`${this.baseURL}/${id}/snapshot`, null, { params });
+    return this.http.post(`${this.baseURL}/${id}/snapshot`, null, {
+      params: name === undefined ? { path } : { path, name }
+    });
   }
 
   rmSnapshot(id: number, path: string, name: string) {
-    let params = new HttpParams();
-    params = params.append('path', path);
-    params = params.append('name', name);
-    return this.http.delete(`${this.baseURL}/${id}/snapshot`, { params });
+    return this.http.delete(`${this.baseURL}/${id}/snapshot`, { params: { path, name } });
   }
 
   quota(id: number, path: string, quotas: CephfsQuotas) {
-    let params = new HttpParams();
-    params = params.append('path', path);
     return this.http.put(`${this.baseURL}/${id}/quota`, quotas, {
       observe: 'response',
-      params
+      params: { path }
     });
   }
 
@@ -106,7 +96,7 @@ export class CephfsService {
   }
 
   remove(name: string) {
-    return this.http.delete(`${this.baseURL}/remove/${name}`, {
+    return this.http.delete(`${this.baseURL}/remove/${encodeURIComponent(name)}`, {
       observe: 'response'
     });
   }
@@ -138,13 +128,13 @@ export class CephfsService {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon/status`);
   }
 
-  enableMirror(@cdEncodeNot fsName: string): Observable<any> {
+  enableMirror(fsName: string): Observable<any> {
     return this.http.post(`${this.baseURL}/mirror/enable`, {
       fs_name: fsName
     });
   }
 
-  disableMirror(@cdEncodeNot fsName: string): Observable<any> {
+  disableMirror(fsName: string): Observable<any> {
     return this.http.post(`${this.baseURL}/mirror/disable`, {
       fs_name: fsName
     });
@@ -158,15 +148,19 @@ export class CephfsService {
     });
   }
 
-  createBootstrapPeer(@cdEncodeNot fsName: string, @cdEncodeNot token: string): Observable<any> {
+  createBootstrapPeer(fsName: string, token: string): Observable<any> {
     return this.http.post(`${this.baseURL}/mirror`, {
       fs_name: fsName,
       token: token
     });
   }
 
+  private mirrorUrl(fsName: string): string {
+    return `${this.baseURL}/mirror/${encodeURIComponent(fsName)}`;
+  }
+
   listMirrorPeers(fsName: string): Observable<MirrorPeerList> {
-    return this.http.get<MirrorPeerList>(`${this.baseURL}/mirror/${fsName}`);
+    return this.http.get<MirrorPeerList>(this.mirrorUrl(fsName));
   }
 
   getMirrorStatus(
@@ -174,54 +168,50 @@ export class CephfsService {
     path?: string,
     peerId?: string
   ): Observable<MirrorStatusResponse> {
-    let params = new HttpParams();
+    const params: Record<string, string> = {};
     if (path) {
-      params = params.set('path', path);
+      params.path = path;
     }
     if (peerId) {
-      params = params.set('peer_id', peerId);
+      params.peer_id = peerId;
     }
-    return this.http.get<MirrorStatusResponse>(`${this.baseURL}/mirror/${fsName}/status`, {
+    return this.http.get<MirrorStatusResponse>(`${this.mirrorUrl(fsName)}/status`, {
       params
     });
   }
 
-  addMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
+  addMirrorDirectory(fsName: string, path: string): Observable<any> {
     return this.http.post(`${this.baseURL}/mirror/directory`, {
       fs_name: fsName,
       path: path
     });
   }
 
-  listMirrorDirectories(@cdEncodeNot fsName: string): Observable<string[]> {
-    return this.http.get<string[]>(`${this.baseURL}/mirror/directory/${fsName}`);
+  listMirrorDirectories(fsName: string): Observable<string[]> {
+    return this.http.get<string[]>(
+      `${this.baseURL}/mirror/directory/${encodeURIComponent(fsName)}`
+    );
   }
 
-  removeMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
+  removeMirrorDirectory(fsName: string, path: string): Observable<any> {
     return this.http.delete(`${this.baseURL}/mirror/directory`, {
       params: { fs_name: fsName, path }
     });
   }
 
-  listMirrorCheckpoints(
-    @cdEncodeNot fsName: string,
-    @cdEncodeNot path: string
-  ): Observable<MirrorCheckpointListResponse> {
-    return this.http.get<MirrorCheckpointListResponse>(
-      `${this.baseURL}/mirror/${fsName}/checkpoint`,
-      {
-        params: { path }
-      }
-    );
+  listMirrorCheckpoints(fsName: string, path: string): Observable<MirrorCheckpointListResponse> {
+    return this.http.get<MirrorCheckpointListResponse>(`${this.mirrorUrl(fsName)}/checkpoint`, {
+      params: { path }
+    });
   }
 
   addMirrorCheckpoint(
-    @cdEncodeNot fsName: string,
-    @cdEncodeNot path: string,
-    @cdEncodeNot snapName: string
+    fsName: string,
+    path: string,
+    snapName: string
   ): Observable<MirrorCheckpointMutationResponse> {
     return this.http.post<MirrorCheckpointMutationResponse>(
-      `${this.baseURL}/mirror/${fsName}/checkpoint`,
+      `${this.mirrorUrl(fsName)}/checkpoint`,
       {
         path,
         snap_name: snapName
@@ -230,12 +220,12 @@ export class CephfsService {
   }
 
   removeMirrorCheckpoint(
-    @cdEncodeNot fsName: string,
-    @cdEncodeNot path: string,
-    @cdEncodeNot snapName: string
+    fsName: string,
+    path: string,
+    snapName: string
   ): Observable<MirrorCheckpointMutationResponse> {
     return this.http.delete<MirrorCheckpointMutationResponse>(
-      `${this.baseURL}/mirror/${fsName}/checkpoint`,
+      `${this.mirrorUrl(fsName)}/checkpoint`,
       {
         params: { path, snap_name: snapName }
       }
