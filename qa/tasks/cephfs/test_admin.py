@@ -156,14 +156,37 @@ class TestAdminCommands(CephFSTestCase):
             'osd', 'pool', 'application', 'get', pool, app, key)
         self.assertEqual(str(output.strip()), value)
 
-    def setup_ec_pools(self, n, metadata=True, overwrites=True):
-        if metadata:
-            self.run_ceph_cmd('osd', 'pool', 'create', n+"-meta", "8")
-        cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
-        self.run_ceph_cmd(cmd)
-        self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
-        if overwrites:
-            self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
+    def setup_pools(self, n, meta_type='rep', data_type='rep',
+                    meta_overwrites=False, data_overwrites=False,
+                    meta_fast=False, data_fast=False):
+        """
+        Sets up metadata and data pools with specific configurations.
+        Types can be 'rep' (Replicated),'ec' (Erasure Coded) or 'none' (Skip Creation).
+        `fast` refers to Fast EC (EC optimizations enabled).
+        """
+        if meta_type == 'ec' or data_type == 'ec':
+            cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
+            try:
+                self.run_ceph_cmd(cmd)
+            except CommandFailedError:
+                pass # Profile might already exist
+
+        pools = [
+            (meta_type, n+"-meta", meta_overwrites, meta_fast),
+            (data_type, n+"-data", data_overwrites, data_fast)
+        ]
+
+        for p_type, p_name, p_ow, p_fast in pools:
+            if p_type == 'none':
+                continue
+            if p_type == 'ec':
+                self.run_ceph_cmd('osd', 'pool', 'create', p_name, "8", "erasure", n+"-profile")
+                if p_ow:
+                    self.run_ceph_cmd('osd', 'pool', 'set', p_name, 'allow_ec_overwrites', 'true')
+            else:
+                self.run_ceph_cmd('osd', 'pool', 'create', p_name, "8")
+            if p_fast:
+                self.run_ceph_cmd('osd', 'pool', 'set', p_name, 'allow_ec_optimizations', 'true')
 
     def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None, path='.'):
         health_warn = 'MDS_CACHE_OVERSIZED'
@@ -429,8 +452,25 @@ class TestAddDataPool(TestAdminCommands):
         """
 
         n = "test_add_data_pool_ec"
-        self.setup_ec_pools(n, metadata=False)
+        self.setup_pools(n, meta_type='none', data_type='ec', data_overwrites=True)
         self.fs.add_data_pool(n+"-data", create=False)
+
+    def test_add_data_pool_ec_no_overwrites(self):
+        """
+        That adding a new EC data pool without overwrites enabled fails.
+        """
+
+        n = "test_add_data_pool_ec_no_overwrite"
+        self.setup_pools(n, meta_type='none', data_type='ec', data_overwrites=False)
+        try:
+            self.fs.add_data_pool(n+"-data", create=False)
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                pass
+            else:
+                raise
+        else:
+            raise RuntimeError("expected failure")
 
     def test_add_already_in_use_data_pool(self):
         """
@@ -528,7 +568,7 @@ class TestFsNew(TestAdminCommands):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec"
-        self.setup_ec_pools(n)
+        self.setup_pools(n, data_type='ec', data_overwrites=True)
         try:
             self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
@@ -547,7 +587,7 @@ class TestFsNew(TestAdminCommands):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
-        self.setup_ec_pools(n)
+        self.setup_pools(n, data_type='ec', data_overwrites=True)
         self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
@@ -558,7 +598,7 @@ class TestFsNew(TestAdminCommands):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_no_overwrite"
-        self.setup_ec_pools(n, overwrites=False)
+        self.setup_pools(n, data_type='ec', data_overwrites=False)
         try:
             self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
@@ -571,6 +611,84 @@ class TestFsNew(TestAdminCommands):
         # and even with --force !
         try:
             self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                pass
+            else:
+                raise
+        else:
+            raise RuntimeError("expected failure")
+
+    def test_new_ec_meta_ec_data(self):
+        """
+        That a new file system fails with an EC metadata pool and EC data pool without --force.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_meta_ec_data"
+        self.setup_pools(n, meta_type='ec', data_type='ec', meta_overwrites=True, data_overwrites=True, meta_fast=True)
+        try:
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                pass
+            else:
+                raise
+        else:
+            raise RuntimeError("expected failure")
+
+    def test_new_ec_meta_ec_data_force(self):
+        """
+        That a new file system succeeds with an EC metadata pool and EC data pool with --force.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_meta_ec_data_force"
+        self.setup_pools(n, meta_type='ec', data_type='ec', meta_overwrites=True, data_overwrites=True, meta_fast=True)
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+
+    def test_new_ec_meta_rep_data(self):
+        """
+        That a new file system fails with an EC metadata pool and Replicated data pool
+        without --force and --yes-i-really-really-mean-it.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_meta_rep_data"
+        self.setup_pools(n, meta_type='ec', data_type='rep', meta_overwrites=True, data_overwrites=False, meta_fast=True)
+        try:
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                pass
+            else:
+                raise
+        else:
+            raise RuntimeError("expected failure")
+
+    def test_new_ec_meta_rep_data_force_and_mean_it(self):
+        """
+        That a new file system succeeds with an EC metadata pool and Replicated data pool
+        with --force and --yes-i-really-really-mean-it.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_meta_rep_data_force_mean_it"
+        self.setup_pools(n, meta_type='ec', data_type='rep', meta_overwrites=True, data_overwrites=False, meta_fast=True)
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force", "--yes-i-really-really-mean-it")
+
+    def test_new_ec_meta_no_optimizations(self):
+        """
+        That a new file system fails with an EC metadata pool lacking optimizations,
+        even when forced.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_meta_no_optimizations"
+        # Note: meta_fast=False
+        self.setup_pools(n, meta_type='ec', data_type='ec', meta_overwrites=True, data_overwrites=True, meta_fast=False)
+        try:
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force", "--yes-i-really-really-mean-it")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass

@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    cephfs:
+      pool_types:
+        data_pool:
+          - type=erasure
+          - k=2
+          - m=2
+          - crush-failure-domain=osd
+        metadata_pool:
+          - type=erasure
+          - k=2
+          - m=2
+          - crush-failure-domain=osd
