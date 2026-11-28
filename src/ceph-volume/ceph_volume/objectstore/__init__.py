@@ -1,5 +1,6 @@
 from . import lvm
 from . import raw
+from . import zfs
 from typing import Any, Dict
 from enum import Enum
 
@@ -15,5 +16,8 @@ mapping: Dict[str, Any] = {
     },
     'RAW': {
         ObjectStore.bluestore: raw.Raw
+    },
+    'ZFS': {
+        ObjectStore.bluestore: zfs.Zfs
     }
 }
