@@ -151,6 +151,7 @@ private:
   double bal_split_rd;
   double bal_split_wr;
   double bal_replicate_threshold;
+  bool bal_skip_replicate_ephemeral_random;
   double bal_unreplicate_threshold;
   double bal_fragment_fast_factor;
   int64_t bal_split_bits;

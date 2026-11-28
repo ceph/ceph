@@ -781,6 +781,7 @@ struct inode_t {
 
   static const uint8_t F_EPHEMERAL_DISTRIBUTED_PIN = (1<<0);
   static const uint8_t F_QUIESCE_BLOCK             = (1<<1);
+  static const uint8_t F_EPHEMERAL_DIST_TREE_PIN   = (1<<2);
 
   inode_t()
   {
@@ -885,6 +886,12 @@ struct inode_t {
   }
   bool get_ephemeral_distributed_pin() const {
     return get_flag(F_EPHEMERAL_DISTRIBUTED_PIN);
+  }
+  void set_ephemeral_dist_tree_pin(bool v) {
+    set_flag(v, F_EPHEMERAL_DIST_TREE_PIN);
+  }
+  bool get_ephemeral_dist_tree_pin() const {
+    return get_flag(F_EPHEMERAL_DIST_TREE_PIN);
   }
   void set_quiesce_block(bool v) {
     set_flag(v, F_QUIESCE_BLOCK);
