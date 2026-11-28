@@ -47,17 +47,12 @@ namespace ceph { class Formatter; }
  *
  * Divided by wall time, the phase totals give the share of a rank spent on
  * each kind of work; summed and divided by wall time they approximate
- * mds_lock utilization, which is also reported directly (lock_held) from
- * the mutex itself.
+ * mds_lock utilization.  Direct wait/hold accounting for mds_lock itself
+ * comes from lockstat rather than an in-mutex counter.
  */
 
 enum {
   l_mdsp_first = 2700,
-
-  /* mds_lock itself; see ceph::fair_mutex::stats */
-  l_mdsp_lock_wait,
-  l_mdsp_lock_held,
-  l_mdsp_lock_acquisitions,
 
   /* message dispatch, by message class */
   l_mdsp_phase_first,
@@ -120,8 +115,8 @@ public:
   /// map a message type to the phase its handling should be charged to
   static int phase_for_message(int message_type);
 
-  /// publish mds_lock wait/hold time; called periodically from tick()
-  void update_lock_stats();
+  /// formerly published fair_mutex wait/hold deltas; lockstat supersedes this
+  void update_lock_stats() {}
 
   /// human readable breakdown, for the `dump phase times` asok command
   void dump(ceph::Formatter *f) const;
@@ -201,21 +196,11 @@ private:
   /* Bumped by every reset(); see MDSPhaseTracker::Timer. */
   std::atomic<uint64_t> generation = 0;
 
-  /* Everything below is written by reset(), which runs from
-   * handle_conf_change() without mds_lock, and read by update_lock_stats()
-   * on the tick thread and by dump() on an asok thread.  Both readers
-   * subtract one of these from a fresh mds_lock snapshot, so the snapshot
-   * has to be taken under the same mutex: taken outside it, a reset()
-   * landing in between would leave a newer baseline being subtracted from
-   * an older total and the wrapped difference being reported. */
+  /* Protects since_ns and the logger snapshot taken by dump()/reset(). */
   mutable std::mutex stats_mutex;
 
   /// when tracking started; dump() reports everything relative to it
   uint64_t since_ns = 0;
-  /// mds_lock totals as of the last reset(), subtracted by dump()
-  ceph::fair_mutex::stats baseline_lock_stats;
-  /// the last mds_lock totals published, so that deltas can be tinc()'d
-  ceph::fair_mutex::stats last_lock_stats;
 };
 
 #endif // CEPH_MDS_PHASE_TRACKER_H
