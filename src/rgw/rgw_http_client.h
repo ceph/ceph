@@ -123,6 +123,9 @@ class RGWHTTPClient : public RGWIOProvider,
 
   std::string ca_path;
 
+  // PEM contents of the CA bundle, takes precedence over ca_path
+  std::string ca_blob;
+
   std::string client_cert;
 
   std::string client_key;
@@ -276,6 +279,11 @@ public:
 
   void set_ca_path(const std::string& _ca_path) {
     ca_path = _ca_path;
+  }
+
+  // set the PEM contents of the CA bundle used to verify the peer
+  void set_ca_blob(const std::string& _ca_blob) {
+    ca_blob = _ca_blob;
   }
 
   void set_client_cert(const std::string& _client_cert) {

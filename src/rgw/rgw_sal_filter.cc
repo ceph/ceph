@@ -708,6 +708,28 @@ int FilterDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
   return next->get_oidc_providers(dpp, y, tenant, providers);
 }
 
+int FilterDriver::load_ext_authz_config(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        RGWExtAuthzConfig& config,
+                                        RGWObjVersionTracker* objv_tracker)
+{
+  return next->load_ext_authz_config(dpp, y, config, objv_tracker);
+}
+
+int FilterDriver::store_ext_authz_config(const DoutPrefixProvider* dpp,
+                                         optional_yield y,
+                                         const RGWExtAuthzConfig& config,
+                                         RGWObjVersionTracker* objv_tracker)
+{
+  return next->store_ext_authz_config(dpp, y, config, objv_tracker);
+}
+
+int FilterDriver::delete_ext_authz_config(const DoutPrefixProvider* dpp,
+                                          optional_yield y)
+{
+  return next->delete_ext_authz_config(dpp, y);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
