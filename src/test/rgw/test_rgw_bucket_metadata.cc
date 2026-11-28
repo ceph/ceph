@@ -13,6 +13,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "common/ceph_json.h"
 #include "common/dout.h"
 #include "global/global_context.h"
 #include "rgw/driver/rados/rgw_bucket.h"
@@ -71,6 +72,7 @@ protected:
   class IndexService : public RGWSI_BucketIndex_RADOS {
   public:
     int calls = 0;
+    uint64_t gen = 0;
 
     IndexService() : RGWSI_BucketIndex_RADOS(g_ceph_context) {}
 
@@ -79,6 +81,7 @@ protected:
         const rgw::bucket_index_layout_generation& layout,
         bool judge_support_logrecord) override {
       ++calls;
+      gen = layout.gen;
       return 0;
     }
   } index;
@@ -206,6 +209,40 @@ TEST_P(BucketInstanceMetadata, PreserveLayoutLogs) {
   service.info.layout.logs.clear();
   EXPECT_EQ(-EINVAL, put(incoming, false));
   EXPECT_EQ(1, service.writes);
+}
+
+TEST_P(BucketInstanceMetadata, PreserveIndexGeneration) {
+  service.exists = true;
+  service.info = bucket_info();
+  service.info.layout.current_index.gen = 2;
+  service.info.layout.logs.back().gen = 2;
+  service.info.layout.resharding = rgw::BucketReshardState::InProgress;
+  service.info.layout.target_index.emplace();
+  service.info.layout.target_index->gen = 3;
+  // the json form of the bucket info doesn't carry the index generation or
+  // the reshard target, so a local update decoded from it has the defaults
+  JSONFormatter f;
+  f.open_object_section("info");
+  service.info.dump(&f);
+  f.close_section();
+  std::stringstream ss;
+  f.flush(ss);
+  const std::string json = ss.str();
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(json.c_str(), json.length()));
+  RGWBucketInfo incoming;
+  incoming.decode_json(&parser);
+  ASSERT_EQ(0u, incoming.layout.current_index.gen);
+  ASSERT_FALSE(incoming.layout.target_index);
+
+  EXPECT_EQ(STATUS_APPLIED, put(incoming, false));
+  EXPECT_EQ(1, service.writes);
+  EXPECT_EQ(2u, service.info.layout.current_index.gen);
+  EXPECT_EQ(rgw::BucketReshardState::InProgress, service.info.layout.resharding);
+  ASSERT_TRUE(service.info.layout.target_index);
+  EXPECT_EQ(3u, service.info.layout.target_index->gen);
+  EXPECT_EQ(1, index.calls);
+  EXPECT_EQ(2u, index.gen);
 }
 
 TEST_P(BucketInstanceMetadata, IndexlessWithoutLayoutLogs) {
