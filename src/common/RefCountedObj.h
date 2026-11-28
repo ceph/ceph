@@ -21,6 +21,7 @@
 #endif
 
 #include "common/ref.h"
+#include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 
 #include <atomic>
@@ -74,6 +75,24 @@ protected:
   RefCountedObject(CephContext* c) : cct(c) {}
 
   virtual ~RefCountedObject();
+
+  // For a subclass that drops some refs without the lock its last ref
+  // needs: drop @n refs that are not the last ones, and return how many
+  // are left.
+  uint64_t put_not_last(uint64_t n) const {
+    uint64_t was = nref.fetch_sub(n);
+    ceph_assert(was > n);
+    return was - n;
+  }
+  // Drop one ref unless no more than @keep would be left; false if not.
+  bool put_unless_down_to(uint64_t keep) const {
+    uint64_t n = nref.load(std::memory_order_relaxed);
+    while (n > keep + 1) {
+      if (nref.compare_exchange_weak(n, n - 1))
+        return true;
+    }
+    return false;
+  }
 
 private:
   void _get() const;

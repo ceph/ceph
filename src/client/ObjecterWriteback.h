@@ -7,12 +7,17 @@
 #include "osdc/Objecter.h"
 #include "osdc/WritebackHandler.h"
 
+#include <functional>
+
 class ObjecterWriteback : public WritebackHandler {
  public:
-  ObjecterWriteback(Objecter *o, Finisher *fin, ceph::mutex *lock)
+  // @wrap wraps every completion handed back to the ObjectCacher, which
+  // runs on @fin; it must take the ObjectCacher's lock
+  using wrap_t = std::function<Context*(Context*)>;
+  ObjecterWriteback(Objecter *o, Finisher *fin, wrap_t wrap)
     : m_objecter(o),
       m_finisher(fin),
-      m_lock(lock) { }
+      m_wrap(std::move(wrap)) { }
   ~ObjecterWriteback() override {}
 
   void read(const object_t& oid, uint64_t object_no,
@@ -23,7 +28,7 @@ class ObjecterWriteback : public WritebackHandler {
                     Context *onfinish) override {
     m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
 			   trunc_size, trunc_seq,
-			   new C_OnFinisher(new C_Lock(m_lock, onfinish),
+			   new C_OnFinisher(m_wrap(onfinish),
 					    m_finisher));
   }
 
@@ -41,8 +46,7 @@ class ObjecterWriteback : public WritebackHandler {
 			   Context *oncommit) override {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
 				   trunc_size, trunc_seq,
-				   new C_OnFinisher(new C_Lock(m_lock,
-							       oncommit),
+				   new C_OnFinisher(m_wrap(oncommit),
 						    m_finisher));
   }
 
@@ -58,14 +62,14 @@ class ObjecterWriteback : public WritebackHandler {
       op.write(offset, bl, trunc_size, trunc_seq);
 
     return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0,
-			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
+			      new C_OnFinisher(m_wrap(oncommit),
 					       m_finisher));
   }
 
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;
-  ceph::mutex *m_lock;
+  wrap_t m_wrap;
 };
 
 #endif

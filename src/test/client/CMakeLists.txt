@@ -46,6 +46,7 @@ if(${WITH_CEPHFS})
     main.cc
     fscrypt_conf.cc
     nonblocking_full.cc
+    threads_full.cc
     )
   target_link_libraries(ceph_test_client_async_full
     client
@@ -58,6 +59,20 @@ if(${WITH_CEPHFS})
     )
   install(TARGETS ceph_test_client_async_full
     DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  add_executable(unittest_client_inode_lock
+    inode_lock.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_client_inode_lock)
+  target_link_libraries(unittest_client_inode_lock
+    client
+    global
+    ceph-common
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
 
   add_executable(unittest_client_command_reset
     command_reset.cc

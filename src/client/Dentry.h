@@ -1,6 +1,8 @@
 #ifndef CEPH_CLIENT_DENTRY_H
 #define CEPH_CLIENT_DENTRY_H
 
+#include <atomic>
+
 #include "include/lru.h"
 #include "include/xlist.h"
 
@@ -106,6 +108,9 @@ public:
   uint64_t lease_gen = 0;
   ceph_seq_t lease_seq = 0;
   int cap_shared_gen = -1;
+  // a lookup without client_lock found me: it does not touch the lru,
+  // so Client::trim_cache() gives me another round before expiring me
+  std::atomic<bool> fast_referenced{false};
   std::string alternate_name;
   bool is_renaming = false;
 

@@ -63,7 +63,12 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#ifdef __linux__
+#include <sched.h>
+#endif
 #include <shared_mutex>
+
+#include "include/current_cpu.h"
 
 using std::set;
 using std::map;
@@ -366,6 +371,9 @@ protected:
     std::vector<AggregatedIOMetrics> last_subvolume_metrics;
     std::unordered_map<inodeno_t, SubvolumeEntry> subvolume_metrics;
     std::unordered_map<inodeno_t, inodeno_t> inode_subvolume;
+    // inode_subvolume.size(), for add_metric() to skip the lock when no
+    // inode is tracked at all
+    std::atomic<size_t> n_tracked = 0;
     CephContext *cct = nullptr;
     client_t whoami;
     std::shared_mutex metrics_lock;
@@ -998,9 +1006,12 @@ public:
   void update_dir_dist(Inode *in, DirStat *st, mds_rank_t from);
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
-  void insert_readdir_results(MetaRequest *request, MetaSession *session,
+  void insert_readdir_results(MetaRequest *request,
+                              const ceph::cref_t<MClientReply>& reply,
+                              MetaSession *session,
                               Inode *diri, Inode *diri_other);
-  Inode* insert_trace(MetaRequest *request, MetaSession *session);
+  Inode* insert_trace(MetaRequest *request, const ceph::cref_t<MClientReply>& reply,
+                      MetaSession *session);
   void update_inode_file_size(Inode *in, int issued, uint64_t size,
 			      uint64_t truncate_seq, uint64_t truncate_size);
   void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
@@ -1008,6 +1019,7 @@ public:
 
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
+  Dentry *request_dentry_now(Dentry *dn, Inode *diri);
   Dentry *insert_dentry_inode(Dir *dir, const std::string& dname, LeaseStat *dlease,
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
@@ -1048,13 +1060,13 @@ public:
   }
 
   void cap_hit() {
-    ++cap_hits;
+    cap_hits.inc();
   }
   void cap_miss() {
-    ++cap_misses;
+    cap_misses.inc();
   }
   std::pair<uint64_t, uint64_t> get_cap_hit_rates() {
-    return std::make_pair(cap_hits, cap_misses);
+    return std::make_pair(cap_hits.get(), cap_misses.get());
   }
 
   void inc_caps() {
@@ -1098,17 +1110,15 @@ public:
     if (!logger) {
       return;
     }
-    auto cur = sync_in_flight.fetch_add(1, std::memory_order_relaxed) + 1;
-    logger->inc(l_c_sync_in_flight);
-    logger->set_max(l_c_sync_in_flight_peak, cur);
+    // counted per CPU, and the perf counters set on tick() (see
+    // update_io_stat_logger()): every buffered read or write counts
+    sync_in_flight.inc();
   }
   void dec_sync_in_flight() {
     if (!logger) {
       return;
     }
-    auto prev = sync_in_flight.fetch_sub(1, std::memory_order_relaxed);
-    ceph_assert(prev > 0);
-    logger->dec(l_c_sync_in_flight);
+    sync_in_flight.dec();
   }
 
   void inc_opened_files() {
@@ -1118,7 +1128,8 @@ public:
     --opened_files;
   }
   std::pair<uint64_t, uint64_t> get_opened_files_rates() {
-    return std::make_pair(opened_files, inode_map.size());
+    return std::make_pair(opened_files.load(std::memory_order_relaxed),
+			  inode_map.size());
   }
 
   void inc_pinned_icaps() {
@@ -1138,7 +1149,8 @@ public:
     --opened_inodes;
   }
   std::pair<uint64_t, uint64_t> get_opened_inodes_rates() {
-    return std::make_pair(opened_inodes, inode_map.size());
+    return std::make_pair(opened_inodes.load(std::memory_order_relaxed),
+			  inode_map.size());
   }
 
   void set_is_fuse() {
@@ -1164,7 +1176,6 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<PerfCounters> readahead_logger;
   std::atomic<uint64_t> aio_in_flight{0};
-  std::atomic<uint64_t> sync_in_flight{0};
   std::unique_ptr<MDSMap> mdsmap;
 #if defined(__linux__)
   std::unique_ptr<FSCrypt> fscrypt;
@@ -1318,8 +1329,13 @@ protected:
   }
   int get_fd_inode(int fd, InodeRef *in);
   bool _ll_fh_exists(Fh *f) {
-    return ll_unclosed_fh_set.count(f);
+    auto& st = fh_stripe(f);
+    std::shared_lock l(st.lock);
+    return st.fhs.count(f);
   }
+  // check an Fh handed in by the user without client_lock and take a ref on
+  // it for the duration of the call; drop it with _put_fh()
+  bool _ll_get_fh(Fh *f);
 
   // helpers
   void wake_up_session_caps(MetaSession *s, bool reconnect);
@@ -1329,6 +1345,41 @@ protected:
     finish_contexts(cct, ls, 0);
   }
   void signal_caps_inode(Inode *in);
+  void wait_on_caps(Inode *in);
+  int put_cap_ref_fast(Inode *in, int cap);
+  int _put_cap_ref_fast(Inode *in, int last);
+  void put_fast_rd_ref(Inode *in);
+  template <typename F>
+  bool _getattr_fast(Inode *in, unsigned mask, F&& fill);
+  template <typename F>
+  bool _getattr_seq(Inode *in, unsigned mask, F&& fill);
+  void _keep_fast_caps(Inode *in);
+  /*
+   * Each mds rank's session's cap_gen and cap_ttl, for a getattr without
+   * any lock (_getattr_seq()) to check a cap's validity by: never freed,
+   * unlike a session, and changed with the session's (publish_session()).
+   */
+  struct alignas(64) SessionLive {
+    std::atomic<uint64_t> gen{0};
+    std::atomic<int64_t> ttl_ns{0};
+  };
+  static constexpr unsigned SESSION_LIVE_SLOTS = 256;
+  std::array<SessionLive, SESSION_LIVE_SLOTS> session_live;
+  void publish_session(const MetaSession *s, bool closed = false);
+  template <typename F>
+  int _ll_lookup_fast(Inode *dir, const char *name, unsigned mask,
+		       const UserPerm& perms, Inode **out, F&& fill);
+  bool _ll_put_fast(Inode *in, bool *last);
+  bool _ll_open_fast(Inode *in, int flags, Fh **fhp, const UserPerm& perms);
+  bool _ll_release_fast(Fh *fh, int *r);
+  void _put_cap_ref_last(Inode *in, int last);
+  bool _read_fast(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
+                  int *pr, bool nowait = false);
+  bool _write_fast(Fh *f, int64_t off, bufferlist& bl, int64_t *pr);
+  void _write_fast_batch(Inode *in, std::unique_lock<Inode::Lock>& il);
+  bool _ll_preadv_fast(Fh *fh, const struct iovec *iov, int iovcnt,
+                       int64_t off, Context *onfinish, bufferlist *bl,
+                       int64_t *pr);
 
   // -- metadata cache stuff
 
@@ -1361,6 +1412,9 @@ protected:
   }
 
   void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
+  // with Inode::lock held, exclusive or shared
+  int _fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  void _fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
   void fill_statx(const InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
     return fill_statx(in.get(), mask, stx);
   }
@@ -1441,8 +1495,194 @@ protected:
 
 
   // global client lock
-  //  - protects Client and buffer cache both!
+  //  - protects Client state
   ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
+
+  /*
+   * The buffer cache is sharded by inode (client_oc_shards): each shard is
+   * an ObjectCacher with its own lock, oc_lock below, which protects it and
+   * the osets of its inodes; the shards share the cache's limits (see
+   * ObjectCacher::set_budget_group()).  One thread holds one shard's lock
+   * at a time.  Lock order: client_lock -> oc_lock.
+   *
+   * Client code calls into the ObjectCacher only through oc_call() (an
+   * OCScope).  Every Client Context handed to the ObjectCacher is wrapped by
+   * oc_ctx(), and flush_set_callback() runs the same way, so no Client code
+   * ever runs under oc_lock:
+   *  - a callback the ObjectCacher completes during an oc_call() is run when
+   *    that call returns, after oc_lock is dropped, in the calling thread
+   *    and under the caller's locks;
+   *  - a callback completed from an OSD reply or writeback is run by
+   *    C_OCAsync after the cache's part, under client_lock, in the same
+   *    objecter_finisher thread;
+   *  - one completed from the cache's own finisher (oc_lock held, no
+   *    OCScope) is queued on oc_finisher and run there under client_lock.
+   */
+  struct OCShard {
+    ceph::mutex oc_lock = ceph::make_mutex("Client::oc_lock");
+    std::atomic<int> oc_lock_spinners{0};
+    std::unique_ptr<WritebackHandler> writeback_handler;
+    std::unique_ptr<ObjectCacher> oc;
+  };
+  std::vector<std::unique_ptr<OCShard>> oc_shards;
+  unsigned oc_shard_mask = 0;   // oc_shards.size() - 1, a power of two
+  // the shards' ObjectCachers, which share the limits
+  std::vector<ObjectCacher*> oc_group;
+  OCShard& oc_shard(const Inode *in);
+  // how many times a cached read retries the read gate before oc_lock
+  // (client_oc_read_gate_retries)
+  std::atomic<unsigned> read_gate_retries{4};
+  void _apply_tuning();
+  unsigned percpu_slots = 0;   // client_percpu_slots (0: each default)
+
+  class OCScope {
+  public:
+    OCScope(Client *c, OCShard& sh);
+    ~OCScope();
+    OCScope(const OCScope&) = delete;
+    OCScope& operator=(const OCScope&) = delete;
+    // queue a callback to run when this scope ends
+    void defer(Context *c, int r) {
+      pending.emplace_back(c, r);
+    }
+    // take the queued callbacks, to run them elsewhere
+    std::vector<std::pair<Context*, int>> detach();
+    OCShard& shard;
+  private:
+    Client *client;
+    std::vector<std::pair<Context*, int>> pending;
+  };
+  // the OCScope this thread is in, if any
+  static thread_local OCScope *oc_scope;
+public:
+  /*
+   * Take a lock that many threads take often, for a short while each, and
+   * that they do much of their work without: try for it a while before
+   * sleeping on it, as an adaptive mutex does.  A thread that sleeps for
+   * such a lock waits to be woken and run again long after its holder has
+   * left, and the lock stays idle for that hand-off on every acquisition.
+   */
+  static void lock_spinning(ceph::mutex& m, std::atomic<int>& spinners) {
+    if (m.try_lock())
+      return;
+    // Few spinners at a time, as the kernel's mutexes allow one: one is
+    // enough to take the lock the moment it is free, and with thousands
+    // of threads on fewer CPUs more of them only take the CPU from the
+    // holder they wait for
+    if (spinners.fetch_add(1, std::memory_order_relaxed) <
+        lock_max_spinners.load(std::memory_order_relaxed)) {
+      int tries = lock_spin_tries.load(std::memory_order_relaxed);
+      for (int i = 0; i < tries; i++) {
+#if defined(__x86_64__) || defined(__i386__)
+        __builtin_ia32_pause();
+#elif defined(__aarch64__)
+        asm volatile("yield");
+#endif
+        if (m.try_lock()) {
+          spinners.fetch_sub(1, std::memory_order_relaxed);
+          return;
+        }
+      }
+    }
+    spinners.fetch_sub(1, std::memory_order_relaxed);
+    m.lock();
+  }
+  // tuning, for the whole process (client_lock_max_spinners,
+  // client_lock_spin_tries): how many threads may spin for one lock at a
+  // time, and how many times each tries it before sleeping
+  static inline std::atomic<int> lock_max_spinners{2};
+  static inline std::atomic<int> lock_spin_tries{100};
+  // most buffered writes of one file done as one (client_write_combine_max,
+  // see _write_fast())
+  static inline std::atomic<uint64_t> write_combine_max{32};
+  // whether this thread holds an oc_lock (is in an OCScope)
+  static bool oc_lock_held() {
+    return oc_scope != nullptr;
+  }
+  // whether it holds the one of @in's shard
+  bool oc_lock_held(const Inode *in) {
+    return oc_scope && &oc_scope->shard == &oc_shard(in);
+  }
+  ceph::mutex& get_oc_lock(const Inode *in) {
+    return oc_shard(in).oc_lock;
+  }
+  // for assertions (debug builds)
+  bool client_lock_held() const {
+    return ceph_mutex_is_locked_by_me(client_lock);
+  }
+protected:
+  // set while this thread runs a data path call without client_lock: the
+  // callbacks of its OCScopes go to oc_finisher under client_lock
+  static thread_local bool oc_fast_path;
+  struct OCFastPath {
+    OCFastPath() {
+      ceph_assert(!oc_fast_path);
+      oc_fast_path = true;
+    }
+    ~OCFastPath() {
+      oc_fast_path = false;
+    }
+  };
+
+  // run @f(ObjectCacher *) under the lock of @in's shard
+  template <typename F>
+  auto oc_call(const Inode *in, F&& f) {
+    OCShard& sh = oc_shard(in);
+    OCScope s(this, sh);
+    return f(sh.oc.get());
+  }
+  // run @f(ObjectCacher *) on each shard in turn, under its lock
+  template <typename F>
+  void oc_call_all(F&& f) {
+    for (auto& sh : oc_shards) {
+      OCScope s(this, *sh);
+      f(sh->oc.get());
+    }
+  }
+  // oc_call() for an @f that only looks at the cache (no Contexts, no
+  // changes): through the ObjectCacher read gate when it is open, so the
+  // close() and check_caps() of a clean file do not take oc_lock
+  template <typename F>
+  auto oc_peek(const Inode *in, F&& f) {
+    OCShard& sh = oc_shard(in);
+    decltype(f(sh.oc.get())) r{};
+    if (sh.oc->gate_peek([&] { r = f(sh.oc.get()); }))
+      return r;
+    return oc_call(in, std::forward<F>(f));
+  }
+
+  class C_OCDefer : public Context {
+  public:
+    // does not own fin: the ObjectCacher completes every Context it keeps,
+    // and callers may pass Contexts they own (e.g. a C_SaferCond)
+    C_OCDefer(Client *c, Context *fin) : client(c), fin(fin) {}
+    void finish(int r) override;
+  private:
+    Client *client;
+    Context *fin;
+  };
+  // wrap a Context before handing it to the ObjectCacher
+  Context *oc_ctx(Context *c) {
+    return c ? new C_OCDefer(this, c) : nullptr;
+  }
+  // the ObjectCacher left the wrapper untouched (e.g. readx() hit): free it;
+  // the wrapped Context still belongs to the caller
+  static void oc_ctx_drop(Context *w) {
+    delete w;
+  }
+  // run a callback the ObjectCacher completed, see oc_lock above
+  void oc_defer(Context *c, int r);
+  // wraps the ObjectCacher's OSD read/write completions (ObjecterWriteback)
+  class C_OCAsync : public Context {
+  public:
+    C_OCAsync(Client *c, OCShard *sh, Context *fin)
+      : client(c), shard(sh), fin(fin) {}
+    void finish(int r) override;
+  private:
+    Client *client;
+    OCShard *shard;
+    Context *fin;
+  };
 
   std::map<snapid_t, int> ll_snap_ref;
 
@@ -1454,8 +1694,6 @@ protected:
   InodeRef cwd;
 
   std::unique_ptr<Filer>             filer;
-  std::unique_ptr<ObjectCacher>      objectcacher;
-  std::unique_ptr<WritebackHandler>  writeback_handler;
 
   Messenger *messenger;
   MonClient *monclient;
@@ -2250,6 +2488,7 @@ private:
 	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0, FSCrypt_Options fscrypt_options = {});
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
+  bool has_absolute_path(const InodeRef& in);
   bool make_absolute_path_string(const InodeRef& in, std::string& path);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 		  const UserPerm& perms, InodeRef *inp,
@@ -2291,6 +2530,8 @@ private:
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
   		Context *onfinish = nullptr, bool read_for_write = false);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
+  void start_readahead(Fh *f, Inode *in,
+                       const std::pair<uint64_t, uint64_t>& readahead_extent);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
                          int64_t request_offset, uint64_t request_size,
                          int64_t offset, uint64_t size, Inode *in,
@@ -2303,7 +2544,11 @@ private:
                                  bool write, bool clamp_to_int,
                                  Context *onfinish = nullptr,
                                  bufferlist *blp = nullptr,
-                                 bool do_fsync = false, bool syncdataonly = false);
+                                 bool do_fsync = false, bool syncdataonly = false,
+                                 bufferlist *wdata = nullptr);
+  static size_t iov_to_bufferlist(const struct iovec *iov, int iovcnt,
+                                  size_t limit, bufferlist *data);
+  void clamp_write_bufferlist(Inode *in, bufferlist *data);
   int _preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
                       int64_t offset, bool write, Context *onfinish = nullptr,
                       bufferlist *blp = nullptr);
@@ -2420,6 +2665,9 @@ private:
   }
 
   uint32_t deleg_timeout = 0;
+  // set (for good) once a delegation was asked for: the open and close
+  // fast paths, which do not break or return delegations, stop then
+  std::atomic<bool> deleg_used = false;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
   client_remount_callback_t remount_cb = nullptr;
@@ -2436,6 +2684,10 @@ private:
   Finisher remount_finisher;
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
+  // runs the Client callbacks the ObjectCacher completes outside of an
+  // OCScope (see oc_lock), under client_lock; not objecter_finisher, as
+  // such a callback may wait for an OSD completion (e.g. an fsync write)
+  Finisher oc_finisher;
 
   ceph::coarse_mono_time last_cap_renew;
 
@@ -2474,9 +2726,107 @@ private:
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   std::unordered_map<int, Fh*> fd_map;
-  set<Fh*> ll_unclosed_fh_set;
+  // The Fhs handed out by the ll_ API and not closed yet, in stripes by
+  // address, each under its own lock, a leaf lock, so the data path can
+  // check an Fh without client_lock, and threads checking different Fhs
+  // do not share one lock's cache line.  A stripe changes on open/close
+  // only; the checks take it shared.  A stripe's lock is held for a set
+  // lookup or change only, and taken on every open and close and every
+  // data-path call: a reader-writer lock of one word, which costs readers
+  // one atomic add and writers one compare-and-swap, where a pthread
+  // rwlock cost a library call and several atomics each way.  It spins a
+  // little and then sleeps on the word.
+  class FhStripeLock {
+  public:
+    void lock() {
+      for (unsigned n = 0; ; n++) {
+        uint32_t e = 0;
+        if (s.compare_exchange_weak(e, WRITER, std::memory_order_acquire,
+                                    std::memory_order_relaxed))
+          return;
+        if (n < SPINS)
+          pause();
+        else
+          sleep([](uint32_t v) { return v != 0; });
+      }
+    }
+    void unlock() {
+      s.fetch_sub(WRITER, std::memory_order_seq_cst);
+      wake();
+    }
+    void lock_shared() {
+      for (unsigned n = 0; ; n++) {
+        if (!(s.fetch_add(READER, std::memory_order_acquire) & WRITER))
+          return;
+        s.fetch_sub(READER, std::memory_order_relaxed);
+        if (n < SPINS)
+          pause();
+        else
+          sleep([](uint32_t v) { return v & WRITER; });
+      }
+    }
+    void unlock_shared() {
+      s.fetch_sub(READER, std::memory_order_seq_cst);
+      wake();
+    }
+  private:
+    static constexpr uint32_t WRITER = 1, READER = 2;
+    // Spin a little, then sleep on the word: with more threads than CPUs
+    // the holder may be preempted, and spinning (or yielding) on would
+    // burn the CPU it needs (s35: 6.6 ms of CPU per open+close at 1024
+    // threads).
+    static constexpr unsigned SPINS = 64;
+    static void pause() {
+#if defined(__x86_64__) || defined(__i386__)
+      __builtin_ia32_pause();
+#elif defined(__aarch64__)
+      asm volatile("yield");
+#endif
+    }
+    // A sleeper counts itself in @waiters before it reads the word, and
+    // an unlock changes the word before it reads @waiters (all seq_cst):
+    // either the unlock sees the sleeper and wakes it, or the sleeper
+    // sees the word changed and does not sleep (wait() compares).
+    template <typename Busy>
+    void sleep(Busy busy) {
+      waiters.fetch_add(1, std::memory_order_seq_cst);
+      uint32_t v = s.load(std::memory_order_seq_cst);
+      if (busy(v))
+        s.wait(v, std::memory_order_relaxed);
+      waiters.fetch_sub(1, std::memory_order_relaxed);
+    }
+    void wake() {
+      if (waiters.load(std::memory_order_seq_cst))
+        s.notify_all();
+    }
+    std::atomic<uint32_t> s{0};
+    std::atomic<uint32_t> waiters{0};
+  };
+  struct alignas(64) FhStripe {
+    FhStripeLock lock;   // a leaf lock
+    std::set<Fh*> fhs;
+  };
+  ceph::PerCpuSlots<FhStripe> fh_stripes{64};   // not by CPU: by Fh
+  // by a hash of the address: the low bits of heap addresses of one size
+  // are mostly the same (an allocator's size class), and a thread tends to
+  // get back the Fh it just freed, so bits of the address alone would put
+  // most Fhs, and each thread's, in a few stripes
+  FhStripe& fh_stripe(Fh *f) {
+    uint64_t a = reinterpret_cast<uintptr_t>(f);
+    return fh_stripes[(a * 0x9e3779b97f4a7c15ull) >> 40];
+  }
+  void ll_fh_add(Fh *f) {
+    auto& st = fh_stripe(f);
+    std::scoped_lock l(st.lock);
+    st.fhs.insert(f);
+  }
+  void ll_fh_remove(Fh *f) {
+    auto& st = fh_stripe(f);
+    std::scoped_lock l(st.lock);
+    st.fhs.erase(f);
+  }
   std::unordered_set<dir_result_t*> opened_dirs;
-  uint64_t fd_gen = 1;
+  std::atomic<uint64_t> fd_gen = 1;  // the write fast path reads it
 
   bool   mount_aborted = false;
   bool   blocklisted = false;
@@ -2510,6 +2860,10 @@ private:
   std::ofstream traceout;
 
   bool fscrypt_as;
+  // looked up by name on every open and every quota check, which costs a
+  // key normalization and a map lookup: kept here, set by the observer
+  std::atomic<bool> force_lazyio{false};
+  std::atomic<bool> quota_enabled{true};
 
   ceph::condition_variable mount_cond, sync_cond;
 
@@ -2530,27 +2884,115 @@ private:
   uint64_t dlease_hits = 0;
   uint64_t dlease_misses = 0;
 
-  uint64_t cap_hits = 0;
-  uint64_t cap_misses = 0;
+  // A counter that threads bump without client_lock, many times a second
+  // (every cached getattr and read counts a cap hit): one cache line per
+  // slot, picked by CPU, so they do not bounce one line; summed on read.
+  class ShardedCounter {
+  public:
+    void inc() {
+      slots.here().v.fetch_add(1, std::memory_order_relaxed);
+    }
+    // for a count that also goes down (a gauge): one slot alone may wrap
+    // below zero, as a thread may go down on another CPU than it went up
+    // on; the sum does not
+    void dec() {
+      slots.here().v.fetch_sub(1, std::memory_order_relaxed);
+    }
+    uint64_t get() const {
+      uint64_t n = 0;
+      for (const auto& s : slots)
+        n += s.v.load(std::memory_order_relaxed);
+      return n;
+    }
+    // client_percpu_slots, before anyone counts
+    void resize(unsigned want) {
+      slots.resize(want);
+    }
+  private:
+    struct alignas(64) Slot {
+      std::atomic<uint64_t> v{0};
+    };
+    // a slot per CPU, so concurrent threads rarely share one
+    ceph::PerCpuSlots<Slot> slots{64};
+  };
+  ShardedCounter cap_hits;
+  ShardedCounter cap_misses;
+  ShardedCounter sync_in_flight;
 
-  uint64_t opened_files = 0;
+  // the open and close fast paths change them without client_lock
+  std::atomic<uint64_t> opened_files = 0;
   uint64_t pinned_icaps = 0;
-  uint64_t opened_inodes = 0;
+  std::atomic<uint64_t> opened_inodes = 0;
 
-  uint64_t total_read_ops = 0;
-  uint64_t total_read_size = 0;
-
-  uint64_t total_write_ops = 0;
-  uint64_t total_write_size = 0;
+  // The read/write I/O statistics (latency, size): every I/O adds to
+  // them, with or without client_lock.  Each adds to the slot of its CPU
+  // (a running count, mean and sum of squared deviations, under the
+  // slot's spinlock, a leaf lock), so I/O threads do not share one cache
+  // line; they are summed for the metrics and, on tick(), for the perf
+  // counters.
+  struct RunStat {
+    uint64_t n = 0;
+    double mean = 0, m2 = 0;
+    void add(double x) {   // Welford, as calc_average()/calc_sq_sum()
+      ++n;
+      double d = x - mean;
+      mean += d / n;
+      m2 += d * (x - mean);
+    }
+    void merge(const RunStat& o) {   // Chan et al.
+      if (!o.n)
+        return;
+      if (!n) {
+        *this = o;
+        return;
+      }
+      uint64_t t = n + o.n;
+      double d = o.mean - mean;
+      mean += d * o.n / t;
+      m2 += o.m2 + d * d * ((double)n * o.n / t);
+      n = t;
+    }
+  };
+  struct IoStats {
+    RunStat rd_lat, wr_lat;   // ns
+    RunStat rd_sz, wr_sz;     // bytes
+    uint64_t rd_bytes = 0, wr_bytes = 0;
+    // for the perf counters, added to them on tick()
+    uint64_t rd_lat_ns = 0, wr_lat_ns = 0;
+    uint64_t osdc_hit = 0, osdc_miss = 0;
+  };
+  struct alignas(64) IoStatSlot {
+    ceph::spinlock lock;
+    IoStats s;
+  };
+  ceph::PerCpuSlots<IoStatSlot> io_stat_slots{64};
+  IoStatSlot& io_stat_slot() {
+    return io_stat_slots.here();
+  }
+  IoStats get_io_stats();
+  void update_io_stat_logger();
+  // what update_io_stat_logger() added to the perf counters so far
+  IoStats io_stats_logged;
+  // a cached read's hit or miss (l_c_osdc_hit/miss), per CPU
+  void count_osdc_read(int r) {
+    auto& slot = io_stat_slot();
+    std::scoped_lock l(slot.lock);
+    if (r > 0)
+      ++slot.s.osdc_hit;
+    else if (r == 0)
+      ++slot.s.osdc_miss;
+  }
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
 
   uint64_t nr_metadata_request = 0;
-  uint64_t nr_read_request = 0;
-  uint64_t nr_write_request = 0;
 
   std::vector<MDSCapAuth> cap_auths;
+  // whether no auth cap can deny an access (mds_check_access() would
+  // return 0 for every path and mask), which spares open() the path;
+  // the open fast path reads it without client_lock
+  std::atomic<bool> cap_auths_allow_all = true;
 
   feature_bitset_t myfeatures;
 

@@ -4,6 +4,8 @@
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
+#include <array>
+#include <memory>
 #include <numeric>
 
 #include "include/compat.h"
@@ -58,6 +60,15 @@ public:
     // move to back of LRU
     session->caps.push_back(&cap_item);
   }
+  // the data path, which may not reorder session->caps (client_lock), marks
+  // the cap instead; trim_caps() gives a marked cap a second chance
+  void mark_referenced() {
+    // look first: readers of one inode share its cap, do not bounce the
+    // cache line when it is marked already
+    if (!referenced.load(std::memory_order_relaxed))
+      referenced.store(true, std::memory_order_relaxed);
+  }
+  std::atomic<bool> referenced = false;
 
   void dump(Formatter *f) const;
 
@@ -124,7 +135,145 @@ struct CapSnap {
 #define I_ERROR_FILELOCK	(1 << 5)
 
 struct Inode : RefCountedObject {
-  ceph::coarse_mono_time hold_caps_until;
+  /*
+   * Inode::lock protects the state the file data path (ll_read and
+   * friends) uses without Client::client_lock:
+   *
+   *   caps (and each Cap's issued/implemented), flags,
+   *   size, max_size, truncate_seq/truncate_size, layout, pool_perm_ok,
+   *   the attributes getattr returns (mode, uid, gid, nlink, rdev, atime,
+   *   btime, time_warp_seq, dirstat, rstat), dirty_caps,
+   *   inline_version/inline_data, fscrypt_auth/fscrypt_file, and the
+   *   waitfor_caps lists
+   *     change them under client_lock and lock, read them under either;
+   *
+   *   mtime, ctime, change_attr
+   *     as above, but a buffered write (Client::_write_fast()) stamps
+   *     them under lock alone: read them under lock;
+   *
+   *   cap_refs, fhs
+   *     the data path changes them under lock alone: read and change
+   *     them under lock only.
+   *
+   *   open_by_mode
+   *     a count crosses zero under client_lock and lock; one that stays
+   *     above zero may change under lock alone (Client::_ll_open_fast()):
+   *     read whether a count is zero under either, its value under lock.
+   *
+   * Lock order: Client::client_lock -> Inode::lock -> Client::oc_lock.
+   * Never hold two Inode::locks.  The lock is recursive, so the helpers
+   * below may take it whether or not the caller holds it: Lock counts the
+   * recursion itself, over a plain mutex (which lockdep tracks).  Debug
+   * builds (CEPH_DEBUG_MUTEX) also track the Inode::lock each thread holds
+   * and check both rules on the first acquisition; release builds keep no
+   * per-thread state, which the data path would pay for on every call.
+   *
+   * Readers that only look (getattr from the caps) may share it
+   * (std::shared_lock): they count themselves in, and leave and wait for
+   * the writer flag to drop when a writer is in or waiting, so a stream
+   * of readers never starves a writer, which may hold client_lock.  A shared holder
+   * must not take the lock exclusively, nor call the helpers that do,
+   * nor take it shared again.
+   *
+   * The readers of one inode from many threads (getattr or cached reads
+   * of one file, lookups in one directory) would all write one count:
+   * once they meet each other in it often enough, the lock spreads them
+   * over a few counts on cache lines of their own, picked by CPU, which
+   * a writer then checks too.  A file that only one thread at a time
+   * reads keeps one count, and its writers check that alone.
+   */
+  class Lock {
+  public:
+    void lock();
+    void unlock();
+    void lock_shared();
+    void unlock_shared();
+    /*
+     * A sequence count over the exclusive holds: odd while a writer holds
+     * the lock, bumped when it leaves.  A reader that only copies a few
+     * fields (getattr, Client::_getattr_seq()) reads it, copies, and reads
+     * it again: the copy is good if neither was odd and both are the same.
+     * Such a reader writes nothing, so many of them on one inode do not
+     * take a cache line from each other.  It must not follow pointers into
+     * what writers change (maps, vectors): a writer may free them under it.
+     */
+    uint32_t read_begin() const {
+      return seq.load(std::memory_order_acquire);
+    }
+    bool read_retry(uint32_t s) const {
+      std::atomic_thread_fence(std::memory_order_acquire);
+      return seq.load(std::memory_order_relaxed) != s;
+    }
+    // the count while the lock is held, shared or not: even, and stable
+    uint32_t held_seq() const {
+      return seq.load(std::memory_order_relaxed);
+    }
+    // whether this thread holds any Inode::lock (debug builds; release
+    // builds do not know, and say no)
+    static bool held_by_me() {
+#ifdef CEPH_DEBUG_MUTEX
+      return held != nullptr;
+#else
+      return false;
+#endif
+    }
+  private:
+    ceph::mutex m = ceph::make_mutex("Client::Inode::lock");
+    int depth = 0;   // changed by the owner only
+    // the owner, for the recursion: only the owner can find itself here.
+    // A thread is known by its thread pointer, which is a register read,
+    // where pthread_self() is a library call; elsewhere, by the address of
+    // a thread-local
+    static const void *me() {
+#ifdef __linux__
+      return __builtin_thread_pointer();
+#else
+      static thread_local char tag;
+      return &tag;
+#endif
+    }
+    std::atomic<const void*> owner{nullptr};
+    // shared holders, and whether a writer is in or about to be
+    std::atomic<uint32_t> readers{0};
+    std::atomic<bool> writer{false};
+    std::atomic<uint32_t> seq{0};  // see read_begin()
+    std::atomic<int> spinners{0};
+    // the spread counts (see above), once readers met often enough
+    struct alignas(64) Slot {
+      std::atomic<uint32_t> n{0};
+    };
+    struct Slots {
+      explicit Slots(unsigned count)
+        : n(count), slot(std::make_unique<Slot[]>(count)) {}
+      const unsigned n;
+      std::unique_ptr<Slot[]> slot;
+    };
+    std::atomic<Slots*> slots{nullptr};
+    std::atomic<uint32_t> met{0};  // readers that found another in readers
+    // the count this thread's shared hold went into: it leaves from the
+    // same one (it holds one Inode::lock at most)
+    static thread_local std::atomic<uint32_t> *my_count;
+    std::atomic<uint32_t> *count_in();
+    bool no_readers() const;
+#ifdef CEPH_DEBUG_MUTEX
+    static thread_local Lock *held;
+#endif
+  public:
+    Lock() = default;
+    ~Lock() { delete slots.load(std::memory_order_relaxed); }
+    // tuning, for every Inode::lock of the process (Client sets them from
+    // client_inode_lock_reader_slots and client_inode_lock_spread_after):
+    // how many counts a hot inode's readers are spread over, and after how
+    // many meetings (0: never); a change applies to inodes spread later
+    static inline std::atomic<unsigned> spread_slots{16};
+    static inline std::atomic<uint32_t> spread_after{64};
+  };
+  // Its own cache line: shared holders (getattr, cached reads of one
+  // file) write its reader count twice per call, which would take the
+  // line from the CPUs reading the fields next to it (ino, snapid, ...)
+  alignas(64) mutable Lock lock;
+
+  alignas(64) ceph::coarse_mono_time hold_caps_until;
   Client *client;
 
   // -- the actual inode --
@@ -159,6 +308,9 @@ struct Inode : RefCountedObject {
   uint64_t   change_attr = 0;
 
   uint64_t max_size = 0;  // max size we can write to
+
+  // the Fr/Fw that check_pool_perm() allowed for the current layout
+  int pool_perm_ok = 0;
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
@@ -221,7 +373,8 @@ struct Inode : RefCountedObject {
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
-  unsigned flags = 0;
+  // atomic: the data path tests flags without client_lock
+  std::atomic<unsigned> flags = 0;
 
   quota_info_t quota;
 
@@ -231,7 +384,11 @@ struct Inode : RefCountedObject {
   }
 
   // about the dir (if this is one!)
-  Dir       *dir = 0;     // if i'm a dir.
+  // if i'm a dir.  It, its dentries map, each of their inode and
+  // cap_shared_gen, and shared_gen and optmetadata below change under
+  // client_lock and lock: a lookup without client_lock reads them
+  // under lock alone
+  Dir       *dir = 0;
   fragtree_t dirfragtree;
   uint64_t dir_release_count = 1;
   uint64_t dir_ordered_count = 1;
@@ -244,6 +401,34 @@ struct Inode : RefCountedObject {
   int64_t cap_dirtier_uid = -1;
   int64_t cap_dirtier_gid = -1;
   unsigned dirty_caps = 0;
+  // a buffered write is marking Fw dirty (Client::_write_fast()); under
+  // lock alone
+  bool fw_marking = false;
+  /*
+   * A buffered write of this file waiting for whoever holds lock to do it
+   * (Client::_write_fast()): its writer queues it, then takes lock and
+   * finds it done, or does it and the others queued with it.  Lives on
+   * the writer's stack until state is set.
+   */
+  struct FastWrite {
+    Fh *fh;
+    int64_t off;
+    ceph::bufferlist *bl;
+    FastWrite *next = nullptr;
+    bool wait_writeback = false;  // the writer waits for writeback room
+    enum { QUEUED, WRITTEN, SLOW };  // SLOW: the writer takes the slow path
+    std::atomic<int> state{QUEUED};
+    FastWrite(Fh *f, int64_t o, ceph::bufferlist *b) : fh(f), off(o), bl(b) {}
+  };
+  // the queued writes, newest first; pushed without a lock, taken under it
+  std::atomic<FastWrite*> fast_writes{nullptr};
+  void queue_fast_write(FastWrite *w) {
+    FastWrite *h = fast_writes.load(std::memory_order_relaxed);
+    do {
+      w->next = h;
+    } while (!fast_writes.compare_exchange_weak(h, w, std::memory_order_release,
+                                                std::memory_order_relaxed));
+  }
   unsigned flushing_caps = 0;
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen = 0;
@@ -257,17 +442,48 @@ struct Inode : RefCountedObject {
   InodeRef snapdir_parent;  // only if we are a snapdir inode
   std::map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
-  //int open_by_mode[CEPH_FILE_MODE_NUM];
-  std::map<int,int> open_by_mode;
+  // opens by mode: a count crosses zero under client_lock and lock, as
+  // it changes what we want from the MDS; one that stays above zero may
+  // change under lock alone (Client::_ll_open_fast()), so a reader under
+  // client_lock alone may only ask whether a count is zero
+  std::array<std::atomic<int>, CEPH_FILE_MODE_NUM> open_by_mode{};
   std::map<int,int> cap_refs;
+  // Fr + Fc refs that cached reads (Client::_read_fast()) hold, one each
+  // per reader, counted apart from cap_refs so that the readers of a file
+  // can share Inode::lock: they change it under the lock shared, everyone
+  // else reads it under the lock (exclusive or shared).  Every use of the
+  // Fr/Fc refs counts them (caps_used(), cap_ref_count(), _release()).
+  // Unlike the first Fc ref in cap_refs they take no inode ref: the
+  // reader's Fh keeps the inode.
+  // Its own cache line too, as the lock (each reader changes it twice)
+  alignas(64) std::atomic<uint32_t> fast_rd_refs{0};
 
-  ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
+  /*
+   * The caps as a getattr under Inode::lock last found them, for a getattr
+   * without any lock (Client::_getattr_seq()), which may not walk caps:
+   * the one cap's mds, gen and issued|implemented bits, good while the
+   * lock's sequence count is still `seq` (odd: none).  Written by readers
+   * that hold the lock shared, all with the same values for one count.
+   * `used`: such a getattr used the cap since trim_caps() last looked.
+   */
+  struct alignas(64) FastCaps {
+    std::atomic<uint32_t> seq{1};
+    std::atomic<int32_t> mds{-1};
+    std::atomic<uint32_t> bits{0};
+    std::atomic<uint64_t> gen{0};
+    std::atomic<bool> used{false};
+  } fast_caps;
+
+  alignas(64) ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
   uint64_t reported_size = 0;
   uint64_t wanted_max_size = 0;
   uint64_t requested_max_size = 0;
 
-  uint64_t  ll_ref = 0;   // separate ref count for ll client
+  // separate ref count for ll client.  Atomic: a file's (not a
+  // directory's, nor a snapshot's) may be taken and dropped without
+  // client_lock
+  std::atomic<uint64_t> ll_ref{0};
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   std::string    symlink;  // symlink content, if it's a symlink
   std::map<std::string,bufferptr> xattrs;
@@ -291,6 +507,7 @@ struct Inode : RefCountedObject {
 
   void make_long_path(filepath& p);
   void make_short_path(filepath& p);
+  bool has_path() const;
   bool make_path_string(std::string& s);
   void make_nosnap_relative_path(filepath& p);
 
@@ -298,13 +515,21 @@ struct Inode : RefCountedObject {
   // cwd that links to me.
   void iget() { get(); }
   void iput(int n=1) { ceph_assert(n >= 0); while (n--) put(); }
+  // drop @n refs that are not the last: returns how many are left
+  uint64_t iput_some(uint64_t n) { return put_not_last(n); }
+  // drop one ref unless that would leave only inode_map's (or fewer):
+  // the caller then puts it through Client::put_inode(), which cleans up
+  bool iput_unless_last() { return put_unless_down_to(1); }
 
-  void ll_get() {
-    ll_ref++;
+  // returns the count before
+  uint64_t ll_get() {
+    return ll_ref.fetch_add(1);
   }
-  void ll_put(uint64_t n=1) {
-    ceph_assert(ll_ref >= n);
-    ll_ref -= n;
+  // returns the count after
+  uint64_t ll_put(uint64_t n=1) {
+    uint64_t was = ll_ref.fetch_sub(n);
+    ceph_assert(was >= n);
+    return was - n;
   }
 
   // file locks
@@ -348,17 +573,37 @@ struct Inode : RefCountedObject {
   // CAPS --------
   void get_open_ref(int mode);
   bool put_open_ref(int mode);
+  // another open or close in a mode the file is open in already, which
+  // changes nothing the MDS sees: false, with nothing done, if the count
+  // would cross zero.  Under lock.
+  bool get_open_ref_fast(int mode);
+  bool put_open_ref_fast(int mode);
 
   void get_cap_ref(int cap);
+  int cap_ref_count(int c) {
+    std::scoped_lock l(lock);
+    return _cap_ref_count(c);
+  }
+  // with lock held, exclusive or shared
+  int _cap_ref_count(int c) const {
+    auto p = cap_refs.find(c);
+    int n = p == cap_refs.end() ? 0 : p->second;
+    if (c == CEPH_CAP_FILE_RD || c == CEPH_CAP_FILE_CACHE)
+      n += fast_rd_refs.load(std::memory_order_relaxed);
+    return n;
+  }
   int put_cap_ref(int cap);
   bool is_last_cap_ref(int c);
   bool is_any_caps();
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
   void try_touch_cap(mds_rank_t mds);
-  bool caps_issued_mask(unsigned mask, bool allow_impl=false);
+  // touch: move the cap used to the back of the session's cap LRU, which
+  // needs client_lock; without it the cap is only marked referenced
+  bool caps_issued_mask(unsigned mask, bool allow_impl=false, bool touch=true);
   int caps_used();
   int caps_file_wanted();
+  int _caps_file_wanted() const;   // with lock held, exclusive or shared
   int caps_wanted();
   int caps_mds_wanted();
   int caps_dirty();
@@ -367,8 +612,14 @@ struct Inode : RefCountedObject {
   bool have_valid_size();
   Dir *open_dir();
 
-  void add_fh(Fh *f) {fhs.insert(f);}
-  void rm_fh(Fh *f) {fhs.erase(f);}
+  void add_fh(Fh *f) {
+    std::scoped_lock l(lock);
+    fhs.insert(f);
+  }
+  void rm_fh(Fh *f) {
+    std::scoped_lock l(lock);
+    fhs.erase(f);
+  }
   void set_async_err(int r);
   void dump(Formatter *f) const;
   void print(std::ostream&) const;
@@ -399,18 +650,32 @@ struct Inode : RefCountedObject {
   void mark_caps_clean();
 private:
   // how many opens for write on this Inode?
-  long open_count_for_write()
+  long open_count_for_write() const
   {
-    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
-		  open_by_mode[CEPH_FILE_MODE_WR]);
+    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR].load(std::memory_order_relaxed) +
+		  open_by_mode[CEPH_FILE_MODE_WR].load(std::memory_order_relaxed));
   };
 
+  // as the map this was printed: {mode=refs,...}, the counts that are not 0
+  std::string open_by_mode_str() const {
+    std::string s = "{";
+    for (int mode = 0; mode < CEPH_FILE_MODE_NUM; ++mode) {
+      int refs = open_by_mode[mode].load(std::memory_order_relaxed);
+      if (!refs)
+	continue;
+      if (s.size() > 1)
+	s += ",";
+      s += std::to_string(mode) + "=" + std::to_string(refs);
+    }
+    return s + "}";
+  }
   // how many opens of any sort on this inode?
-  long open_count()
+  long open_count() const
   {
-    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
-				  [] (int value, const std::map<int, int>::value_type& p)
-                   { return value + p.second; });
+    long n = 0;
+    for (const auto& c : open_by_mode)
+      n += c.load(std::memory_order_relaxed);
+    return n;
   };
 
   void break_deleg(bool skip_read);

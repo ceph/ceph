@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <thread>
 #include "Client.h"
+#include "include/current_cpu.h"
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
@@ -42,14 +44,147 @@ Inode::~Inode()
   }
 }
 
+#ifdef CEPH_DEBUG_MUTEX
+thread_local Inode::Lock *Inode::Lock::held = nullptr;
+#endif
+thread_local std::atomic<uint32_t> *Inode::Lock::my_count = nullptr;
+
+// Count a reader in: in the CPU's spread count once there are any, else
+// in readers, spreading them when readers keep meeting there.  seq_cst
+// throughout, so that a writer that sets writer and then looks at slots
+// and the counts sees every reader that did not see writer set.
+std::atomic<uint32_t> *Inode::Lock::count_in()
+{
+  Slots *sl = slots.load(std::memory_order_seq_cst);
+  if (sl) {
+    auto c = &sl->slot[unsigned(ceph::current_cpu()) % sl->n].n;
+    c->fetch_add(1, std::memory_order_seq_cst);
+    return c;
+  }
+  if (readers.fetch_add(1, std::memory_order_seq_cst) != 0) {
+    uint32_t after = spread_after.load(std::memory_order_relaxed);
+    if (after == 0 || met.fetch_add(1, std::memory_order_relaxed) + 1 != after)
+      return &readers;
+    auto n = new Slots(std::max(1u, spread_slots.load(std::memory_order_relaxed)));
+    Slots *none = nullptr;
+    if (!slots.compare_exchange_strong(none, n, std::memory_order_seq_cst))
+      delete n;
+  }
+  return &readers;
+}
+
+bool Inode::Lock::no_readers() const
+{
+  if (readers.load(std::memory_order_seq_cst) != 0)
+    return false;
+  if (Slots *sl = slots.load(std::memory_order_seq_cst)) {
+    for (unsigned i = 0; i < sl->n; i++) {
+      if (sl->slot[i].n.load(std::memory_order_seq_cst) != 0)
+        return false;
+    }
+  }
+  return true;
+}
+
+void Inode::Lock::lock()
+{
+  const void *self = me();
+  if (owner.load(std::memory_order_relaxed) == self) {
+    ++depth;   // recursion: we own m already
+    return;
+  }
+#ifdef CEPH_DEBUG_MUTEX
+  ceph_assert(held == nullptr);             // never two Inode::locks
+  ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
+#endif
+  // writers of one file take it for each write, as they take oc_lock
+  Client::lock_spinning(m, spinners);
+  // keep new readers out and wait for those inside: they only look, and
+  // leave soon
+  writer.store(true, std::memory_order_seq_cst);
+  for (int spins = 0; !no_readers(); ++spins) {
+    if (spins > Client::lock_spin_tries.load(std::memory_order_relaxed))
+      std::this_thread::yield();
+  }
+  owner.store(self, std::memory_order_relaxed);
+  depth = 1;
+  // odd: readers without the lock retry (see read_begin())
+  seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+  std::atomic_thread_fence(std::memory_order_release);
+#ifdef CEPH_DEBUG_MUTEX
+  held = this;
+#endif
+}
+
+void Inode::Lock::unlock()
+{
+  ceph_assert(depth > 0);
+#ifdef CEPH_DEBUG_MUTEX
+  ceph_assert(held == this);
+#endif
+  if (--depth > 0)
+    return;
+#ifdef CEPH_DEBUG_MUTEX
+  held = nullptr;
+#endif
+  owner.store(nullptr, std::memory_order_relaxed);
+  // even again, after all this hold changed
+  seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+  writer.store(false, std::memory_order_release);
+  writer.notify_all();   // the readers waiting for us (lock_shared())
+  m.unlock();
+}
+
+void Inode::Lock::lock_shared()
+{
+  if (owner.load(std::memory_order_relaxed) == me()) {
+    ++depth;   // we hold it exclusively: that will do
+    return;
+  }
+#ifdef CEPH_DEBUG_MUTEX
+  ceph_assert(held == nullptr);             // never two Inode::locks
+  ceph_assert(!Client::oc_lock_held());     // Inode::lock before oc_lock
+#endif
+  auto c = count_in();
+  while (writer.load(std::memory_order_seq_cst)) {
+    // a writer is in or waiting for us: let it go first, and wait for it
+    // to leave on the writer flag, not on the mutex: thousands of readers
+    // queued on the mutex went through it one by one after each writer,
+    // and an unlucky one waited for seconds
+    c->fetch_sub(1, std::memory_order_release);
+    writer.wait(true, std::memory_order_acquire);
+    c = count_in();
+  }
+  my_count = c;
+#ifdef CEPH_DEBUG_MUTEX
+  held = this;
+#endif
+}
+
+void Inode::Lock::unlock_shared()
+{
+  if (owner.load(std::memory_order_relaxed) == me()) {
+    unlock();
+    return;
+  }
+#ifdef CEPH_DEBUG_MUTEX
+  ceph_assert(held == this);
+  held = nullptr;
+#endif
+  my_count->fetch_sub(1, std::memory_order_release);
+  my_count = nullptr;
+}
+
 void Inode::print(std::ostream& out) const
 {
+  std::scoped_lock l(lock);
   out << vino() << "("
       << "faked_ino=" << faked_ino
       << " nref=" << get_nref()
-      << " ll_ref=" << ll_ref
+      << " ll_ref=" << ll_ref.load()
       << " cap_refs=" << cap_refs
-      << " open=" << open_by_mode
+      << " fast_rd_refs=" << fast_rd_refs.load(std::memory_order_relaxed)
+      << " open=" << open_by_mode_str()
       << " mode=" << oct << mode << dec
       << " size=" << size << "/" << max_size
       << " nlink=" << nlink
@@ -77,8 +212,16 @@ void Inode::print(std::ostream& out) const
   if (flags & I_COMPLETE)
     out << " COMPLETE";
 
-  if (is_file())
-    out << " " << oset;
+  if (is_file()) {
+    // oset changes under the cache's lock; we hold Inode::lock, which goes
+    // first, unless we are inside an ObjectCacher call already
+    if (client->oc_lock_held(this)) {
+      out << " " << oset;
+    } else if (!Client::oc_lock_held()) {
+      std::scoped_lock ol(client->get_oc_lock(this));
+      out << " " << oset;
+    }   // else inside another shard's call: one oc_lock at a time
+  }
 
   if (!dentries.empty())
     out << " parents=" << dentries;
@@ -138,6 +281,21 @@ bool Inode::make_path_string(std::string& s)
   return false;
 }
 
+// whether make_path_string() would succeed, without making the string
+bool Inode::has_path() const
+{
+  for (const Inode *in = this; ; ) {
+    if (in->client->_get_root_ino(false) == in->ino)
+      return true;
+    if (in->dentries.empty())
+      return false;
+    const Dentry *dn = in->get_first_parent();
+    if (!dn->dir)
+      return false;
+    in = dn->dir->parent_inode;
+  }
+}
+
 /*
  * make a filepath suitable for an mds request:
  *  - if we are non-snapped/live, the ino is sufficient, e.g. #1234
@@ -163,29 +321,60 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
-  client->inc_opened_files();
-  if (open_by_mode[mode] == 0) {
-    client->inc_opened_inodes();
+  {
+    std::scoped_lock l(lock);
+    ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+    client->inc_opened_files();
+    if (open_by_mode[mode].fetch_add(1, std::memory_order_relaxed) == 0) {
+      client->inc_opened_inodes();
+    }
   }
-  open_by_mode[mode]++;
+  // may wait for delegations to come back: never with Inode::lock held
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
 
 bool Inode::put_open_ref(int mode)
 {
-  //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-  auto& ref = open_by_mode.at(mode);
-  ceph_assert(ref > 0);
+  std::scoped_lock l(lock);
+  ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+  int was = open_by_mode[mode].fetch_sub(1, std::memory_order_relaxed);
+  ceph_assert(was > 0);
   client->dec_opened_files();
-  if (--ref == 0) {
+  if (was == 1) {
     client->dec_opened_inodes();
     return true;
   }
   return false;
 }
 
+bool Inode::get_open_ref_fast(int mode)
+{
+  ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+  // the count crosses zero under lock only, which we hold
+  auto& c = open_by_mode[mode];
+  int n = c.load(std::memory_order_relaxed);
+  if (n == 0)
+    return false;
+  c.store(n + 1, std::memory_order_relaxed);
+  client->inc_opened_files();
+  return true;
+}
+
+bool Inode::put_open_ref_fast(int mode)
+{
+  ceph_assert(mode >= 0 && mode < CEPH_FILE_MODE_NUM);
+  auto& c = open_by_mode[mode];
+  int n = c.load(std::memory_order_relaxed);
+  if (n <= 1)
+    return false;
+  c.store(n - 1, std::memory_order_relaxed);
+  client->dec_opened_files();
+  return true;
+}
+
 void Inode::get_cap_ref(int cap)
 {
+  std::scoped_lock l(lock);
   int n = 0;
   while (cap) {
     if (cap & 1) {
@@ -200,6 +389,7 @@ void Inode::get_cap_ref(int cap)
 
 bool Inode::is_last_cap_ref(int c)
 {
+  std::scoped_lock l(lock);
   if (c != CEPH_CAP_FILE_BUFFER) {
     return cap_refs[c] == 0;
   }
@@ -214,6 +404,7 @@ bool Inode::is_last_cap_ref(int c)
 
 int Inode::put_cap_ref(int cap)
 {
+  std::scoped_lock l(lock);
   int last = 0;
   int n = 0;
   while (cap) {
@@ -298,7 +489,7 @@ void Inode::try_touch_cap(mds_rank_t mds)
  * Those callers should refrain from taking new references to implemented
  * caps!
  */
-bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
+bool Inode::caps_issued_mask(unsigned mask, bool allow_impl, bool touch)
 {
   int c = snap_caps;
   int i = 0;
@@ -309,7 +500,10 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
   if (auth_cap &&
       cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
-    auth_cap->touch();
+    if (touch)
+      auth_cap->touch();
+    else
+      auth_cap->mark_referenced();
     client->cap_hit();
     return true;
   }
@@ -318,7 +512,10 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     Cap &cap = pair.second;
     if (cap_is_valid(cap)) {
       if ((cap.issued & mask) == mask) {
-        cap.touch();
+        if (touch)
+          cap.touch();
+        else
+          cap.mark_referenced();
 	client->cap_hit();
 	return true;
       }
@@ -333,7 +530,10 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
   if ((c & mask) == mask) {
     // bah.. touch them all
     for (auto &pair : caps) {
-      pair.second.touch();
+      if (touch)
+        pair.second.touch();
+      else
+        pair.second.mark_referenced();
     }
     client->cap_hit();
     return true;
@@ -345,18 +545,30 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 
 int Inode::caps_used()
 {
+  std::scoped_lock l(lock);
   int w = 0;
   for (const auto &[cap, cnt] : cap_refs)
     if (cnt)
       w |= cap;
+  if (fast_rd_refs.load(std::memory_order_relaxed))
+    w |= CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
   return w;
 }
 
 int Inode::caps_file_wanted()
 {
+  // open_by_mode changes under client_lock and lock: either will do, and
+  // the callers that hold client_lock (check_caps(), the cap messages, on
+  // every close()) need not take lock for it
+  ceph_assert(client->client_lock_held() || Lock::held_by_me());
+  return _caps_file_wanted();
+}
+
+int Inode::_caps_file_wanted() const
+{
   int want = 0;
-  for (const auto &[mode, cnt] : open_by_mode)
-    if (cnt) {
+  for (int mode = 0; mode < CEPH_FILE_MODE_NUM; ++mode)
+    if (open_by_mode[mode].load(std::memory_order_relaxed)) {
       want |= ceph_caps_for_mode(mode);
 
 #if defined(__linux__)
@@ -424,7 +636,10 @@ bool Inode::have_valid_size()
 Dir *Inode::open_dir()
 {
   if (!dir) {
-    dir = new Dir(this);
+    {
+      std::scoped_lock l(lock);  // the lookup fast path reads dir
+      dir = new Dir(this);
+    }
     lsubdout(client->cct, client, 15) << "open_dir " << dir << " on " << this << dendl;
     ceph_assert(dentries.size() < 2); // dirs can't be hard-linked
     if (!dentries.empty())
@@ -449,6 +664,7 @@ bool Inode::check_mode(const UserPerm& perms, unsigned want)
 
 void Inode::dump(Formatter *f) const
 {
+  std::scoped_lock l(lock);
   f->dump_stream("ino") << ino;
   f->dump_stream("snapid") << snapid;
   if (rdev)
@@ -564,12 +780,15 @@ void Inode::dump(Formatter *f) const
   }
 
   // open
-  if (!open_by_mode.empty()) {
+  if (open_count()) {
     f->open_array_section("open_by_mode");
-    for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
+    for (int mode = 0; mode < CEPH_FILE_MODE_NUM; ++mode) {
+      int refs = open_by_mode[mode].load(std::memory_order_relaxed);
+      if (!refs)
+	continue;
       f->open_object_section("ref");
-      f->dump_int("mode", p->first);
-      f->dump_int("refs", p->second);
+      f->dump_int("mode", mode);
+      f->dump_int("refs", refs);
       f->close_section();
     }
     f->close_section();
@@ -592,7 +811,7 @@ void Inode::dump(Formatter *f) const
     f->dump_unsigned("requested_max_size", requested_max_size);
 
   f->dump_int("nref", get_nref());
-  f->dump_int("ll_ref", ll_ref);
+  f->dump_int("ll_ref", ll_ref.load());
 
   if (!dentries.empty()) {
     f->open_array_section("parents");
@@ -648,6 +867,7 @@ void CapSnap::dump(Formatter *f) const
 
 void Inode::set_async_err(int r)
 {
+  std::scoped_lock l(lock);
   for (const auto &fh : fhs) {
     fh->async_err = r;
   }
@@ -853,7 +1073,10 @@ void Inode::mark_caps_dirty(int caps)
   if (caps && !caps_dirty())
     iget();
 
-  dirty_caps |= caps;
+  {
+    std::scoped_lock l(lock);   // the write fast path reads it
+    dirty_caps |= caps;
+  }
   auth_cap->session->get_dirty_list().push_back(&dirty_cap_item);
   client->cap_delay_requeue(this);
 }
@@ -864,7 +1087,10 @@ void Inode::mark_caps_dirty(int caps)
 void Inode::mark_caps_clean()
 {
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << dendl;
-  dirty_caps = 0;
+  {
+    std::scoped_lock l(lock);   // the write fast path reads it
+    dirty_caps = 0;
+  }
   dirty_cap_item.remove_myself();
 }
 

@@ -4,6 +4,8 @@
 #ifndef CEPH_OBJECTCACHER_H
 #define CEPH_OBJECTCACHER_H
 
+#include <sched.h>
+
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/Context.h"
@@ -19,7 +21,11 @@
 
 #include "Striper.h"
 
+#include <atomic>
+#include <thread>
 #include <unordered_map>
+
+#include "include/current_cpu.h"
 
 class WritebackHandler;
 
@@ -133,6 +139,8 @@ class ObjectCacher {
     ceph_tid_t last_read_tid;   // tid of last read op (if any)
     ceph::real_time last_write;
     SnapContext snapc;
+    // read by read_hit() since trim() last looked: a second chance
+    std::atomic<bool> referenced{false};
     ceph_tid_t journal_tid;
     int error; // holds return value for failed reads
 
@@ -256,6 +264,8 @@ class ObjectCacher {
 
     bool complete;
     bool exists;
+    // read by read_hit() since trim() last looked: a second chance
+    std::atomic<bool> referenced{false};
 
     std::map<loff_t, BufferHead*>     data;
 
@@ -416,6 +426,56 @@ class ObjectCacher {
   ceph::mutex& lock;
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
+  // the ObjectCachers that share this one's limits, see set_budget_group()
+  const std::vector<ObjectCacher*> *group = nullptr;
+  // in a group, the writers of a member wait for room on its group_cond
+  // under its sleep_lock, a leaf lock taken under a member's lock, so
+  // that room any member frees can wake them (see
+  // _maybe_wait_for_writeback()); a waker holds one at a time
+  ceph::mutex sleep_lock = ceph::make_mutex("ObjectCacher::sleep_lock");
+  ceph::condition_variable group_cond;
+  // what a member of a group uses, for the others to add up: changed
+  // under its lock only, read without it
+  struct alignas(64) Published {
+    std::atomic<uint64_t> clean{0}, clean_bh{0}, dirty{0}, dirty_tx{0},
+                          dirty_tx_bh{0}, waiting{0}, waiters{0};
+    std::atomic<uint64_t> wb_inflight{0};   // stat_wb_inflight
+  };
+  Published pub;
+  struct Totals {
+    uint64_t clean = 0, clean_bh = 0, dirty = 0, dirty_tx = 0,
+             dirty_tx_bh = 0, waiting = 0, waiters = 0;
+  };
+  void publish();
+  Totals group_totals() const;
+  // a member's share of a limit of the group
+  uint64_t share(uint64_t v) const {
+    return group ? v / group->size() : v;
+  }
+
+  bool read_gate = false;
+  alignas(64) std::atomic<bool> gate_closed{false};
+  // the readers inside the read gate, counted per CPU so that readers on
+  // different CPUs do not pass one cache line around; whoever shuts the
+  // gate waits for all of them
+  struct alignas(64) GateSlot {
+    std::atomic<uint32_t> n{0};
+  };
+  ceph::PerCpuSlots<GateSlot> gate_readers{32};
+  bool gate_has_readers() const {
+    for (auto& g : gate_readers) {
+      if (g.n.load(std::memory_order_seq_cst) != 0)
+        return true;
+    }
+    return false;
+  }
+  // read_hit()'s perf counters, per CPU so that readers do not share a
+  // cache line; the flusher adds them to perfcounter every second
+  struct alignas(64) HitSlot {
+    std::atomic<uint64_t> bytes_read{0}, bytes_hit{0}, ops_hit{0};
+  };
+  ceph::PerCpuSlots<HitSlot> hit_slots{64};
+  void fold_hit_slots();
   ceph::timespan max_dirty_age;
   bool cfg_block_writes_upfront;
 
@@ -436,6 +496,11 @@ class ObjectCacher {
   LRU   ob_lru;
 
   ceph::condition_variable flusher_cond;
+  // set by another member of the group whose writeback ended, so this
+  // flusher looks again before it sleeps: that member holds its own lock
+  // and may not wait for ours (see kick_flusher())
+  std::atomic<bool> flusher_kicked{false};
+  void kick_flusher();
   bool flusher_stop;
   void flusher_entry();
   class FlusherThread : public Thread {
@@ -475,8 +540,46 @@ class ObjectCacher {
   loff_t stat_missing;
   loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
+  // bytes of the writes sent to the OSDs and not committed yet: unlike
+  // stat_tx, which counts BufferHeads in tx, it keeps counting a write
+  // whose BufferHeads a later write made dirty again (see writeback_full())
+  uint64_t stat_wb_inflight = 0;
+  // the most of those the flusher keeps (its share of it), 0 for no limit
+  std::atomic<uint64_t> max_writeback{0};
+  std::atomic<int64_t> flush_min_age_ns{0};  // see set_flush_min_age()
+  std::atomic<int> flush_batch{0};           // see set_flush_batch()
+  bool flush_whole_objects = false;          // see set_flush_whole_objects()
+  // Over its share of the limit, a member of a group may still send what
+  // the others leave unused, as the dirty limits let it: one busy file
+  // lives in one member, and its writeback would otherwise get only that
+  // share of the in-flight budget however idle the rest is.
+  bool writeback_full() const {
+    uint64_t m = max_writeback.load(std::memory_order_relaxed);
+    if (!m || stat_wb_inflight < share(m))
+      return false;
+    if (!group)
+      return true;
+    uint64_t t = stat_wb_inflight;
+    for (auto o : *group)
+      if (o != this)
+        t += o->pub.wb_inflight.load(std::memory_order_relaxed);
+    return t >= m;
+  }
+  void publish_wb_inflight() {
+    if (group)
+      pub.wb_inflight.store(stat_wb_inflight, std::memory_order_relaxed);
+  }
 
   size_t stat_nr_dirty_waiters;
+  // the waiters asleep: those not asleep were woken for room and have not
+  // taken the lock again yet (changed under the lock the waiters sleep
+  // with: this cache's, or the group's)
+  std::atomic<size_t> stat_nr_dirty_sleeping{0};
+  // no more writers waiting for writeback are woken at once than this
+  // (set_max_woken_writers())
+  std::atomic<uint64_t> max_woken_writers{32};
+  // how long gate_shut() spins for the readers to leave before yielding
+  std::atomic<int> gate_spin_tries{100};
 
   void verify_stats() const;
 
@@ -537,11 +640,17 @@ class ObjectCacher {
                const ZTracer::Trace &parent_trace);
   void bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace);
   void bh_write_scattered(std::list<BufferHead*>& blist);
+  // write @bh and the dirty BufferHeads of its object around it, up to
+  // *amount bytes and *max_count of them when not null (both lowered by
+  // what it sends); *sent_amount and *sent_count get what it sent
   void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
-			    int64_t *amount, int *max_count);
+			    int64_t *amount, int *max_count,
+			    int64_t *sent_amount = nullptr,
+			    int *sent_count = nullptr);
 
   void trim();
-  void flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0);
+  bool flush(ZTracer::Trace *trace, loff_t amount=0, int max_bhs=0,
+             ceph::timespan min_age=ceph::timespan::zero(), int batch=0);
 
   /**
    * flush a range of buffers
@@ -626,21 +735,196 @@ class ObjectCacher {
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	    ZTracer::Trace *parent_trace = nullptr,
             std::vector<ObjHole> *holes = nullptr);
+  /**
+   * With block_writes_upfront and a non-null @defer_wait, writex() does
+   * not sleep for writeback itself: it sets *defer_wait when a blocking
+   * writer would, and the caller then calls wait_for_writeback_space()
+   * after dropping locks of its own that writeback completions take.
+   * @onfreespace must be null then.
+   */
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 	     ZTracer::Trace *parent_trace,
-	     bool block_writes_upfront);
+	     bool block_writes_upfront, bool *defer_wait = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 	     ZTracer::Trace *parent_trace = nullptr) {
     return writex(wr, oset, onfreespace, parent_trace, cfg_block_writes_upfront);
   }
   bool is_cached(ObjectSet *oset, std::vector<ObjectExtent>& extents,
 		 snapid_t snapid);
+  /**
+   * Whether readx() of @extents would complete right away: every byte is in
+   * a clean, dirty, writeback or zero BufferHead (is_cached() also counts
+   * buffers still being read or in error, which readx() waits for).
+   */
+  bool is_readable(ObjectSet *oset, std::vector<ObjectExtent>& extents,
+                   snapid_t snapid);
+  /**
+   * The read gate, off unless enable_read_gate() is called: it lets
+   * read_hit() serve a cache hit without the cache's lock, so readers of
+   * cached data do not queue on it.  Whoever changes the cache holds the
+   * lock and shuts the gate (gate_shut(), which waits for the readers
+   * inside to leave), and opens it (gate_open()) before dropping the lock
+   * or sleeping on it.  The cache does both around its own lock
+   * acquisitions and waits; a user of the gate does it around its own.
+   * Readers never wait: read_hit() gives up when the gate is shut, and
+   * the caller takes the lock instead.  So writers are not starved, and
+   * the gate adds no wait to the lock order.
+   */
+  void enable_read_gate() {
+    read_gate = true;
+  }
+  // how many per-CPU slots its counts use (see ceph::percpu_slots()):
+  // before start()
+  void set_percpu_slots(unsigned want) {
+    gate_readers.resize(want);
+    hit_slots.resize(want);
+  }
+  // tuning, may be changed at any time
+  /**
+   * Have the flusher send no more writeback while @bytes (this member's
+   * share of them, for a budget group) of the writes it sent are not
+   * committed; 0 for no limit, the default.  Without it, data rewritten
+   * while its writeback is in flight is sent again and again, as fast as
+   * the writers dirty it: a write that makes a BufferHead in tx dirty
+   * again takes it out of stat_tx, so the dirty limits no longer see the
+   * write in flight, and the OSDs fall behind by as many writes as the
+   * flusher can send.  With it, rewrites while the OSDs catch up land in
+   * the cache.  fsync() and the other flushes the cache's users ask for
+   * are not held back.
+   */
+  void set_max_writeback(uint64_t bytes) {
+    max_writeback.store(bytes, std::memory_order_relaxed);
+  }
+  /**
+   * Leave dirty data younger than @age to be rewritten in the cache when
+   * the flusher only brings the cache down to its dirty target; 0, the
+   * default, flushes the oldest data whatever its age.  Data rewritten
+   * faster than the OSDs take it is otherwise sent again on every pass,
+   * and the writeback in flight keeps the writers at the dirty limit.
+   * Once a writer waits for room, the flusher sends any age.
+   */
+  void set_flush_min_age(ceph::signedspan age) {
+    flush_min_age_ns.store(std::max<int64_t>(age.count(), 0),
+                           std::memory_order_relaxed);
+  }
+  /**
+   * Have the flusher, when it brings the cache down to its dirty target,
+   * start at most @n writebacks before it lets go of the lock once, as it
+   * does for aged data; 0, the default, sends all it has to at once.
+   * Writers of the same cache wait for the lock meanwhile, and a pass that
+   * sends hundreds of small BufferHeads held them for milliseconds.
+   */
+  void set_flush_batch(int n) {
+    flush_batch.store(std::max(n, 0), std::memory_order_relaxed);
+  }
+  /**
+   * When the flusher brings the cache down to its dirty target, send all
+   * the dirty data of each object it picks in one write (scattered
+   * writeback), not just as much as it is over the target.  A flusher
+   * that runs as soon as the cache is a little over its target was
+   * otherwise left a few KiB to send at a time, and sent a few small
+   * BufferHeads per write: 2.4 times as many writes as a flusher that
+   * runs late, and writes that waited for room.  Off by default.  Call
+   * before start().
+   */
+  void set_flush_whole_objects(bool on) {
+    flush_whole_objects = on;
+  }
+  void set_max_woken_writers(uint64_t n) {
+    max_woken_writers.store(std::max<uint64_t>(n, 1), std::memory_order_relaxed);
+  }
+  void set_gate_spin_tries(int n) {
+    gate_spin_tries.store(std::max(n, 0), std::memory_order_relaxed);
+  }
+  /**
+   * Share the limits (max_size, max_dirty, target_dirty) with the other
+   * members of @g, which all have the same limits and are all in @g: for
+   * a user that shards its cache by object set, each shard with its own
+   * lock.  A member within its share of a limit (the limit divided by the
+   * number of members) is never held back for the others; one beyond it
+   * is held to the limit for what all members use, and room another
+   * member frees wakes its writers.  max_objects is divided between them.
+   * Call before start().
+   */
+  void set_budget_group(const std::vector<ObjectCacher*> *g) {
+    group = g;
+  }
+  void gate_shut() {
+    if (!read_gate)
+      return;
+    gate_closed.store(true, std::memory_order_seq_cst);
+    for (int spins = 0; gate_has_readers(); ++spins) {
+      if (spins > gate_spin_tries.load(std::memory_order_relaxed))
+        std::this_thread::yield();
+    }
+  }
+  void gate_open() {
+    if (read_gate)
+      gate_closed.store(false, std::memory_order_release);
+  }
+  /**
+   * Serve a read through the read gate, without the lock: a single extent
+   * that one clean, dirty or under-writeback BufferHead covers.  Returns
+   * the bytes read and consumes @rd; or leaves @rd alone and returns
+   * -EBUSY when the gate is shut (wait for the lock's holder, without
+   * shutting the gate again, and retry) or -EAGAIN when it is not such a
+   * hit (readx() it under the lock).  It does not move the BufferHead in the LRU; it marks it
+   * referenced, and trim() gives it a second chance.
+   */
+  int read_hit(OSDRead *rd, ObjectSet *oset);
+  /**
+   * Run @f, which only looks at the cache, through the read gate without
+   * the lock.  Returns false, without running it, when the gate is off or
+   * shut: then run it under the lock.
+   */
+  template <typename F>
+  bool gate_peek(F&& f) {
+    int slot;
+    if (!read_gate || (slot = gate_enter()) < 0)
+      return false;
+    f();
+    gate_exit(slot);
+    return true;
+  }
+  /**
+   * Wait, like a writex() with block_writes_upfront, until there is room
+   * for @len more dirty bytes: the wait a writex() with @defer_wait left to
+   * its caller.
+   */
+  void wait_for_writeback_space(uint64_t len);
 
 private:
   // write blocking
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
                       ZTracer::Trace *trace, Context *onfreespace,
-                      bool block_writes_upfront);
+                      bool block_writes_upfront, bool *defer_wait);
+  bool _writeback_wait_needed();
+  void _wake_writeback_waiters();
+  void _wake_local_waiters();
+  void _wake_group_waiters();
+  void _notify_writeback_waiters(uint64_t n);
+  uint64_t last_dirty_tx = 0;   // dirty + tx when _wake_group_waiters() last looked
+  // enter the read gate: the slot to leave it by (gate_exit()), which is
+  // the one entered by even if the thread moves to another CPU, or -1
+  // when the gate is shut
+  int gate_enter() {
+    int slot = int(ceph::cpu_index() & gate_readers.mask());
+    gate_readers[slot].n.fetch_add(1, std::memory_order_seq_cst);
+    if (gate_closed.load(std::memory_order_seq_cst)) {
+      gate_readers[slot].n.fetch_sub(1, std::memory_order_release);
+      return -1;
+    }
+    return slot;
+  }
+  void gate_exit(int slot) {
+    gate_readers[slot].n.fetch_sub(1, std::memory_order_release);
+  }
+  // shut the gate for a scope that holds the lock (see gate_shut())
+  struct GateShut {
+    ObjectCacher *oc;
+    explicit GateShut(ObjectCacher *o) : oc(o) { oc->gate_shut(); }
+    ~GateShut() { oc->gate_open(); }
+  };
   void _maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
@@ -680,6 +964,9 @@ public:
   // cache sizes
   void set_max_dirty(uint64_t v) {
     max_dirty = v;
+  }
+  uint64_t get_max_dirty() const {
+    return max_dirty;
   }
   void set_target_dirty(int64_t v) {
     target_dirty = v;
@@ -728,11 +1015,13 @@ public:
   int file_write(ObjectSet *oset, file_layout_t *layout,
 		 const SnapContext& snapc, loff_t offset, uint64_t len,
 		 ceph::buffer::list& bl, ceph::real_time mtime, int flags,
-		 Context *onfreespace, bool block_writes_upfront) {
+		 Context *onfreespace, bool block_writes_upfront,
+		 bool *defer_wait = nullptr) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);
-    return writex(wr, oset, onfreespace, nullptr, block_writes_upfront);
+    return writex(wr, oset, onfreespace, nullptr, block_writes_upfront,
+                  defer_wait);
   }
 
   bool file_flush(ObjectSet *oset, file_layout_t *layout,

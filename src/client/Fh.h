@@ -1,6 +1,8 @@
 #ifndef CEPH_CLIENT_FH_H
 #define CEPH_CLIENT_FH_H
 
+#include <atomic>
+
 #include "common/Readahead.h"
 #include "include/types.h"
 #include "InodeRef.h"
@@ -21,7 +23,8 @@ struct Fh {
   // they won't change, and putting them under the client_lock
   // makes no sense.
 
-  int       _ref = 1;
+  // atomic: the data path holds a ref while it runs without client_lock
+  std::atomic<int> _ref = 1;
   loff_t    pos = 0;
   int       mode;       // the mode i opened the file with
 

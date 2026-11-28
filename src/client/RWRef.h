@@ -82,7 +82,14 @@
 
 #include <string>
 #include "include/ceph_assert.h"
+#include <atomic>
+#include <chrono>
+#ifdef __linux__
+#include <sched.h>
+#endif
+
 #include "common/ceph_mutex.h"
+#include "include/current_cpu.h"
 
 /* The status mechanism info */
 template<typename T>
@@ -93,8 +100,10 @@ struct RWRefState {
     /*
      * This will be status mechanism. Currently you need to define
      * it by yourself.
+     *
+     * Atomic: readers check it without the lock (see RWRef).
      */
-    T state;
+    std::atomic<T> state;
 
     /*
      * User defined method to check whether the "require" state
@@ -124,25 +133,77 @@ struct RWRefState {
     virtual bool is_valid_state(T require) const = 0;
 
     int64_t get_state() const {
-      std::scoped_lock l{lock};
       return state;
     }
 
     bool check_current_state(T require) const {
       ceph_assert(is_valid_state(require));
-
-      std::scoped_lock l{lock};
       return state == require;
     }
 
     RWRefState(T init_state, const char *lockname, uint64_t _reader_cnt=0)
-      : state(init_state), lock(ceph::make_mutex(lockname)), reader_cnt(_reader_cnt) {}
+      : state(init_state), lock(ceph::make_mutex(lockname)) {
+      slots[0].n = _reader_cnt;
+    }
     virtual ~RWRefState() {}
 
+    // client_percpu_slots, before any reader or writer comes
+    void resize(unsigned want) {
+      uint64_t n = 0;
+      for (auto& s : slots)
+        n += s.n.load();
+      slots.resize(want);
+      slots[0].n = n;
+    }
+
   private:
+    /*
+     * Readers run without the lock: a reader adds itself to the count of
+     * its CPU's slot and then checks the state; a writer changes the
+     * state and then waits for every slot to drop to zero.  Both sides
+     * use sequentially consistent atomics, so either the reader sees the
+     * new state, or the writer sees the reader and waits for it.  The
+     * counts are per CPU because every libcephfs call is a reader: with
+     * one count, threads on all CPUs passed its cache line around twice
+     * per call.  A reader leaves by the slot it entered by, as it may
+     * have moved to another CPU meanwhile.
+     */
+    unsigned this_slot() const {
+      return ceph::cpu_index() & slots.mask();
+    }
+    void get_reader(unsigned slot) {
+      slots[slot].n.fetch_add(1);
+    }
+    void put_reader(unsigned slot) {
+      // A writer may free this state as soon as it sees no readers
+      // (unmount), so a reader must not touch it once its count is gone.
+      // With no writer waiting, drop the count and go: a writer that
+      // comes meanwhile and misses it sees it on its next look (it looks
+      // again every few milliseconds).  With one waiting, drop it under
+      // the lock, which the writer looks under, and wake it.
+      if (waiters.load() == 0) {
+        slots[slot].n.fetch_sub(1);
+        return;
+      }
+      std::scoped_lock l{lock};
+      slots[slot].n.fetch_sub(1);
+      cond.notify_all();
+    }
+    bool has_readers() const {
+      for (auto& s : slots) {
+        if (s.n.load() != 0)
+          return true;
+      }
+      return false;
+    }
+
     mutable ceph::mutex lock;
     ceph::condition_variable cond;
-    uint64_t reader_cnt = 0;
+    struct alignas(64) Slot {
+      std::atomic<uint64_t> n{0};
+    };
+    ceph::PerCpuSlots<Slot> slots{32};
+    std::atomic<int> waiters = 0;
 };
 
 template<typename T>
@@ -155,13 +216,16 @@ public:
     :S(s), is_reader(ir) {
     ceph_assert(S.is_valid_state(require));
 
-    std::scoped_lock l{S.lock};
-    if (likely(is_reader)) { // Readers will update the reader_cnt
+    if (likely(is_reader)) { // Readers add themselves to the count
+      slot = S.this_slot();
+      S.get_reader(slot);
       if (S.check_reader_state(require)) {
-        S.reader_cnt++;
         satisfied = true;
+      } else {
+        S.put_reader(slot);
       }
     } else { // Writers will update the state
+      std::scoped_lock l{S.lock};
       is_reader = false;
 
       /*
@@ -215,13 +279,15 @@ public:
 
     std::unique_lock l{S.lock};
 
-    S.cond.wait(l, [this] {
-      return !S.reader_cnt;
-    });
+    S.waiters++;
+    // see put_reader(): look again now and then for a reader that left
+    // without waking us
+    while (S.has_readers())
+      S.cond.wait_for(l, std::chrono::milliseconds(10));
+    S.waiters--;
   }
 
   ~RWRef() {
-    std::scoped_lock l{S.lock};
     if (!is_reader)
       return;
 
@@ -231,12 +297,12 @@ public:
     /*
      * Decrease the refcnt and notify the waiters
      */
-    if (--S.reader_cnt == 0)
-      S.cond.notify_all();
+    S.put_reader(slot);
   }
 
 private:
   RWRefState<T> &S;
+  unsigned slot = 0;   // the slot of the reader's count
   bool satisfied = false;
   bool first_writer = false;
   bool is_reader = true;

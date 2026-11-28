@@ -204,6 +204,228 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: client_oc_shards
+  type: uint
+  level: advanced
+  desc: Number of object cache shards
+  long_desc: The client's object cache is split into this many shards, each
+    with its own lock, and every file's cached data goes to one of them, so
+    that threads working on different files through one mount do not queue
+    on one lock.  The shards share client_oc_size, client_oc_max_dirty and
+    client_oc_target_dirty; client_oc_max_objects is divided among them.
+    The value is rounded down to a power of two.
+  default: 8
+  min: 1
+  max: 256
+  services:
+  - mds_client
+  flags:
+  - startup
+  see_also:
+  - client_oc
+  - client_oc_size
+  - client_oc_max_dirty
+- name: client_percpu_slots
+  type: uint
+  level: dev
+  desc: Per-CPU slots of the client's contended counts
+  long_desc: Counts that threads on many CPUs change at once (cap hits, I/O
+    statistics, the mount state's readers, the object cache's read gate and
+    hits) and the open file table are split into slots, one per logical
+    CPU (hardware thread or vCPU) modulo their number, each on its own
+    cache line.  0 gives each its default (32 or 64) but no more than the
+    machine's CPUs; any other value is used for all of them, rounded up to
+    a power of two.  More slots spread the
+    counts further; a count's reader or a writer of the read gate then
+    looks at more cache lines.
+  default: 0
+  min: 0
+  max: 4096
+  services:
+  - mds_client
+  flags:
+  - startup
+- name: client_oc_max_writeback
+  type: size
+  level: dev
+  desc: Limit in bytes for writeback in flight to the OSDs (0 =
+    client_oc_max_dirty)
+  long_desc: The object cache's flusher sends no more writeback while this
+    many bytes it sent are not committed.  Data rewritten while its
+    writeback is in flight is then written back once the OSDs catch up,
+    not every time it is rewritten; without a limit the OSDs can fall
+    minutes behind under a rewrite load, and every read and write that
+    reaches them waits that long.  0 uses client_oc_max_dirty.  fsync and
+    the flushes asked for by the client are not held back.
+  default: 0
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_max_dirty
+- name: client_oc_flush_batch
+  type: uint
+  level: dev
+  desc: Most writebacks the flusher starts at once before it lets the
+    writers of its cache in
+  long_desc: When the object cache's flusher brings the dirty data down to
+    client_oc_target_dirty, it starts this many writebacks at most before
+    it lets go of the cache's lock once, as it does for aged data.  The
+    writers of the cache wait for that lock, and a pass that sent hundreds
+    of small BufferHeads at once held them for milliseconds.  0 sends all
+    it has to at once.
+  default: 32
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_target_dirty
+- name: client_oc_flush_min_age
+  type: float
+  level: dev
+  desc: Seconds dirty data stays in the cache before the flusher sends it
+    only to bring the cache down to client_oc_target_dirty
+  long_desc: The object cache's flusher brings the dirty data down to
+    client_oc_target_dirty, oldest first.  Data younger than this is left
+    in the cache, where a rewrite costs nothing, instead of being sent
+    again on every pass; under a rewrite load that keeps the OSDs and the
+    writeback in flight busy, and the writers wait at client_oc_max_dirty.
+    Once a writer waits for room, the flusher sends data of any age.  0
+    sends the oldest data whatever its age.  client_oc_max_dirty_age
+    still flushes data that stays dirty that long.
+  default: 0
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_target_dirty
+  - client_oc_max_dirty
+  - client_oc_max_dirty_age
+- name: client_write_combine_max
+  type: uint
+  level: dev
+  desc: Most buffered writes of one file done as one
+  long_desc: The writers of one file queue their buffered writes, and
+    whichever takes the file's lock first does the writes queued by then,
+    at most this many, under one hold of the file's lock and of its object
+    cache shard's lock.  More let many threads writing one file take the
+    locks less often; each write waits for those done before it.
+  default: 32
+  min: 1
+  max: 4096
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_shards
+- name: client_oc_max_woken_writers
+  type: uint
+  level: dev
+  desc: Most writers throttled by client_oc_max_dirty woken at once
+  long_desc: When writeback frees room, the writers waiting for it are woken
+    as many as there is room for, but no more than this many that have not
+    written yet.  More let the writers fill the room faster; with thousands
+    of writers, too many queue for the cache's lock ahead of the writeback
+    completions that free it.
+  default: 32
+  min: 1
+  max: 65536
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc_max_dirty
+  - client_oc_shards
+- name: client_oc_read_gate_retries
+  type: uint
+  level: dev
+  desc: Times a cached read retries the object cache's read gate
+  long_desc: A read of cached data goes through the object cache without its
+    lock unless a writer holds that lock; it then waits for the writer and
+    tries again this many times before it reads under the lock.
+  default: 4
+  min: 0
+  max: 1000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_oc
+- name: client_lock_max_spinners
+  type: int
+  level: dev
+  desc: Threads that may spin at once for a contended client lock
+  long_desc: A thread that finds an inode's or an object cache shard's lock
+    taken may spin for it a while (client_lock_spin_tries) before sleeping,
+    but only this many threads per lock at a time; the others sleep at once.
+    0 disables spinning.  It applies to every mount of the process.
+  default: 2
+  min: 0
+  max: 1024
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_lock_spin_tries
+- name: client_lock_spin_tries
+  type: int
+  level: dev
+  desc: Tries of a spinning thread for a contended client lock
+  long_desc: How many times a spinning thread tries an inode's or an object
+    cache shard's lock, pausing between tries, before it sleeps; also how
+    long a writer spins for the readers of an inode or of the read gate to
+    leave before it yields the CPU.  It applies to every mount of the
+    process.
+  default: 100
+  min: 0
+  max: 1000000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_lock_max_spinners
+- name: client_inode_lock_reader_slots
+  type: uint
+  level: dev
+  desc: Counts the readers of a hot inode are spread over
+  long_desc: Readers that share an inode's lock (getattr, cached reads,
+    lookups in a directory) count themselves in one count, until readers
+    from different threads have met there client_inode_lock_spread_after
+    times; then the inode gets this many counts on cache lines of their own,
+    picked by CPU, and its writers check them all.  It applies to inodes
+    spread after a change, in every mount of the process.
+  default: 16
+  min: 1
+  max: 1024
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_inode_lock_spread_after
+- name: client_inode_lock_spread_after
+  type: uint
+  level: dev
+  desc: Reader meetings after which an inode's readers are spread
+  long_desc: See client_inode_lock_reader_slots.  0 never spreads them.  It
+    applies to every mount of the process.
+  default: 64
+  min: 0
+  max: 1000000
+  services:
+  - mds_client
+  flags:
+  - runtime
+  see_also:
+  - client_inode_lock_reader_slots
 - name: client_oc_max_dirty_age
   type: float
   level: advanced
@@ -622,6 +844,21 @@ options:
     cap references (Fb caps in this case). This config is disabled by
     default (value of 0) and is to be used for the purpose of validating
     a race case bug with concurrent fsync.
+  default: 0
+  services:
+  - mds_client
+  min: 0
+- name: client_inject_rename_walk_delay
+  type: millisecs
+  level: dev
+  desc: Induce delays around the target walk of a rename for testing
+  long_desc: Make a rename drop the client lock and sleep this long after it
+    walked the source name, and again after it walked the target name, the
+    windows in which another request of the same client can move the
+    source, or link the target name, while the rename holds the dentries it
+    found.  It is read once the source is walked.  Disabled by default
+    (value of 0); used to validate the handling of a rename whose dentries
+    went stale.
   default: 0
   services:
   - mds_client

@@ -13,6 +13,11 @@
 
 #include <unordered_map>
 
+#include <boost/container/small_vector.hpp>
+#ifdef __linux__
+#include <sched.h>
+#endif
+
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -260,9 +265,67 @@ void ObjectCacher::Object::maybe_rebuild_buffer(BufferHead *bh)
   if (bl.get_num_buffers() <= 1)
     return;
 
-  auto wasted = bl.get_wasted_space();
-  if (wasted * 2 > bl.length() &&
-      wasted > (1U << BUFFER_MEMORY_WEIGHT))
+  // Rebuilding copies the data so that the unused parts of the raw buffers
+  // can be freed.  A raw buffer that other BufferHeads (or anyone else)
+  // also reference is only freed once all of them let go of it: charging
+  // it whole copies a BufferHead that small writes split again and again
+  // out of one large buffer on every write, which frees nothing and only
+  // adds memory (and holds the cache's lock for the copy).
+  // This runs a few times per cached write.  Charging every buffer its
+  // whole raw buffer bounds the waste from above: when even that is not
+  // enough to rebuild (a BufferHead merged out of whole small writes),
+  // stop here, in one pass.  Else group the buffers by raw buffer, on the
+  // stack, not in a map.
+  uint64_t used = 0, upper = 0;
+  for (const auto& p : bl.buffers()) {
+    if (!p.have_raw())
+      continue;
+    used += p.length();
+    upper += p.raw_length();
+  }
+  auto rebuild_worth = [&](uint64_t wasted) {
+    return wasted * 2 > bl.length() &&
+           (wasted > (1U << BUFFER_MEMORY_WEIGHT) ||
+            bl.length() <= (1U << BUFFER_MEMORY_WEIGHT));
+  };
+  if (!rebuild_worth(upper > used ? upper - used : 0))
+    return;
+  boost::container::small_vector<std::pair<const char*, const ceph::buffer::ptr*>, 16> raws;
+  for (const auto& p : bl.buffers()) {
+    if (p.have_raw())
+      raws.emplace_back(p.raw_c_str(), &p);
+  }
+  std::sort(raws.begin(), raws.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+  // What a rebuild frees: all of a raw buffer only this BufferHead holds.
+  // One that others hold too stays: copying out of it frees nothing now.
+  // Charge it, at its share, only to a BufferHead that is small (cheap to
+  // copy: small pieces must not keep a large raw buffer alive for good) or
+  // made of small pieces (small writes merged into a large clean one: every
+  // later split and merge walks all of its pieces, so consolidate them).
+  // Other large ones wait until they hold the raw buffer alone: writes that
+  // split a large clean BufferHead would copy most of it on every split.
+  bool small = bl.length() <= (64U << 10) ||
+               bl.length() < (uint64_t)bl.get_num_buffers() * (16U << 10);
+  uint64_t wasted = 0;
+  for (size_t i = 0; i < raws.size();) {
+    size_t j = i + 1;
+    uint64_t in_use = raws[i].second->length();
+    while (j < raws.size() && raws[j].first == raws[i].first)
+      in_use += raws[j++].second->length();
+    unsigned refs = j - i;   // this BufferHead's refs to the raw buffer
+    const auto* p = raws[i].second;
+    auto nref = std::max<unsigned>(p->raw_nref(), refs);
+    uint64_t charge = 0;
+    if (nref == refs)
+      charge = p->raw_length();
+    else if (small)
+      charge = (uint64_t)p->raw_length() * refs / nref;
+    if (charge > in_use)
+      wasted += charge - in_use;
+    i = j;
+  }
+  if (rebuild_worth(wasted))
     bl.rebuild();
 }
 
@@ -1016,7 +1079,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 }
 
 void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
-					int64_t *max_amount, int *max_count)
+					int64_t *max_amount, int *max_count,
+					int64_t *sent_amount, int *sent_count)
 {
   list<BufferHead*> blist;
 
@@ -1058,6 +1122,10 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
     *max_count -= count;
   if (max_amount)
     *max_amount -= total_len;
+  if (sent_count)
+    *sent_count = count;
+  if (sent_amount)
+    *sent_amount = total_len;
 
   bh_write_scattered(blist);
 }
@@ -1133,6 +1201,8 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
     bh->last_write_tid = tid;
     mark_tx(bh);
   }
+  stat_wb_inflight += total_len;
+  publish_wb_inflight();
 
   if (perfcounter)
     perfcounter->inc(l_objectcacher_data_flushed, total_len);
@@ -1176,6 +1246,24 @@ void ObjectCacher::bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace)
   }
 
   mark_tx(bh);
+  stat_wb_inflight += bh->length();
+  publish_wb_inflight();
+}
+
+/*
+ * Wake this cache's flusher from another member of its group, which holds
+ * its own lock.  Taking ours too would order two caches' locks (and the
+ * other way round elsewhere); notifying without it can be lost between the
+ * flusher's last look and its sleep.  So: flag it, which the flusher reads
+ * under our lock before it sleeps, and notify only if our lock is free
+ * now (else its holder is busy and the flusher sleeps at most a second).
+ */
+void ObjectCacher::kick_flusher()
+{
+  flusher_kicked = true;
+  std::unique_lock l(lock, std::try_to_lock);
+  if (l.owns_lock())
+    flusher_cond.notify_all();
 }
 
 void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
@@ -1185,6 +1273,25 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 7) << "bh_write_commit " << oid << " tid " << tid
 		<< " ranges " << ranges << " returned " << r << dendl;
+
+  // the write is out of flight, whatever its BufferHeads became since
+  {
+    bool was_full = writeback_full();
+    uint64_t len = 0;
+    for (const auto& [off, l] : ranges)
+      len += l;
+    ceph_assert(stat_wb_inflight >= len);
+    stat_wb_inflight -= len;
+    publish_wb_inflight();
+    if (was_full && !writeback_full()) {
+      flusher_cond.notify_all();
+      // a member that stopped on the group's total may go on too
+      if (group)
+        for (auto o : *group)
+          if (o != this)
+            o->kick_flusher();
+    }
+  }
 
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
@@ -1286,11 +1393,13 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
     finish_contexts(cct, ls, r);
 }
 
-void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs)
+bool ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs,
+                         ceph::timespan min_age, int batch)
 {
   ceph_assert(trace != nullptr);
   ceph_assert(ceph_mutex_is_locked(lock));
-  ceph::real_time cutoff = ceph::real_clock::now();
+  // the LRU is in last_write order: stop at the first bh younger than min_age
+  ceph::real_time cutoff = ceph::real_clock::now() - min_age;
 
   ldout(cct, 10) << "flush " << amount
                  << " bytes, max bufferheads " << max_bhs << dendl;
@@ -1303,13 +1412,28 @@ void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs)
    */
   int64_t left = amount;
   int left_bhs = max_bhs;
+  int sent = 0;
   while ((amount == 0 && max_bhs == 0) || left > 0 || left_bhs > 0) {
+    // a batch sent: tell the caller to let go of the lock and come back
+    if (batch && sent >= batch)
+      return true;
+    // the OSDs are behind: let rewrites land in the cache meanwhile (a
+    // commit wakes us, see bh_write_commit())
+    if (writeback_full())
+      break;
     BufferHead *bh = static_cast<BufferHead*>(
       bh_lru_dirty.lru_get_next_expire());
     if (!bh) break;
     if (bh->last_write > cutoff) break;
 
-    if (scattered_write) {
+    if (scattered_write && flush_whole_objects) {
+      // all of the object's dirty data, then count it against the amount
+      int64_t whole = 0;
+      int whole_bhs = 0;
+      bh_write_adjacencies(bh, cutoff, NULL, NULL, &whole, &whole_bhs);
+      left -= whole;
+      left_bhs -= whole_bhs;
+    } else if (scattered_write) {
       bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL,
                            max_bhs > 0 ? &left_bhs : NULL);
     } else {
@@ -1317,7 +1441,9 @@ void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount, int max_bhs)
       left_bhs--;
       bh_write(bh, *trace);
     }
+    ++sent;
   }
+  return false;
 }
 
 void ObjectCacher::trim()
@@ -1329,21 +1455,55 @@ void ObjectCacher::trim()
 
   uint64_t max_clean_bh = max_size >> BUFFER_MEMORY_WEIGHT;
   uint64_t nr_clean_bh = bh_lru_rest.lru_get_size() - bh_lru_rest.lru_get_num_pinned();
+  // a member of a group trims what is beyond both its share of the limits
+  // and the group's (and nothing within its share)
+  uint64_t trim_bytes = UINT64_MAX, trim_bhs = UINT64_MAX;
+  if (group) {
+    uint64_t clean = get_stat_clean();
+    uint64_t ob = clean > share(max_size) ? clean - share(max_size) : 0;
+    uint64_t obh = nr_clean_bh > share(max_clean_bh) ?
+                   nr_clean_bh - share(max_clean_bh) : 0;
+    if (ob || obh) {
+      Totals t = group_totals();
+      ob = std::min<uint64_t>(ob, t.clean > max_size ? t.clean - max_size : 0);
+      obh = std::min<uint64_t>(obh, t.clean_bh > max_clean_bh ?
+                                    t.clean_bh - max_clean_bh : 0);
+    }
+    trim_bytes = ob;
+    trim_bhs = obh;
+  }
+  // read_hit() marks what it reads instead of moving it in the LRU: give
+  // each such BufferHead one more round, at most one pass over the LRU
+  uint64_t second_chances = read_gate ? bh_lru_rest.lru_get_size() : 0;
   while (get_stat_clean() > 0 &&
-	 ((uint64_t)get_stat_clean() > max_size ||
-	  nr_clean_bh > max_clean_bh)) {
+	 (group ? (trim_bytes > 0 || trim_bhs > 0) :
+	  ((uint64_t)get_stat_clean() > max_size ||
+	   nr_clean_bh > max_clean_bh))) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
+    if (second_chances > 0 &&
+        bh->referenced.exchange(false, std::memory_order_relaxed)) {
+      --second_chances;
+      // at the midpoint, not the top: below the data read in (by readahead,
+      // say) since it was read, which is not referenced yet and would
+      // otherwise go first; an LRU would have moved it up at the read
+      bh_lru_rest.lru_insert_mid(bh);
+      continue;
+    }
 
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
     ceph_assert(bh->is_clean() || bh->is_zero() || bh->is_error());
 
     Object *ob = bh->ob;
+    uint64_t len = bh->length();
     bh_remove(ob, bh);
     delete bh;
 
     --nr_clean_bh;
+    trim_bytes -= std::min(trim_bytes, len);
+    if (trim_bhs)
+      --trim_bhs;
 
     if (ob->complete) {
       ldout(cct, 10) << "trim clearing complete on " << *ob << dendl;
@@ -1351,10 +1511,17 @@ void ObjectCacher::trim()
     }
   }
 
-  while (ob_lru.lru_get_size() > max_objects) {
+  uint64_t ob_second_chances = read_gate ? ob_lru.lru_get_size() : 0;
+  while (ob_lru.lru_get_size() > share(max_objects)) {
     Object *ob = static_cast<Object*>(ob_lru.lru_expire());
     if (!ob)
       break;
+    if (ob_second_chances > 0 &&
+        ob->referenced.exchange(false, std::memory_order_relaxed)) {
+      --ob_second_chances;
+      ob_lru.lru_insert_mid(ob);   // as for the BufferHeads above
+      continue;
+    }
 
     ldout(cct, 10) << "trim trimming " << *ob << dendl;
     close_object(ob);
@@ -1368,6 +1535,31 @@ void ObjectCacher::trim()
 
 
 /* public */
+
+bool ObjectCacher::is_readable(ObjectSet *oset, vector<ObjectExtent>& extents,
+                               snapid_t snapid)
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  for (auto& ex : extents) {
+    Object *o = get_object_maybe(sobject_t(ex.oid, snapid), ex.oloc);
+    if (!o)
+      return false;
+    loff_t cur = ex.offset, left = ex.length;
+    auto p = o->data_lower_bound(cur);
+    while (left > 0) {
+      if (p == o->data.end() || p->first > cur)
+        return false;   // a gap
+      BufferHead *bh = p->second;
+      if (!bh->is_clean() && !bh->is_dirty() && !bh->is_tx() && !bh->is_zero())
+        return false;   // rx or error
+      loff_t len = std::min(bh->end() - cur, left);
+      cur += len;
+      left -= len;
+      ++p;
+    }
+  }
+  return true;
+}
 
 bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 			     snapid_t snapid)
@@ -1440,6 +1632,46 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
    * zeroed buffers needs to feed single extents into readx().
    */
   ceph_assert(!oset->return_enoent || rd->extents.size() == 1);
+
+  // The common small cache hit: one extent, all of it in one readable
+  // BufferHead.  Serve it without the hit/miss maps and the stripe map the
+  // general path below builds (all of it under the cache's lock), with the
+  // same side effects.
+  if (external_call && rd->bl && rd->extents.size() == 1 &&
+      !rd->fadvise_flags && !oset->return_enoent) {
+    ObjectExtent &ex = rd->extents.front();
+    if (ex.buffer_extents.size() == 1 &&
+        ex.buffer_extents.front().first == 0 &&
+        ex.buffer_extents.front().second == ex.length) {
+      sobject_t soid(ex.oid, rd->snap);
+      Object *o = get_object(soid, ex.objectno, oset, ex.oloc,
+                             ex.truncate_size, oset->truncate_seq);
+      auto p = o->data_lower_bound(ex.offset);
+      if (p != o->data.end() && p->first <= (loff_t)ex.offset) {
+        BufferHead *bh = p->second;
+        if ((bh->is_clean() || bh->is_dirty() || bh->is_tx()) &&
+            bh->end() >= (loff_t)(ex.offset + ex.length)) {
+          touch_ob(o);
+          if (bh->get_nocache() && bh->is_clean())
+            bh_lru_rest.lru_bottouch(bh);
+          else
+            touch_bh(bh);
+          if (perfcounter) {
+            perfcounter->inc(l_objectcacher_data_read, ex.length);
+            perfcounter->inc(l_objectcacher_cache_bytes_hit, bh->length());
+            perfcounter->inc(l_objectcacher_cache_ops_hit);
+          }
+          rd->bl->clear();
+          rd->bl->substr_of(bh->bl, ex.offset - bh->start(), ex.length);
+          int ret = ex.length;
+          ldout(cct, 20) << "readx single bh hit " << *bh << " " << ret << dendl;
+          delete rd;
+          trim();
+          return ret;
+        }
+      }
+    }
+  }
 
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
@@ -1748,7 +1980,7 @@ void ObjectCacher::retry_waiting_reads()
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 			 ZTracer::Trace *parent_trace,
-			 bool block_writes_upfront)
+			 bool block_writes_upfront, bool *defer_wait)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph::real_time now = ceph::real_clock::now();
@@ -1840,7 +2072,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
   }
 
   int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace,
-                          block_writes_upfront);
+                          block_writes_upfront, defer_wait);
   delete wr;
 
   finish_contexts(cct, wait_for_reads, 0);
@@ -1866,10 +2098,284 @@ private:
 void ObjectCacher::C_WaitForWrite::finish(int r)
 {
   std::lock_guard l(m_oc->lock);
+  GateShut g(m_oc);
   m_oc->_maybe_wait_for_writeback(m_len, &m_trace);
   m_onfinish->complete(r);
 }
 
+void ObjectCacher::fold_hit_slots()
+{
+  if (!perfcounter)
+    return;
+  uint64_t rd = 0, hit = 0, ops = 0;
+  for (auto& hs : hit_slots) {
+    rd += hs.bytes_read.exchange(0, std::memory_order_relaxed);
+    hit += hs.bytes_hit.exchange(0, std::memory_order_relaxed);
+    ops += hs.ops_hit.exchange(0, std::memory_order_relaxed);
+  }
+  if (ops) {
+    perfcounter->inc(l_objectcacher_data_read, rd);
+    perfcounter->inc(l_objectcacher_cache_bytes_hit, hit);
+    perfcounter->inc(l_objectcacher_cache_ops_hit, ops);
+  }
+}
+
+int ObjectCacher::read_hit(OSDRead *rd, ObjectSet *oset)
+{
+  if (!read_gate || !rd->bl || rd->extents.size() != 1 ||
+      rd->fadvise_flags || oset->return_enoent)
+    return -EAGAIN;
+  ObjectExtent &ex = rd->extents.front();
+  if (ex.buffer_extents.size() != 1 ||
+      ex.buffer_extents.front().first != 0 ||
+      ex.buffer_extents.front().second != ex.length)
+    return -EAGAIN;
+  int slot = gate_enter();
+  if (slot < 0)
+    return -EBUSY;
+  // Only look: no writer is inside while the gate is open to us.  Take
+  // the object as it is; readx() under the lock creates or updates it.
+  int r = -EAGAIN;
+  uint64_t bh_len = 0;
+  sobject_t soid(ex.oid, rd->snap);
+  if ((uint32_t)ex.oloc.pool < objects.size()) {
+    auto& pool = objects[ex.oloc.pool];
+    auto it = pool.find(soid);
+    if (it != pool.end()) {
+      Object *o = it->second;
+      if (o->oset == oset && o->object_no == ex.objectno &&
+          o->truncate_size == ex.truncate_size &&
+          o->truncate_seq == oset->truncate_seq) {
+        auto p = o->data_lower_bound(ex.offset);
+        if (p != o->data.end() && p->first <= (loff_t)ex.offset) {
+          BufferHead *bh = p->second;
+          if ((bh->is_clean() || bh->is_dirty() || bh->is_tx()) &&
+              !bh->get_nocache() &&
+              bh->end() >= (loff_t)(ex.offset + ex.length)) {
+            o->referenced.store(true, std::memory_order_relaxed);
+            bh->referenced.store(true, std::memory_order_relaxed);
+            rd->bl->clear();
+            rd->bl->substr_of(bh->bl, ex.offset - bh->start(), ex.length);
+            bh_len = bh->length();
+            r = ex.length;
+          }
+        }
+      }
+    }
+  }
+  gate_exit(slot);
+  if (r < 0)
+    return r;
+  auto& hs = hit_slots.here();
+  hs.bytes_read.fetch_add(ex.length, std::memory_order_relaxed);
+  hs.bytes_hit.fetch_add(bh_len, std::memory_order_relaxed);
+  hs.ops_hit.fetch_add(1, std::memory_order_relaxed);
+  ldout(cct, 20) << "read_hit " << soid << " " << ex.offset << "~" << r << dendl;
+  delete rd;
+  return r;
+}
+
+void ObjectCacher::wait_for_writeback_space(uint64_t len)
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  ZTracer::Trace trace;
+  _maybe_wait_for_writeback(len, &trace);
+}
+
+// Wake as many writers waiting for writeback as there is room for now,
+// see _maybe_wait_for_writeback()
+void ObjectCacher::_wake_writeback_waiters()
+{
+  _wake_local_waiters();
+  if (group)
+    _wake_group_waiters();
+}
+
+/*
+ * Room freed here may be what the waiters of another member of the group
+ * wait for, which their own cache's changes would not wake them for: wake
+ * as many of them as the group has room for (no more than
+ * max_woken_writers), spread over the members.  Waking one of
+ * each, to pass it on, made a chain of wake-ups where each small write
+ * took a little of the room and woke the next: the writers came back too
+ * slowly to keep the flushers busy.
+ *
+ * A waiter registers and publishes that it waits, and then looks at the
+ * group's totals; we publish what we freed, and then look for waiters:
+ * with a full fence between on either side, either it sees the room, or
+ * we see it.  It looks and goes to sleep under its member's sleep_lock,
+ * and we wake it under that, so it cannot miss the wake-up in between.
+ * Each member has its own, so the writers woken in one member do not
+ * queue for a lock with those of all the others.
+ */
+void ObjectCacher::_wake_group_waiters()
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  uint64_t dirty_tx = get_stat_dirty() + get_stat_tx();
+  bool freed = dirty_tx < last_dirty_tx;
+  last_dirty_tx = dirty_tx;
+  if (!freed)
+    return;
+  std::atomic_thread_fence(std::memory_order_seq_cst);
+  auto r = std::memory_order_relaxed;
+  Totals t = group_totals();
+  if (t.waiters <= pub.waiters.load(r))
+    return;   // nobody waits elsewhere
+  uint64_t limit = max_dirty + t.waiting;
+  uint64_t limit_bh = (max_dirty >> BUFFER_MEMORY_WEIGHT) + t.waiters;
+  if (t.dirty_tx >= limit || t.dirty_tx_bh >= limit_bh)
+    return;   // no room in the group: only their own cache can let them go
+  // as _wake_local_waiters() counts them: each that goes takes its bytes,
+  // and at least one BufferHead, out of the room
+  uint64_t avg = std::max<uint64_t>(1, t.waiting / t.waiters);
+  uint64_t n = std::min<uint64_t>({(limit - t.dirty_tx) / avg,
+                                   limit_bh - t.dirty_tx_bh,
+                                   max_woken_writers.load(std::memory_order_relaxed)});
+  n = std::max<uint64_t>(n, 1);
+  // round robin over the other members, no more of each than wait there
+  std::vector<uint64_t> wake(group->size(), 0);
+  for (bool any = true; n > 0 && any; ) {
+    any = false;
+    size_t i = 0;
+    for (auto m : *group) {
+      if (n == 0)
+        break;
+      if (m != this && wake[i] < m->pub.waiters.load(r)) {
+        ++wake[i];
+        --n;
+        any = true;
+      }
+      ++i;
+    }
+  }
+  size_t i = 0;
+  for (auto m : *group) {
+    if (uint64_t k = wake[i++]; k > 0) {
+      std::scoped_lock sl(m->sleep_lock);
+      while (k--)
+        m->group_cond.notify_one();
+    }
+  }
+}
+
+void ObjectCacher::_notify_writeback_waiters(uint64_t n)
+{
+  if (group) {
+    std::scoped_lock sl(sleep_lock);
+    while (n--)
+      group_cond.notify_one();
+  } else {
+    while (n--)
+      stat_cond.notify_one();
+  }
+}
+
+void ObjectCacher::_wake_local_waiters()
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  uint64_t waiters = get_stat_nr_dirty_waiters();
+  if (!waiters)
+    return;
+  if (_writeback_wait_needed())
+    return;
+  // The limit counts what the waiters wait to write; each that goes takes
+  // its bytes, and at least one BufferHead, out of the room left: in this
+  // cache, or in the group's when this member is beyond its share
+  uint64_t used = get_stat_dirty() + get_stat_tx();
+  uint64_t used_bh = dirty_or_tx_bh.size();
+  uint64_t limit = share(max_dirty) + get_stat_dirty_waiting();
+  uint64_t bh_limit = share(max_dirty >> BUFFER_MEMORY_WEIGHT) + waiters;
+  if (group && (used >= limit || used_bh >= bh_limit)) {
+    Totals t = group_totals();
+    used = t.dirty_tx;
+    used_bh = t.dirty_tx_bh;
+    limit = max_dirty + t.waiting;
+    bh_limit = (max_dirty >> BUFFER_MEMORY_WEIGHT) + t.waiters;
+  }
+  uint64_t avg = std::max<uint64_t>(1, get_stat_dirty_waiting() / waiters);
+  uint64_t n = (limit > used ? limit - used : 0) / avg;
+  n = std::min<uint64_t>(n, bh_limit > used_bh ? bh_limit - used_bh : 0);
+  n = std::max<uint64_t>(n, 1);
+  // those woken already and not back yet take their share of it, and no
+  // more than max_woken_writers are let go at once
+  uint64_t sleeping = std::min<uint64_t>(stat_nr_dirty_sleeping, waiters);
+  uint64_t woken = waiters - sleeping;
+  uint64_t max_woken = max_woken_writers.load(std::memory_order_relaxed);
+  if (n <= woken || woken >= max_woken || !sleeping)
+    return;
+  n = std::min<uint64_t>({n - woken, max_woken - woken,
+                          sleeping});
+  _notify_writeback_waiters(n);
+}
+
+bool ObjectCacher::_writeback_wait_needed()
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
+  //  - do not wait for bytes other waiters are waiting on.  this means that
+  //    threads do not wait for each other.  this effectively allows the cache
+  //    size to balloon proportional to the data that is in flight.
+  uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
+  auto over = [](uint64_t used, uint64_t used_bh, uint64_t waiting,
+                     uint64_t waiters, uint64_t limit, uint64_t limit_bh) {
+    return used > 0 &&
+           (used >= limit + waiting || used_bh >= limit_bh + waiters);
+  };
+  // a member of a group within its share of the limit does not wait
+  bool local = over(get_stat_dirty() + get_stat_tx(), dirty_or_tx_bh.size(),
+                    get_stat_dirty_waiting(), get_stat_nr_dirty_waiters(),
+                    share(max_dirty), share(max_dirty_bh));
+  if (!group || !local)
+    return local;
+  Totals t = group_totals();
+  return over(t.dirty_tx, t.dirty_tx_bh, t.waiting, t.waiters,
+              max_dirty, max_dirty_bh);
+}
+
+void ObjectCacher::publish()
+{
+  if (!group)
+    return;
+  auto r = std::memory_order_relaxed;
+  pub.clean.store(get_stat_clean(), r);
+  pub.clean_bh.store(bh_lru_rest.lru_get_size() -
+                     bh_lru_rest.lru_get_num_pinned(), r);
+  pub.dirty.store(get_stat_dirty(), r);
+  pub.dirty_tx.store(get_stat_dirty() + get_stat_tx(), r);
+  pub.dirty_tx_bh.store(dirty_or_tx_bh.size(), r);
+  pub.waiting.store(get_stat_dirty_waiting(), r);
+  pub.waiters.store(get_stat_nr_dirty_waiters(), r);
+}
+
+ObjectCacher::Totals ObjectCacher::group_totals() const
+{
+  Totals t;
+  auto r = std::memory_order_relaxed;
+  for (auto m : *group) {
+    t.clean += m->pub.clean.load(r);
+    t.clean_bh += m->pub.clean_bh.load(r);
+    t.dirty += m->pub.dirty.load(r);
+    t.dirty_tx += m->pub.dirty_tx.load(r);
+    t.dirty_tx_bh += m->pub.dirty_tx_bh.load(r);
+    t.waiting += m->pub.waiting.load(r);
+    t.waiters += m->pub.waiters.load(r);
+  }
+  return t;
+}
+
+/*
+ * Writers wait here while the dirty and in-flight data is over the limit.
+ * A change of the cache's state that lifts the limit (counting what all
+ * waiters wait to write) wakes as many of them as there is room for, but
+ * never more than max_woken_writers that have not taken the
+ * lock again yet, and each that goes passes on what room is left.  Waking
+ * them all made them queue for the lock, and with thousands of writers
+ * the writeback completions, which need the lock to lower the dirty data,
+ * waited behind them all: the writeback, and with it the writers, nearly
+ * stopped.  Waking one at a time makes them go one by one when there is
+ * room for many.  Whatever they wait for changes the state again until
+ * the dirty data is under the limit, so none is left asleep.
+ */
 void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 					     ZTracer::Trace *trace)
 {
@@ -1877,17 +2383,14 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
   ceph::mono_time start = ceph::mono_clock::now();
   int blocked = 0;
   // wait for writeback?
-  //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
-  //  - do not wait for bytes other waiters are waiting on.  this means that
-  //    threads do not wait for each other.  this effectively allows the cache
-  //    size to balloon proportional to the data that is in flight.
-
-  uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
-  while (get_stat_dirty() + get_stat_tx() > 0 &&
-	 (((uint64_t)(get_stat_dirty() + get_stat_tx()) >=
-	  max_dirty + get_stat_dirty_waiting()) ||
-	 (dirty_or_tx_bh.size() >=
-	  max_dirty_bh + get_stat_nr_dirty_waiters()))) {
+  while (true) {
+    // a member of a group looks at the group's totals and sleeps under
+    // its sleep_lock (see _wake_group_waiters())
+    std::unique_lock<ceph::mutex> gl;
+    if (group)
+      gl = std::unique_lock<ceph::mutex>(sleep_lock);
+    if (!_writeback_wait_needed())
+      break;
 
     if (blocked == 0) {
       trace->event("start wait for writeback");
@@ -1899,16 +2402,48 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     flusher_cond.notify_all();
     stat_dirty_waiting += len;
     ++stat_nr_dirty_waiters;
-    std::unique_lock l{lock, std::adopt_lock};
-    stat_cond.wait(l);
-    l.release();
+    publish();
+    if (group) {
+      // look again now that the others can see us wait, for room they
+      // freed and did not see us waiting for
+      std::atomic_thread_fence(std::memory_order_seq_cst);
+      stat_dirty_waiting -= len;
+      --stat_nr_dirty_waiters;
+      bool needed = _writeback_wait_needed();
+      stat_dirty_waiting += len;
+      ++stat_nr_dirty_waiters;
+      if (!needed) {
+        stat_dirty_waiting -= len;
+        --stat_nr_dirty_waiters;
+        publish();
+        break;
+      }
+    }
+    ++stat_nr_dirty_sleeping;
+    gate_open();
+    if (group) {
+      lock.unlock();
+      group_cond.wait(gl);
+      --stat_nr_dirty_sleeping;
+      gl.unlock();
+      lock.lock();
+    } else {
+      std::unique_lock l{lock, std::adopt_lock};
+      stat_cond.wait(l);
+      --stat_nr_dirty_sleeping;
+      l.release();
+    }
+    gate_shut();
     stat_dirty_waiting -= len;
     --stat_nr_dirty_waiters;
+    publish();
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
   }
   if (blocked > 0) {
     trace->event("finish wait for writeback");
+    // pass it on: there may be room for more waiters
+    _wake_writeback_waiters();
   }
   if (blocked && perfcounter) {
     perfcounter->inc(l_objectcacher_write_ops_blocked);
@@ -1921,14 +2456,19 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 // blocking wait for write.
 int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 				  ZTracer::Trace *trace, Context *onfreespace,
-                                  bool block_writes_upfront)
+                                  bool block_writes_upfront, bool *defer_wait)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph_assert(trace != nullptr);
   int ret = 0;
 
   if (max_dirty > 0 && !(wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_FUA)) {
-    if (block_writes_upfront) {
+    if (block_writes_upfront && defer_wait) {
+      // the caller waits, with wait_for_writeback_space(), once it has
+      // dropped locks of its own that writeback completions need
+      ceph_assert(!onfreespace);
+      *defer_wait = _writeback_wait_needed();
+    } else if (block_writes_upfront) {
       _maybe_wait_for_writeback(len, trace);
       if (onfreespace)
 	onfreespace->complete(0);
@@ -1949,7 +2489,9 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 		   << " bytes" << dendl;
     if (block_writes_upfront) {
       std::unique_lock l{lock, std::adopt_lock};
+      gate_open();
       cond.wait(l, [&done] { return done; });
+      gate_shut();
       l.release();
       ldout(cct, 10) << "wait_for_write woke up, ret " << ret << dendl;
       if (onfreespace)
@@ -1971,6 +2513,7 @@ void ObjectCacher::flusher_entry()
   ldout(cct, 10) << "flusher start" << dendl;
   int target_dirty_bh = target_dirty >> BUFFER_MEMORY_WEIGHT;
   std::unique_lock l{lock};
+  gate_shut();
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() +
       get_stat_dirty();
@@ -1989,28 +2532,52 @@ void ObjectCacher::flusher_entry()
       trace.init("flusher", &trace_endpoint);
       trace.event("start");
     }
+    if (read_gate)
+      fold_hit_slots();
 
     loff_t actual = get_stat_dirty() + get_stat_dirty_waiting();
     int actual_bhs = dirty_or_tx_bh.size() + get_stat_nr_dirty_waiters();
-    if (actual > 0 && (uint64_t) actual > target_dirty) {
+    // beyond the target: this cache's, or, for a member of a group, its
+    // share of it and the group's (flush what is beyond both)
+    loff_t over = actual - (loff_t)share(target_dirty);
+    int over_bhs = actual_bhs - (int)share(target_dirty_bh);
+    if (group && (over > 0 || over_bhs > 0)) {
+      Totals t = group_totals();
+      over = std::min<loff_t>(over, t.dirty + t.waiting - target_dirty);
+      over_bhs = std::min<int>(over_bhs,
+                               t.dirty_tx_bh + t.waiters - target_dirty_bh);
+      if (t.clean > max_size || t.clean_bh > (max_size >> BUFFER_MEMORY_WEIGHT))
+        trim();   // as no read or write of ours may come to do it
+    }
+    // only down to the target: leave young data to be rewritten in the
+    // cache, unless a writer waits for room (see set_flush_min_age())
+    ceph::timespan min_age = ceph::timespan::zero();
+    if ((over > 0 || over_bhs > 0) &&
+        !get_stat_nr_dirty_waiters() && !(group && group_totals().waiters))
+      min_age = ceph::timespan(flush_min_age_ns.load(std::memory_order_relaxed));
+    bool more = false;   // flush() stopped at a batch, see set_flush_batch()
+    if (actual > 0 && over > 0) {
       // flush some dirty pages
       ldout(cct, 10) << "flusher " << get_stat_dirty() << " dirty + "
 		     << get_stat_dirty_waiting() << " dirty_waiting > target "
 		     << target_dirty << ", flushing some dirty bhs" << dendl;
-      flush(&trace, actual - target_dirty);
-    } else if (actual_bhs > target_dirty_bh) {
+      more = flush(&trace, over, 0, min_age,
+                   flush_batch.load(std::memory_order_relaxed));
+    } else if (over_bhs > 0) {
       ldout(cct, 10) << "flusher " << dirty_or_tx_bh.size() << " dirty/tx bh + "
                      << get_stat_nr_dirty_waiters() << " dirty_waiters > "
                      << "target dirty bh " << target_dirty_bh
                      << ", flushing some dirty bhs" << dendl;
-      flush(&trace, 0, actual_bhs - target_dirty_bh);
+      more = flush(&trace, 0, over_bhs, min_age,
+                   flush_batch.load(std::memory_order_relaxed));
     } else {
       // check tail of lru for old dirty items
       ceph::real_time cutoff = ceph::real_clock::now();
       cutoff -= max_dirty_age;
       BufferHead *bh = 0;
       int max = MAX_FLUSH_UNDER_LOCK;
-      while ((bh = static_cast<BufferHead*>(bh_lru_dirty.
+      while (!writeback_full() &&
+	     (bh = static_cast<BufferHead*>(bh_lru_dirty.
 					    lru_get_next_expire())) != 0 &&
 	     bh->last_write <= cutoff &&
 	     max > 0) {
@@ -2025,17 +2592,32 @@ void ObjectCacher::flusher_entry()
       if (!max) {
 	// back off the lock to avoid starving other threads
         trace.event("backoff");
+	gate_open();
 	l.unlock();
 	l.lock();
+	gate_shut();
 	continue;
       }
+    }
+
+    if (more) {
+      // let the writers of this cache in between the batches
+      trace.event("backoff");
+      gate_open();
+      l.unlock();
+      l.lock();
+      gate_shut();
+      continue;
     }
 
     trace.event("finish");
     if (flusher_stop)
       break;
 
-    flusher_cond.wait_for(l, 1s);
+    gate_open();
+    if (!flusher_kicked.exchange(false))
+      flusher_cond.wait_for(l, 1s);
+    gate_shut();
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -2044,6 +2626,7 @@ void ObjectCacher::flusher_entry()
    * the rados reads do come back their callback will try to access the
    * no-longer-valid ObjectCacher.
    */
+  gate_open();
   read_cond.wait(l, [this] {
     if (reads_outstanding > 0) {
       ldout(cct, 10) << "Waiting for all reads to complete. Number left: "
@@ -2061,7 +2644,9 @@ void ObjectCacher::flusher_entry()
 
 bool ObjectCacher::set_is_empty(ObjectSet *oset)
 {
-  ceph_assert(ceph_mutex_is_locked(lock));
+  // under the lock, or through the read gate (gate_peek())
+  ceph_assert(ceph_mutex_is_locked(lock) ||
+              gate_has_readers());
   if (oset->objects.empty())
     return true;
 
@@ -2715,8 +3300,8 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
   default:
     ceph_abort_msg("bh_stat_add: invalid bufferhead state");
   }
-  if (get_stat_dirty_waiting() > 0)
-    stat_cond.notify_all();
+  publish();
+  _wake_writeback_waiters();
 }
 
 void ObjectCacher::bh_stat_sub(BufferHead *bh)
@@ -2751,6 +3336,7 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
   default:
     ceph_abort_msg("bh_stat_sub: invalid bufferhead state");
   }
+  publish();
 }
 
 void ObjectCacher::bh_set_state(BufferHead *bh, int s)
@@ -2830,7 +3416,6 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
     dirty_or_tx_bh.erase(bh);
   }
   bh_stat_sub(bh);
-  if (get_stat_dirty_waiting() > 0)
-    stat_cond.notify_all();
+  _wake_writeback_waiters();
 }
 

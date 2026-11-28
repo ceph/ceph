@@ -1,5 +1,14 @@
 >=22.0.0
 
+* CephFS: The threads of one libcephfs mount (ceph-fuse, nfs-ganesha, Samba
+  and other multi-threaded clients) no longer serialize on the client's
+  global lock for cached reads, buffered writes, getattr, lookup, and
+  open/close of an already open file.  The client's object cache now has its
+  own lock and is split into ``client_oc_shards`` shards (8 by default) that
+  share the ``client_oc_size`` and ``client_oc_max_dirty`` limits; set
+  ``client_oc_shards`` to 1 to keep a single cache.  librbd's cache is
+  unchanged.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
