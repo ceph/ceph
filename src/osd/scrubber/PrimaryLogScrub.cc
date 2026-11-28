@@ -26,6 +26,47 @@ static ostream& _prefix(std::ostream* _dout, T* t)
 
 using namespace Scrub;
 
+namespace {
+
+/**
+ * Copy into 'sum' only the members of object_stat_sum_t that a scrub
+ * recomputes (the ones ScrubBackend adds to m_scrub_cstat), leaving all
+ * other members untouched.
+ *
+ * Assigning the whole scrubbed collection would reset to zero:
+ * - cumulative counters that scrub does not track (num_rd, num_wr,
+ *   num_*_recovered, ...). The pool and cluster sums built from them
+ *   would go backwards, breaking the client I/O and recovery rates shown
+ *   by 'ceph -s' and the rate() of the exported pool counters.
+ *   Note that m_scrub_cstat does hold some I/O counts: via
+ *   stats_of_handled_objects() it accumulates the full delta_stats of
+ *   writes to already-scrubbed objects. These are partial values and must
+ *   not be used - the PG stats already account for those writes;
+ * - the scrub error and omap members, which are only maintained by
+ *   emit_scrub_result() (and only recomputed by a deep scrub). A shallow
+ *   scrub would otherwise drop the deep scrub errors found earlier,
+ *   clearing PG_STATE_INCONSISTENT while the damage is still there.
+ *
+ * Keep in sync with crimson::osd::scrub::foreach_scrub_checked_stat().
+ */
+void adopt_scrub_checked_stats(
+    object_stat_sum_t& sum,
+    const object_stat_sum_t& scrubbed)
+{
+  sum.num_objects = scrubbed.num_objects;
+  sum.num_bytes = scrubbed.num_bytes;
+  sum.num_object_clones = scrubbed.num_object_clones;
+  sum.num_whiteouts = scrubbed.num_whiteouts;
+  sum.num_objects_dirty = scrubbed.num_objects_dirty;
+  sum.num_objects_omap = scrubbed.num_objects_omap;
+  sum.num_objects_pinned = scrubbed.num_objects_pinned;
+  sum.num_objects_hit_set_archive = scrubbed.num_objects_hit_set_archive;
+  sum.num_bytes_hit_set_archive = scrubbed.num_bytes_hit_set_archive;
+  sum.num_objects_manifest = scrubbed.num_objects_manifest;
+}
+
+}  // namespace
+
 bool PrimaryLogScrub::get_store_errors(const scrub_ls_arg_t& arg,
 				       scrub_ls_result_t& res_inout) const
 {
@@ -129,7 +170,7 @@ void PrimaryLogScrub::_scrub_finish()
 
   if (info.stats.stats_invalid) {
     m_pl_pg->recovery_state.update_stats([=, this](auto& history, auto& stats) {
-      stats.stats = m_scrub_cstat;
+      adopt_scrub_checked_stats(stats.stats.sum, m_scrub_cstat.sum);
       stats.stats_invalid = false;
       return false;
     });
@@ -220,7 +261,7 @@ void PrimaryLogScrub::_scrub_finish()
       ++m_fixed_count;
 	m_pl_pg->recovery_state.update_stats(
 	    [this](auto& history, auto& stats) {
-	      stats.stats = m_scrub_cstat;
+	      adopt_scrub_checked_stats(stats.stats.sum, m_scrub_cstat.sum);
 	      stats.dirty_stats_invalid = false;
 	      stats.omap_stats_invalid = false;
 	      stats.hitset_stats_invalid = false;
@@ -248,7 +289,7 @@ void PrimaryLogScrub::_scrub_finish()
 	      << dendl;
       m_pl_pg->recovery_state.update_stats(
 	  [this](auto& history, auto& stats) {
-	stats.stats = m_scrub_cstat;
+	adopt_scrub_checked_stats(stats.stats.sum, m_scrub_cstat.sum);
 	stats.dirty_stats_invalid = false;
 	stats.omap_stats_invalid = false;
 	stats.hitset_stats_invalid = false;
