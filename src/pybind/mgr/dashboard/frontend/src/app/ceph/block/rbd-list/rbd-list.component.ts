@@ -217,7 +217,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const promoteAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: Icons.up,
       click: () => this.actionPrimary(true),
       name: this.actionLabels.PROMOTE,
       visible: () => this.selection.first() != null && !this.selection.first().primary,
@@ -226,7 +226,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const demoteAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: Icons.down,
       click: () => this.actionPrimary(false),
       name: this.actionLabels.DEMOTE,
       visible: () => this.selection.first() != null && this.selection.first().primary,
