@@ -183,6 +183,11 @@ COMMAND("osd repair " \
 	"initiate repair on osd <who>, or use <all|any> to repair all", \
         "osd", "rw")
 
+COMMAND("mgr api ls " \
+	"name=module,type=CephString,req=false",
+	"list the methods each module exports to other modules",
+	"mgr", "r")
+
 COMMAND("service dump",
         "dump service map", "service", "r")
 COMMAND("service status",
