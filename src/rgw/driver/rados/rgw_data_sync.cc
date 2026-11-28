@@ -4628,8 +4628,10 @@ class RGWBucketFullSyncCR : public RGWCoroutine {
         return false;
       }
       cur_prefix = iter->first;
-      marker->name = *cur_prefix;
-      marker->instance.clear();
+      if (!boost::starts_with(marker->name, *cur_prefix)) {
+        marker->name = *cur_prefix;
+        marker->instance.clear();
+      }
       return true;
     }
 
