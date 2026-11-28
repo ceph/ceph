@@ -561,6 +561,10 @@ void PeerReplayer::refresh_directory_current_sync_perf_counters(
 
 int PeerReplayer::init() {
   dout(20) << ": initial dir list=[" << m_directories << "]" << dendl;
+  if (!m_local_cluster) {
+    derr << ": local cluster unavailable" << dendl;
+    return -EINVAL;
+  }
   for (auto &dir_root : m_directories) {
     m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
   }
