@@ -317,7 +317,10 @@ list(APPEND librgw_d4n_srcs
   rgw_redis_driver.cc
   rgw_ssd_driver.cc
   driver/d4n/d4n_directory.cc
+  driver/d4n/d4n_directory_redis.cc
+  driver/d4n/d4n_directory_fdb.cc
   driver/d4n/d4n_policy.cc
+  driver/d4n/d4n_remote_cache_manager.cc
   driver/d4n/rgw_sal_d4n.cc)
 
 set(rgw_common_libs ${CMAKE_DL_LIBS})
@@ -870,7 +873,7 @@ target_link_libraries(radosgw PRIVATE
   ${rgw_libs}
   ${ALLOC_LIBS})
 
-if(WITH_RADOSGW_FDB)
+if(WITH_RADOSGW_FDB OR WITH_RADOSGW_D4N)
  message("FoundationDB support is active (experimental)")
 
  add_library(rgw_fdb INTERFACE)
@@ -890,12 +893,11 @@ if(WITH_RADOSGW_FDB)
  # Use the zpp_bits back-end for serialization:
  add_library(zpp_bits INTERFACE)
 
- # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
- target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ target_include_directories(zpp_bits INTERFACE "${zpp_bits_SOURCE_DIR}")
 
  target_link_libraries(rgw_fdb INTERFACE zpp_bits)
 
-endif(WITH_RADOSGW_FDB)
+endif()
 
 install(TARGETS radosgw DESTINATION bin)
 

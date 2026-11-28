@@ -1,0 +1,2465 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2026 International Business Machines Corp. (IBM)
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ */
+
+#include <algorithm>
+#include <chrono>
+#include <boost/asio/consign.hpp>
+#include <boost/algorithm/string.hpp>
+#include <memory>
+#include <expected>
+#include <limits>
+#include <optional>
+#include <ranges>
+#include <source_location>
+#include <string_view>
+#include <tuple>
+#include <variant>
+#include "common/async/blocked_completion.h"
+#include "common/dout.h" 
+#include "common/dout_fmt.h"
+#include "common/inline_variant.h"
+#include "d4n_directory_redis.h"
+#include "d4n_log.h"
+#include "d4n_backend.h"
+#include "rgw/fdb/query.h"
+
+namespace rgw::d4n {
+
+namespace {
+
+constexpr std::optional<bool> parse_bool(const std::string_view str) noexcept
+{
+  if ("true" == str || "1" == str) {
+    return true;
+  }
+
+  if ("false" == str || "0" == str) {
+    return false;
+  }
+
+  return std::nullopt;
+}
+
+double version_score(const ceph::real_time creation_time)
+{
+  // Redis scores store microseconds within double's exact-integer range (~9e15).
+  return static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
+      creation_time.time_since_epoch()).count());
+}
+
+} // anonymous namespace
+
+// initiate a call to async_exec() on the connection's executor
+struct initiate_exec {
+  std::shared_ptr<boost::redis::connection> conn;
+
+  using executor_type = boost::redis::connection::executor_type;
+  executor_type get_executor() const noexcept { return conn->get_executor(); }
+
+  template <typename Handler, typename Response>
+  void operator()(Handler handler, const boost::redis::request& req, Response& resp)
+  {
+    auto h = boost::asio::consign(std::move(handler), conn);
+    return boost::asio::dispatch(get_executor(),
+        [c = conn, &req, &resp, h = std::move(h)] () mutable {
+            return c->async_exec(req, resp, std::move(h));
+    });
+  }
+};
+
+template <typename Response, typename CompletionToken>
+auto async_exec(std::shared_ptr<boost::redis::connection> conn,
+                const boost::redis::request& req,
+                Response& resp, CompletionToken&& token)
+{
+  return boost::asio::async_initiate<CompletionToken,
+         void(boost::system::error_code, std::size_t)>(
+      initiate_exec{std::move(conn)}, token, req, resp);
+}
+
+// TODO: Consolidate the typed and generic response overloads below by templating on Response:
+template <typename... Types>
+void redis_exec(std::shared_ptr<boost::redis::connection> conn,
+                boost::system::error_code& ec,
+                const boost::redis::request& req,
+                boost::redis::response<Types...>& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
+  }
+}
+
+template <typename... Types>
+void redis_exec_cp(const DoutPrefixProvider* dpp,
+                std::shared_ptr<rgw::d4n::RedisPool> pool,
+                boost::system::error_code& ec,
+                const boost::redis::request& req,
+                boost::redis::response<Types...>& resp,
+		optional_yield y)
+{
+//purpose: Execute a Redis command using a connection from the pool
+	std::shared_ptr<boost::redis::connection> conn = pool->acquire(dpp);
+	try {
+
+  		if (y) {
+    		auto yield = y.get_yield_context();
+    		async_exec(conn, req, resp, yield[ec]);
+  		} else {
+    		async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
+  		}
+	} catch (const std::exception& e) {
+		//release the connection upon exception
+                pool->release(std::move(conn));
+    		throw;
+	}
+	//release the connection back to the pool after execution
+        pool->release(std::move(conn));
+}
+
+void redis_exec(std::shared_ptr<boost::redis::connection> conn,
+                boost::system::error_code& ec,
+                const boost::redis::request& req,
+    boost::redis::generic_response& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
+  }
+}
+
+void redis_exec_cp(const DoutPrefixProvider* dpp,
+                std::shared_ptr<rgw::d4n::RedisPool> pool,
+                boost::system::error_code& ec,
+                const boost::redis::request& req,
+                boost::redis::generic_response& resp, optional_yield y)
+{
+	//purpose: Execute a Redis command using a connection from the pool
+	std::shared_ptr<boost::redis::connection> conn = pool->acquire(dpp);
+
+	try {
+  		if (y) {
+    			auto yield = y.get_yield_context();
+    			async_exec(conn, req, resp, yield[ec]);
+  		} else {
+    			async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
+  		}	
+	} catch (const std::exception& e) {
+                        pool->release(std::move(conn));
+    			throw;
+	}
+	//release the connection back to the pool after execution
+        pool->release(std::move(conn));
+}
+
+void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
+				std::shared_ptr<RedisPool> redis_pool,
+				std::shared_ptr<boost::redis::connection> conn,
+				boost::system::error_code& ec,
+				const boost::redis::request& req,
+				boost::redis::generic_response& resp,
+				optional_yield y)
+{
+    if(!redis_pool)[[unlikely]]
+    {
+	redis_exec(conn, ec, req, resp, y);
+	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
+    }
+    else[[likely]]
+    	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
+}
+
+template <typename... Types>
+void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
+				std::shared_ptr<RedisPool> redis_pool,
+				std::shared_ptr<boost::redis::connection> conn,
+				boost::system::error_code& ec,
+				const boost::redis::request& req,
+				boost::redis::response<Types...>& resp,
+				optional_yield y)
+{
+    if(!redis_pool)[[unlikely]]
+    {
+	redis_exec(conn, ec, req, resp, y);
+	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
+    }
+    else[[likely]]
+    	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
+}
+
+// RedisLease implementation
+
+namespace {
+
+constexpr std::string_view lease_prefix{"d4n:leases:"};
+
+// Helper: Convert nanoseconds to milliseconds for Redis PEXPIRE
+uint64_t nanoseconds_to_milliseconds(uint64_t nanoseconds) {
+  // Convert nanoseconds to milliseconds, round up to avoid zero TTL
+  uint64_t milliseconds = (nanoseconds + 999999ULL) / 1000000ULL;
+  return std::max<uint64_t>(milliseconds, 1);  // Ensure at least 1ms
+}
+
+// Lease metadata structure
+struct LeaseData {
+  uint64_t expiry = 0;          // Expiry in nanoseconds since epoch
+  std::string holder_id;
+  std::string token;
+  uint64_t tick_count = 0;
+  std::string last_renewal_id;  // ID of last renewal - for replay detection
+
+  // Serialize to format: "expiry|holder_id|token|tick_count|last_renewal_id"
+  std::string serialize() const {
+    return std::to_string(expiry) + "|" +
+           url_encode(holder_id, true) + "|" +
+           url_encode(token, true) + "|" +
+           std::to_string(tick_count) + "|" +
+           url_encode(last_renewal_id, true);
+  }
+
+  // Deserialize from format: "expiry|holder_id|token|tick_count|last_renewal_id"
+  static bool deserialize(const std::string& value, LeaseData& data) {
+    std::vector<std::string> parts;
+    boost::split(parts, value, boost::is_any_of("|"));
+
+    // Support old formats: 3 parts (no tick), 4 parts (no renewal_id), 5 parts (current)
+    if (parts.size() < 3 || parts.size() > 5) {
+      return false;
+    }
+
+    try {
+      data.expiry = std::stoull(parts[0]);
+    } catch (...) {
+      return false;
+    }
+
+    data.holder_id = url_decode(parts[1]);
+    data.token = url_decode(parts[2]);
+
+    // Parse tick_count if present (parts[3])
+    if (parts.size() >= 4) {
+      try {
+        data.tick_count = std::stoull(parts[3]);
+      } catch (...) {
+        data.tick_count = 0;
+      }
+    } else {
+      data.tick_count = 0;
+    }
+
+    // Parse last_renewal_id if present (parts[4])
+    if (parts.size() >= 5) {
+      data.last_renewal_id = url_decode(parts[4]);
+    } else {
+      data.last_renewal_id = "";
+    }
+
+    return true;
+  }
+
+  bool is_active(uint64_t now) const {
+    return expiry > now;
+  }
+};
+
+std::string make_lease_key(const std::string& resource_name)
+{
+  return std::string{lease_prefix} + resource_name;
+}
+
+uint64_t current_time_nanoseconds()
+{
+  const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  return static_cast<uint64_t>(std::max<int64_t>(now, 0));
+}
+
+} // anonymous namespace
+
+int RedisLease::acquire(const DoutPrefixProvider* dpp,
+                               const std::string& resource_name,
+                               const std::string& holder_id,
+                               const std::string& token,
+                               uint64_t ttl_nanoseconds,
+                               std::optional<Transaction> txn)
+{
+  if (txn){
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                    << " does not support acquiring a lease with an external transaction"
+                    << " for resource=" << resource_name << dendl;
+    return -ENOTSUP;
+  }
+
+  if (ttl_nanoseconds == 0) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " invalid TTL=0 for resource=" << resource_name << dendl;
+    return -EINVAL;
+  }
+
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return -EINVAL;
+  }
+
+  const auto redis_key = make_lease_key(resource_name);
+  LeaseData new_lease{
+    .expiry = current_time_nanoseconds() + ttl_nanoseconds,
+    .holder_id = holder_id,
+    .token = token,
+    .tick_count = 0,
+    .last_renewal_id = ""  // No renewals yet
+  };
+
+  // Convert nanoseconds to milliseconds for Redis (PX option)
+  const uint64_t ttl_ms = nanoseconds_to_milliseconds(ttl_nanoseconds);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    // SET key value NX PX ttl_ms
+    // NX = only set if key doesn't exist
+    // PX = expire in ttl_ms milliseconds (better precision than EX seconds)
+    req.push("SET", redis_key, new_lease.serialize(), "NX", "PX", std::to_string(ttl_ms));
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return -EIO;
+    }
+
+    const auto& result = std::get<0>(resp).value();
+    if (!result.has_value() || result->empty()) {
+      // SET NX failed - resource already has an active lease
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " resource already leased: " << resource_name << dendl;
+      return -EBUSY;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " acquired lease: resource=" << resource_name
+                       << " holder=" << holder_id
+                       << " expiry_ns=" << new_lease.expiry << dendl;
+    return 0;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+int RedisLease::renew(const DoutPrefixProvider* dpp,
+                             const std::string& resource_name,
+                             const std::string& holder_id,
+                             const std::string& token,
+                             uint64_t ttl_nanoseconds,
+                             uint64_t max_ticks)
+{
+  if (ttl_nanoseconds == 0) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " invalid TTL=0 for resource=" << resource_name << dendl;
+    return -EINVAL;
+  }
+
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return -EINVAL;
+  }
+
+  // Generate unique renewal_id BEFORE any Redis operations
+  // This ensures the same ID is used if we retry
+  const uint64_t renewal_timestamp = current_time_nanoseconds();
+  const std::string renewal_id = std::to_string(renewal_timestamp) + ":" +
+                                  holder_id + ":" +
+                                  std::to_string(std::hash<std::string>{}(token));
+
+  const auto redis_key = make_lease_key(resource_name);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+
+    // Get current lease data
+    req.push("GET", redis_key);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return -EIO;
+    }
+
+    const auto& get_result = std::get<0>(resp).value();
+    if (!get_result.has_value() || get_result->empty()) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " lease not found: resource=" << resource_name << dendl;
+      return -ENOENT;
+    }
+
+    // Parse existing lease
+    LeaseData existing_lease;
+    if (!LeaseData::deserialize(*get_result, existing_lease)) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to parse lease data for resource=" << resource_name << dendl;
+      return -EINVAL;
+    }
+
+    // REPLAY/RETRY DETECTION: Check if this exact renewal was already applied
+    if (existing_lease.last_renewal_id == renewal_id) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " renewal already applied (retry detected)"
+                         << " renewal_id=" << renewal_id
+                         << " resource=" << resource_name << dendl;
+      return 0;  // Idempotent - this renewal already happened
+    }
+
+    // Check if lease is still active
+    const auto now = current_time_nanoseconds();
+    if (!existing_lease.is_active(now)) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " lease expired: resource=" << resource_name << dendl;
+      // Clean up expired lease
+      request del_req;
+      del_req.push("DEL", redis_key);
+      response<int> del_resp;
+      boost::system::error_code del_ec;
+      if (redis_pool) {
+        redis_exec_cp(dpp, redis_pool, del_ec, del_req, del_resp, null_yield);
+      } else {
+        redis_exec(REDISconn, del_ec, del_req, del_resp, null_yield);
+      }
+      return -ENOENT;
+    }
+
+    // Validate ownership
+    if (existing_lease.holder_id != holder_id || existing_lease.token != token) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " ownership validation failed: resource=" << resource_name
+                         << " expected_holder=" << existing_lease.holder_id
+                         << " provided_holder=" << holder_id << dendl;
+      return -EACCES;
+    }
+
+    // Check if max_ticks limit reached
+    if (max_ticks > 0 && existing_lease.tick_count >= max_ticks) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " max_ticks limit reached: resource=" << resource_name
+                         << " tick_count=" << existing_lease.tick_count
+                         << " max_ticks=" << max_ticks << dendl;
+      return -EINVAL;  // Lease still held - caller decides what to do
+    }
+
+    // Renew the lease with incremented tick count and this renewal_id
+    LeaseData renewed_lease{
+      .expiry = current_time_nanoseconds() + ttl_nanoseconds,
+      .holder_id = holder_id,
+      .token = token,
+      .tick_count = existing_lease.tick_count + 1,
+      .last_renewal_id = renewal_id  // Mark this renewal as applied
+    };
+
+    // Convert nanoseconds to milliseconds for Redis (PX option)
+    const uint64_t ttl_ms = nanoseconds_to_milliseconds(ttl_nanoseconds);
+
+    request set_req;
+    set_req.push("SET", redis_key, renewed_lease.serialize(), "PX", std::to_string(ttl_ms));
+    response<std::optional<std::string>> set_resp;
+    boost::system::error_code set_ec;
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, set_ec, set_req, set_resp, null_yield);
+    } else {
+      redis_exec(REDISconn, set_ec, set_req, set_resp, null_yield);
+    }
+
+    if (set_ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to update lease for resource=" << resource_name
+                        << ": " << set_ec.message() << dendl;
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " renewed lease: resource=" << resource_name
+                       << " holder=" << holder_id
+                       << " new_expiry_ns=" << renewed_lease.expiry
+                       << " tick_count=" << renewed_lease.tick_count
+                       << " renewal_id=" << renewal_id << dendl;
+    return 0;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+int RedisLease::release(const DoutPrefixProvider* dpp,
+                               const std::string& resource_name,
+                               const std::string& holder_id,
+                               const std::string& token)
+{
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return -EINVAL;
+  }
+
+  const auto redis_key = make_lease_key(resource_name);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+
+    // Get current lease data
+    req.push("GET", redis_key);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return -EIO;
+    }
+
+    const auto& get_result = std::get<0>(resp).value();
+    if (!get_result.has_value() || get_result->empty()) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " lease not found: resource=" << resource_name << dendl;
+      return -ENOENT;
+    }
+
+    // Parse existing lease
+    LeaseData existing_lease;
+    if (!LeaseData::deserialize(*get_result, existing_lease)) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to parse lease data for resource=" << resource_name << dendl;
+      return -ENOENT;
+    }
+
+    // Validate ownership
+    if (existing_lease.holder_id != holder_id || existing_lease.token != token) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " ownership validation failed: resource=" << resource_name
+                         << " expected_holder=" << existing_lease.holder_id
+                         << " provided_holder=" << holder_id << dendl;
+      return -EACCES;
+    }
+
+    // Release the lease
+    request del_req;
+    del_req.push("DEL", redis_key);
+    response<int> del_resp;
+    boost::system::error_code del_ec;
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, del_ec, del_req, del_resp, null_yield);
+    } else {
+      redis_exec(REDISconn, del_ec, del_req, del_resp, null_yield);
+    }
+
+    if (del_ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to delete lease for resource=" << resource_name
+                        << ": " << del_ec.message() << dendl;
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " released lease: resource=" << resource_name
+                       << " holder=" << holder_id << dendl;
+    return 0;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+LeaseCheckResult RedisLease::any_active(const DoutPrefixProvider* dpp,
+                                        const std::string& resource_prefix)
+{
+  if (resource_prefix.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_prefix" << dendl;
+    return std::unexpected(-EINVAL);
+  }
+
+  // Build pattern for scanning all leases matching this resource prefix
+  const auto pattern = make_lease_key(resource_prefix) + "*";
+
+  response<std::vector<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    // Use KEYS pattern to find all matching lease keys
+    // Note: KEYS can be slow on large datasets, but lease counts should be small
+    req.push("KEYS", pattern);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource_prefix=" << resource_prefix
+                        << ": " << ec.message() << dendl;
+      return std::unexpected(-EIO);
+    }
+
+    const auto& keys = std::get<0>(resp).value();
+    if (keys.empty()) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " no leases found for resource prefix: " << resource_prefix << dendl;
+      return false;
+    }
+
+    // Check if any of the found keys contain active leases
+    // Opportunistically delete expired leases we encounter
+    const auto now = current_time_nanoseconds();
+    int total_leases = keys.size();
+    int active_leases = 0;
+    std::vector<std::string> expired_keys;
+
+    for (const auto& lease_key : keys) {
+      response<std::optional<std::string>> get_resp;
+      request get_req;
+      get_req.push("GET", lease_key);
+      boost::system::error_code get_ec;
+
+      if (redis_pool) {
+        redis_exec_cp(dpp, redis_pool, get_ec, get_req, get_resp, null_yield);
+      } else {
+        redis_exec(REDISconn, get_ec, get_req, get_resp, null_yield);
+      }
+
+      if (!get_ec) {
+        const auto& val = std::get<0>(get_resp).value();
+        if (val.has_value() && !val->empty()) {
+          LeaseData lease;
+          if (LeaseData::deserialize(*val, lease)) {
+            if (lease.is_active(now)) {
+              active_leases++;
+              ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                                 << " found active lease: holder=" << lease.holder_id
+                                 << " expiry_ns=" << lease.expiry << dendl;
+            } else {
+              // Lease expired but not yet cleaned up by Redis - delete it
+              expired_keys.push_back(lease_key);
+            }
+          }
+        }
+      }
+    }
+
+    // Opportunistic cleanup: delete expired leases
+    if (!expired_keys.empty()) {
+      request del_req;
+      for (const auto& key : expired_keys) {
+        del_req.push("DEL", key);
+      }
+      response<int> del_resp;
+      boost::system::error_code del_ec;
+      if (redis_pool) {
+        redis_exec_cp(dpp, redis_pool, del_ec, del_req, del_resp, null_yield);
+      } else {
+        redis_exec(REDISconn, del_ec, del_req, del_resp, null_yield);
+      }
+      if (!del_ec) {
+        ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                           << " cleaned up " << expired_keys.size() << " expired leases" << dendl;
+      }
+    }
+
+    bool has_active = (active_leases > 0);
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " resource_prefix=" << resource_prefix
+                       << " total_leases=" << total_leases
+                       << " active_leases=" << active_leases
+                       << " has_active=" << has_active << dendl;
+    return has_active;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource_prefix=" << resource_prefix
+                      << ": " << e.what() << dendl;
+    return std::unexpected(-EIO);
+  }
+}
+
+LeaseCheckResult RedisLease::is_active(const DoutPrefixProvider* dpp,
+                                       const std::string& resource_name,
+                                       const std::string& holder_id,
+                                       const std::string& token)
+{
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return std::unexpected(-EINVAL);
+  }
+
+  const auto redis_key = make_lease_key(resource_name);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("GET", redis_key);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return std::unexpected(-EIO);
+    }
+
+    const auto& get_result = std::get<0>(resp).value();
+    if (!get_result.has_value() || get_result->empty()) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " lease not found: resource=" << resource_name << dendl;
+      return false;
+    }
+
+    // Parse lease data
+    LeaseData lease;
+    if (!LeaseData::deserialize(*get_result, lease)) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " failed to parse lease data for resource=" << resource_name << dendl;
+      return std::unexpected(-EINVAL);
+    }
+
+    // Check expiry
+    const auto now = current_time_nanoseconds();
+    if (!lease.is_active(now)) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " lease expired: resource=" << resource_name
+                         << " expiry_ns=" << lease.expiry << dendl;
+      return false;
+    }
+
+    // Validate ownership
+    if (lease.holder_id != holder_id || lease.token != token) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " ownership mismatch: resource=" << resource_name
+                         << " expected_holder=" << lease.holder_id
+                         << " provided_holder=" << holder_id << dendl;
+      return false;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " lease is active: resource=" << resource_name
+                       << " holder=" << holder_id
+                       << " expiry_ns=" << lease.expiry << dendl;
+    return true;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return std::unexpected(-EIO);
+  }
+}
+
+TransactionResult RedisBackend::execute(const DoutPrefixProvider *dpp, optional_yield y,
+    const boost::compat::function_ref<int(Transaction&)> fn, const unsigned max_attempts)
+{
+  const auto whence = std::source_location::current();
+  for (unsigned attempt = 1; attempt <= max_attempts; ++attempt) {
+    auto conn = pool ? pool->acquire(dpp) : this->conn;
+    if (!conn) {
+      return TransactionResult(errno_result {std::unexpected(-ECANCELED)});
+    }
+
+    RedisTransaction txn(std::move(conn), pool);
+    Transaction view(std::ref(txn));
+    if (const int ret = fn(view); 0 > ret) {
+      if (-EAGAIN == ret) {
+        detail::log_message<10>(dpp, whence,
+          "operation returned EAGAIN; retrying attempt {}/{}", attempt, max_attempts);
+        continue;
+      }
+
+      return TransactionResult(errno_result {std::unexpected(ret)});
+    }
+
+    const int completion = txn.execute_request(dpp, y);
+    if (0 == completion) {
+      return {};
+    }
+
+    if (-EAGAIN == completion) {
+      detail::log_message<10>(dpp, whence,
+        "submission returned EAGAIN; retrying attempt {}/{}", attempt, max_attempts);
+      continue;
+    }
+
+    return TransactionResult(errno_result {std::unexpected(completion)});
+  }
+
+  detail::log_message(dpp, whence, "transaction failed after {} attempts", max_attempts);
+
+  return TransactionResult(errno_result {std::unexpected(-EAGAIN)}, true);
+}
+
+int RedisTransaction::execute_request(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  if (0 == req_.get_commands()) {
+    return 0;
+  }
+
+  boost::redis::generic_response resp;
+  try {
+    boost::system::error_code ec;
+    redis_exec(conn_, ec, req_, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisTransaction - Directory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisTransaction - Directory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  if (!resp.has_value()) {
+    detail::log_message(dpp, std::source_location::current(),
+      "Redis submission failed: {}", resp.error().diagnostic);
+    return -EIO;
+  }
+  return 0;
+}
+
+int RedisDirectory::prepare_request(const DoutPrefixProvider* dpp,
+                                    std::optional<Transaction> txn,
+                                    request& req,
+                                    request*& target)
+{
+  if (!txn) {
+    target = &req;
+    return 0;
+  }
+
+  const auto *view = std::get_if<redis_txn_ref>(&*txn);
+  if (!view) {
+    const auto whence = std::source_location::current();
+    detail::log_message(dpp, whence, "transaction is not a RedisTransaction");
+    return -EINVAL;
+  }
+
+  target = &view->get().get_request();
+  return 0;
+}
+
+template <typename Response>
+void RedisDirectory::execute_immediate(const DoutPrefixProvider *dpp, const std::optional<Transaction> txn,
+                                       boost::system::error_code& ec, const request& req,
+                                       Response& resp, optional_yield y, const std::source_location whence)
+{
+  if (!txn) {
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, req, resp, y);
+  }
+
+  if (txn) {
+    const auto *view = std::get_if<redis_txn_ref>(&*txn);
+    if (!view) {
+      ec = boost::asio::error::invalid_argument;
+      return;
+    }
+    redis_exec(view->get().conn_, ec, req, resp, y);
+  }
+  if (ec) {
+    return;
+  }
+
+  const auto validate = [dpp, &ec, whence](const auto& reply) {
+    if (!reply.has_value()) {
+      detail::log_message(dpp, whence, "Redis request failed: {}", reply.error().diagnostic);
+      ec = boost::system::errc::make_error_code(boost::system::errc::io_error);
+    }
+  };
+
+  const auto validate_response = overloaded{
+    validate,
+    [&validate]<typename ...Replies>(const std::tuple<Replies...>& replies) {
+      std::apply([&validate](const auto& ...reply) { (validate(reply), ...); }, replies);
+    }
+  };
+
+  validate_response(resp);
+}
+
+int RedisDirectory::set_kv(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           const std::string& key,
+                           const std::string& field,
+                           const std::string& val,
+                           std::optional<Transaction> txn)
+{
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  target->push("HSET", key, field, val);
+
+  if (txn) {
+    return 0;
+  }
+
+  try {
+    boost::system::error_code ec;
+    response<ignore_t> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisDirectory::get_kv(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& key,
+                       const std::string& field,
+                       std::string& out_val,
+                       std::optional<Transaction> txn)
+{
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("HGET", key, field);
+    execute_immediate(dpp, txn, ec, req, resp, y);
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception& e) {
+    return -EINVAL;
+  }
+  const auto& val = std::get<0>(resp).value();
+  if (val.has_value() && !val->empty()) {
+    out_val = *val;
+  }
+  return 0;
+}
+
+int RedisDirectory::set_kv_multi(const DoutPrefixProvider* dpp,
+                                 optional_yield y,
+                                 const std::string& key,
+                                 const std::map<std::string, std::string>& vals,
+                                 std::optional<Transaction> txn)
+{
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  target->push_range("HSET", key, vals);
+
+  if (txn) {
+    return 0;
+  }
+
+  try {
+    boost::system::error_code ec;
+    response<ignore_t> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisDirectory::get_kv_multi(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& key,
+                        const std::vector<std::string>& fields,
+                        std::map<std::string, std::string>& out_vals,
+                        std::optional<Transaction> txn)
+{
+  response<std::vector<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push_range("HMGET", key, fields);
+    execute_immediate(dpp, txn, ec, req, resp, y);
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception& e) {
+    return -EINVAL;
+  }
+  const auto& values = std::get<0>(resp).value();
+  for (size_t i = 0; i < fields.size() && i < values.size(); ++i) {
+    out_vals[fields[i]] = values[i];
+  }
+  return 0;
+}
+
+int RedisDirectory::set_kv_if_not_exists(const DoutPrefixProvider* dpp,
+                                         optional_yield y,
+                                         const std::string& key,
+                                         const std::string& field,
+                                         const std::string& val,
+                                         std::optional<Transaction> txn)
+{
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  target->push("HSETNX", key, field, val);
+
+  if (txn) {
+    return 0;
+  }
+
+  try {
+    boost::system::error_code ec;
+    response<ignore_t> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisDirectory::" << __func__
+                      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBucketDirectory::zadd(const DoutPrefixProvider* dpp, optional_yield y,
+                               const std::string& bucket_id,
+                               double score,
+                               const std::string& member,
+                               std::optional<Transaction> txn)
+{
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    target->push("ZADD", bucket_id, "CH", std::to_string(score), member);
+
+    if (txn) {
+      return 0;
+    }
+
+    boost::system::error_code ec;
+    response<std::string> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "1") {
+      ldpp_dout(dpp, 10) << "RedisBucketDirectory::" << __func__
+                         << "() Response value is: "
+                         << std::get<0>(resp).value() << dendl;
+      return -ENOENT;
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__
+                      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBucketDirectory::zrem(const DoutPrefixProvider* dpp, optional_yield y,
+                                const std::string& bucket_id,
+                                const std::string& member,
+                                std::optional<Transaction> txn)
+{
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    target->push("ZREM", bucket_id, member);
+
+    if (txn) {
+      return 0;
+    }
+
+    boost::system::error_code ec;
+    response<std::string> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__
+                        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "1") {
+      ldpp_dout(dpp, 10) << "RedisBucketDirectory::" << __func__
+                         << "() Response is: "
+                         << std::get<0>(resp).value() << dendl;
+      return -ENOENT;
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__
+                      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBucketDirectory::zrange(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, std::optional<Transaction> txn)
+{
+  request req;
+
+  try {
+
+    if (offset == 0 && count == 0) {
+      req.push("ZRANGE", bucket_id, start, stop, "bylex");
+    } else {
+      req.push("ZRANGE", bucket_id, start, stop, "bylex", "LIMIT", offset, count);
+    }
+
+    boost::system::error_code ec;
+    response<std::vector<std::string> > resp;
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value().empty()) {
+      ldpp_dout(dpp, 10) << "RedisBucketDirectory::" << __func__ << "() Empty response" << dendl;
+      return -ENOENT;
+    }
+
+    members = std::move(std::get<0>(resp).value());
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBucketDirectory::zscan(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, uint64_t cursor, const std::string& prefix, uint64_t count, std::vector<CacheObject>& objs_info, uint64_t& next_cursor, std::optional<Transaction> txn)
+{
+  request req;
+
+  try {
+    // MATCH takes a glob; the object-name prefix is literal.
+    std::string pattern;
+    pattern.reserve(prefix.size() + 1);
+    auto remaining = std::string_view{prefix};
+    while (!remaining.empty()) {
+      const auto special = remaining.find_first_of("*?[]\\");
+      pattern.append(remaining.substr(0, special));
+      if (std::string_view::npos == special) {
+        break;
+      }
+      pattern.push_back('\\');
+      pattern.push_back(remaining[special]);
+      remaining.remove_prefix(special + 1);
+    }
+    pattern.push_back('*');
+    req.push("ZSCAN", bucket_id, cursor, "MATCH", pattern, "COUNT", count);
+
+    boost::system::error_code ec;
+    boost::redis::generic_response resp;
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    std::vector<boost::redis::resp3::basic_node<std::__cxx11::basic_string<char> > > root_array;
+    if (resp.has_value()) {
+      root_array = std::move(resp.value());
+      ldpp_dout(dpp, 20) << "RedisBucketDirectory::" << __func__ << "() aggregate size is: " << root_array.size() << dendl;
+      auto size = root_array.size();
+      if (size >= 2) {
+        //Nothing of interest at index 0, index 1 has the next cursor value
+        next_cursor = std::stoull(root_array[1].value);
+
+        //skip the first 3 values to get the actual member, score
+        for (uint64_t i = 3; i < size; i = i+2) {
+          objs_info.push_back(CacheObject{});
+          objs_info.back().objName = std::move(root_array[i].value);
+          ldpp_dout(dpp, 20) << "RedisBucketDirectory::" << __func__ << "() objName is: " << objs_info.back().objName << dendl;
+        }
+      }
+    } else {
+      detail::log_message(dpp, std::source_location::current(), "ERROR: {}", resp.error().diagnostic);
+      return -EIO;
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBucketDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<Transaction> txn)
+{
+  request req;
+
+  std::string key = bucket_id;
+  try {
+    req.push("EXISTS", key);
+
+    boost::system::error_code ec;
+    response<int> resp;
+
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    return std::get<0>(resp).value();
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+//FIXME: this is a dummy function and should be updated.
+int RedisBucketDirectory::del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::optional<Transaction> txn)
+{
+  return 0;
+}
+
+int RedisBucketDirectory::add_object(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& object_name, std::optional<CacheObject> params, std::optional<Transaction> txn)
+{
+  return zadd(dpp, y, bucket_id, 0, object_name, txn);
+}
+
+int RedisBucketDirectory::remove_object(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& object_name, std::optional<Transaction> txn)
+{
+  return zrem(dpp, y, bucket_id, object_name, txn);
+}
+
+int RedisBucketDirectory::list_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, const std::string_view end_marker, const uint64_t count, const bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
+{
+  std::vector<CacheObject> objects;
+  std::string next_token;
+  // An opaque ZSCAN cursor cannot provide bounded, ordered lookahead.
+  if (const int ret = !prefix.empty() && end_marker.empty()
+          ? scan_objects(dpp, y, bucket_id, start_token, prefix, marker, count, marker_inclusive,
+                         objects, next_token, txn)
+          : get_range(dpp, y, bucket_id, marker, prefix, end_marker, count, marker_inclusive,
+                        objects, next_token, txn); ret < 0) {
+    detail::log_message(dpp, std::source_location::current(), "listing failed: {}", ret);
+    return ret;
+  }
+
+  objs_info = std::move(objects);
+  continuation_token = std::move(next_token);
+  return 0;
+}
+
+//Performs an incremental scan of objects within the specified bucket, returning a subset of results based on the provided cursor position and count.
+int RedisBucketDirectory::scan_objects(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& start_token, const std::string& prefix, const std::string& marker, uint64_t count, bool marker_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
+{
+  uint64_t cursor = start_token.empty() ? 0 : std::stoull(start_token);
+  uint64_t next_cursor = 0;
+  auto ret = zscan(dpp, y, bucket_id, cursor, prefix, count, objs_info, next_cursor, txn);
+  continuation_token = (next_cursor == 0) ? "" : std::to_string(next_cursor);
+  return ret;
+}
+
+int RedisBucketDirectory::get_range(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, std::string_view start, const std::string_view prefix,
+    std::string_view end_marker, const uint64_t count, bool start_inclusive, std::vector<CacheObject>& objs_info, std::string& continuation_token, std::optional<Transaction> txn)
+{
+  if (prefix > start) {
+    start = prefix;
+    start_inclusive = true;
+  }
+
+  const auto prefix_end = ceph::libfdb::query::byte_string_domain::successor(prefix);
+  if (prefix_end && (end_marker.empty() || *prefix_end < end_marker)) {
+    end_marker = *prefix_end;
+  }
+  if (!end_marker.empty() && end_marker <= start) {
+    return -ENOENT;
+  }
+
+  const auto redis_start = start.empty() ? "-"
+      : (start_inclusive ? "[" : "(") + std::string{start};
+  const auto redis_end = end_marker.empty() ? "+" : "(" + std::string{end_marker};
+  constexpr uint64_t max_redis_count = std::numeric_limits<int64_t>::max();
+  const uint64_t fetch_count = 0 != count && max_redis_count > count ? count + 1 : 0;
+
+  std::vector<std::string> members;
+  if (const auto ret = zrange(dpp, y, bucket_id, redis_start, redis_end, 0, fetch_count, members, txn); ret < 0) {
+    return ret;
+  }
+
+  const auto actual_size = (count == 0) ? members.size() : std::min<uint64_t>(count, members.size());
+  objs_info.reserve(actual_size);
+  for (auto& member : members | std::views::take(actual_size)) {
+    objs_info.emplace_back().objName = std::move(member);
+  }
+
+  if (0 != count && count < members.size()) {
+    continuation_token = objs_info.back().objName;
+  }
+  return 0;
+}
+
+int RedisObjectDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, std::optional<Transaction> txn)
+{
+  request req;
+
+  std::string key = build_index(bucket_id, obj_name);
+  response<int> resp;
+  try {
+    req.push("EXISTS", key);
+
+    boost::system::error_code ec;
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return std::get<0>(resp).value();
+}
+
+int RedisObjectDirectory::del(const DoutPrefixProvider* dpp, optional_yield y, CacheObj* object, std::optional<Transaction> txn)
+{
+  std::string key = build_index(object->bucketName, object->objName);
+  ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    target->push("DEL", key);
+
+    if (txn) {
+      return 0;   // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    response<int> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (!std::get<0>(resp).value()) {
+      ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "(): No values deleted." << dendl;
+      return -ENOENT;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0; 
+}
+
+int RedisObjectDirectory::zadd(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, double score, const std::string& member, std::optional<Transaction> txn)
+{
+  std::string key = build_index(bucket_id, obj_name);
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    target->push("ZADD", key, "CH", std::to_string(score), member);
+
+    if (txn) {
+      return 0;   // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    response<std::string> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "1") {
+      ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
+      return -ENOENT;
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+
+int RedisObjectDirectory::zrange(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, int start, int stop, std::vector<std::string>& members, std::optional<Transaction> txn)
+{
+  std::string key = build_index(bucket_id, obj_name);
+
+  request req;
+
+  try {
+    req.push("ZRANGE", key, std::to_string(start), std::to_string(stop));
+
+    boost::system::error_code ec;
+    response<std::vector<std::string> > resp;
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value().empty()) {
+      ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "() Empty response" << dendl;
+      return -ENOENT;
+    }
+
+    members = std::move(std::get<0>(resp).value());
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& start, const std::string& stop, std::vector<std::string>& members, std::optional<Transaction> txn)
+{
+  std::string key = build_index(bucket_id, obj_name);
+
+  request req;
+
+  try {
+    req.push("ZREVRANGE", key, start, stop);
+
+    boost::system::error_code ec;
+    response<std::vector<std::string> > resp;
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    members = std::move(std::get<0>(resp).value());
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisObjectDirectory::zrem(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& member, std::optional<Transaction> txn)
+{
+  std::string key = build_index(bucket_id, obj_name);
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    target->push("ZREM", key, member);
+
+    if (txn) {
+      return 0;   // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    response<std::string> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() != "1") {
+      ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+      return -ENOENT;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisObjectDirectory::zremrangebyscore(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, double min, double max, std::optional<Transaction> txn)
+{
+  std::string key = build_index(bucket_id, obj_name);
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    target->push("ZREMRANGEBYSCORE", key, std::to_string(min), std::to_string(max));
+
+    if (txn) {
+      return 0;   // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    response<std::string> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value() == "0") {
+      ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "() No element removed!" << dendl;
+      return -ENOENT;
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisObjectDirectory::zrevrank(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& member, std::string& index, std::optional<Transaction> txn)
+{
+  std::string key = build_index(bucket_id, obj_name);
+
+  request req;
+
+  try {
+    req.push("ZREVRANK", key, member);
+
+    boost::system::error_code ec;
+    response<std::optional<uint64_t>> resp;
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    const auto& rank = std::get<0>(resp).value();
+    if (!rank) {
+      return -ENOENT;
+    }
+    index = std::to_string(*rank);
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int RedisObjectDirectory::add_version(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, ceph::real_time& creation_time, std::optional<CacheObjectVersion> params, std::optional<Transaction> txn)
+{
+  const auto score = version_score(creation_time);
+  ldpp_dout(dpp, 10) << "RedisObjectDirectory::" << __func__ << "(): Score of object name: "<< obj_name << " version: " << version << " is: "  << score << dendl;
+  return zadd(dpp, y, bucket_id, obj_name, score, version, txn);
+}
+
+int RedisObjectDirectory::remove_version(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, std::optional<Transaction> txn)
+{
+  return zrem(dpp, y, bucket_id, obj_name, version, txn);
+}
+
+int RedisObjectDirectory::remove_version_by_creation_time(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, ceph::real_time creation_time, std::optional<Transaction> txn)
+{
+  const auto score = version_score(creation_time);
+  return zremrangebyscore(dpp, y, bucket_id, obj_name, score, score, txn);
+}
+
+int RedisObjectDirectory::list_versions(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& marker_version, uint64_t count, std::vector<CacheObjectVersion>& obj_versions, std::string& continuation_token, std::optional<Transaction> txn)
+{
+  continuation_token.clear();
+  // Get starting version index from marker
+  uint64_t start_rank = 0;
+  if(!marker_version.empty()) {
+    std::string index;
+    auto ret = get_version_index(dpp, y, bucket_id, obj_name, marker_version, index, txn);
+    if (ret < 0) {
+      detail::log_message(dpp, std::source_location::current(), "version rank lookup failed: {}", ret);
+      return ret;
+    }
+    start_rank = std::stoull(index) + 1; //start version is exclusive
+  }
+  constexpr auto max_rank = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+  if (max_rank < start_rank) {
+    return -ENOENT;
+  }
+  const auto start = std::to_string(start_rank);
+  // Redis indexes are signed; an oversized page simply includes the remaining versions.
+  const auto stop = 0 != count && max_rank - start_rank >= count
+      ? std::to_string(start_rank + count) : "-1";
+  std::vector<std::string> members;
+  auto ret = zrevrange(dpp, y, bucket_id, obj_name, start, stop, members, txn);
+  if (ret < 0 ) {
+    return ret;
+  }
+  if (members.empty()) {
+    return -ENOENT;
+  }
+  uint64_t actual_size = count ? std::min<uint64_t>(count, members.size()) : members.size();
+  obj_versions.reserve(actual_size);
+  for (uint64_t i = 0; i < actual_size; i++) {
+    auto& obj_version = obj_versions.emplace_back();
+    obj_version.bucketId = bucket_id;
+    obj_version.objName = obj_name;
+    obj_version.version = members[i];
+  }
+  if (0 != count && count < members.size()) {
+    continuation_token = members[count - 1];
+  }
+
+  return 0;
+}
+
+int RedisObjectDirectory::get_version_index(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& version, std::string& index, std::optional<Transaction> txn)
+{
+  return zrevrank(dpp, y, bucket_id, obj_name, version, index, txn);
+}
+
+int RedisBlockDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn)
+{
+  request req;
+
+  if (!block) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__
+                      << "() ERROR: null block pointer" << dendl;
+    return -EINVAL;
+  }
+
+  response<int> resp;
+  try {
+    std::string key = build_index(block);
+    boost::system::error_code ec;
+    req.push("EXISTS", key);
+
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return std::get<0>(resp).value();
+}
+
+
+int RedisBlockDirectory::set(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, std::optional<Transaction> txn)
+{
+  if (!block) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__
+                      << "() ERROR: null block pointer" << dendl;
+    return -EINVAL;
+  }
+  std::string key = build_index(block);
+  ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+  const auto redisValues = encode_fields(*block);
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  target->push_range("HSET", key, redisValues);
+
+  if (txn) {
+    return 0;   // batched — caller commits later
+  }
+
+  try {
+    boost::system::error_code ec;
+    response<ignore_t> resp;
+
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBlockDirectory::set(const DoutPrefixProvider* dpp, optional_yield y,
+                             std::vector<CacheBlock>& blocks,
+                             std::optional<Transaction> txn)
+{
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  try {
+    for (auto& block : blocks) {
+      std::string key = build_index(&block);
+      ldpp_dout(dpp, 10)
+        << "RedisBlockDirectory::" << __func__
+        << "(): index is: " << key << dendl;
+
+      const auto redisValues = encode_fields(block);
+
+      target->push_range("HSET", key, redisValues);
+    }
+
+    if (txn) {
+      return 0;  // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    boost::redis::generic_response resp;
+
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0)
+        << "RedisBlockDirectory::" << __func__
+        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception& e) {
+    ldpp_dout(dpp, 0)
+      << "RedisBlockDirectory::" << __func__
+      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+template<typename T, typename Seq>
+struct expander;
+
+template<typename T, std::size_t... Is>
+struct expander<T, std::index_sequence<Is...>> {
+template<typename E, std::size_t>
+using elem = E;
+
+using type = boost::redis::response<elem<T, Is>...>;
+};
+
+template <size_t N, class Type>
+struct redis_response
+{
+  using type = typename expander<Type, std::make_index_sequence<N>>::type;
+};
+
+template <typename Integer, Integer ...I, typename F>
+constexpr void constexpr_for_each(std::integer_sequence<Integer, I...>, F &&func)
+{
+    (func(std::integral_constant<Integer, I>{}) , ...);
+}
+
+template <auto N, typename F>
+constexpr void constexpr_for(F &&func)
+{
+    if constexpr (N > 0)
+    {
+        constexpr_for_each(std::make_integer_sequence<decltype(N), N>{}, std::forward<F>(func));
+    }
+}
+
+template <typename T>
+void parse_response(T t, std::vector<std::vector<std::string>>& responses)
+{
+    constexpr_for<std::tuple_size_v<T>>([&](auto index)
+    {
+      std::vector<std::string> empty_vector;
+      constexpr auto i = index.value;
+      if (std::get<i>(t).value().has_value()) {
+        if (std::get<i>(t).value().value().empty()) {
+          responses.emplace_back(empty_vector);
+        } else {
+          responses.emplace_back(std::get<i>(t).value().value());
+        }
+      } else {
+        responses.emplace_back(empty_vector);
+      }
+    });
+}
+
+std::expected<std::optional<CacheBlock>, int>
+RedisBlockDirectory::find(const DoutPrefixProvider *dpp, optional_yield y, const CacheBlock& block,
+                          std::optional<Transaction> txn)
+try
+ {
+  const auto key = build_index(&block);
+  ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+  boost::system::error_code ec;
+  response< std::optional<std::map<std::string, std::string>> > resp;
+  request req;
+  req.push("HGETALL", key);
+
+  execute_immediate(dpp, txn, ec, req, resp, y);
+
+  if (ec) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+    return std::unexpected(-ec.value());
+  }
+
+  const auto& result = std::get<0>(resp);
+  if (!result.has_value()) {
+    detail::log_message(dpp, std::source_location::current(),
+      "ERROR: {} key={}", result.error().diagnostic, key);
+    return std::unexpected(-EIO);
+  }
+
+  const auto& opt = result.value();
+  if (!opt.has_value() || opt.value().empty()) {
+    ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): No values returned for key=" << key << dendl;
+    return std::nullopt;
+  }
+  const auto& fields = *opt;
+  CacheBlock decoded {};
+  decoded.blockID = std::stoull(fields.at("blockID"));
+  decoded.version = fields.at("version");
+  decoded.deleteMarker = (std::stoi(fields.at("deleteMarker")) != 0);
+  if (const auto it = fields.find("invalid"); it != fields.end()) {
+    decoded.invalid = (std::stoi(it->second) != 0);
+  }
+  decoded.size = std::stoull(fields.at("size"));
+  decoded.globalWeight = std::stoull(fields.at("globalWeight"));
+  decoded.cacheObj.objName = fields.at("objName");
+  decoded.cacheObj.bucketName = fields.at("bucketName");
+  decoded.cacheObj.creationTime = fields.at("creationTime");
+  decoded.cacheObj.dirty = (std::stoi(fields.at("dirty")) != 0);
+  boost::split(decoded.cacheObj.hostsList, fields.at("hosts"), boost::is_any_of("_"));
+  decoded.cacheObj.etag = fields.at("etag");
+  decoded.cacheObj.size = std::stoull(fields.at("objSize"));
+  decoded.cacheObj.user_id = fields.at("userId");
+  decoded.cacheObj.display_name = fields.at("displayName");
+  decoded.cacheObj.acl = fields.at("acl");
+
+  const std::size_t attrs_count = std::stoull(fields.at("attrsCount"));
+  std::size_t found = 0;
+  for (const auto& [field, value] : fields) {
+    if (!field.starts_with("attr_")) {
+      continue;
+    }
+    ceph::buffer::list bl;
+    bl.append(value);
+    decoded.cacheObj.attrs[field.substr(5)] = std::move(bl);
+    if (++found == attrs_count) {
+      break;
+    }
+  }
+
+  if (found != attrs_count) {
+    ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "() ERROR: expected " << attrs_count << " attrs but found " << found << dendl;
+    return std::unexpected(-EINVAL);
+  }
+  return decoded;
+ }
+catch (const std::exception& e)
+ {
+  ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+  return std::unexpected(-EINVAL);
+ }
+
+int RedisBlockDirectory::get(const DoutPrefixProvider* dpp, optional_yield y, std::vector<CacheBlock>& blocks, std::optional<Transaction> txn)
+{
+  if (blocks.empty())
+    return 0;
+
+  boost::redis::generic_response resp;
+  request req;
+  for (auto& block : blocks) {
+    std::string key = build_index(&block);
+    std::vector<std::string> fields;
+    ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+    fields.push_back("blockID");
+    fields.push_back("version");
+    fields.push_back("deleteMarker");
+    fields.push_back("invalid");
+    fields.push_back("size");
+    fields.push_back("globalWeight");
+
+    fields.push_back("objName");
+    fields.push_back("bucketName");
+    fields.push_back("creationTime");
+    fields.push_back("dirty");
+    fields.push_back("hosts");
+    fields.push_back("etag");
+    fields.push_back("objSize");
+    fields.push_back("userId");
+    fields.push_back("displayName");
+    fields.push_back("acl");
+
+    try {
+      req.push("HGETALL", key);
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
+    }
+  } //end - for
+
+  try {
+    boost::system::error_code ec;
+    redis_exec(REDISconn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  //i is used to index blocks
+  //j is used to keep a track of number of elements for aggregate type map or array
+  auto i = 0, j = 0;
+  bool field_key=true, field_val=false;
+  std::string key, fieldkey, fieldval, prev_val;
+  int num_elements = 0;
+  for (auto& element : resp.value()) {
+    ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): i is: " << i << dendl;
+    CacheBlock* block = &blocks[i];
+    std::string key = build_index(block);
+    ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+    if (element.data_type == boost::redis::resp3::type::array || element.data_type == boost::redis::resp3::type::map) {
+      num_elements = element.aggregate_size;
+      if (num_elements == 0) {
+        i++;
+        j = 0;
+      }
+      ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "() num_elements: " << num_elements << dendl;
+      continue;
+    } else {
+      if (j < num_elements) {
+        if (field_key && !field_val) {
+          if (element.value == "blockID" || element.value == "version" || element.value == "deleteMarker" ||
+              element.value == "invalid" || element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
+              element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
+              element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
+              element.value == "userId" || element.value == "displayName" || element.value == "acl" ||
+              element.value == "attrsCount" || element.value.starts_with("attr_")) {
+            prev_val = element.value;
+            ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "() field key: " << prev_val << dendl;
+            field_key = false;
+            field_val = true;
+          }
+          continue;
+        } else {
+          ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "() field val: " << element.value << dendl;
+          if (prev_val == "blockID") {
+            block->blockID = std::stoull(element.value);
+          } else if (prev_val == "version") {
+            block->version = element.value;
+          } else if (prev_val == "deleteMarker") {
+            block->deleteMarker = (std::stoi(element.value) != 0);
+          } else if (prev_val == "invalid") {
+            block->invalid = (std::stoi(element.value) != 0);
+          } else if (prev_val == "size") {
+            block->size = std::stoull(element.value);
+          } else if (prev_val == "globalWeight") {
+            block->globalWeight = std::stoull(element.value);
+          } else if (prev_val == "objName") {
+            block->cacheObj.objName = element.value;
+          } else if (prev_val == "bucketName") {
+            block->cacheObj.bucketName = element.value;
+          } else if (prev_val == "creationTime") {
+            block->cacheObj.creationTime = element.value;
+          } else if (prev_val == "dirty") {
+            block->cacheObj.dirty = (std::stoi(element.value) != 0);
+          } else if (prev_val == "hosts") {
+            boost::split(block->cacheObj.hostsList, element.value, boost::is_any_of("_"));
+          } else if (prev_val == "etag") {
+            block->cacheObj.etag = element.value;
+          } else if (prev_val == "objSize") {
+            block->cacheObj.size = std::stoull(element.value);
+          } else if (prev_val == "userId") {
+            block->cacheObj.user_id = element.value;
+          } else if (prev_val == "displayName") {
+            block->cacheObj.display_name = element.value;
+          } else if (prev_val == "acl") {
+            block->cacheObj.acl = element.value;
+          } else if (prev_val == "attrsCount") {
+            size_t attrsCount = std::stoi(element.value); //This is unused.
+          } else if (prev_val.starts_with("attr_")) {
+            std::string attrKey = prev_val.substr(5);
+            ceph::buffer::list bl;
+            bl.append(element.value);
+            block->cacheObj.attrs[attrKey] = std::move(bl);
+          }
+          j++;
+          field_key= true;
+          field_val = false;
+          prev_val.clear();
+        }
+      }
+      if (j == num_elements) {
+        i++;
+        j = 0;
+      }
+    }
+  }
+  return 0;
+}
+
+int RedisBlockDirectory::copy(const DoutPrefixProvider* dpp, optional_yield y,
+                              CacheBlock* block,
+                              const std::string& copyName,
+                              const std::string& copyBucketName,
+                              std::optional<Transaction> txn)
+{
+  if (!block) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__
+                      << "(): null block pointer" << dendl;
+    return -EINVAL;
+  }
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  std::string key = build_index(block);
+  auto copyBlock = CacheBlock{
+    .cacheObj = {
+      .objName = copyName,
+      .bucketName = copyBucketName
+    },
+    .blockID = 0
+  };
+  std::string copyKey = build_index(&copyBlock);
+
+  try {
+    target->push("COPY", key, copyKey);
+    target->push("HSET", copyKey, "objName", copyName, "bucketName", copyBucketName);
+
+    if (txn) {
+      return 0;  // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    response<ignore_t, ignore_t> resp;
+
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0)
+        << "RedisBlockDirectory::" << __func__
+        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception& e) {
+    ldpp_dout(dpp, 0)
+      << "RedisBlockDirectory::" << __func__
+      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RedisBlockDirectory::del(const DoutPrefixProvider* dpp, optional_yield y,
+                             CacheBlock* block,
+                             std::optional<Transaction> txn)
+{
+  if (!block) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__
+                      << "(): null block pointer" << dendl;
+    return -EINVAL;
+  }
+
+  request req;
+  request* target = nullptr;
+  if (const int ret = prepare_request(dpp, txn, req, target); ret < 0) {
+    return ret;
+  }
+
+  std::string key = build_index(block);
+  ldpp_dout(dpp, 10)
+    << "RedisBlockDirectory::" << __func__
+    << "(): index is: " << key << dendl;
+
+  try {
+    target->push("DEL", key);
+
+    if (txn) {
+      return 0;  // batched — caller commits later
+    }
+
+    boost::system::error_code ec;
+    response<int> resp;
+
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, *target, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0)
+        << "RedisBlockDirectory::" << __func__
+        << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (!std::get<0>(resp).value()) {
+      ldpp_dout(dpp, 10)
+        << "RedisBlockDirectory::" << __func__
+        << "(): No values deleted for key=" << key << dendl;
+      return -ENOENT;
+    }
+  } catch (std::exception& e) {
+    ldpp_dout(dpp, 0)
+      << "RedisBlockDirectory::" << __func__
+      << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+/* Note: This method is not compatible for use on Ubuntu systems. */
+/*
+int RedisBlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& copyName, const std::string& copyBucketName, optional_yield y)
+{
+  std::string key = build_index(block);
+  auto copyBlock = CacheBlock{ .cacheObj = { .objName = copyName, .bucketName = copyBucketName }, .blockID = 0 };
+  std::string copyKey = build_index(&copyBlock);
+
+  try {
+    boost::system::error_code ec;
+    response<
+      ignore_t,
+      ignore_t,
+      ignore_t,
+      response<std::optional<int>, std::optional<int>> 
+    > resp;
+    request req;
+    req.push("MULTI");
+    req.push("COPY", key, copyKey);
+    req.push("HSET", copyKey, "objName", copyName, "bucketName", copyBucketName);
+    req.push("EXEC");
+
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(std::get<3>(resp).value()).value().value() == 1) {
+      return 0;
+    } else {
+      ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): No values copied." << dendl;
+      return -ENOENT;
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+}
+
+int RedisBlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y)
+{
+  std::string key = build_index(block);
+  ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("DEL", key);
+    response<int> resp;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, req, resp, y);
+    if (!std::get<0>(resp).value()) {
+      ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): No values deleted for key=" << key << dendl;
+      return -ENOENT;
+    }
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      std::cout << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << std::endl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    std::cout << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+
+  return 0; 
+}
+*/
+
+//FIXME: We cannot guarantee atomicty for update_field and remove_host functions unless we use Redis lua script.
+//TODO: update these functions accrodingly.
+int RedisBlockDirectory::update_field(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& field, std::string& value, std::optional<Transaction> txn)
+{
+  int ret = -1;
+  std::string key = build_index(block);
+
+  if (0 < (ret = exist_key(dpp, y, block, txn))) {
+    try {
+      if (field == "hosts") { 
+	/* Append rather than overwrite */
+	ldpp_dout(dpp, 20) << "RedisBlockDirectory::" << __func__ << "() Appending to hosts list." << dendl;
+
+	boost::system::error_code ec;
+	response< std::optional<std::string> > resp;
+	request req;
+	req.push("HGET", key, field);
+
+        execute_immediate(dpp, txn, ec, req, resp, y);
+
+	if (ec) {
+	  ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+	  return -ec.value();
+	}
+
+	/* If entry exists, it should have at least one host */
+	std::get<0>(resp).value().value() += "_";
+	std::get<0>(resp).value().value() += value;
+	value = std::get<0>(resp).value().value();
+      } else if (field == "dirty") { 
+        const auto parsed = parse_bool(value);
+
+        if (!parsed.has_value()) {
+          detail::log_message(dpp, std::source_location::current(), "ERROR: Invalid bool value");
+          return -EINVAL;
+        }
+
+        value = *parsed ? "1" : "0";
+      }
+
+      boost::system::error_code ec;
+      response<ignore_t> resp;
+      request req;
+      req.push("HSET", key, field, value);
+
+        execute_immediate(dpp, txn, ec, req, resp, y);
+
+      if (ec) {
+	ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+	return -ec.value();
+      }
+
+      return 0; 
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
+    }
+  } else if (0 == ret || ret == -ENOENT) {
+    ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): Block does not exist." << dendl;
+    return -ENOENT;
+  } else {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "(): ERROR: ret=" << ret << dendl;
+  }
+  
+  return ret;
+}
+
+int RedisBlockDirectory::remove_host(const DoutPrefixProvider* dpp, optional_yield y, CacheBlock* block, const std::string& value, std::optional<Transaction> txn)
+{
+  std::string key = build_index(block);
+  std::string tmpVal = value;
+
+  try {
+    {
+      boost::system::error_code ec;
+      response< std::optional<std::string> > resp;
+      request req;
+      req.push("HGET", key, "hosts");
+
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+      if (ec) {
+	ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+	return -ec.value();
+      }
+
+      if (std::get<0>(resp).value().value().empty()) {
+	ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): No values returned." << dendl;
+	return -ENOENT;
+      }
+
+      std::string result = std::get<0>(resp).value().value();
+      auto it = result.find(tmpVal);
+      if (it != std::string::npos) { 
+	result.erase(result.begin() + it, result.begin() + it + tmpVal.size());
+      } else {
+	ldpp_dout(dpp, 10) << "RedisBlockDirectory::" << __func__ << "(): Host was not found." << dendl;
+	return -ENOENT;
+      }
+
+      if (result[0] == '_') {
+	result.erase(0, 1);
+      } else if (result.length() && result[result.length() - 1] == '_') {
+	result.erase(result.length() - 1, 1);
+      }
+
+      if (result.length() == 0) { /* Last host, delete entirely */
+        int ret = del(dpp, y, block, txn); 
+        if (ret < 0) {
+		  ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Failed to delete entire block, ret=" << ret << dendl;
+        }
+		return ret;
+      }
+
+      tmpVal = result;
+    }
+
+    {
+      boost::system::error_code ec;
+      response<ignore_t> resp;
+      request req;
+      req.push("HSET", key, "hosts", tmpVal);
+
+    execute_immediate(dpp, txn, ec, req, resp, y);
+
+      if (ec) {
+	ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+	return -ec.value();
+      }
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "RedisBlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int Pipeline::execute(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  boost::redis::generic_response resp;
+  try {
+    boost::system::error_code ec;
+    pipeline_mode = false;
+    redis_exec_connection_pool(dpp, redis_pool, REDISconn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+} // namespace rgw::d4n

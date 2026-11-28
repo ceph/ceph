@@ -4,8 +4,11 @@
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
+#include "common/split.h"
 #include "rgw_auth_registry.h"
+#include "rgw_cache_driver.h"
 #include "driver/d4n/d4n_directory.h"
+#include "driver/d4n/d4n_directory_redis.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -14,6 +17,22 @@ using boost::redis::config;
 using boost::redis::connection;
 using boost::redis::request;
 using boost::redis::response;
+
+inline std::string to_legacy_object_index(const std::string& key) {
+  auto parts = split(key, "_");
+  std::vector<std::string> block_info;
+  block_info.assign(parts.begin(), parts.end());
+
+  return fmt::format("{}{}{}", block_info[0], CACHE_DELIM, block_info[1]);
+}
+
+inline std::string to_legacy_block_index(const std::string& key) {
+  auto parts = split(key, "_");
+  std::vector<std::string> block_info;
+  block_info.assign(parts.begin(), parts.end());
+
+  return fmt::format("{}{}{}{}{}{}{}", block_info[0], CACHE_DELIM, block_info[1], "/block/", block_info[2], "/", block_info[3]);
+}
 
 class Environment* env;
 
@@ -34,7 +53,7 @@ class Environment : public ::testing::Environment {
       cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {}); 
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
       
-      redisHost = cct->_conf->rgw_d4n_address; 
+      redisHost = cct->_conf->rgw_d4n_l1_datacache_address; 
     }
     
     void TearDown() override {
@@ -50,13 +69,15 @@ class ObjectDirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
       conn = std::make_shared<connection>(boost::asio::make_strand(io));
-      dir = new rgw::d4n::ObjectDirectory{conn};
+
+      redis_conn = conn;
+      dir = new rgw::d4n::RedisObjectDirectory{redis_conn};
       obj = new rgw::d4n::CacheObj{
-	.objName = "testName",
-	.bucketName = "testBucket",
-	.creationTime = "",
-	.dirty = false,
-	.hostsList = { env->redisHost }
+		.objName = "testName",
+		.bucketName = "testBucket",
+		.creationTime = "",
+		.dirty = false,
+		.hostsList = { env->redisHost }
       };
 
       ASSERT_NE(obj, nullptr);
@@ -68,6 +89,7 @@ class ObjectDirectoryFixture: public ::testing::Test {
       cfg.addr.host = env->redisHost.substr(0, env->redisHost.find(":"));
       cfg.addr.port = env->redisHost.substr(env->redisHost.find(":") + 1, env->redisHost.length()); 
 
+	  redis_pool = redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io, cfg, 8);
       conn->async_run(cfg, {}, net::detached);
     } 
 
@@ -77,32 +99,36 @@ class ObjectDirectoryFixture: public ::testing::Test {
     }
 
     rgw::d4n::CacheObj* obj;
-    rgw::d4n::ObjectDirectory* dir;
+    rgw::d4n::RedisObjectDirectory* dir;
 
     net::io_context io;
     std::shared_ptr<connection> conn;
+    std::shared_ptr<connection> redis_conn;
+	std::shared_ptr<rgw::d4n::RedisPool> redis_pool; 
 
-    std::vector<std::string> vals{"testName", "testBucket", "", "0", env->redisHost};
-    std::vector<std::string> fields{"objName", "bucketName", "creationTime", "dirty", "hosts"};
+	ceph::real_time time = real_clock::now();
+    std::string version = "test_version";
 };
 
 class BlockDirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
       conn = std::make_shared<connection>(boost::asio::make_strand(io));
-      dir = new rgw::d4n::BlockDirectory{conn};
+
+      redis_conn = conn;
+      dir = new rgw::d4n::RedisBlockDirectory{redis_conn};
       block = new rgw::d4n::CacheBlock{
-        .cacheObj = {
-	  .objName = "testName",
-	  .bucketName = "testBucket",
-	  .creationTime = "",
-	  .dirty = false,
-	  .hostsList = { env->redisHost }
-	},
-        .blockID = 0,
-	.version = "",
-	.deleteMarker = false,
-	.size = 0
+		.cacheObj = {
+		  .objName = "testName",
+		  .bucketName = "testBucket",
+		  .creationTime = "",
+		  .dirty = false,
+		  .hostsList = { env->redisHost }
+		},
+		.blockID = 0,
+		.version = "",
+		.deleteMarker = false,
+		.size = 0
       };
 
       ASSERT_NE(block, nullptr);
@@ -114,6 +140,7 @@ class BlockDirectoryFixture: public ::testing::Test {
       cfg.addr.host = env->redisHost.substr(0, env->redisHost.find(":"));
       cfg.addr.port = env->redisHost.substr(env->redisHost.find(":") + 1, env->redisHost.length()); 
 
+	  redis_pool = redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io, cfg, 8);
       conn->async_run(cfg, {}, net::detached);
     } 
 
@@ -123,10 +150,12 @@ class BlockDirectoryFixture: public ::testing::Test {
     }
 
     rgw::d4n::CacheBlock* block;
-    rgw::d4n::BlockDirectory* dir;
+    rgw::d4n::RedisBlockDirectory* dir;
 
     net::io_context io;
     std::shared_ptr<connection> conn;
+    std::shared_ptr<connection> redis_conn;
+	std::shared_ptr<rgw::d4n::RedisPool> redis_pool; 
 
     std::vector<std::string> vals{"0", "", "0", "0", "0", 
                                    "testName", "testBucket", "", "0", env->redisHost};
@@ -138,106 +167,41 @@ void rethrow(std::exception_ptr eptr) {
   if (eptr) std::rethrow_exception(eptr);
 }
 
-TEST_F(ObjectDirectoryFixture, SetYield)
+TEST_F(ObjectDirectoryFixture, AddVersion)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, obj, yield));
+
+    ASSERT_EQ(0, dir->add_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version, time, std::nullopt, {}));
 
     boost::system::error_code ec;
     request req;
-    req.push_range("HMGET", "testBucket_testName", fields);
+    req.push("ZREVRANGE", to_legacy_object_index("testBucket_testName"), "0", "-1");
     req.push("FLUSHALL");
 
     response< std::vector<std::string>,
-	      boost::redis::ignore_t > resp;
+	          boost::redis::ignore_t > resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), vals);
+    EXPECT_EQ(std::get<0>(resp).value()[0], version);
+    redis_pool->cancel_all();
     conn->cancel();
   }, rethrow);
 
   io.run();
 }
 
-TEST_F(ObjectDirectoryFixture, GetYield)
+TEST_F(ObjectDirectoryFixture, RemoveVersion)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, obj, yield));
+
+    ASSERT_EQ(0, dir->add_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version, time, std::nullopt, {}));
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("HSET", "testBucket_testName", "objName", "newoid");
-      response<int> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-
-      ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), 0);
-    }
-
-    ASSERT_EQ(0, dir->get(env->dpp, obj, yield));
-    EXPECT_EQ(obj->objName, "newoid");
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("FLUSHALL");
-      response<boost::redis::ignore_t> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-    }
-
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-
-/* Does not currently pass on Ubuntu due to incompatible Redis version.
-TEST_F(ObjectDirectoryFixture, CopyYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, obj, yield));
-    ASSERT_EQ(0, dir->copy(env->dpp, obj, "copyTestName", "copyBucketName", yield));
-
-    boost::system::error_code ec;
-    request req;
-    req.push("EXISTS", "copyBucketName_copyTestName");
-    req.push_range("HMGET", "copyBucketName_copyTestName", fields);
-    req.push("FLUSHALL");
-
-    response<int, std::vector<std::string>, 
-	     boost::redis::ignore_t> resp;
-
-    conn->async_exec(req, resp, yield[ec]);
-
-    ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), 1);
-
-    auto copyVals = vals;
-    copyVals[0] = "copyTestName";
-    copyVals[1] = "copyBucketName";
-    EXPECT_EQ(std::get<1>(resp).value(), copyVals);
-
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-*/
-
-TEST_F(ObjectDirectoryFixture, DelYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, obj, yield));
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("EXISTS", "testBucket_testName");
+      req.push("EXISTS", to_legacy_object_index("testBucket_testName"));
       response<int> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -246,12 +210,12 @@ TEST_F(ObjectDirectoryFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, dir->del(env->dpp, obj, yield));
+    ASSERT_EQ(0, dir->remove_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version, {}));
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", "testBucket_testName");
+      req.push("EXISTS", to_legacy_object_index("testBucket_testName"));
       req.push("FLUSHALL");
       response<int, boost::redis::ignore_t> resp;
 
@@ -261,129 +225,104 @@ TEST_F(ObjectDirectoryFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
 
+    redis_pool->cancel_all();
     conn->cancel();
   }, rethrow);
 
   io.run();
 }
 
-TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
+TEST_F(ObjectDirectoryFixture, RemoveVersionCreationTime)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, obj, yield));
-    std::string oid = "newTestName";
-    std::string host = "127.0.0.1:5000";
-    ASSERT_EQ(0, dir->update_field(env->dpp, obj, "objName", oid, yield));
-    ASSERT_EQ(0, dir->update_field(env->dpp, obj, "hosts", host, yield));
+
+    ASSERT_EQ(0, dir->add_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version, time, std::nullopt, {}));
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", to_legacy_object_index("testBucket_testName"));
+      response<int> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 1);
+    }
+
+    ASSERT_EQ(0, dir->remove_version_by_creation_time(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, time, {}));
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", to_legacy_object_index("testBucket_testName"));
+      req.push("FLUSHALL");
+      response<int, boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+    }
+
+    redis_pool->cancel_all();
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(ObjectDirectoryFixture, ListVersions)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+	auto r_conn = redis_conn;
+	rgw::d4n::Pipeline p = rgw::d4n::Pipeline(r_conn, redis_pool);
+	ceph::real_time time_next = real_clock::now();
+    std::string version_next = "test_version_next";
+    p.start();
+    ASSERT_EQ(0, dir->add_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version, time, std::nullopt, {}));
+    ASSERT_EQ(0, dir->add_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version_next, time_next, std::nullopt, {}));
+
+	std::vector<rgw::d4n::CacheObjectVersion> obj_versions;
+	std::string continuation_token;
+    ASSERT_EQ(0, dir->list_versions(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, "", 2, obj_versions, continuation_token, {}));
+	auto out = rgw::d4n::CacheObjectVersion{
+      .objName = obj->objName,
+      .bucketId = obj->bucketName,
+      .version = version_next,
+      .user_id = "",
+      .display_name = ""};
+	EXPECT_EQ(obj_versions[0], out); 
+    out.version = version;
+    EXPECT_EQ(obj_versions[1], out);
+
+    redis_pool->cancel_all();
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(ObjectDirectoryFixture, Delete)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+
+    ASSERT_EQ(0, dir->add_version(env->dpp, optional_yield{yield}, obj->bucketName, obj->objName, version, time, std::nullopt, {}));
+
+    EXPECT_EQ(0, dir->del(env->dpp, optional_yield{yield}, obj, {}));
 
     boost::system::error_code ec;
     request req;
-    req.push("HMGET", "testBucket_testName", "objName", "hosts");
+    req.push("EXISTS", to_legacy_object_index("testBucket_testName"));
     req.push("FLUSHALL");
-    response< std::vector<std::string>, 
-	      boost::redis::ignore_t> resp;
+
+    response<int, boost::redis::ignore_t> resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value()[0], oid);
-    EXPECT_EQ(std::get<0>(resp).value()[1], "127.0.0.1:6379_127.0.0.1:5000");
-
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-
-TEST_F(ObjectDirectoryFixture, ZAddYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    auto m_time = real_clock::now();
-    auto score = ceph::real_clock::to_double(m_time);
-    std::string version = "v1";
-    ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("FLUSHALL");
-      response<boost::redis::ignore_t> resp;
-      conn->async_exec(req, resp, yield[ec]);
-      ASSERT_EQ((bool)ec, false);
-    }
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-
-TEST_F(ObjectDirectoryFixture, ZAddZRevRangeYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    {
-      auto m_time = real_clock::now();
-      auto score = ceph::real_clock::to_double(m_time);
-      std::string version = "v2";
-      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
-    }
-    {
-      auto m_time = real_clock::now();
-      auto score = ceph::real_clock::to_double(m_time);
-      std::string version = "v1";
-      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
-    }
-    {
-      std::vector<std::string> members;
-      ASSERT_EQ(0, dir->zrevrange(env->dpp, obj, "0", "0", members, yield));
-      ASSERT_EQ(1, members.size());
-      ASSERT_EQ("v1", members[0]);
-    }
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("FLUSHALL");
-      response<boost::redis::ignore_t> resp;
-      conn->async_exec(req, resp, yield[ec]);
-      ASSERT_EQ((bool)ec, false);
-    }
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-
-TEST_F(ObjectDirectoryFixture, ZAddZRemYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    {
-      auto m_time = real_clock::now();
-      auto score = ceph::real_clock::to_double(m_time);
-      std::cout << "Score for v1: " << score << std::endl;
-      std::string version = "v1";
-      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
-    }
-    {
-      auto m_time = real_clock::now();
-      auto score = ceph::real_clock::to_double(m_time);
-      std::cout << "Score for v2: " << score << std::endl;
-      std::string version = "v2";
-      ASSERT_EQ(0, dir->zadd(env->dpp, obj, score, version, yield));
-    }
-    {
-      ASSERT_EQ(0, dir->zrem(env->dpp, obj, "v2", yield));
-      std::vector<std::string> members;
-      ASSERT_EQ(0, dir->zrevrange(env->dpp, obj, "0", "0", members, yield));
-      ASSERT_EQ(1, members.size());
-      ASSERT_EQ("v1", members[0]);
-    }
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("FLUSHALL");
-      response<boost::redis::ignore_t> resp;
-      conn->async_exec(req, resp, yield[ec]);
-      ASSERT_EQ((bool)ec, false);
-    }
+    EXPECT_EQ(std::get<0>(resp).value(), 0);
+    redis_pool->cancel_all();
     conn->cancel();
   }, rethrow);
 
@@ -393,15 +332,15 @@ TEST_F(ObjectDirectoryFixture, ZAddZRemYield)
 TEST_F(BlockDirectoryFixture, SetYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, optional_yield{yield}, block, {}));
 
     boost::system::error_code ec;
     request req;
-    req.push_range("HMGET", "testBucket_testName_0_0", fields);
+    req.push_range("HMGET", to_legacy_block_index("testBucket_testName_0_0"), fields);
     req.push("FLUSHALL");
 
     response< std::vector<std::string>,
-	      boost::redis::ignore_t > resp;
+			  boost::redis::ignore_t > resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
@@ -416,12 +355,12 @@ TEST_F(BlockDirectoryFixture, SetYield)
 TEST_F(BlockDirectoryFixture, GetYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, optional_yield{yield}, block, {}));
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("HSET", "testBucket_testName_0_0", "objName", "newoid");
+      req.push("HSET",  to_legacy_block_index("testBucket_testName_0_0"), "objName", "newoid");
       response<int> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -430,7 +369,7 @@ TEST_F(BlockDirectoryFixture, GetYield)
       EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
 
-    ASSERT_EQ(0, dir->get(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->get(env->dpp, optional_yield{yield}, block, {}));
     EXPECT_EQ(block->cacheObj.objName, "newoid");
 
     {
@@ -452,8 +391,8 @@ TEST_F(BlockDirectoryFixture, GetYield)
 TEST_F(BlockDirectoryFixture, CopyYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
-    ASSERT_EQ(0, dir->copy(env->dpp, block, "copyTestName", "copyBucketName", optional_yield{yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, optional_yield{yield}, block, {}));
+    ASSERT_EQ(0, dir->copy(env->dpp, optional_yield{yield}, block, "copyTestName", "copyBucketName", {}));
 
     boost::system::error_code ec;
     request req;
@@ -484,12 +423,12 @@ TEST_F(BlockDirectoryFixture, CopyYield)
 TEST_F(BlockDirectoryFixture, DelYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, optional_yield{yield}, block, {}));
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", "testBucket_testName_0_0");
+      req.push("EXISTS", to_legacy_block_index("testBucket_testName_0_0"));
       response<int> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -498,7 +437,7 @@ TEST_F(BlockDirectoryFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, dir->del(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->del(env->dpp, optional_yield{yield}, block, {}));
 
     {
       boost::system::error_code ec;
@@ -522,15 +461,15 @@ TEST_F(BlockDirectoryFixture, DelYield)
 TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, optional_yield{yield}, block, {}));
     std::string oid = "newTestName";
     std::string host = "127.0.0.1:5000";
-    ASSERT_EQ(0, dir->update_field(env->dpp, block, "objName", oid, optional_yield{yield}));
-    ASSERT_EQ(0, dir->update_field(env->dpp, block, "hosts", host, optional_yield{yield}));
+    ASSERT_EQ(0, dir->update_field(env->dpp, optional_yield{yield}, block, "objName", oid, {}));
+    ASSERT_EQ(0, dir->update_field(env->dpp, optional_yield{yield}, block, "hosts", host, {}));
 
     boost::system::error_code ec;
     request req;
-    req.push("HMGET", "testBucket_testName_0_0", "objName", "hosts");
+    req.push("HMGET", to_legacy_block_index("testBucket_testName_0_0"), "objName", "hosts");
     req.push("FLUSHALL");
     response< std::vector<std::string>, 
 	      boost::redis::ignore_t> resp;
@@ -551,17 +490,17 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     block->cacheObj.hostsList.insert("127.0.0.1:6000");
-    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->set(env->dpp, optional_yield{yield}, block, {}));
     {
       std::string host = "127.0.0.1:6379";
-      ASSERT_EQ(0, dir->remove_host(env->dpp, block, host, optional_yield{yield}));
+      ASSERT_EQ(0, dir->remove_host(env->dpp, optional_yield{yield}, block, host, {}));
     }
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("HEXISTS", "testBucket_testName_0_0", "hosts");
-      req.push("HGET", "testBucket_testName_0_0", "hosts");
+      req.push("HEXISTS", to_legacy_block_index("testBucket_testName_0_0"), "hosts");
+      req.push("HGET", to_legacy_block_index("testBucket_testName_0_0"), "hosts");
       response<int, std::string> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -573,13 +512,13 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
 
     {
       std::string host = "127.0.0.1:6000";
-      ASSERT_EQ(0, dir->remove_host(env->dpp, block, host, optional_yield{yield}));
+      ASSERT_EQ(0, dir->remove_host(env->dpp, optional_yield{yield}, block, host, {}));
     }
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", "testBucket_testName_0");
+      req.push("EXISTS", to_legacy_block_index("testBucket_testName_0_0"));
       req.push("FLUSHALL");
       response<int, boost::redis::ignore_t> resp;
 
