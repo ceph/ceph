@@ -160,6 +160,16 @@ def _write_container_cmd_to_bash(
             stderr=False,
         )
 
+    # dockerd removes a --rm container after `docker stop` has returned, and
+    # `docker rm -f` fails while that removal is in progress
+    if isinstance(ctx.container_engine, Docker):
+        cname = shlex.quote(container.cname)
+        inspect = f'{ctx.container_engine.path} container inspect {cname}'
+        file_obj.write(
+            f'for _ in $(seq 30); do {inspect} &>/dev/null || break; '
+            'sleep 1; done\n'
+        )
+
     # container run command
     _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
 
