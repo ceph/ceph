@@ -115,6 +115,9 @@ The following configurable options have to be added for STS integration:
 .. confval:: rgw_sts_key
 .. confval:: rgw_s3_auth_use_sts
 
+How often the OIDC provider is contacted when verifying web identity tokens for
+``AssumeRoleWithWebIdentity`` is described in :doc:`oidc`.
+
 .. note:: The STS and S3 APIs co-exist in the same namespace, and both S3
    and STS APIs can be accessed via the same endpoint.
 

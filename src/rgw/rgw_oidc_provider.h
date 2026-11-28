@@ -20,9 +20,12 @@ struct RGWOIDCProviderInfo
   std::string tenant; // tenant-name or account-id
   std::vector<std::string> client_ids;
   std::vector<std::string> thumbprints;
+  // Incremented by 'radosgw-admin oidc-provider invalidate-jwks-cache'.
+  // A cached JWKS is reused only if it was fetched under the same value.
+  uint64_t jwks_generation = 0;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(id, bl);
     encode(provider_url, bl);
     encode(arn, bl);
@@ -30,11 +33,12 @@ struct RGWOIDCProviderInfo
     encode(tenant, bl);
     encode(client_ids, bl);
     encode(thumbprints, bl);
+    encode(jwks_generation, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(id, bl);
     decode(provider_url, bl);
     decode(arn, bl);
@@ -42,6 +46,9 @@ struct RGWOIDCProviderInfo
     decode(tenant, bl);
     decode(client_ids, bl);
     decode(thumbprints, bl);
+    if (struct_v >= 4) {
+      decode(jwks_generation, bl);
+    }
     DECODE_FINISH(bl);
   }
 
