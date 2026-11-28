@@ -157,48 +157,52 @@ an object storage endpoint:
   | type        | object-store                     |
   +-------------+----------------------------------+
 
+The Keystone v3 API takes one endpoint per interface. Create a ``public``, an
+``admin``, and an ``internal`` endpoint for the service:
+
 .. prompt:: bash #
 
    openstack endpoint create --region RegionOne \
-                               --publicurl   "http://radosgw.example.com:8080/swift/v1" \
-                               --adminurl    "http://radosgw.example.com:8080/swift/v1" \
-                               --internalurl "http://radosgw.example.com:8080/swift/v1" \
-                               swift
+       swift public "http://radosgw.example.com:8080/swift/v1"
+   openstack endpoint create --region RegionOne \
+       swift admin "http://radosgw.example.com:8080/swift/v1"
+   openstack endpoint create --region RegionOne \
+       swift internal "http://radosgw.example.com:8080/swift/v1"
+
+Each command prints the endpoint that it created. For example, the first
+command prints:
 
 ::
 
   +--------------+------------------------------------------+
   | Field        | Value                                    |
   +--------------+------------------------------------------+
-  | adminurl     | http://radosgw.example.com:8080/swift/v1 |
+  | enabled      | True                                     |
   | id           | e4249d2b60e44743a67b5e5b38c18dd3         |
-  | internalurl  | http://radosgw.example.com:8080/swift/v1 |
-  | publicurl    | http://radosgw.example.com:8080/swift/v1 |
+  | interface    | public                                   |
   | region       | RegionOne                                |
+  | region_id    | RegionOne                                |
   | service_id   | 37c4c0e79571404cb4644201a4a6e5ee         |
   | service_name | swift                                    |
   | service_type | object-store                             |
+  | url          | http://radosgw.example.com:8080/swift/v1 |
   +--------------+------------------------------------------+
+
+To check the endpoints of the service, run the following command:
 
 .. prompt:: bash #
 
-   openstack endpoint show object-store
+   openstack endpoint list --service object-store -c Interface -c URL
 
 ::
 
-  +--------------+------------------------------------------+
-  | Field        | Value                                    |
-  +--------------+------------------------------------------+
-  | adminurl     | http://radosgw.example.com:8080/swift/v1 |
-  | enabled      | True                                     |
-  | id           | e4249d2b60e44743a67b5e5b38c18dd3         |
-  | internalurl  | http://radosgw.example.com:8080/swift/v1 |
-  | publicurl    | http://radosgw.example.com:8080/swift/v1 |
-  | region       | RegionOne                                |
-  | service_id   | 37c4c0e79571404cb4644201a4a6e5ee         |
-  | service_name | swift                                    |
-  | service_type | object-store                             |
-  +--------------+------------------------------------------+
+  +-----------+------------------------------------------+
+  | Interface | URL                                      |
+  +-----------+------------------------------------------+
+  | admin     | http://radosgw.example.com:8080/swift/v1 |
+  | internal  | http://radosgw.example.com:8080/swift/v1 |
+  | public    | http://radosgw.example.com:8080/swift/v1 |
+  +-----------+------------------------------------------+
 
 .. note:: If :ref:`ceph-conf-database` sets the configuration option
 	  ``rgw_swift_account_in_url = true``, your ``object-store``
@@ -227,29 +231,35 @@ to a different project, the following config option needs to be enabled::
    rgw_swift_account_in_url = true
 
 The Keystone object store endpoint must accordingly be configured to include
-the ``AUTH_%(project_id)s`` suffix:
+the ``AUTH_%(project_id)s`` suffix. Keystone replaces ``%(project_id)s`` with
+the project ID of each request, so put the URL in single quotes to keep the
+shell from interpreting it:
 
 .. prompt:: bash #
 
    openstack endpoint create --region RegionOne \
-                               --publicurl   "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
-                               --adminurl    "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
-                               --internalurl "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
-                               swift
+       swift public 'http://radosgw.example.com:8080/swift/v1/AUTH_%(project_id)s'
+   openstack endpoint create --region RegionOne \
+       swift admin 'http://radosgw.example.com:8080/swift/v1/AUTH_%(project_id)s'
+   openstack endpoint create --region RegionOne \
+       swift internal 'http://radosgw.example.com:8080/swift/v1/AUTH_%(project_id)s'
+
+For example, the first command prints:
 
 ::
 
   +--------------+--------------------------------------------------------------+
   | Field        | Value                                                        |
   +--------------+--------------------------------------------------------------+
-  | adminurl     | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | enabled      | True                                                         |
   | id           | e4249d2b60e44743a67b5e5b38c18dd3                             |
-  | internalurl  | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
-  | publicurl    | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | interface    | public                                                       |
   | region       | RegionOne                                                    |
+  | region_id    | RegionOne                                                    |
   | service_id   | 37c4c0e79571404cb4644201a4a6e5ee                             |
   | service_name | swift                                                        |
   | service_type | object-store                                                 |
+  | url          | http://radosgw.example.com:8080/swift/v1/AUTH_%(project_id)s |
   +--------------+--------------------------------------------------------------+
 
 Keystone Integration with the S3 API
