@@ -51,8 +51,9 @@ ninja ceph_test_rgw_sal_wrapper
 
 The backend (rados, dbstore, posix) is read from ceph.conf.
 Each functional test runs for both regular S3 buckets and native
-vector buckets in the same invocation. The test creates and removes
-both bucket types;
+vector buckets in the same invocation. The test program creates one bucket of
+each type and removes both on exit. These tests cover object I/O, metadata,
+conditional writes, copies, and multipart operations through the C wrapper.
 
 To run only one bucket type:
 
@@ -75,7 +76,7 @@ LD_LIBRARY_PATH=$PWD/lib ./bin/ceph_test_rgw_lancedb_object_store -c ./ceph.conf
 
 ### S3 Vector Integration Tests
 
-Full end-to-end tests via S3 protocol. See `src/test/rgw/s3vectors/`.
+Full end-to-end tests via the S3-Vectors API. See `src/test/rgw/s3vectors/`.
 
 ## Architecture
 

@@ -5241,6 +5241,31 @@ options:
   see_also:
   - rgw_max_put_param_size
   with_legacy: true
+- name: rgw_s3vector_max_indexes_per_bucket
+  type: uint
+  level: advanced
+  desc: Maximum number of vector indexes a single vector bucket may hold
+  long_desc: CreateIndex rejects the request if the bucket already holds this
+    many indexes or more. Set to 0 to disable the limit.
+  default: 10000
+  services:
+  - rgw
+  min: 0
+  flags:
+  - runtime
+- name: rgw_s3vector_max_vectors_per_index
+  type: uint
+  level: advanced
+  desc: Maximum number of vectors a single vector index may hold
+  long_desc: A PutVectors request is rejected when the target index already holds
+    more than this many vectors. Set to 0 to disable the limit. The default limit is
+    2 billion vectors per index.
+  default: 2000000000
+  services:
+  - rgw
+  min: 0
+  flags:
+  - runtime
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
