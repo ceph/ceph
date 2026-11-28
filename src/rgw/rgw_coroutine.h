@@ -16,6 +16,7 @@
 #endif
 
 #include "include/utime.h"
+#include "include/rados/librados.hpp"
 #include "common/RefCountedObj.h"
 #include "common/debug.h"
 #include "common/Timer.h"

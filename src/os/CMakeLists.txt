@@ -21,7 +21,7 @@ if(WITH_FUSE)
   add_library(fusestore
     FuseStore.cc)
   target_link_libraries(fusestore
-    PRIVATE FUSE::FUSE)
+    PRIVATE FUSE::FUSE legacy-option-headers)
   target_link_libraries(os
     PRIVATE fusestore)
 endif()

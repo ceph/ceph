@@ -21,6 +21,7 @@
 #include "rgw_rest_role.h"
 #include "rgw_role.h"
 #include "rgw_sal.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

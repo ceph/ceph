@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_perf_counters.h"
+#include "rgw_req_state.h"
 #include "common/perf_counters.h"
 #include "common/perf_counters_key.h"
 #include "common/ceph_context.h"

@@ -21,6 +21,7 @@
 #include "rgw_sal_rados.h"
 #include "rgw_cr_rados.h"
 #include "sync_fairness.h"
+#include "rgw_tools.h"
 
 #include <boost/asio/yield.hpp>
 

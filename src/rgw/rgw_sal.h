@@ -17,21 +17,27 @@
 
 #include <cstdint>
 #include <optional>
+#include <tuple>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
+#include "common/subsys_types.h"
 #include "common/tracer.h"
 #include "rgw_cksum.h"
+#include "rgw_common.h"
 #include "rgw_sal_fwd.h"
-#include "rgw_lua.h"
+#include "rgw_lua_types.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
 #include "include/random.h"
 #include "include/function2.hpp"
 
 // FIXME: following subclass dependencies
-#include "driver/rados/rgw_user.h"
 #include "driver/rados/rgw_datalog_notify.h"
+
+namespace neorados {
+  class RADOS;
+}
 
 struct RGWBucketEnt;
 class RGWRESTMgr;
@@ -58,6 +64,7 @@ using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
 namespace rgw {
   class Aio;
+  class SiteConfig;
   namespace IAM { struct Policy; }
 }
 

@@ -29,6 +29,7 @@
 #include "rgw_auth.h"
 #include "rgw_common.h"
 #include "rgw_iam_policy.h"
+#include "rgw_permission.h"
 #include "rgw_keystone.h"
 
 using rgw::auth::Identity;

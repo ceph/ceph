@@ -5,6 +5,7 @@
 
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
+#include "common/dout.h"
 #include "common/OutputDataSocket.h"
 #include "common/versioned_variant.h"
 #include <vector>
@@ -75,7 +76,7 @@ WRITE_CLASS_ENCODER(delete_multi_obj_op_meta)
 struct rgw_log_entry {
 
   using headers_map = boost::container::flat_map<std::string, std::string>;
-  using Clock = req_state::Clock;
+  using Clock = ceph::coarse_real_clock;
 
   rgw_owner object_owner;
   rgw_owner bucket_owner;

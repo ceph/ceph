@@ -43,6 +43,7 @@
 #include "cls/log/cls_log_types.h"
 #include "neorados/cls/sem_set.h"
 #include "rgw_basic_types.h"
+#include "rgw_datalog_notify.h"
 #include "rgw_log_backing.h"
 #include "rgw_sync_policy.h"
 #include "rgw_trim_bilog.h"
@@ -172,30 +173,6 @@ struct RGWDataChangesLogMarker {
 };
 
 class RGWDataChangesLog;
-
-struct rgw_data_notify_entry {
-  std::string key;
-  uint64_t gen = 0;
-
-  void dump(ceph::Formatter* f) const;
-  void decode_json(JSONObj* obj);
-
-  rgw_data_notify_entry& operator=(const rgw_data_notify_entry&) = default;
-
-  bool operator <(const rgw_data_notify_entry& d) const {
-    if (key < d.key) {
-      return true;
-    }
-    if (d.key < key) {
-      return false;
-    }
-    return gen < d.gen;
-  }
-  friend std::ostream& operator <<(std::ostream& m,
-				   const rgw_data_notify_entry& e) {
-    return m << "[key: " << e.key << ", gen: " << e.gen << "]";
-  }
-};
 
 class RGWDataChangesBE;
 

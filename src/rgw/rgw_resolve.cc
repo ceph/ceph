@@ -13,6 +13,7 @@
 #endif
 
 #include "rgw_common.h"
+#include "global/global_context.h"
 #include "rgw_resolve.h"
 #include "common/dns_resolve.h"
 

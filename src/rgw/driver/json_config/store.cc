@@ -14,6 +14,7 @@
 
 #include <system_error>
 #include "include/buffer.h"
+#include "common/dout.h"
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "rgw_zone.h"

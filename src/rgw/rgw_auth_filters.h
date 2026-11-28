@@ -10,6 +10,7 @@
 
 #include "rgw_common.h"
 #include "rgw_auth.h"
+#include "rgw_req_state.h"
 #include "driver/rados/rgw_user.h"
 
 namespace rgw {

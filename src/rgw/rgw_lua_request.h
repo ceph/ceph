@@ -2,6 +2,7 @@
 
 #include <string>
 #include "include/common_fwd.h"
+#include "rgw_lua_types.h"
 #include "rgw_sal_fwd.h"
 
 struct lua_State;

@@ -12,8 +12,11 @@
 #include "common/Formatter.h"
 #include "common/versioned_variant.h"
 
+#include "rgw_auth.h"
 #include "rgw_op.h"
 #include "rgw_common.h"
+#include "rgw_permission.h"
+#include "rgw_req_state.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
 #include "rgw_http_errors.h"

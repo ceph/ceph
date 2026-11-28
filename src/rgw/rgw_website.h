@@ -19,9 +19,11 @@
 #include <list>
 #include <string>
 
-#include "common/ceph_json.h"
+#include "include/encoding.h"
 
 #include "rgw_xml.h"
+
+class JSONObj;
 
 struct RGWRedirectInfo
 {

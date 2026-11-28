@@ -3,6 +3,7 @@
 
 #include "rgw_obj_manifest.h"
 
+#include "common/debug.h"
 #include "services/svc_zone.h"
 #include "rgw_rados.h"
 #include "rgw_bucket.h"

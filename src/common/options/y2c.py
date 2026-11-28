@@ -246,26 +246,34 @@ def translate(opts):
         name = os.path.split(opts.input)[-1]
         name = name.rsplit('.', 1)[0]
     name = name.replace('-', '_')
-    # noqa: E127
-    with open(opts.input) as infile, \
-         open(opts.output, 'w') as cc_file, \
-         open(opts.legacy, 'w') as h_file:
+    with open(opts.input) as infile:
         yml = yaml.load(infile, Loader=UniqueKeySafeLoader)
-        headers = yml.get('headers', '')
-        options = yml['options']
-        cc_file.write(prelude.format(name=name, headers=headers,
-                                     count=len(options)))
-        for option in options:
-            try:
-                cc_file.write(yaml_to_cxx(option, opts.indent, head,
-                                          terminator) + '\n')
-                if option.get('with_legacy', False):
-                    h_file.write(yaml_to_h(option) + '\n')
-            except ValueError as e:
-                print(f'failed to translate option "{name}": {e}',
-                      file=sys.stderr)
-                return 1
-        cc_file.write(epilogue.replace("}}", "}"))
+    headers = yml.get('headers', '')
+    options = yml['options']
+    cc_parts = [prelude.format(name=name, headers=headers, count=len(options))]
+    h_parts = []
+    for option in options:
+        try:
+            cc_parts.append(yaml_to_cxx(option, opts.indent, head, terminator) + '\n')
+            if option.get('with_legacy', False):
+                h_parts.append(yaml_to_h(option) + '\n')
+        except ValueError as e:
+            print(f'failed to translate option "{name}": {e}',
+                  file=sys.stderr)
+            return 1
+    cc_parts.append(epilogue.replace("}}", "}"))
+
+    for path, contents in ((opts.output, ''.join(cc_parts)),
+                           (opts.legacy, ''.join(h_parts))):
+        try:
+            with open(path) as output:
+                if output.read() == contents:
+                    continue
+        except FileNotFoundError:
+            pass
+        with open(path, 'w') as output:
+            output.write(contents)
+    return 0
 
 
 def readable_size(value, typ):
@@ -360,10 +368,9 @@ def main():
                         help='operation to perform.')
     opts = parser.parse_args(sys.argv[1:])
     if opts.op == 'translate':
-        translate(opts)
-    else:
-        readable(opts)
+        return translate(opts)
+    return readable(opts)
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

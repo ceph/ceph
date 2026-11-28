@@ -6,6 +6,7 @@
 #include <boost/container/small_vector.hpp>
 
 #include "common/async/completion.h"
+#include "common/dout.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"
 #include "rgw_ssd_driver.h"

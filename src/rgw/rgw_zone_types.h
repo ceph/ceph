@@ -38,6 +38,7 @@
 #include "common/Formatter.h"
 
 class JSONObj;
+class JSONFormattable;
 
 namespace rgw_zone_defaults {
 
@@ -446,20 +447,7 @@ struct RGWTierACLMapping {
   source_id(s),
   dest_id(d) {}
 
-  void init(const JSONFormattable& config) {
-    const std::string& t = config["type"];
-
-    if (t == "email") {
-      type = ACL_TYPE_EMAIL_USER;
-    } else if (t == "uri") {
-      type = ACL_TYPE_GROUP;
-    } else {
-      type = ACL_TYPE_CANON_USER;
-    }
-
-    source_id = config["source_id"];
-    dest_id = config["dest_id"];
-  }
+  void init(const JSONFormattable& config);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

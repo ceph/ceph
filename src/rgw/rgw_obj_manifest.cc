@@ -3,6 +3,7 @@
 
 #include "driver/rados/rgw_obj_manifest.h"
 
+#include "common/dout.h"
 #include "rgw_bucket.h" // RGW_OBJ_NS_SHADOW and RGW_OBJ_NS_MULTIPART
 
 using namespace std;

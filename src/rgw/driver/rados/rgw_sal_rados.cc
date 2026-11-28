@@ -29,6 +29,7 @@
 
 #include "common/ceph_time.h"
 #include "common/Clock.h"
+#include "common/dout_fmt.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"
 
@@ -44,6 +45,7 @@
 #include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
 #include "rgw_lc.h"
+#include "rgw_lua.h"
 #include "rgw_lc_tier.h"
 #include "rgw_lc_tier.h"
 #include "rgw_mdlog.h"

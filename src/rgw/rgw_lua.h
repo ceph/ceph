@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <set>
+#include <tuple>
 #include "rgw_lua_version.h"
 #include "rgw_lua_types.h"
 #include "common/async/yield_context.h"
@@ -18,16 +18,6 @@ namespace rgw::sal {
 }
 
 namespace rgw::lua {
-
-enum class context {
-  preRequest,
-  postAuth,
-  postRequest,
-  background,
-  getData,
-  putData,
-  none
-};
 
 // get context enum from string 
 // the expected string the same as the enum (case insensitive)
@@ -49,8 +39,6 @@ std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *d
 
 // delete the stored lua script from a context
 int delete_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx);
-
-using packages_t = std::set<std::string>;
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 

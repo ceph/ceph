@@ -9,6 +9,7 @@
 
 #include "rgw_bucket.h"
 #include "rgw_log.h"
+#include "rgw_auth.h"
 #include "rgw_acl.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"

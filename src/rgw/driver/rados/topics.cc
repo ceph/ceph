@@ -14,6 +14,7 @@
  */
 
 #include "topics.h"
+#include "rgw_tools.h"
 
 #include "include/rados/librados.hpp"
 #include "common/dout.h"

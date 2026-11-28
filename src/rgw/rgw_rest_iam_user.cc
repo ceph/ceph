@@ -25,6 +25,7 @@
 #include "rgw_process_env.h"
 #include "rgw_rest.h"
 #include "rgw_rest_iam.h"
+#include "rgw_zone.h"
 
 
 static std::string make_resource_name(const RGWUserInfo& info)

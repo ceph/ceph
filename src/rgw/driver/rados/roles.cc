@@ -14,6 +14,7 @@
  */
 
 #include "roles.h"
+#include "rgw_tools.h"
 
 #include "include/rados/librados.hpp"
 #include "common/ceph_json.h"

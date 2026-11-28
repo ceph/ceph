@@ -26,9 +26,10 @@
 #include "rgw_obj_types.h"
 #include "rgw_placement_types.h"
 
-#include "common/dout.h"
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 
+class DoutPrefixProvider;
 class RGWSI_Zone;
 struct RGWZoneGroup;
 struct RGWZoneParams;
