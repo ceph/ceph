@@ -54,6 +54,8 @@ DEFAULT_USER_RATELIMIT = {
     "user_ratelimit": {
         "max_read_ops": 0,
         "max_write_ops": 0,
+        "max_list_ops": 0,
+        "max_delete_ops": 0,
         "max_read_bytes": 0,
         "max_write_bytes": 0,
         "enabled": False
@@ -1922,6 +1924,7 @@ class RgwRateLimit:
     def set_rateLimit(self, scope: str, enabled: bool, name: str,
                       max_read_ops: int, max_write_ops: int,
                       max_read_bytes: int, max_write_bytes: int,
+                      max_list_ops: int = 0, max_delete_ops: int = 0,
                       daemon_name: Optional[str] = None,
                       realm_name: Optional[str] = None):
         if daemon_name and realm_name is None:
@@ -1930,7 +1933,9 @@ class RgwRateLimit:
         rgw_rate_limit_cmd = ['ratelimit', 'set', '--ratelimit-scope', scope,
                               '--max-read-ops', str(max_read_ops), '--max-write-ops',
                               str(max_write_ops), '--max-write-bytes', str(max_write_bytes),
-                              '--max-read-bytes', str(max_read_bytes)]
+                              '--max-read-bytes', str(max_read_bytes),
+                              '--max-list-ops', str(max_list_ops),
+                              '--max-delete-ops', str(max_delete_ops)]
 
         rgw_rate_limit_enable_cmd = ['ratelimit', 'enable' if enabled == 'True' else 'disable',
                                      '--ratelimit-scope', scope]
