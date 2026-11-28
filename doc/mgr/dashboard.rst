@@ -489,6 +489,8 @@ The default value is 45 seconds.
 Enabling iSCSI Management
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. include:: /rbd/iscsi-deprecation.inc.rst
+
 The Ceph Dashboard can manage iSCSI targets using the REST API provided by the
 ``rbd-target-api`` service of the :ref:`ceph-iscsi`. Please make sure that it is
 installed and enabled on the iSCSI gateways.
