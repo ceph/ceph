@@ -8554,6 +8554,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.null_verid = (instance == "null");
   del_op->params.last_mod_time_match = object.get_last_mod_time();
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
