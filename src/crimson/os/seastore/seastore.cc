@@ -80,6 +80,33 @@ SET_SUBSYS(seastore);
 
 namespace crimson::os::seastore {
 
+namespace {
+// Upper bound of the space a writer may consume, reserved before it takes
+// the writer gate (see writer_gate_t). The exact projected usage is only
+// known once the transaction is built, under the gate, where it must not
+// wait for space any more. What the bound misses is reserved at submit if
+// available, otherwise overcommitted (see TransactionManager::
+// submit_transaction()).
+// Per op, allow for the metadata extents it may write as fresh extents
+// (e.g. split onode, lba or omap nodes).
+// TODO: derive from the extent sizes and what each op type can touch, and
+//       count ops whose journal size isn't bounded by their payload (clone).
+io_usage_t estimate_writer_usage(std::size_t bytes, std::size_t ops)
+{
+  constexpr std::size_t METADATA_PER_OP = 16 << 10;
+  const std::size_t usage_bytes = bytes + ops * METADATA_PER_OP;
+  io_usage_t usage;
+  usage.inline_usage = usage_bytes;
+  usage.cleaner_usage.main_usage = usage_bytes;
+  return usage;
+}
+
+io_usage_t estimate_writer_usage(ceph::os::Transaction &t)
+{
+  return estimate_writer_usage(t.get_num_bytes(), t.get_num_ops());
+}
+} // anonymous namespace
+
 using crimson::os::seastore::omap_manager::BtreeOMapManager;
 using crimson::os::seastore::log_manager::LogManager;
 
@@ -230,6 +257,8 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
+    {txn_stage_t::WRITER_RESERVE,        sm::label_instance("stage", "writer_reserve")},
+    {txn_stage_t::WRITER_GATE_WAIT,      sm::label_instance("stage", "writer_gate_wait")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
     {txn_stage_t::SUBMIT_TOTAL,          sm::label_instance("stage", "submit_total")},
@@ -341,6 +370,36 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   sm::description("transactions waiting to get "
 		        "through seastore's throttler"),
   {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "read_txns",
+        [this] { return shard_stats.read_num; },
+        sm::description("READ transactions started; restarts are "
+                        "read_attempts - read_txns"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "read_attempts",
+        [this] { return shard_stats.repeat_read_num; },
+        sm::description("READ transaction attempts including the first; "
+                        "a restart happens when an extent a reader used "
+                        "was invalidated by a writer"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "writer_ungated_commits",
+        [this] { return shard_stats.writer_ungated_commits; },
+        sm::description("writers that committed without holding the "
+                        "writer gate (should stay 0 outside of tests)"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "writer_overcommits",
+        [this] { return shard_stats.writer_overcommits; },
+        sm::description("writers whose usage exceeded the reservation taken "
+                        "before the writer gate and was not available "
+                        "right away"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "attr_inline",
@@ -935,17 +994,30 @@ SeaStore::Shard::mkfs_managers()
   ++(shard_stats.pending_io_num);
   // For TM::submit_transaction()
   ++(shard_stats.processing_inlock_io_num);
+  // A writer: reserve, then hold the writer gate, see writer_gate_t.
+  const auto usage = estimate_writer_usage(0, 1);
+  co_await transaction_manager->reserve_writer_usage(usage);
+  auto release_usage = seastar::defer([this, usage] {
+    transaction_manager->release_writer_usage(usage);
+  });
+  auto gate_units =
+    co_await transaction_manager->get_writer_gate().acquire();
   TransactionRef t = transaction_manager->create_transaction(
     Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
-   co_await with_repeat_trans_intr(*t,
+  transaction_manager->get_writer_gate().set_holder(*t);
+  // Not run_writer_once(): a coroutine lambda must outlive its coroutine,
+  // so it has to stay in this full expression, not in a lambda's return.
+  co_await with_trans_intr(*t,
     seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
     ++(shard_stats.repeat_io_num);
     DEBUGT("...", tr);
     co_await onode_manager->mkfs(tr);
     auto coll_root = co_await collection_manager->mkfs(tr);
     transaction_manager->write_collection_root(tr, coll_root);
-    co_await transaction_manager->submit_transaction(tr);
-  }));
+    co_await transaction_manager->submit_transaction(tr, &usage);
+  })).handle_error(
+    crimson::ct_error::eagain::assert_failure("eagain in a writer"),
+    crimson::ct_error::pass_further_all{});
   assert(shard_stats.pending_io_num);
   --(shard_stats.pending_io_num);
    // XXX: it's wrong to assume no failure
@@ -2240,13 +2312,26 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   --(shard_stats.waiting_throttler_io_num);
   ++(shard_stats.processing_inlock_io_num);
 
-  co_await with_repeat_trans_intr(
-    [&, this] {
-      // Preserve handle and rewind the external iterator before each attempt.
-      ctx.reset_preserve_handle(*transaction_manager);
-    },
+  // Single writer per shard: reserve space first, then take the writer
+  // gate. Reserving may wait for background reclamation, which needs the
+  // gate, so it must not happen while holding it (see writer_gate_t).
+  const auto usage = estimate_writer_usage(ctx.ext_transaction);
+  auto t_pre_reserve = seastar::lowres_clock::now();
+  co_await transaction_manager->reserve_writer_usage(usage);
+  auto reserve_wait = seastar::lowres_clock::now() - t_pre_reserve;
+  auto release_usage = seastar::defer([this, usage] {
+    transaction_manager->release_writer_usage(usage);
+  });
+
+  auto t_pre_gate = seastar::lowres_clock::now();
+  auto gate_units =
+    co_await transaction_manager->get_writer_gate().acquire();
+  auto gate_wait = seastar::lowres_clock::now() - t_pre_gate;
+  transaction_manager->get_writer_gate().set_holder(*ctx.transaction);
+
+  co_await with_trans_intr(
     *ctx.transaction,
-    seastar::coroutine::lambda([&ctx, this, FNAME](auto &t)
+    seastar::coroutine::lambda([&ctx, &usage, this, FNAME](auto &t)
 			       -> tm_ret {
       ++(shard_stats.repeat_io_num);
 #ifndef NDEBUG
@@ -2285,7 +2370,8 @@ seastar::future<> SeaStore::Shard::run_one_batch(
 
       DEBUGT("completed all {} ops", t, total_ops);
       auto submit_start = seastar::lowres_clock::now();
-      co_await transaction_manager->submit_transaction(*ctx.transaction);
+      co_await transaction_manager->submit_transaction(
+        *ctx.transaction, &usage);
       ctx.submit_time += seastar::lowres_clock::now() - submit_start;
     })
   ).handle_error(
@@ -2308,6 +2394,8 @@ seastar::future<> SeaStore::Shard::run_one_batch(
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
+        {txn_stage_t::WRITER_RESERVE,        reserve_wait},
+        {txn_stage_t::WRITER_GATE_WAIT,      gate_wait},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
         {txn_stage_t::SUBMIT_TOTAL,          ctx.submit_time},
@@ -3561,26 +3649,37 @@ seastar::future<> SeaStore::Shard::write_meta(
   // For TM::submit_transaction()
   ++(shard_stats.processing_inlock_io_num);
 
-  return repeat_eagain([this, &key, &value] {
-    ++(shard_stats.repeat_io_num);
+  // Reserve before taking the writer gate, see writer_gate_t.
+  return seastar::do_with(
+    estimate_writer_usage(key.size() + value.size(), 1),
+    [this, &key, &value](auto &usage)
+  {
+    return transaction_manager->reserve_writer_usage(usage
+    ).then([this, &key, &value, &usage] {
+      return run_writer_once([this, &key, &value, &usage] {
+        ++(shard_stats.repeat_io_num);
 
-    return transaction_manager->with_transaction_intr(
-      Transaction::src_t::MUTATE,
-      "write_meta",
-      CACHE_HINT_NOCACHE,
-      [this, &key, &value](auto& t)
-    {
-      LOG_PREFIX(SeaStoreS::write_meta);
-      DEBUGT("key={} value={} ...", t, key, value);
-      return transaction_manager->update_root_meta(
-        t, key, value
-      ).si_then([this, &t] {
-        return transaction_manager->submit_transaction(t);
-      });
+        return transaction_manager->with_transaction_intr(
+          Transaction::src_t::MUTATE,
+          "write_meta",
+          CACHE_HINT_NOCACHE,
+          [this, &key, &value, &usage](auto& t)
+        {
+          LOG_PREFIX(SeaStoreS::write_meta);
+          DEBUGT("key={} value={} ...", t, key, value);
+          return transaction_manager->update_root_meta(
+            t, key, value
+          ).si_then([this, &t, &usage] {
+            return transaction_manager->submit_transaction(t, &usage);
+          });
+        });
+      }).handle_error(
+        crimson::ct_error::assert_all("Invalid error in SeaStoreS::write_meta")
+      );
+    }).finally([this, &usage] {
+      transaction_manager->release_writer_usage(usage);
     });
-  }).handle_error(
-    crimson::ct_error::assert_all("Invalid error in SeaStoreS::write_meta")
-  ).finally([this] {
+  }).finally([this] {
     assert(shard_stats.pending_io_num);
     --(shard_stats.pending_io_num);
     // XXX: it's wrong to assume no failure,

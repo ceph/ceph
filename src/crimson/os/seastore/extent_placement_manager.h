@@ -690,6 +690,11 @@ public:
     return background_process.reserve_projected_usage(usage);
   }
 
+  /// Reserves usage only if it is available right away, never waits
+  bool try_reserve_projected_usage(const io_usage_t &usage) {
+    return background_process.try_reserve_projected_usage(usage);
+  }
+
   void release_projected_usage(const io_usage_t &usage) {
     background_process.release_projected_usage(usage);
   }
@@ -1099,6 +1104,18 @@ private:
     }
 
     seastar::future<> reserve_projected_usage(io_usage_t usage);
+
+    bool try_reserve_projected_usage(const io_usage_t &usage) {
+      if (!is_ready()) {
+        return true;
+      }
+      auto res = try_reserve_io(usage);
+      if (!res.is_successful()) {
+        abort_io_usage(usage, res);
+        return false;
+      }
+      return true;
+    }
 
     void release_projected_usage(const io_usage_t &usage) {
       if (is_ready()) {

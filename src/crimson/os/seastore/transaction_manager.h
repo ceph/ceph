@@ -14,6 +14,7 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
+#include <seastar/core/semaphore.hh>
 #include <seastar/util/defer.hh>
 
 #include "include/ceph_assert.h"
@@ -61,6 +62,22 @@ auto repeat_eagain(F &&f) {
 }
 
 /**
+ * run_writer_once
+ *
+ * Runs a writing transaction once. A writer holds the writer gate (see
+ * writer_gate_t), so nothing can conflict with it, and only READ
+ * transactions get interrupted (see Transaction::is_reader_stale()).
+ * eagain reaching a writer is a bug, not a reason to retry.
+ * The returned future has the same errors as repeat_eagain()'s.
+ */
+template <typename F>
+auto run_writer_once(F &&f) {
+  return std::invoke(std::forward<F>(f)).handle_error(
+    crimson::ct_error::eagain::assert_failure("eagain in a writer"),
+    crimson::ct_error::pass_further_all{});
+}
+
+/**
  * TransactionManager
  *
  * Abstraction hiding reading and writing to persistence.
@@ -98,11 +115,6 @@ public:
 
   cache_stats_t get_cache_stats(bool report_detail, double seconds) const {
     return cache->get_stats(report_detail, seconds);
-  }
-
-  /// Resets transaction
-  void reset_transaction_preserve_handle(Transaction &t) {
-    return cache->reset_transaction_preserve_handle(t);
   }
 
   /**
@@ -619,6 +631,27 @@ public:
     std::vector<laddr_t> offsets);
 
   /**
+   * wait_background_for_alloc
+   *
+   * An allocation failed without the device being full, so background work
+   * (cleaning, demoting) has to free space first. A writer holding the
+   * writer gate can't wait for it, since that background work needs the
+   * gate: the shard would hang. Abort instead, see writer_gate_t. The usage
+   * reserved before taking the gate should make this unreachable.
+   * Transactions without the gate (tests, tools) keep waiting.
+   */
+  auto wait_background_for_alloc(Transaction &t) {
+    if (writer_gate.is_held_by(t)) {
+      LOG_PREFIX(TransactionManager::wait_background_for_alloc);
+      SUBERRORT(seastore_tm,
+                "allocation failed while holding the writer gate", t);
+      ceph_abort_msg("allocation failed while holding the writer gate");
+    }
+    epm->maybe_wake_background();
+    return trans_intr::make_interruptible(epm->wait_background());
+  }
+
+  /**
    * alloc_non_data_extent
    *
    * Allocates a new block of type T with the minimum lba range of size len
@@ -647,8 +680,7 @@ public:
           t, len, {placement_hint, INIT_GENERATION});
       } catch(crimson::ct_error::eagain&) {}
       if (!ext) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     // user must initialize the logical extent themselves.
@@ -695,8 +727,7 @@ public:
           });
       } catch (crimson::ct_error::eagain&) {}
       if (exts.empty()) {
-        epm->maybe_wake_background();
-        co_await trans_intr::make_interruptible(epm->wait_background());
+        co_await wait_background_for_alloc(t);
       }
     }
     // user must initialize the logical extent themselves
@@ -973,9 +1004,37 @@ public:
    * submit_transaction
    *
    * Atomically submits transaction to persistence
+   *
+   * reserved: the usage the caller already reserved through
+   * reserve_writer_usage() before taking the writer gate. The submit then
+   * never waits for space: what the reservation doesn't cover is reserved
+   * only if available right away, otherwise it is overcommitted. Without
+   * it, the submit reserves and may wait for background work, which a
+   * holder of the writer gate must not do (see writer_gate_t).
    */
   using submit_transaction_iertr = base_iertr;
-  submit_transaction_iertr::future<> submit_transaction(Transaction &);
+  submit_transaction_iertr::future<> submit_transaction(
+    Transaction &,
+    const io_usage_t *reserved = nullptr);
+
+  /**
+   * reserve_writer_usage
+   *
+   * Reserves the space a writer will consume, before it takes the writer
+   * gate. May wait for background reclamation, which needs the gate, so it
+   * must not be called while holding it. Reservations are serialized, so
+   * at most one writer waits for space at a time. Release with
+   * release_writer_usage() once the transaction is done.
+   */
+  seastar::future<> reserve_writer_usage(io_usage_t usage) {
+    return seastar::with_semaphore(reserve_lock, 1, [this, usage] {
+      return epm->reserve_projected_usage(usage);
+    });
+  }
+
+  void release_writer_usage(const io_usage_t &usage) {
+    epm->release_projected_usage(usage);
+  }
 
   /**
    * flush
@@ -992,6 +1051,10 @@ public:
 
   shard_stats_t& get_shard_stats() {
     return shard_stats;
+  }
+
+  writer_gate_t& get_writer_gate() final {
+    return writer_gate;
   }
 
   /// weak transaction should be type READ
@@ -1456,6 +1519,15 @@ private:
 
   shard_stats_t& shard_stats;
 
+  /// Single writer per shard, see writer_gate_t
+  writer_gate_t writer_gate;
+
+  /// Serializes reserve_writer_usage()
+  seastar::semaphore reserve_lock{1};
+
+  /// Logged once: a writer committed without holding the writer gate
+  bool warned_ungated_commit = false;
+
   bool can_drop_backref() const {
     return cache->can_drop_backref();
   }
@@ -1470,41 +1542,6 @@ private:
     }
   };
 
-  using mutated_extents_set_t =
-    std::set<CachedExtentRef, mem_addr_cmp_t>;
-  struct mutated_extents_locker {
-    mutated_extents_set_t mutated_extents;
-    std::vector<std::unique_lock<seastar::shared_mutex>> unique_locks;
-    std::vector<std::shared_lock<seastar::shared_mutex>> shared_locks;
-
-    mutated_extents_locker(
-      mutated_extents_set_t &&mutated_extents,
-      std::vector<std::unique_lock<seastar::shared_mutex>> &&unique_locks,
-      std::vector<std::shared_lock<seastar::shared_mutex>> &&shared_locks)
-      : mutated_extents(mutated_extents),
-        unique_locks(std::move(unique_locks)),
-        shared_locks(std::move(shared_locks)) {}
-    mutated_extents_locker() = default;
-    mutated_extents_locker(mutated_extents_locker&&) = default;
-
-    void release_lock() {
-      unique_locks.clear();
-    }
-
-    void release_shared_lock() {
-      shared_locks.clear();
-    }
-
-    void release() {
-      unique_locks.clear();
-      shared_locks.clear();
-    }
-    ~mutated_extents_locker() {
-      release();
-    }
-  };
-  seastar::future<mutated_extents_locker> lock_mutated_nodes(
-    Transaction &t);
 
   using resolve_cursor_to_mapping_iertr = base_iertr;
   resolve_cursor_to_mapping_iertr::future<LBAMapping>

@@ -132,19 +132,11 @@ public:
       ++next_id,
       cache_hint)
     );
+    ret->set_invalidation_epoch(&invalidation_epoch);
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
               *ret, name, src, is_weak);
     assert(!is_weak || src == Transaction::src_t::READ);
     return ret;
-  }
-
-  /// Resets transaction preserving
-  void reset_transaction_preserve_handle(Transaction &t) {
-    LOG_PREFIX(Cache::reset_transaction_preserve_handle);
-    if (t.did_reset()) {
-      SUBDEBUGT(seastore_t, "reset", t);
-    }
-    t.reset_preserve_handle();
   }
 
   /// Declare ref retired in t
@@ -1654,6 +1646,7 @@ public:
             SUBDEBUGT(seastore_cache, "extent is not alive, remove extent -- {}", t, *e);
             remove_extent(e, nullptr);
 	    e->set_invalid(t);
+	    ++invalidation_epoch;
           } else {
             SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
           }
@@ -1930,6 +1923,10 @@ private:
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   transaction_id_t next_id = 0;
+
+  /// Bumped whenever an extent readers may hold is invalidated, see
+  /// Transaction::is_reader_stale()
+  uint64_t invalidation_epoch = 0;
 
   const bool force_backref = false;
 
@@ -2220,10 +2217,6 @@ void stage_visibility_handoff(Transaction& t,
 
   /// Invalidate extent and mark affected transactions
   void invalidate_extent(Transaction& t, CachedExtent& extent);
-
-  /// Mark a valid transaction as conflicted
-  void mark_transaction_conflicted(
-    Transaction& t, CachedExtent& conflicting_extent);
 
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
