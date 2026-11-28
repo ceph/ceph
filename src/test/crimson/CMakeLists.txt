@@ -189,6 +189,15 @@ target_link_libraries(
 add_ceph_unittest(unittest-crimson-pg-shard-mapping
   --memory 256M --smp 4)
 
+add_executable(unittest-crimson-dispatch-context-transaction
+  test_dispatch_context_transaction.cc)
+target_link_libraries(
+  unittest-crimson-dispatch-context-transaction
+  crimson-os
+  crimson::gtest)
+add_ceph_unittest(unittest-crimson-dispatch-context-transaction
+  --memory 256M --smp 1)
+
 add_subdirectory(cbt)
 
 add_executable(unittest-crimson-operation-throttler
