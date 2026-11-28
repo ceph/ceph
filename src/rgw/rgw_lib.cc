@@ -20,7 +20,7 @@
 #include "include/rados/librgw.h"
 #include "rgw_acl.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "global/signal_handler.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"

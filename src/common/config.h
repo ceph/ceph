@@ -17,6 +17,7 @@
 #define CEPH_CONFIG_H
 
 #include <iosfwd>
+#include <list>
 #include <map>
 #include <variant>
 #include <boost/container/small_vector.hpp>

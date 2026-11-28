@@ -7,7 +7,7 @@
 #include "rgw_rest_bucket.h"
 #include "rgw_sal.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"

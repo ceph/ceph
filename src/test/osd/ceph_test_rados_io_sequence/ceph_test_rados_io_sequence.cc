@@ -11,7 +11,7 @@
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/dout.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "common/strtol.h" // for strict_iecstrtoll()
 #include "common/ceph_json.h"
 #include "common/Formatter.h"

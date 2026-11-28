@@ -12,7 +12,7 @@
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "include/types.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
@@ -253,11 +253,11 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
    * also thread-safe. */
   static const struct RolesCacher {
     explicit RolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, system_reader);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_project_reader_roles, project_reader);
-      get_str_vec(cct->_conf->rgw_keystone_implicit_deny_roles, implicit_deny);
+      plain = ceph::split_strings(cct->_conf->rgw_keystone_accepted_roles);
+      admin = ceph::split_strings(cct->_conf->rgw_keystone_accepted_admin_roles);
+      system_reader = ceph::split_strings(cct->_conf->rgw_keystone_accepted_reader_roles);
+      project_reader = ceph::split_strings(cct->_conf->rgw_keystone_accepted_project_reader_roles);
+      implicit_deny = ceph::split_strings(cct->_conf->rgw_keystone_implicit_deny_roles);
 
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
       plain.insert(std::end(plain), std::begin(project_reader), std::end(project_reader));
@@ -273,7 +273,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   static const struct ServiceTokenRolesCacher {
     explicit ServiceTokenRolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_service_token_accepted_roles, plain);
+      plain = ceph::split_strings(
+        cct->_conf->rgw_keystone_service_token_accepted_roles);
     }
 
     std::vector<std::string> plain;
@@ -727,11 +728,11 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
    * also thread-safe. */
   static const struct RolesCacher {
     explicit RolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, system_reader);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_project_reader_roles, project_reader);
-      get_str_vec(cct->_conf->rgw_keystone_implicit_deny_roles, implicit_deny);
+      plain = ceph::split_strings(cct->_conf->rgw_keystone_accepted_roles);
+      admin = ceph::split_strings(cct->_conf->rgw_keystone_accepted_admin_roles);
+      system_reader = ceph::split_strings(cct->_conf->rgw_keystone_accepted_reader_roles);
+      project_reader = ceph::split_strings(cct->_conf->rgw_keystone_accepted_project_reader_roles);
+      implicit_deny = ceph::split_strings(cct->_conf->rgw_keystone_implicit_deny_roles);
 
       /* Admit the project-reader and implicit-deny tiers on their own, the
        * same way an admin role is admitted. A user whose only role is one of

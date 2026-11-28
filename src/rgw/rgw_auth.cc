@@ -17,7 +17,7 @@
 #include "rgw_log.h"
 
 #include "include/function2.hpp"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

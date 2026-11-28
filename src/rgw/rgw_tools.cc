@@ -6,7 +6,7 @@
 
 #include "common/errno.h"
 #include "common/safe_io.h" // for safe_read()
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "driver/rados/rgw_tools.h"
 
