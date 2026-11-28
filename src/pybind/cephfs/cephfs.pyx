@@ -82,6 +82,13 @@ CEPH_SNAPDIFF_BTIME = 0x100
 
 CEPH_NOSNAP = -2
 
+CEPH_QUERY_PERM_READ = 1
+CEPH_QUERY_PERM_WRITE = 2
+CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT = 1
+CEPH_QUERY_PERM_NOT_RETURNED = 0
+CEPH_QUERY_PERM_NO_ACL = 1
+CEPH_QUERY_PERM_ACL = 2
+
 
 # XXX: DON'T FORGET to update values in src/include/cephfs/snap_types.h, if you
 # make any changes below.
@@ -1936,6 +1943,40 @@ cdef class LibCephFS(object):
             ret = ceph_mknod(self.cluster, _path, _mode, _rdev)
         if ret < 0:
             raise make_ex(ret, "error in mknod {}".format(path.decode('utf-8')))
+
+    def query_permissions(self, path, rights, want_snapshot=False):
+        """
+        MDS QUERY_PERMISSIONS for qa (not a production VFS API).
+
+        :returns: dict with ino, state, and tuple fields when applicable
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        cdef:
+            char* _path = path
+            uint32_t _rights = rights
+            uint32_t _flags = CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT if want_snapshot else 0
+            ceph_query_permissions_answer answer
+            char acl_buf[65536]
+            int ret
+
+        with nogil:
+            ret = ceph_query_permissions(self.cluster, _path, _rights, _flags,
+                                         &answer, acl_buf, sizeof(acl_buf))
+        if ret < 0:
+            raise make_ex(ret, "error in query_permissions")
+
+        out = {
+            'ino': answer.ino,
+            'state': answer.state,
+            'tuple_version': answer.tuple_version,
+            'mode': answer.mode,
+            'uid': answer.uid,
+            'gid': answer.gid,
+        }
+        if answer.state == CEPH_QUERY_PERM_ACL and answer.acl_length:
+            out['acl'] = bytes(acl_buf[:answer.acl_length])
+        return out
 
     def getxattr(self, path, name, size=255, follow_symlink=True):
         """

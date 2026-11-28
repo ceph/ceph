@@ -403,6 +403,15 @@ enum {
 	CEPH_MDS_OP_LOOKUPNAME = 0x00105,
 	CEPH_MDS_OP_GETVXATTR  = 0x00106,
 	CEPH_MDS_OP_DUMMY = 0x00107,
+	/*
+	 * One-shot CephX permission check. Not a GETATTR and not a cap.
+	 * The reply is a length-delimited permission tuple (see
+	 * src/mds/QueryPermissions.h). It carries no dentry, inode, or
+	 * capability trace, and it does not advance client_xattr_version.
+	 * An MDS that does not know this op returns -EOPNOTSUPP. That is
+	 * unsupported, not an empty ACL and not -EACCES.
+	 */
+	CEPH_MDS_OP_QUERY_PERMISSIONS = 0x00108,
 
 	CEPH_MDS_OP_SETXATTR   = 0x01105,
 	CEPH_MDS_OP_RMXATTR    = 0x01106,
@@ -677,7 +686,31 @@ union ceph_mds_request_args {
                 // how many data objects to scan in one invocation (capped by the mds).
                 __le64 max_objects;
         } __attribute__ ((packed)) blockdiff;
+	/*
+	 * QUERY_PERMISSIONS request. The live inode is filepath.ino.
+	 * format must be 1. rights is exactly one of the CEPH_QUERY_PERM_*
+	 * right bits. flags is CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT or 0.
+	 * This member is smaller than setattr, so it does not change the
+	 * size of ceph_mds_request_head.
+	 */
+	struct {
+		__le32 format;
+		__le32 rights;
+		__le32 flags;
+	} __attribute__ ((packed)) query_permissions;
 } __attribute__ ((packed));
+
+/* QUERY_PERMISSIONS request format. Any other value is -EOPNOTSUPP. */
+#define CEPH_QUERY_PERM_FORMAT              1
+/* CephX rights. Exactly one may be set. These are not Unix mode bits. */
+#define CEPH_QUERY_PERM_READ                1
+#define CEPH_QUERY_PERM_WRITE               2
+/* When clear, a successful reply is NOT_RETURNED and has no tuple. */
+#define CEPH_QUERY_PERM_FLAG_WANT_SNAPSHOT  1
+/* Reply state. NOT_RETURNED has no tuple. The other two are a full tuple. */
+#define CEPH_QUERY_PERM_NOT_RETURNED        0
+#define CEPH_QUERY_PERM_NO_ACL              1
+#define CEPH_QUERY_PERM_ACL                 2
 
 #define CEPH_MDS_REQUEST_HEAD_VERSION	3
 

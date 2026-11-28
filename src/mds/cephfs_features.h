@@ -53,7 +53,13 @@ namespace ceph {
 #define CEPHFS_FEATURE_CHARMAP              22
 #define CEPHFS_FEATURE_BLOCKDIFF            23
 #define CEPHFS_FEATURE_QUARANTINE           24
-#define CEPHFS_FEATURE_MAX                  24
+/*
+ * Optional. A client sets this when it understands QUERY_PERMISSIONS.
+ * It is not a mount-release gate: do not add it to the required-client
+ * feature set. An old client simply never sends the op.
+ */
+#define CEPHFS_FEATURE_QUERY_PERMISSIONS    25
+#define CEPHFS_FEATURE_MAX                  25
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -79,6 +85,7 @@ namespace ceph {
   CEPHFS_FEATURE_CHARMAP,               \
   CEPHFS_FEATURE_BLOCKDIFF,             \
   CEPHFS_FEATURE_QUARANTINE,            \
+  CEPHFS_FEATURE_QUERY_PERMISSIONS,     \
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\
