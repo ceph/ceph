@@ -675,6 +675,9 @@ message gateway_info {
 	optional bool gateway_initialization_over = 18;
 	optional bool io_stats_enabled = 19;
 	optional string location = 20;
+	optional string initialization_over_time = 21;
+	optional string ceph_version = 22;
+	optional string ceph_cluster_id = 23;
 }
 
 message cli_version {
