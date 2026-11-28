@@ -4365,7 +4365,15 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
-  desc: Enable OSD devices trimming during in runtime
+  desc: Discard (TRIM) space on OSD devices as it is freed
+  long_desc: When enabled, BlueStore sends a discard (TRIM) request to the
+    device for space that it frees, which can help an SSD sustain write
+    performance. Discards are costly for many drives and can increase client
+    latency, and many drives perform well without them. Some drives,
+    especially older ones, do not implement discard properly. Before enabling
+    this option for many OSDs, update one drive of each model to the latest
+    available firmware, and enable this option first on the OSD that uses
+    that drive, as a canary.
   type: bool
   level: advanced
   default: false
@@ -4388,9 +4396,9 @@ options:
   - bdev_enable_discard
   - bdev_async_discard_max_pending
 - name: bdev_async_discard
-  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1"
+  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1'
     mode to avoid implicit async discard mode disablement after upgrade.
-    Ignored if 'dev_asunc_discard_threads' is greater than zero.
+    Ignored if 'bdev_async_discard_threads' is greater than zero.
     This parameter is DEPRECATED and provided for backward compatibility for
     Squid minor releases only.
     PLEASE SWITCH TO 'bdev_async_discard_threads' USE.
