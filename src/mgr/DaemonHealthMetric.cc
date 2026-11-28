@@ -17,6 +17,8 @@ void DaemonHealthMetric::dump(ceph::Formatter *f) const {
 std::list<DaemonHealthMetric> DaemonHealthMetric::generate_test_instances() {
   std::list<DaemonHealthMetric> o;
   o.push_back(DaemonHealthMetric(daemon_metric::SLOW_OPS, 1));
+  o.push_back(DaemonHealthMetric(daemon_metric::CEPHFS_MIRROR_FAILURE, 1));
+  o.push_back(DaemonHealthMetric(daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE, 1));
   o.push_back(DaemonHealthMetric(daemon_metric::PENDING_CREATING_PGS, 1, 2));
   return o;
 }
