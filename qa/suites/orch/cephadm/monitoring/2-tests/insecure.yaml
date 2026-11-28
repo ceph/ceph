@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mgr:
+        # Quoted so conf_setup passes lowercase "false" (not Python False).
+        mgr/cephadm/secure_monitoring_stack: "false"
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.monitoring.test_monitoring_insecure.TestMonitoringInsecure

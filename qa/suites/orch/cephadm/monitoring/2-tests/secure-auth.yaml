@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mgr:
+        # Quoted so conf_setup passes lowercase "true" (not Python True).
+        mgr/cephadm/secure_monitoring_stack: "true"
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_unauthenticated_scrape_fails
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_authenticated_scrape_succeeds
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_set_credentials_rotates_access

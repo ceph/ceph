@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mgr:
+        # Quoted so conf_setup passes lowercase "true" (not Python True).
+        mgr/cephadm/secure_monitoring_stack: "true"
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_set_prometheus_target
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_prometheus_remote_write
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_mgr_prometheus_exports_health_metric
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_node_exporter_prometheus_target
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_node_exporter_metrics
+      - tasks.cephadm_cases.monitoring.test_monitoring_secure.TestMonitoringSecure.test_grafana_api_health
