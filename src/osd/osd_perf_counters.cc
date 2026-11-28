@@ -83,7 +83,8 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_op_w, "op_w", "Client write operations");
   osd_plb.add_u64_counter(
-    l_osd_op_w_inb, "op_w_in_bytes", "Client data written");
+    l_osd_op_w_inb, "op_w_in_bytes", "Client data written",
+    nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   osd_plb.add_time_avg(
     l_osd_op_w_lat,  "op_w_latency",
     "Latency of write operation (including queue time)");
@@ -183,7 +184,7 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
    l_osd_rbytes, "recovery_bytes",
    "recovery bytes",
-   "rbt", PerfCountersBuilder::PRIO_INTERESTING);
+   "rbt", PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
   osd_plb.add_time_avg(
     l_osd_recovery_push_queue_lat,
@@ -369,19 +370,23 @@ PerfCounters *build_osd_logger(CephContext *cct) {
 
   // scrub I/O (no EC vs. replicated differentiation)
   osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_cnt, "scrub_omapgetheader_cnt", "scrub omap get header calls count");
-  osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_bytes, "scrub_omapgetheader_bytes", "scrub omap get header bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_bytes, "scrub_omapgetheader_bytes", "scrub omap get header bytes read",
+                          nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   osd_plb.add_u64_counter(l_osd_scrub_omapget_cnt, "scrub_omapget_cnt", "scrub omap get calls count");
-  osd_plb.add_u64_counter(l_osd_scrub_omapget_bytes, "scrub_omapget_bytes", "scrub omap get bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_omapget_bytes, "scrub_omapget_bytes", "scrub omap get bytes read",
+                          nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   // scrub I/O performed for replicated pools
   osd_plb.add_u64_counter(l_osd_scrub_rppool_getattr_cnt, "scrub_replicated_getattr_cnt", "scrub replicated pool getattr calls count");
   osd_plb.add_u64_counter(l_osd_scrub_rppool_stats_cnt, "scrub_replicated_stats_cnt", "scrub replicated pool stats calls count");
   osd_plb.add_u64_counter(l_osd_scrub_rppool_read_cnt, "scrub_replicated_read_cnt", "scrub replicated pool read calls count");
-  osd_plb.add_u64_counter(l_osd_scrub_rppool_read_bytes, "scrub_replicated_read_bytes", "scrub replicated pool read bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_read_bytes, "scrub_replicated_read_bytes", "scrub replicated pool read bytes read",
+                          nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
   // scrub I/O performed for EC pools
   osd_plb.add_u64_counter(l_osd_scrub_ec_getattr_cnt, "scrub_ec_getattr_cnt", "scrub EC getattr calls count");
   osd_plb.add_u64_counter(l_osd_scrub_ec_stats_cnt, "scrub_ec_stats_cnt", "scrub EC stats calls count");
   osd_plb.add_u64_counter(l_osd_scrub_ec_read_cnt, "scrub_ec_read_cnt", "scrub EC read calls count");
-  osd_plb.add_u64_counter(l_osd_scrub_ec_read_bytes, "scrub_ec_read_bytes", "scrub EC read bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_read_bytes, "scrub_ec_read_bytes", "scrub EC read bytes read",
+                          nullptr, PerfCountersBuilder::PRIO_DEBUGONLY, unit_t(UNIT_BYTES));
 
   // scrub - replicated pools
   osd_plb.add_u64_counter(
