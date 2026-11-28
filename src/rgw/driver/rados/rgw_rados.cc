@@ -3498,7 +3498,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     meta.set_mtime = real_clock::now();
   }
 
-  if (target->get_bucket_info().obj_lock_enabled() && target->get_bucket_info().obj_lock.has_rule() && meta.flags == PUT_OBJ_CREATE) {
+  if (target->get_bucket_info().obj_lock_enabled() && target->get_bucket_info().obj_lock.has_rule() &&
+      meta.flags == PUT_OBJ_CREATE && meta.apply_default_retention) {
     auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
     if (iter == attrs.end()) {
       real_time lock_until_date = target->get_bucket_info().obj_lock.get_lock_until_date(meta.set_mtime);
@@ -4155,7 +4156,9 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   return copy_obj_data(octx, owner, dest_bucket_info,
                        dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
-                       attrset, 0, real_time(), NULL, NULL, NULL, NULL, dpp, y);
+                       attrset, 0, real_time(), NULL, NULL, NULL, NULL, dpp, y,
+                       0 /* src_accounted_size */, true /* log_op */,
+                       nullptr /* pcanceled */, false /* apply_default_retention */);
 }
 
 
@@ -4756,9 +4759,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
+  // a replica in the same bucket only has the source object's retention. a
+  // replica in another bucket without one gets that bucket's default
+  const bool apply_default_retention = !source_trace_entry ||
+                                       src_obj.bucket != dest_obj.bucket;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
                                   owner, dest_obj_ctx, dest_obj, olh_epoch,
-				  tag, rctx.dpp, rctx.y, no_trace);
+				  tag, apply_default_retention,
+				  rctx.dpp, rctx.y, no_trace);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -5660,7 +5668,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                optional_yield y,
                uint64_t src_accounted_size,
                bool log_op,
-               bool *pcanceled)
+               bool *pcanceled,
+               bool apply_default_retention)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -5670,7 +5679,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   jspan_context no_trace{false, false};
   AtomicObjectProcessor aoproc(aio.get(), this, dest_bucket_info,
                                &dest_placement, owner,
-                               obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
+                               obj_ctx, dest_obj, olh_epoch, tag,
+                               apply_default_retention, dpp, y, no_trace);
 
   DataProcessorFilter aoproc_filter(&aoproc);
   RGWGetObj_Filter *filter = &aoproc_filter;
@@ -6032,7 +6042,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       y,
                       0, /* src_accounted_size: unknown here, keep ofs-based size */
                       log_op,
-                      &canceled);
+                      &canceled,
+                      false /* apply_default_retention */);
   if (ret < 0) {
     return ret;
   }
@@ -6083,7 +6094,8 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
    * an engaged 0 would mean "next epoch" and promote over the real latest.
    */
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj_bi, std::nullopt, tag, dpp, y, no_trace);
+                                  owner, obj_ctx, dest_obj_bi, std::nullopt, tag,
+                                  false /* apply_default_retention */, dpp, y, no_trace);
  
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;

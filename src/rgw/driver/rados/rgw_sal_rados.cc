@@ -3722,6 +3722,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           decode(m, attr_iter->second);
           obj_op.meta.modify_tail = true;
           obj_op.meta.flags = PUT_OBJ_CREATE;
+          obj_op.meta.apply_default_retention = false;
           obj_op.meta.category = RGWObjCategory::CloudTiered;
           obj_op.meta.delete_at = real_time();
           bufferlist blo;
@@ -3825,6 +3826,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   set_atomic(true);
   obj_op.meta.modify_tail = true;
   obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.apply_default_retention = false;
   obj_op.meta.category = RGWObjCategory::CloudTiered;
   obj_op.meta.delete_at = real_time();
   bufferlist blo;

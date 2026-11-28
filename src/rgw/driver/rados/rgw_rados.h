@@ -885,6 +885,10 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
+        // give an object written without retention the bucket's default.
+        // internal rewrites of an existing object, and replicas of one in the
+        // same bucket, clear this
+        bool apply_default_retention{true};
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
@@ -1329,7 +1333,8 @@ public:
                optional_yield y,
                uint64_t src_accounted_size = 0,
                bool log_op = true,
-               bool *pcanceled = nullptr);
+               bool *pcanceled = nullptr,
+               bool apply_default_retention = true);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
