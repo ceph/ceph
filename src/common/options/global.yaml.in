@@ -5048,15 +5048,43 @@ options:
 - name: bluestore_compression_min_blob_size
   type: size
   level: advanced
-  desc: Chunks smaller than this are never compressed, keeping random-access reads cheap.
-  long_desc: Chunks smaller than this are never compressed. Compressing very small blobs
-    adds decompression overhead to random-access reads for little space saving, so they
-    are left uncompressed. The per-pool property compression_min_blob_size overrides this
-    setting.
-  fmt_desc: Chunks smaller than this are never compressed. Compressing very small blobs
-    adds decompression overhead to random-access reads for little space saving, so they
-    are left uncompressed. The per-pool property ``compression_min_blob_size`` overrides
-    this setting.
+  desc: Maximum size of each compressed chunk for objects without
+    sequential-access allocation hints
+  long_desc: When BlueStore compresses a write, it splits the data into chunks
+    of at most this size and compresses each chunk separately. Despite the name,
+    this is not a minimum, and smaller chunks are compressed too. This size
+    applies to all objects except those with sequential-access allocation hints
+    (read sequentially, append-only or immutable, and not read or written
+    randomly), which use bluestore_compression_max_blob_size instead. RBD, RGW,
+    and CephFS do not set those hints, so their data uses this size. A
+    compressed chunk is stored in whole allocation units
+    (bluestore_min_alloc_size), so larger chunks allow higher compression
+    ratios, but reading any part of a compressed chunk reads and decompresses
+    all of it. BlueStore also caps chunks at its maximum blob size
+    (bluestore_max_blob_size, or its _hdd or _ssd variant when that is 0), so a
+    value above that does not make chunks any larger. A value of 0 means to use
+    bluestore_compression_min_blob_size_hdd or
+    bluestore_compression_min_blob_size_ssd, depending on whether the OSD's main
+    device is rotational. The per-pool property compression_min_blob_size
+    overrides this setting.
+  fmt_desc: When BlueStore compresses a write, it splits the data into chunks of
+    at most this size and compresses each chunk separately. Despite the name,
+    this is not a minimum, and smaller chunks are compressed too. This size
+    applies to all objects except those with sequential-access
+    :c:func:`allocation hints <rados_set_alloc_hint>` (read sequentially,
+    append-only or immutable, and not read or written randomly), which use
+    :confval:`bluestore_compression_max_blob_size` instead. RBD, RGW, and CephFS
+    do not set those hints, so their data uses this size. A compressed chunk is
+    stored in whole allocation units (:confval:`bluestore_min_alloc_size`), so
+    larger chunks allow higher compression ratios, but reading any part of a
+    compressed chunk reads and decompresses all of it. BlueStore also caps
+    chunks at its maximum blob size (``bluestore_max_blob_size``, or its
+    ``_hdd`` or ``_ssd`` variant when that is ``0``), so a value above that does
+    not make chunks any larger. A value of ``0`` means to use
+    :confval:`bluestore_compression_min_blob_size_hdd` or
+    :confval:`bluestore_compression_min_blob_size_ssd`, depending on whether the
+    OSD's main device is rotational. The per-pool property
+    ``compression_min_blob_size`` overrides this setting.
   default: 0
   flags:
   - runtime
@@ -5064,9 +5092,10 @@ options:
 - name: bluestore_compression_min_blob_size_hdd
   type: size
   level: advanced
-  desc: Default value of bluestore_compression_min_blob_size for rotational media
-  fmt_desc: Default value of ``bluestore compression min blob size``
-    for rotational media.
+  desc: Value of bluestore_compression_min_blob_size for OSDs whose main device
+    is rotational, used when that option is 0
+  fmt_desc: The value used for :confval:`bluestore_compression_min_blob_size`
+    when that option is ``0`` and the OSD's main device is rotational (HDD).
   default: 64_K
   see_also:
   - bluestore_compression_min_blob_size
@@ -5076,10 +5105,10 @@ options:
 - name: bluestore_compression_min_blob_size_ssd
   type: size
   level: advanced
-  desc: Default value of bluestore_compression_min_blob_size for non-rotational (solid
-    state) media
-  fmt_desc: Default value of ``bluestore compression min blob size``
-    for non-rotational (solid state) media.
+  desc: Value of bluestore_compression_min_blob_size for OSDs whose main device
+    is not rotational, used when that option is 0
+  fmt_desc: The value used for :confval:`bluestore_compression_min_blob_size`
+    when that option is ``0`` and the OSD's main device is not rotational (SSD).
   default: 64_K
   see_also:
   - bluestore_compression_min_blob_size
@@ -5089,14 +5118,40 @@ options:
 - name: bluestore_compression_max_blob_size
   type: size
   level: advanced
-  desc: Maximum chunk size to apply compression to when non-random access is expected
-    for an object.
-  long_desc: Chunks larger than this value are broken into smaller blobs of at most
-    bluestore_compression_max_blob_size bytes before being compressed. The per-pool
-    property compression_max_blob_size overrides this setting.
-  fmt_desc: Chunks larger than this value are broken into smaller blobs of at most
-    ``bluestore_compression_max_blob_size`` bytes before being compressed. The per-pool
-    property ``compression_max_blob_size`` overrides this setting.
+  desc: Maximum size of each compressed chunk for objects with sequential-access
+    allocation hints
+  long_desc: When BlueStore compresses a write to an object with
+    sequential-access allocation hints (read sequentially, append-only or
+    immutable, and not read or written randomly), it splits the data into chunks
+    of at most this size and compresses each chunk separately. All other objects
+    use bluestore_compression_min_blob_size instead. RBD, RGW, and CephFS do not
+    set those hints, so this size does not apply to their data. A compressed
+    chunk is stored in whole allocation units (bluestore_min_alloc_size), so
+    larger chunks allow higher compression ratios, but reading any part of a
+    compressed chunk reads and decompresses all of it. BlueStore also caps
+    chunks at its maximum blob size (bluestore_max_blob_size, or its _hdd or
+    _ssd variant when that is 0), so a value above that does not make chunks any
+    larger. A value of 0 means to use bluestore_compression_max_blob_size_hdd or
+    bluestore_compression_max_blob_size_ssd, depending on whether the OSD's main
+    device is rotational. The per-pool property compression_max_blob_size
+    overrides this setting.
+  fmt_desc: When BlueStore compresses a write to an object with
+    sequential-access :c:func:`allocation hints <rados_set_alloc_hint>` (read
+    sequentially, append-only or immutable, and not read or written randomly),
+    it splits the data into chunks of at most this size and compresses each
+    chunk separately. All other objects use
+    :confval:`bluestore_compression_min_blob_size` instead. RBD, RGW, and CephFS
+    do not set those hints, so this size does not apply to their data. A
+    compressed chunk is stored in whole allocation units
+    (:confval:`bluestore_min_alloc_size`), so larger chunks allow higher
+    compression ratios, but reading any part of a compressed chunk reads and
+    decompresses all of it. BlueStore also caps chunks at its maximum blob size
+    (``bluestore_max_blob_size``, or its ``_hdd`` or ``_ssd`` variant when that
+    is ``0``), so a value above that does not make chunks any larger. A value of
+    ``0`` means to use :confval:`bluestore_compression_max_blob_size_hdd` or
+    :confval:`bluestore_compression_max_blob_size_ssd`, depending on whether the
+    OSD's main device is rotational. The per-pool property
+    ``compression_max_blob_size`` overrides this setting.
   default: 0
   flags:
   - runtime
@@ -5104,9 +5159,10 @@ options:
 - name: bluestore_compression_max_blob_size_hdd
   type: size
   level: advanced
-  desc: Default value of bluestore_compression_max_blob_size for rotational media
-  fmt_desc: Default value of ``bluestore compression max blob size``
-    for rotational media.
+  desc: Value of bluestore_compression_max_blob_size for OSDs whose main device
+    is rotational, used when that option is 0
+  fmt_desc: The value used for :confval:`bluestore_compression_max_blob_size`
+    when that option is ``0`` and the OSD's main device is rotational (HDD).
   default: 64_K
   see_also:
   - bluestore_compression_max_blob_size
@@ -5116,10 +5172,10 @@ options:
 - name: bluestore_compression_max_blob_size_ssd
   type: size
   level: advanced
-  desc: Default value of bluestore_compression_max_blob_size for non-rotational (solid
-    state) media
-  fmt_desc: Default value of ``bluestore compression max blob size``
-    for non-rotational (SSD, NVMe) media.
+  desc: Value of bluestore_compression_max_blob_size for OSDs whose main device
+    is not rotational, used when that option is 0
+  fmt_desc: The value used for :confval:`bluestore_compression_max_blob_size`
+    when that option is ``0`` and the OSD's main device is not rotational (SSD).
   default: 64_K
   see_also:
   - bluestore_compression_max_blob_size
