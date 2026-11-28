@@ -185,6 +185,7 @@ class PutOperation
   RGWObjVersionTracker *objv_tracker;
   const real_time& mtime;
   bool exclusive;
+  bool from_remote_zone;
   map<string, bufferlist> *pattrs;
   RGWObjVersionTracker ot;
   string err_msg;
@@ -205,10 +206,12 @@ public:
                const real_time& mtime,
                bool exclusive,
                map<string, bufferlist> *pattrs,
-               optional_yield y) :
+               optional_yield y,
+               bool from_remote_zone) :
       svc(svc), rados(rados), info(info), old_info(old_info),
       objv_tracker(objv_tracker), mtime(mtime),
-      exclusive(exclusive), pattrs(pattrs), y(y) {
+      exclusive(exclusive), from_remote_zone(from_remote_zone),
+      pattrs(pattrs), y(y) {
     ui.id = info.user_id.to_str();
   }
 
@@ -268,7 +271,7 @@ public:
       std::string existing_uid;
       int r = rgwrados::users::get(dpp, y, rados, users,
                                    info.display_name, existing_uid);
-      if (r >= 0 && existing_uid != info.user_id.id) {
+      if (r >= 0 && existing_uid != info.user_id.id && !from_remote_zone) {
         ldpp_dout(dpp, 0) << "WARNING: can't store user info, display name "
             "already exists in account" << dendl;
         return -EEXIST;
@@ -291,6 +294,45 @@ public:
       return r;
     }
     return svc.mdlog->complete_entry(dpp, y, "user", key, &ot);
+  }
+
+  // link the new account name, then drop the old one only while this user
+  // still owns it. this runs before put() because a retry reads the stored
+  // user object as old_info. once that object already has the new name,
+  // link_new would become false and the account index is left unchanged.
+  int update_account_name(const DoutPrefixProvider *dpp) {
+    const bool link_new = account_users_link(&info) &&
+        account_users_link(&info) != account_users_link(old_info);
+    const bool unlink_old = old_info && account_users_link(old_info) &&
+        account_users_link(old_info) != account_users_link(&info);
+    if (!link_new && !unlink_old) {
+      return 0;
+    }
+
+    const RGWZoneParams& zone = svc.zone->get_zone_params();
+    if (link_new) {
+      const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
+      int ret = rgwrados::users::add(dpp, y, rados, users, info, false,
+                                     std::numeric_limits<uint32_t>::max());
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << "WARNING: failed to link user "
+            << info.user_id << " to account " << info.account_id
+            << ": " << cpp_strerror(ret) << dendl;
+        return ret;
+      }
+    }
+    if (unlink_old) {
+      const auto& users = rgwrados::account::get_users_obj(zone, old_info->account_id);
+      int ret = rgwrados::users::remove_if_owner(dpp, y, rados, users,
+                                                 old_info->display_name,
+                                                 old_info->path,
+                                                 old_info->user_id.id);
+      if (ret < 0 && ret != -ENOENT) {
+        set_err_msg("ERROR: could not unlink from account " + old_info->account_id);
+        return ret;
+      }
+    }
+    return 0;
   }
 
   int complete(const DoutPrefixProvider *dpp) {
@@ -342,23 +384,6 @@ public:
       if (ret < 0) {
         return ret;
       }
-    }
-
-    if (account_users_link(&info) &&
-        account_users_link(&info) != account_users_link(old_info)) {
-      // link the user to its account
-      const RGWZoneParams& zone = svc.zone->get_zone_params();
-      const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
-      ret = rgwrados::users::add(dpp, y, rados, users, info, false,
-                                 std::numeric_limits<uint32_t>::max());
-      if (ret < 0) {
-        ldpp_dout(dpp, 20) << "WARNING: failed to link user "
-            << info.user_id << " to account " << info.account_id
-            << ": " << cpp_strerror(ret) << dendl;
-        return ret;
-      }
-      ldpp_dout(dpp, 20) << "linked user " << info.user_id
-          << " to account " << info.account_id << dendl;
     }
 
     for (const auto& group_id : info.group_ids) {
@@ -428,18 +453,6 @@ public:
       }
     }
 
-    if (account_users_link(&old_info) &&
-        account_users_link(&old_info) != account_users_link(&info)) {
-      // unlink the old name from its account
-      const RGWZoneParams& zone = svc.zone->get_zone_params();
-      const auto& users = rgwrados::account::get_users_obj(zone, old_info.account_id);
-      ret = rgwrados::users::remove(dpp, y, rados, users, old_info.display_name);
-      if (ret < 0 && ret != -ENOENT) {
-        set_err_msg("ERROR: could not unlink from account " + old_info.account_id);
-        return ret;
-      }
-    }
-
     for (const auto& group_id : old_info.group_ids) {
       if (info.group_ids.count(group_id)) {
         continue;
@@ -469,12 +482,18 @@ int RGWSI_User_RADOS::store_user_info(const RGWUserInfo& info,
                                 bool exclusive,
                                 map<string, bufferlist> *attrs,
                                 optional_yield y,
-                                const DoutPrefixProvider *dpp)
+                                const DoutPrefixProvider *dpp,
+                                bool from_remote_zone)
 {
   PutOperation op(svc, *rados, info, old_info, objv_tracker,
-                  mtime, exclusive, attrs, y);
+                  mtime, exclusive, attrs, y, from_remote_zone);
 
   int r = op.prepare(dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  r = op.update_account_name(dpp);
   if (r < 0) {
     return r;
   }
