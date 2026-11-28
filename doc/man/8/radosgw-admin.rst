@@ -164,6 +164,27 @@ as follows:
 :command:`bucket reshard`
   Reshard a bucket's index.
 
+:command:`bucket sync checkpoint`
+  Wait until a bucket's sync catches up with its source zones, checking every
+  --retry-delay-ms until --timeout-sec runs out.
+
+:command:`bucket sync info`
+  Show the zones and buckets from which a bucket syncs.
+
+:command:`bucket sync status`
+  Show a bucket's sync status with each of its source zones, or with the one
+  given with --source-zone.
+
+:command:`bucket sync markers`
+  Show a bucket's sync markers for the source zone given with --source-zone.
+
+:command:`bucket sync init`
+  Initialize a bucket's sync status for the source zone given with
+  --source-zone, so that its sync from that zone starts over.
+
+:command:`bucket sync run`
+  Run a bucket's sync from the source zone given with --source-zone.
+
 :command:`bucket sync disable`
   Disable bucket sync.
 
@@ -370,11 +391,50 @@ as follows:
 :command:`data sync run`
   Run data sync for the specified source zone.
 
+:command:`sync status`
+  Show a summary of the multisite sync of this zone: its metadata sync, and its
+  data sync from each source zone.
+
 :command:`sync error list`
   List sync errors.
 
 :command:`sync error trim`
   Trim sync errors.
+
+:command:`sync policy get`
+  Show the zonegroup's sync policy or, with --bucket, a bucket's sync policy.
+  See https://docs.ceph.com/en/latest/radosgw/multisite-sync-policy/.
+
+:command:`sync group create`
+  Create a sync policy group.
+
+:command:`sync group modify`
+  Modify the status of a sync policy group.
+
+:command:`sync group get`
+  Show the sync policy groups, or the one given with --group-id.
+
+:command:`sync group remove`
+  Remove a sync policy group.
+
+:command:`sync group flow create`
+  Create or update a data flow in a sync policy group.
+
+:command:`sync group flow remove`
+  Remove a data flow, or some of its zones, from a sync policy group.
+
+:command:`sync group pipe create`
+  Create a sync pipe in a sync policy group, or update its parameters.
+
+:command:`sync group pipe modify`
+  Modify the parameters of an existing sync pipe.
+
+:command:`sync group pipe remove`
+  Remove a sync pipe, or some of its parameters.
+
+:command:`sync info`
+  Show the sync sources and destinations that the sync policy gives this zone
+  or, with --bucket, a bucket.
 
 :command:`zone rename`
   Rename a zone.
@@ -443,6 +503,10 @@ as follows:
 :command:`mdlog list`
   List metadata log which is needed for multi-site deployments.
 
+:command:`mdlog autotrim`
+  Trim the metadata log once, the way the gateway's integrated log trimming
+  does.
+
 :command:`mdlog trim`
   Trim metadata log manually instead of relying on the gateway's integrated log sync.
   Before trimming, compare the listings and make sure the last sync was
@@ -461,13 +525,40 @@ as follows:
   complete, otherwise it can reinitiate a sync. Without an end-marker the
   trim has no upper bound, so it requires --yes-i-really-mean-it.
 
+:command:`bilog status`
+  Show the bucket index log markers of each shard of a bucket.
+
+:command:`bilog autotrim`
+  Trim the bucket index logs once, the way the gateway's integrated log
+  trimming does. In a zone that does not export data, such as an archive zone,
+  it requires --yes-i-really-mean-it.
+
 :command:`datalog list`
   List data log which is needed for multi-site deployments.
+
+:command:`datalog autotrim`
+  Trim the data log once, the way the gateway's integrated log trimming does.
 
 :command:`datalog trim`
   Trim data log manually instead of relying on the gateway's integrated log sync.
   Before trimming, compare the listings and make sure the last sync was
   complete, otherwise it can reinitiate a sync.
+
+:command:`datalog type`
+  Change the data log's backing store to FIFO (--log-type=fifo). Changing it
+  to omap is not supported.
+
+:command:`datalog prune`
+  Remove the data log's older generations that are empty. datalog type starts
+  a new generation, and the old one can be pruned after it has been trimmed.
+
+:command:`datalog semaphore list`
+  List the data log's recovery semaphores, which mark bucket shards whose
+  changes might not have reached the data log yet.
+
+:command:`datalog semaphore reset`
+  Reset the recovery semaphore whose key is given with --marker to --count,
+  or to 0.
 
 :command:`datalog status`
   Read data log status.
@@ -715,6 +806,13 @@ Options
 
    Specify the object name.
 
+.. option:: --marker=<marker>
+
+   The marker at which a listing begins, up to which mdlog trim and datalog
+   trim remove entries, or at which bucket chown resumes. For bucket list, it
+   requires an ordered listing. For datalog semaphore reset, it is the key of
+   the semaphore.
+
 .. option:: --date=yyyy-mm-dd
 
    The date in the format yyyy-mm-dd.
@@ -737,9 +835,27 @@ Options
    While the tenant-id can be specified, this is not
    necessary in normal operation.
 
+.. option:: --count=<count>
+
+   The value to which datalog semaphore reset sets a semaphore. The default is
+   0.
+
 .. option:: --shard-id=<shard-id>
 
-   Optional for mdlog list, bi list, data sync status, gc list, gc process. Required for ``mdlog trim``.
+   Optional for mdlog list, mdlog status, bilog list, bilog trim, bilog status,
+   datalog list, datalog status, datalog semaphore list, data sync status, sync
+   error list, sync error trim, reshardlog list, bi list, gc list, and gc
+   process. Required for ``mdlog trim`` and ``datalog trim``.
+
+.. option:: --gen=<gen-id>
+
+   The generation of the bucket index log, for bilog list, bilog trim, and
+   bilog status. bilog list and bilog status default to the latest generation,
+   and bilog trim to generation 0.
+
+.. option:: --log-type=<type>
+
+   The backing store to which datalog type changes the data log: ``fifo``.
 
 .. option:: --max-entries=<entries>
 
@@ -986,6 +1102,12 @@ Options
     is set to 0, then the specified object will always be
     rewritten when restriping.
 
+.. option:: --trim-delay-ms
+
+   For sync error trim, the time in milliseconds to sleep after every 1000
+   entries that are trimmed, which limits the rate of trimming. The default is
+   0.
+
 .. option:: --warnings-only
 
    When specified with bucket limit check,
@@ -1122,6 +1244,112 @@ Bucket Notifications/PubSub Options
 .. option:: --topic
 
    The bucket notifications/pubsub topic name.
+
+
+Sync Options
+============
+
+These options are for the sync policy commands, sync info, and the bucket sync
+commands. See https://docs.ceph.com/en/latest/radosgw/multisite-sync-policy/.
+
+.. option:: --group-id=<id>
+
+   The ID of a sync policy group.
+
+.. option:: --status=<status>
+
+   The status of a sync policy group: ``enabled``, ``allowed``, or
+   ``forbidden``.
+
+.. option:: --flow-id=<id>
+
+   The ID of a data flow in a sync policy group.
+
+.. option:: --flow-type=<type>
+
+   The type of a data flow: ``symmetrical`` or ``directional``.
+
+.. option:: --zones=<list>, --zone-ids=<list>
+
+   The zones of a symmetrical data flow, by name or by ID.
+
+.. option:: --source-zone-id=<id>
+
+   The source zone of a directional data flow, by ID. --source-zone gives it by
+   name.
+
+.. option:: --dest-zone=<zone>, --dest-zone-id=<id>
+
+   The destination zone of a directional data flow, by name or by ID.
+
+.. option:: --pipe-id=<id>
+
+   The ID of a sync pipe.
+
+.. option:: --source-zones=<list>, --source-zone-ids=<list>
+
+   The source zones of a sync pipe, by name or by ID, or ``*`` for any zone.
+
+.. option:: --dest-zones=<list>, --dest-zone-ids=<list>
+
+   The destination zones of a sync pipe, by name or by ID, or ``*`` for any
+   zone.
+
+.. option:: --source-bucket=<bucket>, --source-bucket-id=<id>
+
+   The source bucket of a sync pipe, by name or by ID, or ``*`` for the bucket
+   whose policy holds the pipe. The bucket sync commands take them to select
+   one source bucket.
+
+.. option:: --source-tenant=<tenant>
+
+   The tenant of the source bucket.
+
+.. option:: --dest-bucket=<bucket>, --dest-bucket-id=<id>
+
+   The destination bucket of a sync pipe, by name or by ID, or ``*`` for the
+   bucket whose policy holds the pipe.
+
+.. option:: --dest-tenant=<tenant>
+
+   The tenant of the destination bucket.
+
+.. option:: --prefix=<prefix>
+
+   Sync only the source objects whose names begin with this prefix.
+
+.. option:: --prefix-rm=<value>
+
+   Remove the prefix filter from a sync pipe. The option needs a value, which
+   is ignored, such as ``--prefix-rm=1``.
+
+.. option:: --dest-owner=<user>
+
+   The user who owns the objects that a sync pipe writes.
+
+.. option:: --mode=<mode>
+
+   The mode of a sync pipe: ``system`` or ``user``. In ``user`` mode, the pipe
+   syncs with the permissions of the user given with --uid.
+
+.. option:: --priority=<number>
+
+   The priority of a sync pipe.
+
+.. option:: --effective-zone-name=<zone>, --effective-zone-id=<id>
+
+   The zone for which sync info shows the sync sources and destinations. The
+   default is this zone.
+
+.. option:: --retry-delay-ms=<ms>
+
+   For bucket sync checkpoint, the time in milliseconds between checks. The
+   default is 2000.
+
+.. option:: --timeout-sec=<seconds>
+
+   For bucket sync checkpoint, the time in seconds to wait before giving up.
+   The default is 60.
 
 
 Examples
