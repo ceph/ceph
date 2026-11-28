@@ -56,24 +56,6 @@ def nfs_json(**kwargs):
             [SAMPLE_UUID, "fred", good_nfs_json()],
             {"image": ""},
         ),
-        # fail due to: no files in config_json
-        (
-            [
-                SAMPLE_UUID,
-                "fred",
-                nfs_json(pool=True),
-            ],
-            {},
-        ),
-        # fail due to: no pool in config_json
-        (
-            [
-                SAMPLE_UUID,
-                "fred",
-                nfs_json(files=True),
-            ],
-            {},
-        ),
         # fail due to: bad rgw content
         (
             [
@@ -100,6 +82,43 @@ def test_nfsganesha_validation_errors(args, kwargs):
     with pytest.raises(_cephadm.Error):
         with with_cephadm_ctx([]) as ctx:
             _cephadm.NFSGanesha(ctx, *args, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "config_json,match",
+    [
+        # no config-json at all (e.g. cephadm shell)
+        ({}, "pool missing"),
+        # fail due to: no files in config_json
+        (nfs_json(pool=True), "required file missing"),
+        # fail due to: no pool in config_json
+        (nfs_json(files=True), "pool missing"),
+    ],
+)
+@mock.patch("cephadm.logger")
+def test_nfsganesha_deploy_requires_config(
+    _logger, cephadm_fs, config_json, match
+):
+    with with_cephadm_ctx([]) as ctx:
+        # constructing the object without deployment config is allowed so
+        # that `cephadm shell --name nfs.<id>` can compute container mounts
+        nfsg = _cephadm.NFSGanesha(ctx, SAMPLE_UUID, "fred", config_json)
+        cephadm_fs.create_dir("/var/tmp")
+        with pytest.raises(_cephadm.Error, match=match):
+            nfsg.validate_deployment_config()
+        # ... but deploying it must still fail
+        with pytest.raises(_cephadm.Error, match=match):
+            nfsg.create_daemon_dirs("/var/tmp", 45, 54)
+
+
+def test_nfsganesha_shell_container_mounts_without_config():
+    with with_cephadm_ctx([]) as ctx:
+        ctx.image = "test_image"
+        ident = _cephadm.DaemonIdentity(SAMPLE_UUID, "nfs", "fred")
+        mounts = _cephadm.get_container_mounts(ctx, ident)
+    data_dir = f"/var/lib/ceph/{SAMPLE_UUID}/nfs.fred"
+    assert mounts[f"{data_dir}/config"] == "/etc/ceph/ceph.conf:z"
+    assert mounts[f"{data_dir}/etc/ganesha"] == "/etc/ganesha:z"
 
 
 def test_nfsganesha_init():
