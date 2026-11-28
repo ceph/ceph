@@ -390,7 +390,7 @@
             >
               <div
                 cdsCol
-                [columnNumbers]="{ lg: 13 }"
+                [columnNumbers]="{ lg: 12 }"
               >
                 <cds-select
                   formControlName="erasureProfile"
@@ -439,6 +439,27 @@
                     cdsIcon="help"
                     size="20"
                     class="cds--btn__icon-help"
+                  ></svg>
+                </cds-icon-button>
+              </div>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 1 }"
+                class="item-action-btn"
+              >
+                <cds-icon-button
+                  kind="ghost"
+                  size="md"
+                  data-testid="ecp-view-button"
+                  description="View erasure code profile"
+                  i18n-description
+                  [disabled]="!selectedEcp"
+                  (click)="viewErasureCodeProfile()"
+                >
+                  <svg
+                    cdsIcon="view"
+                    size="16"
+                    class="ecp-view-icon"
                   ></svg>
                 </cds-icon-button>
               </div>

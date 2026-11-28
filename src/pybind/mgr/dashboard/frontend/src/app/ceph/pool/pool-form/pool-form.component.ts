@@ -749,9 +749,22 @@ export class PoolFormComponent extends CdForm implements OnInit {
     );
   }
 
-  private addModal(modalComponent: Type<any>, reload: (item: any) => void) {
+  viewErasureCodeProfile() {
+    if (!this.selectedEcp) {
+      return;
+    }
+    this.addModal(ErasureCodeProfileFormModalComponent, () => {}, {
+      profile: this.selectedEcp
+    });
+  }
+
+  private addModal(
+    modalComponent: Type<any>,
+    reload: (item: any) => void,
+    initialState?: Record<string, unknown>
+  ) {
     this.hideOpenTooltips();
-    const modalRef = this.modalService.show(modalComponent);
+    const modalRef = this.modalService.show(modalComponent, initialState);
     modalRef.submitAction.subscribe((item: any) => {
       reload(item);
     });

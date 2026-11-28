@@ -2,7 +2,9 @@ import {
   ChangeDetectorRef,
   Component,
   EventEmitter,
+  Inject,
   OnInit,
+  Optional,
   Output,
   ViewChild
 } from '@angular/core';
@@ -73,7 +75,8 @@ export class ErasureCodeProfileFormModalComponent
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     public actionLabels: ActionLabelsI18n,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    @Optional() @Inject('profile') public profile?: ErasureCodeProfile
   ) {
     super();
     this.action = this.actionLabels.CREATE;
@@ -304,6 +307,9 @@ export class ErasureCodeProfileFormModalComponent
   }
 
   toggleDCalc() {
+    if (this.profile) {
+      return;
+    }
     this.dCalc = !this.dCalc;
     this.form.get('d')[this.dCalc ? 'disable' : 'enable']();
     this.calculateD();
@@ -437,13 +443,17 @@ export class ErasureCodeProfileFormModalComponent
           this.plugins = plugins;
           this.names = names;
           this.preValidateNumericInputFields();
-          this.cdr.detectChanges();
 
           if (this.plugins.includes(this.PLUGIN.ISA)) {
             this.setIsaDefaults();
           } else if (this.plugins.includes(this.PLUGIN.JERASURE)) {
             this.setJerasureDefaults();
           }
+
+          if (this.profile) {
+            this.initViewProfile(this.profile);
+          }
+          this.cdr.detectChanges();
         }
       );
   }
@@ -459,6 +469,29 @@ export class ErasureCodeProfileFormModalComponent
       control.markAsDirty();
     });
     kml[1].updateValueAndValidity(); // Update validity of k, m, c, d and l
+  }
+
+  private initViewProfile(profile: ErasureCodeProfile) {
+    this.action = this.actionLabels.VIEW;
+    this.plugin = profile.plugin;
+    const controlNames: Record<string, string> = {
+      'crush-failure-domain': 'crushFailureDomain',
+      'crush-num-failure-domains': 'crushNumFailureDomains',
+      'crush-osds-per-failure-domain': 'crushOsdsPerFailureDomain',
+      'crush-device-class': 'crushDeviceClass',
+      'crush-locality': 'crushLocality'
+    };
+
+    Object.entries(profile).forEach(([profileName, value]) => {
+      const controlName = controlNames[profileName] || profileName;
+      if (value !== undefined && this.form.controls[controlName]) {
+        this.form.silentSet(controlName, value);
+      }
+    });
+
+    this.form.disable({ emitEvent: false });
+    this.form.markAsPristine();
+    this.form.markAsUntouched();
   }
 
   onSubmit() {

@@ -120,6 +120,78 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should initialize an existing profile with read-only name, k and m values', () => {
+    component.profile = {
+      name: 'existing-profile',
+      plugin: 'isa',
+      k: 2,
+      m: 2,
+      'crush-failure-domain': 'host',
+      'crush-num-failure-domains': 2,
+      'crush-osds-per-failure-domain': 3,
+      'crush-device-class': 'ssd',
+      scalar_mds: 'isa'
+    };
+
+    component.ngOnInit();
+
+    expect(component.action).toBe('View');
+    expect(component.form.getValue('name')).toBe('existing-profile');
+    expect(component.form.getValue('plugin')).toBe('isa');
+    expect(component.form.getValue('k')).toBe(2);
+    expect(component.form.getValue('m')).toBe(2);
+    expect(component.form.getValue('crushFailureDomain')).toBe('host');
+    expect(component.form.getValue('crushNumFailureDomains')).toBe(2);
+    expect(component.form.getValue('crushOsdsPerFailureDomain')).toBe(3);
+    expect(component.form.getValue('crushDeviceClass')).toBe('ssd');
+    Object.values(component.form.controls).forEach((control) => {
+      expect(control.disabled).toBe(true);
+    });
+  });
+
+  it('should display the stored failure domain even when it is unavailable for creation', () => {
+    data.nodes = [
+      Mocks.getCrushNode('default', -1, 'root', 11, [-2]),
+      Mocks.getCrushNode('host-1', -2, 'host', 1, [0, 1]),
+      Mocks.getCrushNode('osd.0', 0, 'osd', 0, undefined, 'ssd'),
+      Mocks.getCrushNode('osd.1', 1, 'osd', 0, undefined, 'ssd')
+    ];
+    const viewFixture = TestBed.createComponent(ErasureCodeProfileFormModalComponent);
+    viewFixture.componentInstance.profile = {
+      name: 'default',
+      plugin: 'isa',
+      k: 2,
+      m: 2,
+      'crush-failure-domain': 'host'
+    };
+    viewFixture.detectChanges();
+
+    expect(viewFixture.componentInstance.failureDomainKeys).not.toContain('host');
+    const select: HTMLSelectElement = viewFixture.nativeElement.querySelector(
+      'select[formControlName="crushFailureDomain"], cds-select[formControlName="crushFailureDomain"] select'
+    );
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe('host');
+    expect(select.selectedOptions[0].textContent.trim()).toBe('host');
+  });
+
+  it('should not allow toggling d calculation in view mode', () => {
+    component.profile = {
+      name: 'clay-profile',
+      plugin: 'clay',
+      k: 4,
+      m: 2,
+      d: 5
+    };
+
+    component.ngOnInit();
+    const initialD = component.form.getValue('d');
+    component.toggleDCalc();
+
+    expect(component.form.get('d').disabled).toBe(true);
+    expect(component.form.getValue('d')).toBe(initialD);
+  });
+
   it('calls listing to get ecps on ngInit', () => {
     expect(ecpService.getInfo).toHaveBeenCalled();
     expect(component.names.length).toBe(2);
