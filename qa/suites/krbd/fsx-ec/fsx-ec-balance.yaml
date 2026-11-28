@@ -1,0 +1,40 @@
+# fsx on an rbd image whose DATA is in an optimized EC pool, mapped
+# read_from_replica=balance -- ceph_test_rbd_fsx's aggressive random
+# read/write/truncate/hole-punch over the EC direct/split-read path. The stock
+# krbd fsx suite uses a plain replicated image; this drives our code under fsx.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - is_erasure
+      - slow request
+      - marked LAGGY
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default data pool: fsxec
+        rbd default map options: ms_mode=crc,read_from_replica=balance
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set fsxecp k=2 m=1 crush-failure-domain=osd plugin=jerasure technique=reed_sol_van
+      - sudo ceph osd pool create fsxec erasure fsxecp
+      - sudo ceph osd pool set fsxec allow_ec_overwrites true
+      - sudo ceph osd pool set fsxec allow_ec_optimizations true
+      - sudo ceph osd pool ls detail | grep fsxec | grep -q split_reads
+- rbd_fsx:
+    clients: [client.0]
+    ops: 20000
+    krbd: true
+    readbdy: 512
+    writebdy: 512
+    truncbdy: 512
+    holebdy: 512
+    punch_holes: true

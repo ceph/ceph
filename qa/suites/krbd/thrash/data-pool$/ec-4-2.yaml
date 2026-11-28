@@ -1,0 +1,15 @@
+# image data in an EC 4+2 pool
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set krbd-ec k=4 m=2 crush-failure-domain=osd
+      - sudo ceph osd pool create ecdata 16 16 erasure krbd-ec
+      - sudo ceph osd pool set ecdata allow_ec_overwrites true
+      - sudo ceph osd pool application enable ecdata rbd
+overrides:
+  thrashosds:
+    min_in: 6  # a 4+2 PG needs 5 of its 6 shards to be active
+  ceph:
+    conf:
+      client:
+        rbd default data pool: ecdata

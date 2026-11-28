@@ -1,0 +1,44 @@
+# kcephfs over an optimized erasure-coded data pool (T2): mount the kernel
+# cephfs client with read_from_replica=balance and verify that reads of files
+# whose layout points at the EC pool take the EC direct-read path -- the cephfs
+# side of the libceph EC direct-read port, counterpart to the krbd suites.
+#
+# One node: a single MDS, four OSDs (k=2 m=1, failure-domain=osd), one kernel
+# client.  The fs ("cephfs") is created by the ceph task; an exec builds the
+# optimized EC pool and add_data_pool's it; the workunit runs in the mount,
+# points a subdir's layout at the EC pool and O_DIRECT-verifies files there.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(CACHE_POOL_
+      - \(MDS_
+      - is_erasure
+      - slow request
+roles:
+- [mon.a, mgr.x, mds.a, osd.0, osd.1, osd.2, osd.3, client.0]
+tasks:
+- install:
+- ceph:
+- kclient:
+    client.0:
+      mntopts:
+        - ms_mode=crc
+        - read_from_replica=balance
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set cephfsec k=2 m=1 crush-failure-domain=osd plugin=jerasure technique=reed_sol_van
+      - sudo ceph osd pool create cephfs_ec_data 32 32 erasure cephfsec
+      - sudo ceph osd pool set cephfs_ec_data allow_ec_overwrites true
+      - sudo ceph osd pool set cephfs_ec_data allow_ec_optimizations true
+      - sudo ceph osd pool ls detail | grep cephfs_ec_data | grep -q split_reads
+      - sudo ceph fs add_data_pool cephfs cephfs_ec_data
+- workunit:
+    clients:
+      client.0:
+        - fs/kcephfs_verify_ec_reads.sh
+    env:
+      EC_POOL: cephfs_ec_data
+      DURATION: "300"

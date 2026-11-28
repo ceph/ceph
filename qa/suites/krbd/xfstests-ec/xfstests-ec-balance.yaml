@@ -1,0 +1,61 @@
+# xfstests on an rbd image whose DATA is in an optimized EC pool, mapped
+# read_from_replica=balance -- so ext4's ~300 I/O patterns drive the EC
+# direct/split-read path (the stock krbd xfstests facet uses a plain replicated
+# image and exercises none of our code). This is the EC+balance intent: FS stress
+# as a real workload over the direct-read path, not just the counter microtests.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - is_erasure
+      - slow request
+      - marked LAGGY
+roles:
+- [mon.a, mon.c, osd.0, osd.1, osd.2, osd.3, osd.4]
+- [mon.b, mgr.x, mds.a, osd.5, osd.6, osd.7]
+- [client.0]
+- [client.1]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default data pool: xfsec
+        rbd default map options: ms_mode=crc,read_from_replica=balance
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set xfsecp k=2 m=1 crush-failure-domain=osd plugin=jerasure technique=reed_sol_van
+      - sudo ceph osd pool create xfsec erasure xfsecp
+      - sudo ceph osd pool set xfsec allow_ec_overwrites true
+      - sudo ceph osd pool set xfsec allow_ec_optimizations true
+      - sudo ceph osd pool ls detail | grep xfsec | grep -q split_reads
+- rbd.xfstests:
+    client.0: &ref
+        test_image: 'test_image-0'
+        test_size: 5120
+        scratch_image: 'scratch_image-0'
+        scratch_size: 15360
+        fs_type: ext4
+        tests: '-g auto -g blockdev -x clone'
+        exclude:
+        - generic/042
+        - generic/392
+        - generic/044
+        - generic/045
+        - generic/046
+        - generic/223
+        - ext4/002
+        - ext4/304
+        - generic/388
+        - generic/405
+        - generic/422
+        - shared/298
+        randomize: true
+    client.1:
+        <<: *ref
+        test_image: 'test_image-1'
+        scratch_image: 'scratch_image-1'

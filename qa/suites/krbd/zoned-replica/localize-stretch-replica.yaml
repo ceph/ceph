@@ -1,0 +1,53 @@
+# Localize reads on a REPLICATED pool over two zones (stretch-replica).
+# Build a 2-datacenter crush (osds even->dc1, odd->dc2), a replicated pool with
+# one replica per datacenter, and verify localize reads (crush_location=dc1)
+# return correct data with no splat.  Concern 3: on sepia localize was only
+# tested on EC-over-zones; this covers the replicated-over-zones path, which the
+# userspace SplitOp treats specially and which only the squad5 chaos had touched.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - slow request
+      - marked LAGGY
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default map options: ms_mode=crc,read_from_replica=localize,crush_location=datacenter:dc1
+- exec:
+    client.0:
+      - |
+        set -ex
+        for dc in dc1 dc2; do
+          sudo ceph osd crush add-bucket $dc datacenter
+          sudo ceph osd crush move $dc root=default
+        done
+        i=0
+        for osd in $(sudo ceph osd ls); do
+          dc=dc1; [ $((i % 2)) -eq 1 ] && dc=dc2
+          h=zh-$osd
+          sudo ceph osd crush add-bucket $h host || true
+          sudo ceph osd crush move $h datacenter=$dc
+          sudo ceph osd crush set osd.$osd 1.0 root=default datacenter=$dc host=$h
+          i=$((i + 1))
+        done
+        sudo ceph osd crush rule create-replicated repl-zones default datacenter
+        sudo ceph osd pool create reprep 32 32 replicated repl-zones
+        sudo ceph osd pool set reprep size 2
+        sudo ceph osd pool set reprep min_size 1
+        sudo ceph osd pool application enable reprep rbd
+        for _ in $(seq 30); do sudo ceph osd pool ls detail | grep -q "'reprep'" && break; sleep 2; done
+- workunit:
+    clients:
+      client.0:
+        - rbd/krbd_verify_localize_replica.sh
+    env:
+      POOL: reprep
+      DURATION: "300"

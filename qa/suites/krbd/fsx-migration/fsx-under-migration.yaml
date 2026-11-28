@@ -1,0 +1,70 @@
+# fsx on an rbd image whose DATA is in an optimized EC pool, mapped
+# read_from_replica=balance, WHILE the data pool is migrated underneath via a
+# loop of "ceph osd pool migrate" pg_num changes (T13).  Exercises the EC
+# direct/split-read path and the kernel's migration-follow path together under
+# ceph_test_rbd_fsx's aggressive random read/write/truncate/hole-punch.  The
+# plain krbd/fsx-ec suite runs fsx on a quiescent pool; this adds continuous
+# migration churn in parallel -- fsx (20k ops) is the long pole, migration
+# churns the data pool for ~10 min alongside it.
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - is_erasure
+      - slow request
+      - marked LAGGY
+      - Degraded data redundancy
+      - Reduced data availability
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        rbd default data pool: fsxec
+        rbd default map options: ms_mode=crc,read_from_replica=balance
+- exec:
+    client.0:
+      - sudo ceph osd erasure-code-profile set fsxecp k=2 m=1 crush-failure-domain=osd plugin=jerasure technique=reed_sol_van
+      - sudo ceph osd pool create fsxec erasure fsxecp
+      - sudo ceph osd pool set fsxec allow_ec_overwrites true
+      - sudo ceph osd pool set fsxec allow_ec_optimizations true
+      - sudo ceph osd pool ls detail | grep fsxec | grep -q split_reads
+- parallel:
+  - fsx_workload
+  - migrate_workload
+fsx_workload:
+  sequential:
+  - rbd_fsx:
+      clients: [client.0]
+      ops: 20000
+      krbd: true
+      readbdy: 512
+      writebdy: 512
+      truncbdy: 512
+      holebdy: 512
+      punch_holes: true
+migrate_workload:
+  sequential:
+  - exec:
+      client.0:
+        - |
+          set -x
+          mig() { sudo ceph osd pool ls detail -f json | python3 -c "import json,sys; p=json.load(sys.stdin); sys.exit(0 if any(x['pool_name']=='fsxec' and (x.get('migration_src',-1) not in (None,-1) or x.get('migration_target',-1) not in (None,-1) or 'migrating' in x.get('flags_names','')) for x in p) else 1)"; }
+          # Churn fsxec's pg_num via pool migration for ~10 min while fsx runs;
+          # fsx (20k ops) is the long pole, so migration finishing first is fine.
+          end=$((SECONDS + 600))
+          while (( SECONDS < end )); do
+            for pg in 32 64 48 32 16; do
+              (( SECONDS < end )) || break
+              sudo ceph osd pool migrate fsxec $pg $pg --yes-i-really-mean-it 2>/dev/null || sudo ceph osd pool migrate fsxec $pg $pg 2>/dev/null || true
+              for _ in $(seq 120); do mig || break; sleep 2; done
+              sleep 3
+            done
+          done
+          true
