@@ -78,6 +78,19 @@
 
 <router-outlet name="modal"></router-outlet>
 
+<!-- The filesystem id travels in router state so the detail view needs no lookup -->
+<ng-template
+  #fsNameTpl
+  let-row="data.row"
+  let-value="data.value"
+>
+  <a
+    [routerLink]="[mirroringUrl, value, 'overview']"
+    [state]="{ fsId: row.filesystem_id, fsName: value }"
+    >{{ value }}</a
+  >
+</ng-template>
+
 <ng-template
   #disableMirroringTpl
   let-row="row"

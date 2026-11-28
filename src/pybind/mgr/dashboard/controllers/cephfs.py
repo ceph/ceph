@@ -32,6 +32,16 @@ GET_STATFS_SCHEMA = {
     'subdirs': (int, '')
 }
 
+PATH_SNAPSHOT_SCHEMA = {
+    'name': (str, 'Snapshot name'),
+    'path': (str, 'Snapshot path'),
+    'created': (str, 'Snapshot creation time'),
+    'id': (int, 'Snapshot ID (present when details=true)'),
+    'metadata': ({
+        'key': (str, 'Snapshot metadata value'),
+    }, 'Snapshot metadata key/value pairs (present when details=true)'),
+}
+
 LIST_PEERS_SCHEMA = [{
     'uuid': ({
         'client_name': (str, 'Ceph client name'),
@@ -748,6 +758,29 @@ class CephFS(RESTController):
         """
         cfs = self._cephfs_instance(fs_id)
         return cfs.statfs(path)
+
+    @RESTController.Resource('GET', path='/snapshot')
+    @EndpointDoc("List snapshots of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'Directory path'),
+                     'details': (bool, 'Include full snap_info (id and metadata)'),
+                 },
+                 responses={200: [PATH_SNAPSHOT_SCHEMA]})
+    def ls_snapshots(self, fs_id, path, details=False):
+        """
+        List snapshots for the specified directory.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        :param details: When true, include full snap_info (id and metadata).
+        :return: Snapshot name, path, and creation time. snap_info fields when details.
+        :rtype: list
+        """
+        try:
+            cfs = self._cephfs_instance(fs_id)
+            return cfs.ls_snapshots(path, details=str_to_bool(details))
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            return []
 
     @RESTController.Resource('POST', path='/snapshot')
     @allow_empty_body

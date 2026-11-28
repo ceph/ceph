@@ -6152,6 +6152,111 @@ paths:
       - jwt: []
       tags:
       - Cephfs
+    get:
+      description: "\n        List snapshots for the specified directory.\n      \
+        \  :param fs_id: The filesystem identifier.\n        :param path: The path\
+        \ of the directory.\n        :param details: When true, include full snap_info\
+        \ (id and metadata).\n        :return: Snapshot name, path, and creation time.\
+        \ snap_info fields when details.\n        :rtype: list\n        "
+      parameters:
+      - description: File System Identifier
+        in: path
+        name: fs_id
+        required: true
+        schema:
+          type: string
+      - description: Directory path
+        in: query
+        name: path
+        required: true
+        schema:
+          type: string
+      - default: false
+        description: Include full snap_info (id and metadata)
+        in: query
+        name: details
+        schema:
+          type: boolean
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    created:
+                      description: Snapshot creation time
+                      type: string
+                    id:
+                      description: Snapshot ID (present when details=true)
+                      type: integer
+                    metadata:
+                      description: Snapshot metadata key/value pairs (present when
+                        details=true)
+                      properties:
+                        key:
+                          description: Snapshot metadata value
+                          type: string
+                      required: &id038
+                      - key
+                      type: object
+                    name:
+                      description: Snapshot name
+                      type: string
+                    path:
+                      description: Snapshot path
+                      type: string
+                  type: object
+                required: &id039
+                - name
+                - path
+                - created
+                - id
+                - metadata
+                type: array
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    created:
+                      description: Snapshot creation time
+                      type: string
+                    id:
+                      description: Snapshot ID (present when details=true)
+                      type: integer
+                    metadata:
+                      description: Snapshot metadata key/value pairs (present when
+                        details=true)
+                      properties:
+                        key:
+                          description: Snapshot metadata value
+                          type: string
+                      required: *id038
+                      type: object
+                    name:
+                      description: Snapshot name
+                      type: string
+                    path:
+                      description: Snapshot path
+                      type: string
+                  type: object
+                required: *id039
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List snapshots of the specified path
+      tags:
+      - Cephfs
     post:
       description: "\n        Create a snapshot.\n        :param fs_id: The filesystem\
         \ identifier.\n        :param path: The path of the directory.\n        :param\
@@ -6242,7 +6347,7 @@ paths:
                   subdirs:
                     description: ''
                     type: integer
-                required: &id038
+                required: &id040
                 - bytes
                 - files
                 - subdirs
@@ -6259,7 +6364,7 @@ paths:
                   subdirs:
                     description: ''
                     type: integer
-                required: *id038
+                required: *id040
                 type: object
           description: OK
         '400':
@@ -7242,7 +7347,7 @@ paths:
                       description: Config option type
                       type: string
                   type: object
-                required: &id039
+                required: &id041
                 - name
                 - type
                 - level
@@ -7319,7 +7424,7 @@ paths:
                       description: Config option type
                       type: string
                   type: object
-                required: *id039
+                required: *id041
                 type: array
           description: OK
         '400':
@@ -7443,7 +7548,7 @@ paths:
                   type:
                     description: Type of Rule
                     type: integer
-                required: &id040
+                required: &id042
                 - rule_id
                 - rule_name
                 - ruleset
@@ -7478,7 +7583,7 @@ paths:
                   type:
                     description: Type of Rule
                     type: integer
-                required: *id040
+                required: *id042
                 type: object
           description: OK
         '400':
@@ -7741,7 +7846,7 @@ paths:
                       description: ''
                       type: string
                   type: object
-                required: &id041
+                required: &id043
                 - crush-failure-domain
                 - k
                 - m
@@ -7772,7 +7877,7 @@ paths:
                       description: ''
                       type: string
                   type: object
-                required: *id041
+                required: *id043
                 type: array
           description: OK
         '400':
@@ -7930,7 +8035,7 @@ paths:
                   rgw:
                     description: ''
                     type: boolean
-                required: &id042
+                required: &id044
                 - rbd
                 - mirroring
                 - iscsi
@@ -7959,7 +8064,7 @@ paths:
                   rgw:
                     description: ''
                     type: boolean
-                required: *id042
+                required: *id044
                 type: object
           description: OK
         '400':
@@ -8217,7 +8322,7 @@ paths:
                   instance:
                     description: grafana instance
                     type: string
-                required: &id043
+                required: &id045
                 - instance
                 type: object
             application/vnd.ceph.api.v1.0+json:
@@ -8226,7 +8331,7 @@ paths:
                   instance:
                     description: grafana instance
                     type: string
-                required: *id043
+                required: *id045
                 type: object
           description: OK
         '400':
@@ -8358,7 +8463,7 @@ paths:
                         savings_bytes:
                           description: Logical minus physical bytes used
                           type: integer
-                      required: &id044
+                      required: &id046
                       - fcm_drive_count
                       - phy_util_percent
                       - log_util_percent
@@ -8385,61 +8490,6 @@ paths:
                       properties:
                         fans:
                           description: fans components
-                          properties:
-                            components:
-                              description: Components; each also carries the fields
-                                its category reports
-                              items:
-                                properties:
-                                  chassis_id:
-                                    description: Chassis id
-                                    type: string
-                                  health:
-                                    description: OK, Unknown, Warning or Critical
-                                    type: string
-                                  id:
-                                    description: Component id
-                                    type: string
-                                  state:
-                                    description: Redfish state, e.g. Enabled
-                                    type: string
-                                required: &id045
-                                - id
-                                - chassis_id
-                                - health
-                                - state
-                                type: object
-                              type: array
-                            critical:
-                              description: Components with health Critical
-                              type: integer
-                            health:
-                              description: 'Worst health of the components: OK, Unknown,
-                                Warning or Critical'
-                              type: string
-                            ok:
-                              description: Components with health OK
-                              type: integer
-                            total:
-                              description: Number of components
-                              type: integer
-                            unknown:
-                              description: Components whose health is not reported
-                              type: integer
-                            warning:
-                              description: Components with health Warning
-                              type: integer
-                          required: &id046
-                          - health
-                          - total
-                          - ok
-                          - warning
-                          - critical
-                          - unknown
-                          - components
-                          type: object
-                        memory:
-                          description: memory components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8493,8 +8543,8 @@ paths:
                           - unknown
                           - components
                           type: object
-                        network:
-                          description: network components
+                        memory:
+                          description: memory components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8548,8 +8598,8 @@ paths:
                           - unknown
                           - components
                           type: object
-                        power:
-                          description: power components
+                        network:
+                          description: network components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8603,8 +8653,8 @@ paths:
                           - unknown
                           - components
                           type: object
-                        processors:
-                          description: processors components
+                        power:
+                          description: power components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8658,8 +8708,8 @@ paths:
                           - unknown
                           - components
                           type: object
-                        storage:
-                          description: storage components
+                        processors:
+                          description: processors components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8713,8 +8763,8 @@ paths:
                           - unknown
                           - components
                           type: object
-                        temperatures:
-                          description: temperatures components
+                        storage:
+                          description: storage components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8768,7 +8818,62 @@ paths:
                           - unknown
                           - components
                           type: object
-                      required: &id059
+                        temperatures:
+                          description: temperatures components
+                          properties:
+                            components:
+                              description: Components; each also carries the fields
+                                its category reports
+                              items:
+                                properties:
+                                  chassis_id:
+                                    description: Chassis id
+                                    type: string
+                                  health:
+                                    description: OK, Unknown, Warning or Critical
+                                    type: string
+                                  id:
+                                    description: Component id
+                                    type: string
+                                  state:
+                                    description: Redfish state, e.g. Enabled
+                                    type: string
+                                required: &id059
+                                - id
+                                - chassis_id
+                                - health
+                                - state
+                                type: object
+                              type: array
+                            critical:
+                              description: Components with health Critical
+                              type: integer
+                            health:
+                              description: 'Worst health of the components: OK, Unknown,
+                                Warning or Critical'
+                              type: string
+                            ok:
+                              description: Components with health OK
+                              type: integer
+                            total:
+                              description: Number of components
+                              type: integer
+                            unknown:
+                              description: Components whose health is not reported
+                              type: integer
+                            warning:
+                              description: Components with health Warning
+                              type: integer
+                          required: &id060
+                          - health
+                          - total
+                          - ok
+                          - warning
+                          - critical
+                          - unknown
+                          - components
+                          type: object
+                      required: &id061
                       - storage
                       - processors
                       - memory
@@ -8778,7 +8883,7 @@ paths:
                       - temperatures
                       type: object
                   type: object
-                required: &id060
+                required: &id062
                 - hostname
                 - sn
                 - health
@@ -8813,7 +8918,7 @@ paths:
                         savings_bytes:
                           description: Logical minus physical bytes used
                           type: integer
-                      required: *id044
+                      required: *id046
                       type: object
                     firmware:
                       description: 'Installed firmware: name -> version'
@@ -8834,50 +8939,6 @@ paths:
                       properties:
                         fans:
                           description: fans components
-                          properties:
-                            components:
-                              description: Components; each also carries the fields
-                                its category reports
-                              items:
-                                properties:
-                                  chassis_id:
-                                    description: Chassis id
-                                    type: string
-                                  health:
-                                    description: OK, Unknown, Warning or Critical
-                                    type: string
-                                  id:
-                                    description: Component id
-                                    type: string
-                                  state:
-                                    description: Redfish state, e.g. Enabled
-                                    type: string
-                                required: *id045
-                                type: object
-                              type: array
-                            critical:
-                              description: Components with health Critical
-                              type: integer
-                            health:
-                              description: 'Worst health of the components: OK, Unknown,
-                                Warning or Critical'
-                              type: string
-                            ok:
-                              description: Components with health OK
-                              type: integer
-                            total:
-                              description: Number of components
-                              type: integer
-                            unknown:
-                              description: Components whose health is not reported
-                              type: integer
-                            warning:
-                              description: Components with health Warning
-                              type: integer
-                          required: *id046
-                          type: object
-                        memory:
-                          description: memory components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8920,8 +8981,8 @@ paths:
                               type: integer
                           required: *id048
                           type: object
-                        network:
-                          description: network components
+                        memory:
+                          description: memory components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -8964,8 +9025,8 @@ paths:
                               type: integer
                           required: *id050
                           type: object
-                        power:
-                          description: power components
+                        network:
+                          description: network components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -9008,8 +9069,8 @@ paths:
                               type: integer
                           required: *id052
                           type: object
-                        processors:
-                          description: processors components
+                        power:
+                          description: power components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -9052,8 +9113,8 @@ paths:
                               type: integer
                           required: *id054
                           type: object
-                        storage:
-                          description: storage components
+                        processors:
+                          description: processors components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -9096,8 +9157,8 @@ paths:
                               type: integer
                           required: *id056
                           type: object
-                        temperatures:
-                          description: temperatures components
+                        storage:
+                          description: storage components
                           properties:
                             components:
                               description: Components; each also carries the fields
@@ -9140,10 +9201,54 @@ paths:
                               type: integer
                           required: *id058
                           type: object
-                      required: *id059
+                        temperatures:
+                          description: temperatures components
+                          properties:
+                            components:
+                              description: Components; each also carries the fields
+                                its category reports
+                              items:
+                                properties:
+                                  chassis_id:
+                                    description: Chassis id
+                                    type: string
+                                  health:
+                                    description: OK, Unknown, Warning or Critical
+                                    type: string
+                                  id:
+                                    description: Component id
+                                    type: string
+                                  state:
+                                    description: Redfish state, e.g. Enabled
+                                    type: string
+                                required: *id059
+                                type: object
+                              type: array
+                            critical:
+                              description: Components with health Critical
+                              type: integer
+                            health:
+                              description: 'Worst health of the components: OK, Unknown,
+                                Warning or Critical'
+                              type: string
+                            ok:
+                              description: Components with health OK
+                              type: integer
+                            total:
+                              description: Number of components
+                              type: integer
+                            unknown:
+                              description: Components whose health is not reported
+                              type: integer
+                            warning:
+                              description: Components with health Warning
+                              type: integer
+                          required: *id060
+                          type: object
+                      required: *id061
                       type: object
                   type: object
-                required: *id060
+                required: *id062
                 type: array
           description: OK
         '400':
@@ -9198,7 +9303,7 @@ paths:
                       savings_bytes:
                         description: Logical minus physical bytes used
                         type: integer
-                    required: &id061
+                    required: &id063
                     - fcm_drive_count
                     - phy_util_percent
                     - log_util_percent
@@ -9225,61 +9330,6 @@ paths:
                     properties:
                       fans:
                         description: fans components
-                        properties:
-                          components:
-                            description: Components; each also carries the fields
-                              its category reports
-                            items:
-                              properties:
-                                chassis_id:
-                                  description: Chassis id
-                                  type: string
-                                health:
-                                  description: OK, Unknown, Warning or Critical
-                                  type: string
-                                id:
-                                  description: Component id
-                                  type: string
-                                state:
-                                  description: Redfish state, e.g. Enabled
-                                  type: string
-                              required: &id062
-                              - id
-                              - chassis_id
-                              - health
-                              - state
-                              type: object
-                            type: array
-                          critical:
-                            description: Components with health Critical
-                            type: integer
-                          health:
-                            description: 'Worst health of the components: OK, Unknown,
-                              Warning or Critical'
-                            type: string
-                          ok:
-                            description: Components with health OK
-                            type: integer
-                          total:
-                            description: Number of components
-                            type: integer
-                          unknown:
-                            description: Components whose health is not reported
-                            type: integer
-                          warning:
-                            description: Components with health Warning
-                            type: integer
-                        required: &id063
-                        - health
-                        - total
-                        - ok
-                        - warning
-                        - critical
-                        - unknown
-                        - components
-                        type: object
-                      memory:
-                        description: memory components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9333,8 +9383,8 @@ paths:
                         - unknown
                         - components
                         type: object
-                      network:
-                        description: network components
+                      memory:
+                        description: memory components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9388,8 +9438,8 @@ paths:
                         - unknown
                         - components
                         type: object
-                      power:
-                        description: power components
+                      network:
+                        description: network components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9443,8 +9493,8 @@ paths:
                         - unknown
                         - components
                         type: object
-                      processors:
-                        description: processors components
+                      power:
+                        description: power components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9498,8 +9548,8 @@ paths:
                         - unknown
                         - components
                         type: object
-                      storage:
-                        description: storage components
+                      processors:
+                        description: processors components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9553,8 +9603,8 @@ paths:
                         - unknown
                         - components
                         type: object
-                      temperatures:
-                        description: temperatures components
+                      storage:
+                        description: storage components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9608,7 +9658,62 @@ paths:
                         - unknown
                         - components
                         type: object
-                    required: &id076
+                      temperatures:
+                        description: temperatures components
+                        properties:
+                          components:
+                            description: Components; each also carries the fields
+                              its category reports
+                            items:
+                              properties:
+                                chassis_id:
+                                  description: Chassis id
+                                  type: string
+                                health:
+                                  description: OK, Unknown, Warning or Critical
+                                  type: string
+                                id:
+                                  description: Component id
+                                  type: string
+                                state:
+                                  description: Redfish state, e.g. Enabled
+                                  type: string
+                              required: &id076
+                              - id
+                              - chassis_id
+                              - health
+                              - state
+                              type: object
+                            type: array
+                          critical:
+                            description: Components with health Critical
+                            type: integer
+                          health:
+                            description: 'Worst health of the components: OK, Unknown,
+                              Warning or Critical'
+                            type: string
+                          ok:
+                            description: Components with health OK
+                            type: integer
+                          total:
+                            description: Number of components
+                            type: integer
+                          unknown:
+                            description: Components whose health is not reported
+                            type: integer
+                          warning:
+                            description: Components with health Warning
+                            type: integer
+                        required: &id077
+                        - health
+                        - total
+                        - ok
+                        - warning
+                        - critical
+                        - unknown
+                        - components
+                        type: object
+                    required: &id078
                     - storage
                     - processors
                     - memory
@@ -9617,7 +9722,7 @@ paths:
                     - fans
                     - temperatures
                     type: object
-                required: &id077
+                required: &id079
                 - hostname
                 - sn
                 - health
@@ -9651,7 +9756,7 @@ paths:
                       savings_bytes:
                         description: Logical minus physical bytes used
                         type: integer
-                    required: *id061
+                    required: *id063
                     type: object
                   firmware:
                     description: 'Installed firmware: name -> version'
@@ -9672,50 +9777,6 @@ paths:
                     properties:
                       fans:
                         description: fans components
-                        properties:
-                          components:
-                            description: Components; each also carries the fields
-                              its category reports
-                            items:
-                              properties:
-                                chassis_id:
-                                  description: Chassis id
-                                  type: string
-                                health:
-                                  description: OK, Unknown, Warning or Critical
-                                  type: string
-                                id:
-                                  description: Component id
-                                  type: string
-                                state:
-                                  description: Redfish state, e.g. Enabled
-                                  type: string
-                              required: *id062
-                              type: object
-                            type: array
-                          critical:
-                            description: Components with health Critical
-                            type: integer
-                          health:
-                            description: 'Worst health of the components: OK, Unknown,
-                              Warning or Critical'
-                            type: string
-                          ok:
-                            description: Components with health OK
-                            type: integer
-                          total:
-                            description: Number of components
-                            type: integer
-                          unknown:
-                            description: Components whose health is not reported
-                            type: integer
-                          warning:
-                            description: Components with health Warning
-                            type: integer
-                        required: *id063
-                        type: object
-                      memory:
-                        description: memory components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9758,8 +9819,8 @@ paths:
                             type: integer
                         required: *id065
                         type: object
-                      network:
-                        description: network components
+                      memory:
+                        description: memory components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9802,8 +9863,8 @@ paths:
                             type: integer
                         required: *id067
                         type: object
-                      power:
-                        description: power components
+                      network:
+                        description: network components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9846,8 +9907,8 @@ paths:
                             type: integer
                         required: *id069
                         type: object
-                      processors:
-                        description: processors components
+                      power:
+                        description: power components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9890,8 +9951,8 @@ paths:
                             type: integer
                         required: *id071
                         type: object
-                      storage:
-                        description: storage components
+                      processors:
+                        description: processors components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9934,8 +9995,8 @@ paths:
                             type: integer
                         required: *id073
                         type: object
-                      temperatures:
-                        description: temperatures components
+                      storage:
+                        description: storage components
                         properties:
                           components:
                             description: Components; each also carries the fields
@@ -9978,9 +10039,53 @@ paths:
                             type: integer
                         required: *id075
                         type: object
-                    required: *id076
+                      temperatures:
+                        description: temperatures components
+                        properties:
+                          components:
+                            description: Components; each also carries the fields
+                              its category reports
+                            items:
+                              properties:
+                                chassis_id:
+                                  description: Chassis id
+                                  type: string
+                                health:
+                                  description: OK, Unknown, Warning or Critical
+                                  type: string
+                                id:
+                                  description: Component id
+                                  type: string
+                                state:
+                                  description: Redfish state, e.g. Enabled
+                                  type: string
+                              required: *id076
+                              type: object
+                            type: array
+                          critical:
+                            description: Components with health Critical
+                            type: integer
+                          health:
+                            description: 'Worst health of the components: OK, Unknown,
+                              Warning or Critical'
+                            type: string
+                          ok:
+                            description: Components with health OK
+                            type: integer
+                          total:
+                            description: Number of components
+                            type: integer
+                          unknown:
+                            description: Components whose health is not reported
+                            type: integer
+                          warning:
+                            description: Components with health Warning
+                            type: integer
+                        required: *id077
+                        type: object
+                    required: *id078
                     type: object
-                required: *id077
+                required: *id079
                 type: object
           description: OK
         '400':
@@ -10171,7 +10276,7 @@ paths:
                       write_op_per_sec:
                         description: ''
                         type: integer
-                    required: &id078
+                    required: &id080
                     - read_bytes_sec
                     - read_op_per_sec
                     - recovering_bytes_per_sec
@@ -10193,12 +10298,12 @@ paths:
                           total_used_raw_bytes:
                             description: ''
                             type: integer
-                        required: &id079
+                        required: &id081
                         - total_avail_bytes
                         - total_bytes
                         - total_used_raw_bytes
                         type: object
-                    required: &id080
+                    required: &id082
                     - stats
                     type: object
                   fs_map:
@@ -10229,7 +10334,7 @@ paths:
                                     ro_compat:
                                       description: ''
                                       type: string
-                                  required: &id081
+                                  required: &id083
                                   - compat
                                   - ro_compat
                                   - incompat
@@ -10322,7 +10427,7 @@ paths:
                                 up:
                                   description: ''
                                   type: string
-                              required: &id082
+                              required: &id084
                               - session_autoclose
                               - balancer
                               - up
@@ -10356,12 +10461,12 @@ paths:
                             standbys:
                               description: ''
                               type: string
-                          required: &id083
+                          required: &id085
                           - mdsmap
                           - standbys
                           type: object
                         type: array
-                    required: &id084
+                    required: &id086
                     - filesystems
                     type: object
                   health:
@@ -10376,7 +10481,7 @@ paths:
                       status:
                         description: ''
                         type: string
-                    required: &id085
+                    required: &id087
                     - checks
                     - mutes
                     - status
@@ -10393,7 +10498,7 @@ paths:
                       up:
                         description: ''
                         type: integer
-                    required: &id086
+                    required: &id088
                     - up
                     - down
                     type: object
@@ -10406,7 +10511,7 @@ paths:
                       standbys:
                         description: ''
                         type: string
-                    required: &id087
+                    required: &id089
                     - active_name
                     - standbys
                     type: object
@@ -10419,7 +10524,7 @@ paths:
                           mons:
                             description: ''
                             type: string
-                        required: &id088
+                        required: &id090
                         - mons
                         type: object
                       quorum:
@@ -10427,7 +10532,7 @@ paths:
                         items:
                           type: integer
                         type: array
-                    required: &id089
+                    required: &id091
                     - monmap
                     - quorum
                     type: object
@@ -10444,12 +10549,12 @@ paths:
                             up:
                               description: ''
                               type: integer
-                          required: &id090
+                          required: &id092
                           - in
                           - up
                           type: object
                         type: array
-                    required: &id091
+                    required: &id093
                     - osds
                     type: object
                   pg_info:
@@ -10473,7 +10578,7 @@ paths:
                           num_objects_unfound:
                             description: ''
                             type: integer
-                        required: &id092
+                        required: &id094
                         - num_objects
                         - num_object_copies
                         - num_objects_degraded
@@ -10486,7 +10591,7 @@ paths:
                       statuses:
                         description: ''
                         type: string
-                    required: &id093
+                    required: &id095
                     - object_stats
                     - pgs_per_osd
                     - statuses
@@ -10500,7 +10605,7 @@ paths:
                   scrub_status:
                     description: ''
                     type: string
-                required: &id094
+                required: &id096
                 - client_perf
                 - df
                 - fs_map
@@ -10536,7 +10641,7 @@ paths:
                       write_op_per_sec:
                         description: ''
                         type: integer
-                    required: *id078
+                    required: *id080
                     type: object
                   df:
                     description: ''
@@ -10553,9 +10658,9 @@ paths:
                           total_used_raw_bytes:
                             description: ''
                             type: integer
-                        required: *id079
+                        required: *id081
                         type: object
-                    required: *id080
+                    required: *id082
                     type: object
                   fs_map:
                     description: ''
@@ -10585,7 +10690,7 @@ paths:
                                     ro_compat:
                                       description: ''
                                       type: string
-                                  required: *id081
+                                  required: *id083
                                   type: object
                                 created:
                                   description: ''
@@ -10675,15 +10780,15 @@ paths:
                                 up:
                                   description: ''
                                   type: string
-                              required: *id082
+                              required: *id084
                               type: object
                             standbys:
                               description: ''
                               type: string
-                          required: *id083
+                          required: *id085
                           type: object
                         type: array
-                    required: *id084
+                    required: *id086
                     type: object
                   health:
                     description: ''
@@ -10697,7 +10802,7 @@ paths:
                       status:
                         description: ''
                         type: string
-                    required: *id085
+                    required: *id087
                     type: object
                   hosts:
                     description: ''
@@ -10711,7 +10816,7 @@ paths:
                       up:
                         description: ''
                         type: integer
-                    required: *id086
+                    required: *id088
                     type: object
                   mgr_map:
                     description: ''
@@ -10722,7 +10827,7 @@ paths:
                       standbys:
                         description: ''
                         type: string
-                    required: *id087
+                    required: *id089
                     type: object
                   mon_status:
                     description: ''
@@ -10733,14 +10838,14 @@ paths:
                           mons:
                             description: ''
                             type: string
-                        required: *id088
+                        required: *id090
                         type: object
                       quorum:
                         description: ''
                         items:
                           type: integer
                         type: array
-                    required: *id089
+                    required: *id091
                     type: object
                   osd_map:
                     description: ''
@@ -10755,10 +10860,10 @@ paths:
                             up:
                               description: ''
                               type: integer
-                          required: *id090
+                          required: *id092
                           type: object
                         type: array
-                    required: *id091
+                    required: *id093
                     type: object
                   pg_info:
                     description: ''
@@ -10781,7 +10886,7 @@ paths:
                           num_objects_unfound:
                             description: ''
                             type: integer
-                        required: *id092
+                        required: *id094
                         type: object
                       pgs_per_osd:
                         description: ''
@@ -10789,7 +10894,7 @@ paths:
                       statuses:
                         description: ''
                         type: string
-                    required: *id093
+                    required: *id095
                     type: object
                   pools:
                     description: ''
@@ -10800,7 +10905,7 @@ paths:
                   scrub_status:
                     description: ''
                     type: string
-                required: *id094
+                required: *id096
                 type: object
           description: OK
         '400':
@@ -10838,7 +10943,7 @@ paths:
                       num_standbys:
                         description: Standby MDS count
                         type: integer
-                    required: &id095
+                    required: &id097
                     - num_active
                     - num_standbys
                     type: object
@@ -10866,16 +10971,16 @@ paths:
                                   message:
                                     description: Human-readable summary
                                     type: string
-                                required: &id096
+                                required: &id098
                                 - message
                                 - count
                                 type: object
-                            required: &id097
+                            required: &id099
                             - severity
                             - summary
                             - muted
                             type: object
-                        required: &id098
+                        required: &id100
                         - <check_name>
                         type: object
                       mutes:
@@ -10886,7 +10991,7 @@ paths:
                       status:
                         description: Overall health status
                         type: string
-                    required: &id099
+                    required: &id101
                     - status
                     - checks
                     - mutes
@@ -10900,7 +11005,7 @@ paths:
                       num_standbys:
                         description: Standby manager count
                         type: integer
-                    required: &id100
+                    required: &id102
                     - num_active
                     - num_standbys
                     type: object
@@ -10915,7 +11020,7 @@ paths:
                         items:
                           type: integer
                         type: array
-                    required: &id101
+                    required: &id103
                     - num_mons
                     - quorum
                     type: object
@@ -10934,7 +11039,7 @@ paths:
                       up:
                         description: Count of iSCSI gateways running
                         type: integer
-                    required: &id102
+                    required: &id104
                     - up
                     - down
                     type: object
@@ -10953,7 +11058,7 @@ paths:
                       up:
                         description: Number of OSDs up
                         type: integer
-                    required: &id103
+                    required: &id105
                     - in
                     - up
                     - num_osds
@@ -10983,7 +11088,7 @@ paths:
                             state_name:
                               description: Placement group state
                               type: string
-                          required: &id104
+                          required: &id106
                           - state_name
                           - count
                           type: object
@@ -10991,7 +11096,7 @@ paths:
                       recovering_bytes_per_sec:
                         description: Total recovery in bytes
                         type: integer
-                    required: &id105
+                    required: &id107
                     - pgs_by_state
                     - num_pools
                     - num_pgs
@@ -10999,7 +11104,7 @@ paths:
                     - bytes_total
                     - recovering_bytes_per_sec
                     type: object
-                required: &id106
+                required: &id108
                 - fsid
                 - health
                 - monmap
@@ -11027,7 +11132,7 @@ paths:
                       num_standbys:
                         description: Standby MDS count
                         type: integer
-                    required: *id095
+                    required: *id097
                     type: object
                   health:
                     description: Cluster health overview
@@ -11053,11 +11158,11 @@ paths:
                                   message:
                                     description: Human-readable summary
                                     type: string
-                                required: *id096
+                                required: *id098
                                 type: object
-                            required: *id097
+                            required: *id099
                             type: object
-                        required: *id098
+                        required: *id100
                         type: object
                       mutes:
                         description: List of muted check names
@@ -11067,7 +11172,7 @@ paths:
                       status:
                         description: Overall health status
                         type: string
-                    required: *id099
+                    required: *id101
                     type: object
                   mgrmap:
                     description: Manager map details
@@ -11078,7 +11183,7 @@ paths:
                       num_standbys:
                         description: Standby manager count
                         type: integer
-                    required: *id100
+                    required: *id102
                     type: object
                   monmap:
                     description: Monitor map details
@@ -11091,7 +11196,7 @@ paths:
                         items:
                           type: integer
                         type: array
-                    required: *id101
+                    required: *id103
                     type: object
                   num_hosts:
                     description: Count of hosts
@@ -11108,7 +11213,7 @@ paths:
                       up:
                         description: Count of iSCSI gateways running
                         type: integer
-                    required: *id102
+                    required: *id104
                     type: object
                   num_rgw_gateways:
                     description: Count of RGW gateway daemons running
@@ -11125,7 +11230,7 @@ paths:
                       up:
                         description: Number of OSDs up
                         type: integer
-                    required: *id103
+                    required: *id105
                     type: object
                   pgmap:
                     description: Placement group map details
@@ -11152,15 +11257,15 @@ paths:
                             state_name:
                               description: Placement group state
                               type: string
-                          required: *id104
+                          required: *id106
                           type: object
                         type: array
                       recovering_bytes_per_sec:
                         description: Total recovery in bytes
                         type: integer
-                    required: *id105
+                    required: *id107
                     type: object
-                required: *id106
+                required: *id108
                 type: object
           description: OK
         '400':
@@ -11249,7 +11354,7 @@ paths:
                         type:
                           description: type of service
                           type: string
-                      required: &id107
+                      required: &id109
                       - type
                       - count
                       type: object
@@ -11267,7 +11372,7 @@ paths:
                         type:
                           description: type of service
                           type: string
-                      required: &id108
+                      required: &id110
                       - type
                       - id
                       type: object
@@ -11281,14 +11386,14 @@ paths:
                       orchestrator:
                         description: ''
                         type: boolean
-                    required: &id109
+                    required: &id111
                     - ceph
                     - orchestrator
                     type: object
                   status:
                     description: ''
                     type: string
-                required: &id110
+                required: &id112
                 - hostname
                 - services
                 - service_instances
@@ -11326,7 +11431,7 @@ paths:
                         type:
                           description: type of service
                           type: string
-                      required: *id107
+                      required: *id109
                       type: object
                     type: array
                   service_type:
@@ -11342,7 +11447,7 @@ paths:
                         type:
                           description: type of service
                           type: string
-                      required: *id108
+                      required: *id110
                       type: object
                     type: array
                   sources:
@@ -11354,12 +11459,12 @@ paths:
                       orchestrator:
                         description: ''
                         type: boolean
-                    required: *id109
+                    required: *id111
                     type: object
                   status:
                     description: ''
                     type: string
-                required: *id110
+                required: *id112
                 type: object
           description: OK
         '400':
@@ -11762,7 +11867,7 @@ paths:
                                 IDENTsupport:
                                   description: ''
                                   type: string
-                              required: &id111
+                              required: &id113
                               - IDENTsupport
                               - IDENTstatus
                               - FAILsupport
@@ -11783,7 +11888,7 @@ paths:
                             transport:
                               description: ''
                               type: string
-                          required: &id112
+                          required: &id114
                           - serialNum
                           - transport
                           - mediaType
@@ -11821,7 +11926,7 @@ paths:
                               type:
                                 description: ''
                                 type: string
-                            required: &id113
+                            required: &id115
                             - name
                             - osd_id
                             - cluster_name
@@ -11886,7 +11991,7 @@ paths:
                                     start:
                                       description: ''
                                       type: string
-                                  required: &id114
+                                  required: &id116
                                   - start
                                   - sectors
                                   - sectorsize
@@ -11894,7 +11999,7 @@ paths:
                                   - human_readable_size
                                   - holders
                                   type: object
-                              required: &id115
+                              required: &id117
                               - partition_name
                               type: object
                             path:
@@ -11936,7 +12041,7 @@ paths:
                             vendor:
                               description: ''
                               type: string
-                          required: &id116
+                          required: &id118
                           - removable
                           - ro
                           - vendor
@@ -11956,7 +12061,7 @@ paths:
                           - path
                           - locked
                           type: object
-                      required: &id117
+                      required: &id119
                       - rejected_reasons
                       - available
                       - path
@@ -11976,7 +12081,7 @@ paths:
                   name:
                     description: Hostname
                     type: string
-                required: &id118
+                required: &id120
                 - name
                 - addr
                 - devices
@@ -12027,7 +12132,7 @@ paths:
                                 IDENTsupport:
                                   description: ''
                                   type: string
-                              required: *id111
+                              required: *id113
                               type: object
                             linkSpeed:
                               description: ''
@@ -12044,7 +12149,7 @@ paths:
                             transport:
                               description: ''
                               type: string
-                          required: *id112
+                          required: *id114
                           type: object
                         lvs:
                           description: ''
@@ -12074,7 +12179,7 @@ paths:
                               type:
                                 description: ''
                                 type: string
-                            required: *id113
+                            required: *id115
                             type: object
                           type: array
                         osd_ids:
@@ -12131,9 +12236,9 @@ paths:
                                     start:
                                       description: ''
                                       type: string
-                                  required: *id114
+                                  required: *id116
                                   type: object
-                              required: *id115
+                              required: *id117
                               type: object
                             path:
                               description: ''
@@ -12174,9 +12279,9 @@ paths:
                             vendor:
                               description: ''
                               type: string
-                          required: *id116
+                          required: *id118
                           type: object
-                      required: *id117
+                      required: *id119
                       type: object
                     type: array
                   labels:
@@ -12187,7 +12292,7 @@ paths:
                   name:
                     description: Hostname
                     type: string
-                required: *id118
+                required: *id120
                 type: object
           description: OK
         '400':
@@ -12258,7 +12363,7 @@ paths:
                       description: username
                       type: string
                   type: object
-                required: &id119
+                required: &id121
                 - user
                 - password
                 - mutual_user
@@ -12281,7 +12386,7 @@ paths:
                       description: username
                       type: string
                   type: object
-                required: *id119
+                required: *id121
                 type: array
           description: OK
         '400':
@@ -12622,13 +12727,13 @@ paths:
                                   type:
                                     description: ''
                                     type: string
-                                required: &id120
+                                required: &id122
                                 - type
                                 - addr
                                 - nonce
                                 type: object
                               type: array
-                          required: &id121
+                          required: &id123
                           - addrvec
                           type: object
                         channel:
@@ -12652,7 +12757,7 @@ paths:
                         stamp:
                           description: ''
                           type: string
-                      required: &id122
+                      required: &id124
                       - name
                       - rank
                       - addrs
@@ -12668,7 +12773,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id123
+                required: &id125
                 - clog
                 - audit_log
                 type: object
@@ -12695,10 +12800,10 @@ paths:
                                   type:
                                     description: ''
                                     type: string
-                                required: *id120
+                                required: *id122
                                 type: object
                               type: array
-                          required: *id121
+                          required: *id123
                           type: object
                         channel:
                           description: ''
@@ -12721,7 +12826,7 @@ paths:
                         stamp:
                           description: ''
                           type: string
-                      required: *id122
+                      required: *id124
                       type: object
                     type: array
                   clog:
@@ -12729,7 +12834,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id123
+                required: *id125
                 type: object
           description: OK
         '400':
@@ -12936,7 +13041,7 @@ paths:
                             type:
                               description: Type of the option
                               type: string
-                          required: &id124
+                          required: &id126
                           - name
                           - type
                           - level
@@ -12950,11 +13055,11 @@ paths:
                           - tags
                           - see_also
                           type: object
-                      required: &id125
+                      required: &id127
                       - Option_name
                       type: object
                   type: object
-                required: &id126
+                required: &id128
                 - name
                 - enabled
                 - always_on
@@ -13021,12 +13126,12 @@ paths:
                             type:
                               description: Type of the option
                               type: string
-                          required: *id124
+                          required: *id126
                           type: object
-                      required: *id125
+                      required: *id127
                       type: object
                   type: object
-                required: *id126
+                required: *id128
                 type: array
           description: OK
         '400':
@@ -13306,13 +13411,13 @@ paths:
                                   type:
                                     description: ''
                                     type: string
-                                required: &id127
+                                required: &id129
                                 - type
                                 - addr
                                 - nonce
                                 type: object
                               type: array
-                          required: &id128
+                          required: &id130
                           - addrvec
                           type: object
                         rank:
@@ -13326,13 +13431,13 @@ paths:
                               items:
                                 type: integer
                               type: array
-                          required: &id129
+                          required: &id131
                           - num_sessions
                           type: object
                         weight:
                           description: ''
                           type: integer
-                      required: &id130
+                      required: &id132
                       - rank
                       - name
                       - public_addrs
@@ -13370,7 +13475,7 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: &id131
+                              required: &id133
                               - features
                               - release
                               - num
@@ -13389,7 +13494,7 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: &id132
+                              required: &id134
                               - features
                               - release
                               - num
@@ -13408,7 +13513,7 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: &id133
+                              required: &id135
                               - features
                               - release
                               - num
@@ -13427,13 +13532,13 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: &id134
+                              required: &id136
                               - features
                               - release
                               - num
                               type: object
                             type: array
-                        required: &id135
+                        required: &id137
                         - mon
                         - mds
                         - client
@@ -13458,7 +13563,7 @@ paths:
                             items:
                               type: integer
                             type: array
-                        required: &id136
+                        required: &id138
                         - required_con
                         - required_mon
                         - quorum_con
@@ -13486,7 +13591,7 @@ paths:
                                 items:
                                   type: string
                                 type: array
-                            required: &id137
+                            required: &id139
                             - persistent
                             - optional
                             type: object
@@ -13534,13 +13639,13 @@ paths:
                                           type:
                                             description: ''
                                             type: string
-                                        required: &id138
+                                        required: &id140
                                         - type
                                         - addr
                                         - nonce
                                         type: object
                                       type: array
-                                  required: &id139
+                                  required: &id141
                                   - addrvec
                                   type: object
                                 rank:
@@ -13554,13 +13659,13 @@ paths:
                                       items:
                                         type: integer
                                       type: array
-                                  required: &id140
+                                  required: &id142
                                   - num_sessions
                                   type: object
                                 weight:
                                   description: ''
                                   type: integer
-                              required: &id141
+                              required: &id143
                               - rank
                               - name
                               - public_addrs
@@ -13571,7 +13676,7 @@ paths:
                               - stats
                               type: object
                             type: array
-                        required: &id142
+                        required: &id144
                         - epoch
                         - fsid
                         - modified
@@ -13608,7 +13713,7 @@ paths:
                         items:
                           type: string
                         type: array
-                    required: &id143
+                    required: &id145
                     - name
                     - rank
                     - state
@@ -13627,7 +13732,7 @@ paths:
                     items:
                       type: integer
                     type: array
-                required: &id144
+                required: &id146
                 - mon_status
                 - in_quorum
                 - out_quorum
@@ -13667,10 +13772,10 @@ paths:
                                   type:
                                     description: ''
                                     type: string
-                                required: *id127
+                                required: *id129
                                 type: object
                               type: array
-                          required: *id128
+                          required: *id130
                           type: object
                         rank:
                           description: ''
@@ -13683,12 +13788,12 @@ paths:
                               items:
                                 type: integer
                               type: array
-                          required: *id129
+                          required: *id131
                           type: object
                         weight:
                           description: ''
                           type: integer
-                      required: *id130
+                      required: *id132
                       type: object
                     type: array
                   mon_status:
@@ -13718,7 +13823,7 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: *id131
+                              required: *id133
                               type: object
                             type: array
                           mds:
@@ -13734,7 +13839,7 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: *id132
+                              required: *id134
                               type: object
                             type: array
                           mgr:
@@ -13750,7 +13855,7 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: *id133
+                              required: *id135
                               type: object
                             type: array
                           mon:
@@ -13766,10 +13871,10 @@ paths:
                                 release:
                                   description: ''
                                   type: string
-                              required: *id134
+                              required: *id136
                               type: object
                             type: array
-                        required: *id135
+                        required: *id137
                         type: object
                       features:
                         description: ''
@@ -13790,7 +13895,7 @@ paths:
                             items:
                               type: integer
                             type: array
-                        required: *id136
+                        required: *id138
                         type: object
                       monmap:
                         description: ''
@@ -13814,7 +13919,7 @@ paths:
                                 items:
                                   type: string
                                 type: array
-                            required: *id137
+                            required: *id139
                             type: object
                           fsid:
                             description: ''
@@ -13860,10 +13965,10 @@ paths:
                                           type:
                                             description: ''
                                             type: string
-                                        required: *id138
+                                        required: *id140
                                         type: object
                                       type: array
-                                  required: *id139
+                                  required: *id141
                                   type: object
                                 rank:
                                   description: ''
@@ -13876,15 +13981,15 @@ paths:
                                       items:
                                         type: integer
                                       type: array
-                                  required: *id140
+                                  required: *id142
                                   type: object
                                 weight:
                                   description: ''
                                   type: integer
-                              required: *id141
+                              required: *id143
                               type: object
                             type: array
-                        required: *id142
+                        required: *id144
                         type: object
                       name:
                         description: ''
@@ -13913,14 +14018,14 @@ paths:
                         items:
                           type: string
                         type: array
-                    required: *id143
+                    required: *id145
                     type: object
                   out_quorum:
                     description: ''
                     items:
                       type: integer
                     type: array
-                required: *id144
+                required: *id146
                 type: object
           description: OK
         '400':
@@ -14430,7 +14535,7 @@ paths:
                           status:
                             description: Backend daemon status
                             type: string
-                        required: &id145
+                        required: &id147
                         - hostname
                         - ip
                         type: object
@@ -14479,7 +14584,7 @@ paths:
                       description: Virtual IP address
                       type: string
                   type: object
-                required: &id146
+                required: &id148
                 - name
                 - backend
                 - placement
@@ -14504,7 +14609,7 @@ paths:
                           status:
                             description: Backend daemon status
                             type: string
-                        required: *id145
+                        required: *id147
                         type: object
                       type: array
                     deployment_type:
@@ -14551,7 +14656,7 @@ paths:
                       description: Virtual IP address
                       type: string
                   type: object
-                required: *id146
+                required: *id148
                 type: array
           description: OK
         '400':
@@ -14735,7 +14840,7 @@ paths:
                         status:
                           description: Backend daemon status
                           type: string
-                      required: &id147
+                      required: &id149
                       - hostname
                       - ip
                       type: object
@@ -14782,7 +14887,7 @@ paths:
                   virtual_ip:
                     description: Virtual IP address
                     type: string
-                required: &id148
+                required: &id150
                 - name
                 - backend
                 - placement
@@ -14806,7 +14911,7 @@ paths:
                         status:
                           description: Backend daemon status
                           type: string
-                      required: *id147
+                      required: *id149
                       type: object
                     type: array
                   deployment_type:
@@ -14851,7 +14956,7 @@ paths:
                   virtual_ip:
                     description: Virtual IP address
                     type: string
-                required: *id148
+                required: *id150
                 type: object
           description: OK
         '400':
@@ -14901,7 +15006,7 @@ paths:
                           squash:
                             description: Client squash policy
                             type: string
-                        required: &id149
+                        required: &id151
                         - addresses
                         - access_type
                         - squash
@@ -14928,7 +15033,7 @@ paths:
                         user_id:
                           description: User id
                           type: string
-                      required: &id150
+                      required: &id152
                       - name
                       type: object
                     path:
@@ -14954,7 +15059,7 @@ paths:
                         type: string
                       type: array
                   type: object
-                required: &id151
+                required: &id153
                 - export_id
                 - path
                 - cluster_id
@@ -14989,7 +15094,7 @@ paths:
                           squash:
                             description: Client squash policy
                             type: string
-                        required: *id149
+                        required: *id151
                         type: object
                       type: array
                     cluster_id:
@@ -15013,7 +15118,7 @@ paths:
                         user_id:
                           description: User id
                           type: string
-                      required: *id150
+                      required: *id152
                       type: object
                     path:
                       description: Export path
@@ -15038,7 +15143,7 @@ paths:
                         type: string
                       type: array
                   type: object
-                required: *id151
+                required: *id153
                 type: array
           description: OK
         '400':
@@ -15162,7 +15267,7 @@ paths:
                         squash:
                           description: Client squash policy
                           type: string
-                      required: &id152
+                      required: &id154
                       - addresses
                       - access_type
                       - squash
@@ -15189,7 +15294,7 @@ paths:
                       user_id:
                         description: User id
                         type: string
-                    required: &id153
+                    required: &id155
                     - name
                     type: object
                   path:
@@ -15214,7 +15319,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id154
+                required: &id156
                 - export_id
                 - path
                 - cluster_id
@@ -15248,7 +15353,7 @@ paths:
                         squash:
                           description: Client squash policy
                           type: string
-                      required: *id152
+                      required: *id154
                       type: object
                     type: array
                   cluster_id:
@@ -15272,7 +15377,7 @@ paths:
                       user_id:
                         description: User id
                         type: string
-                    required: *id153
+                    required: *id155
                     type: object
                   path:
                     description: Export path
@@ -15296,7 +15401,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id154
+                required: *id156
                 type: object
           description: Resource created.
         '202':
@@ -15408,7 +15513,7 @@ paths:
                         squash:
                           description: Client squash policy
                           type: string
-                      required: &id155
+                      required: &id157
                       - addresses
                       - access_type
                       - squash
@@ -15435,7 +15540,7 @@ paths:
                       user_id:
                         description: User id
                         type: string
-                    required: &id156
+                    required: &id158
                     - name
                     type: object
                   path:
@@ -15460,7 +15565,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id157
+                required: &id159
                 - export_id
                 - path
                 - cluster_id
@@ -15494,7 +15599,7 @@ paths:
                         squash:
                           description: Client squash policy
                           type: string
-                      required: *id155
+                      required: *id157
                       type: object
                     type: array
                   cluster_id:
@@ -15518,7 +15623,7 @@ paths:
                       user_id:
                         description: User id
                         type: string
-                    required: *id156
+                    required: *id158
                     type: object
                   path:
                     description: Export path
@@ -15542,7 +15647,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id157
+                required: *id159
                 type: object
           description: OK
         '400':
@@ -15674,7 +15779,7 @@ paths:
                         squash:
                           description: Client squash policy
                           type: string
-                      required: &id158
+                      required: &id160
                       - addresses
                       - access_type
                       - squash
@@ -15701,7 +15806,7 @@ paths:
                       user_id:
                         description: User id
                         type: string
-                    required: &id159
+                    required: &id161
                     - name
                     type: object
                   path:
@@ -15726,7 +15831,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id160
+                required: &id162
                 - export_id
                 - path
                 - cluster_id
@@ -15760,7 +15865,7 @@ paths:
                         squash:
                           description: Client squash policy
                           type: string
-                      required: *id158
+                      required: *id160
                       type: object
                     type: array
                   cluster_id:
@@ -15784,7 +15889,7 @@ paths:
                       user_id:
                         description: User id
                         type: string
-                    required: *id159
+                    required: *id161
                     type: object
                   path:
                     description: Export path
@@ -15808,7 +15913,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id160
+                required: *id162
                 type: object
           description: Resource updated.
         '202':
@@ -19035,7 +19140,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id161
+                required: &id163
                 - list_of_flags
                 type: object
             application/vnd.ceph.api.v1.0+json:
@@ -19046,7 +19151,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id161
+                required: *id163
                 type: object
           description: OK
         '400':
@@ -19095,7 +19200,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id162
+                required: &id164
                 - list_of_flags
                 type: object
             application/vnd.ceph.api.v1.0+json:
@@ -19106,7 +19211,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id162
+                required: *id164
                 type: object
           description: Resource updated.
         '202':
@@ -19149,7 +19254,7 @@ paths:
                   osd:
                     description: OSD ID
                     type: integer
-                required: &id163
+                required: &id165
                 - osd
                 - flags
                 type: object
@@ -19164,7 +19269,7 @@ paths:
                   osd:
                     description: OSD ID
                     type: integer
-                required: *id163
+                required: *id165
                 type: object
           description: OK
         '400':
@@ -19237,7 +19342,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id164
+                required: &id166
                 - added
                 - removed
                 - ids
@@ -19260,7 +19365,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id164
+                required: *id166
                 type: object
           description: Resource updated.
         '202':
@@ -19357,7 +19462,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id165
+                required: &id167
                 - safe_to_destroy
                 - active
                 - missing_stats
@@ -19390,7 +19495,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id165
+                required: *id167
                 type: object
           description: OK
         '400':
@@ -19943,7 +20048,7 @@ paths:
                           value:
                             description: ''
                             type: integer
-                        required: &id166
+                        required: &id168
                         - description
                         - nick
                         - type
@@ -19951,10 +20056,10 @@ paths:
                         - units
                         - value
                         type: object
-                    required: &id167
+                    required: &id169
                     - .cache_bytes
                     type: object
-                required: &id168
+                required: &id170
                 - mon.a
                 type: object
             application/vnd.ceph.api.v1.0+json:
@@ -19984,11 +20089,11 @@ paths:
                           value:
                             description: ''
                             type: integer
-                        required: *id166
+                        required: *id168
                         type: object
-                    required: *id167
+                    required: *id169
                     type: object
-                required: *id168
+                required: *id170
                 type: object
           description: OK
         '400':
@@ -20308,7 +20413,7 @@ paths:
                         type:
                           description: ''
                           type: string
-                      required: &id169
+                      required: &id171
                       - type
                       type: object
                     hit_set_period:
@@ -20350,7 +20455,7 @@ paths:
                         target_version:
                           description: ''
                           type: string
-                      required: &id170
+                      required: &id172
                       - ready_epoch
                       - last_epoch_started
                       - last_epoch_clean
@@ -20379,7 +20484,7 @@ paths:
                         pg_num_min:
                           description: ''
                           type: integer
-                      required: &id171
+                      required: &id173
                       - pg_num_min
                       - pg_num_max
                       type: object
@@ -20465,7 +20570,7 @@ paths:
                       description: ''
                       type: integer
                   type: object
-                required: &id172
+                required: &id174
                 - pool
                 - pool_name
                 - flags
@@ -20591,7 +20696,7 @@ paths:
                         type:
                           description: ''
                           type: string
-                      required: *id169
+                      required: *id171
                       type: object
                     hit_set_period:
                       description: ''
@@ -20632,7 +20737,7 @@ paths:
                         target_version:
                           description: ''
                           type: string
-                      required: *id170
+                      required: *id172
                       type: object
                     min_read_recency_for_promote:
                       description: ''
@@ -20655,7 +20760,7 @@ paths:
                         pg_num_min:
                           description: ''
                           type: integer
-                      required: *id171
+                      required: *id173
                       type: object
                     pg_autoscale_mode:
                       description: ''
@@ -20739,7 +20844,7 @@ paths:
                       description: ''
                       type: integer
                   type: object
-                required: *id172
+                required: *id174
                 type: array
           description: OK
         '400':
@@ -23157,7 +23262,7 @@ paths:
                       description: Zone Group
                       type: string
                   type: object
-                required: &id173
+                required: &id175
                 - id
                 - version
                 - server_hostname
@@ -23192,7 +23297,7 @@ paths:
                       description: Zone Group
                       type: string
                   type: object
-                required: *id173
+                required: *id175
                 type: array
           description: OK
         '400':
@@ -24419,7 +24524,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: &id174
+                required: &id176
                 - list_of_users
                 type: object
             application/vnd.ceph.api.v1.0+json:
@@ -24430,7 +24535,7 @@ paths:
                     items:
                       type: string
                     type: array
-                required: *id174
+                required: *id176
                 type: object
           description: OK
         '400':
@@ -26270,14 +26375,14 @@ paths:
                           items:
                             type: string
                           type: array
-                      required: &id175
+                      required: &id177
                       - cephfs
                       type: object
                     system:
                       description: ''
                       type: boolean
                   type: object
-                required: &id176
+                required: &id178
                 - name
                 - description
                 - scopes_permissions
@@ -26301,13 +26406,13 @@ paths:
                           items:
                             type: string
                           type: array
-                      required: *id175
+                      required: *id177
                       type: object
                     system:
                       description: ''
                       type: boolean
                   type: object
-                required: *id176
+                required: *id178
                 type: array
           description: OK
         '400':
@@ -26714,7 +26819,7 @@ paths:
                       description: Certificate target (service name or hostname)
                       type: string
                   type: object
-                required: &id177
+                required: &id179
                 - cert_name
                 - scope
                 - signed_by
@@ -26757,7 +26862,7 @@ paths:
                       description: Certificate target (service name or hostname)
                       type: string
                   type: object
-                required: *id177
+                required: *id179
                 type: array
           description: OK
         '400':
@@ -26791,7 +26896,7 @@ paths:
                   certificate:
                     description: Root CA certificate in PEM format
                     type: string
-                required: &id178
+                required: &id180
                 - certificate
                 type: object
             application/vnd.ceph.api.v1.0+json:
@@ -26800,7 +26905,7 @@ paths:
                   certificate:
                     description: Root CA certificate in PEM format
                     type: string
-                required: *id178
+                required: *id180
                 type: object
           description: OK
         '400':
@@ -27068,7 +27173,7 @@ paths:
                       description: Settings Value
                       type: boolean
                   type: object
-                required: &id179
+                required: &id181
                 - name
                 - default
                 - type
@@ -27091,7 +27196,7 @@ paths:
                       description: Settings Value
                       type: boolean
                   type: object
-                required: *id179
+                required: *id181
                 type: array
           description: OK
         '400':
@@ -27302,7 +27407,7 @@ paths:
                               source_type:
                                 description: resource
                                 type: string
-                            required: &id180
+                            required: &id182
                             - source_type
                             - ref
                             type: object
@@ -27310,7 +27415,7 @@ paths:
                         realm:
                           description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                           type: string
-                      required: &id181
+                      required: &id183
                       - realm
                       - join_sources
                       type: object
@@ -27324,7 +27429,7 @@ paths:
                         count:
                           description: Number of instances to place
                           type: integer
-                      required: &id182
+                      required: &id184
                       - count
                       type: object
                     public_addrs:
@@ -27339,7 +27444,7 @@ paths:
                             description: Defines where the system will assign the
                               managed IPs.
                             type: string
-                        required: &id183
+                        required: &id185
                         - address
                         - destination
                         type: object
@@ -27357,13 +27462,13 @@ paths:
                           source_type:
                             description: resource
                             type: string
-                        required: &id184
+                        required: &id186
                         - source_type
                         - ref
                         type: object
                       type: array
                   type: object
-                required: &id185
+                required: &id187
                 - resource_type
                 - cluster_id
                 - auth_mode
@@ -27404,13 +27509,13 @@ paths:
                               source_type:
                                 description: resource
                                 type: string
-                            required: *id180
+                            required: *id182
                             type: object
                           type: array
                         realm:
                           description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                           type: string
-                      required: *id181
+                      required: *id183
                       type: object
                     intent:
                       description: Desired state of the resource, e.g., 'present'
@@ -27422,7 +27527,7 @@ paths:
                         count:
                           description: Number of instances to place
                           type: integer
-                      required: *id182
+                      required: *id184
                       type: object
                     public_addrs:
                       description: Public Address
@@ -27436,7 +27541,7 @@ paths:
                             description: Defines where the system will assign the
                               managed IPs.
                             type: string
-                        required: *id183
+                        required: *id185
                         type: object
                       type: array
                     resource_type:
@@ -27452,11 +27557,11 @@ paths:
                           source_type:
                             description: resource
                             type: string
-                        required: *id184
+                        required: *id186
                         type: object
                       type: array
                   type: object
-                required: *id185
+                required: *id187
                 type: array
           description: OK
         '400':
@@ -27529,7 +27634,7 @@ paths:
                                       source_type:
                                         description: resource
                                         type: string
-                                    required: &id186
+                                    required: &id188
                                     - source_type
                                     - ref
                                     type: object
@@ -27537,7 +27642,7 @@ paths:
                                 realm:
                                   description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                                   type: string
-                              required: &id187
+                              required: &id189
                               - realm
                               - join_sources
                               type: object
@@ -27551,7 +27656,7 @@ paths:
                                 count:
                                   description: Number of instances to place
                                   type: integer
-                              required: &id188
+                              required: &id190
                               - count
                               type: object
                             public_addrs:
@@ -27566,7 +27671,7 @@ paths:
                                     description: Defines where the system will assign
                                       the managed IPs.
                                     type: string
-                                required: &id189
+                                required: &id191
                                 - address
                                 - destination
                                 type: object
@@ -27585,12 +27690,12 @@ paths:
                                   source_type:
                                     description: resource
                                     type: string
-                                required: &id190
+                                required: &id192
                                 - source_type
                                 - ref
                                 type: object
                               type: array
-                          required: &id191
+                          required: &id193
                           - resource_type
                           - cluster_id
                           - auth_mode
@@ -27608,7 +27713,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id192
+                      required: &id194
                       - resource
                       - state
                       - success
@@ -27617,7 +27722,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id193
+                required: &id195
                 - results
                 - success
                 type: object
@@ -27658,13 +27763,13 @@ paths:
                                       source_type:
                                         description: resource
                                         type: string
-                                    required: *id186
+                                    required: *id188
                                     type: object
                                   type: array
                                 realm:
                                   description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                                   type: string
-                              required: *id187
+                              required: *id189
                               type: object
                             intent:
                               description: Desired state of the resource, e.g., 'present'
@@ -27676,7 +27781,7 @@ paths:
                                 count:
                                   description: Number of instances to place
                                   type: integer
-                              required: *id188
+                              required: *id190
                               type: object
                             public_addrs:
                               description: Public Address
@@ -27690,7 +27795,7 @@ paths:
                                     description: Defines where the system will assign
                                       the managed IPs.
                                     type: string
-                                required: *id189
+                                required: *id191
                                 type: object
                               type: array
                             resource_type:
@@ -27707,10 +27812,10 @@ paths:
                                   source_type:
                                     description: resource
                                     type: string
-                                required: *id190
+                                required: *id192
                                 type: object
                               type: array
-                          required: *id191
+                          required: *id193
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -27719,13 +27824,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id192
+                      required: *id194
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id193
+                required: *id195
                 type: object
           description: Resource created.
         '202':
@@ -27838,7 +27943,7 @@ paths:
                             source_type:
                               description: resource
                               type: string
-                          required: &id194
+                          required: &id196
                           - source_type
                           - ref
                           type: object
@@ -27846,7 +27951,7 @@ paths:
                       realm:
                         description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                         type: string
-                    required: &id195
+                    required: &id197
                     - realm
                     - join_sources
                     type: object
@@ -27860,7 +27965,7 @@ paths:
                       count:
                         description: Number of instances to place
                         type: integer
-                    required: &id196
+                    required: &id198
                     - count
                     type: object
                   public_addrs:
@@ -27875,7 +27980,7 @@ paths:
                           description: Defines where the system will assign the managed
                             IPs.
                           type: string
-                      required: &id197
+                      required: &id199
                       - address
                       - destination
                       type: object
@@ -27893,12 +27998,12 @@ paths:
                         source_type:
                           description: resource
                           type: string
-                      required: &id198
+                      required: &id200
                       - source_type
                       - ref
                       type: object
                     type: array
-                required: &id199
+                required: &id201
                 - resource_type
                 - cluster_id
                 - auth_mode
@@ -27938,13 +28043,13 @@ paths:
                             source_type:
                               description: resource
                               type: string
-                          required: *id194
+                          required: *id196
                           type: object
                         type: array
                       realm:
                         description: Domain realm, e.g., 'DOMAIN1.SINK.TEST'
                         type: string
-                    required: *id195
+                    required: *id197
                     type: object
                   intent:
                     description: Desired state of the resource, e.g., 'present' or
@@ -27956,7 +28061,7 @@ paths:
                       count:
                         description: Number of instances to place
                         type: integer
-                    required: *id196
+                    required: *id198
                     type: object
                   public_addrs:
                     description: Public Address
@@ -27970,7 +28075,7 @@ paths:
                           description: Defines where the system will assign the managed
                             IPs.
                           type: string
-                      required: *id197
+                      required: *id199
                       type: object
                     type: array
                   resource_type:
@@ -27986,10 +28091,10 @@ paths:
                         source_type:
                           description: resource
                           type: string
-                      required: *id198
+                      required: *id200
                       type: object
                     type: array
-                required: *id199
+                required: *id201
                 type: object
           description: OK
         '400':
@@ -28027,7 +28132,7 @@ paths:
                         username:
                           description: Username for authentication
                           type: string
-                      required: &id200
+                      required: &id202
                       - username
                       - password
                       type: object
@@ -28047,7 +28152,7 @@ paths:
                       description: ceph.smb.join.auth
                       type: string
                   type: object
-                required: &id201
+                required: &id203
                 - resource_type
                 - auth_id
                 - intent
@@ -28067,7 +28172,7 @@ paths:
                         username:
                           description: Username for authentication
                           type: string
-                      required: *id200
+                      required: *id202
                       type: object
                     auth_id:
                       description: Unique identifier for the join auth resource
@@ -28085,7 +28190,7 @@ paths:
                       description: ceph.smb.join.auth
                       type: string
                   type: object
-                required: *id201
+                required: *id203
                 type: array
           description: OK
         '400':
@@ -28138,7 +28243,7 @@ paths:
                                 username:
                                   description: Username for authentication
                                   type: string
-                              required: &id202
+                              required: &id204
                               - username
                               - password
                               type: object
@@ -28157,7 +28262,7 @@ paths:
                             resource_type:
                               description: ceph.smb.join.auth
                               type: string
-                          required: &id203
+                          required: &id205
                           - resource_type
                           - auth_id
                           - intent
@@ -28171,7 +28276,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id204
+                      required: &id206
                       - resource
                       - state
                       - success
@@ -28180,7 +28285,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id205
+                required: &id207
                 - results
                 - success
                 type: object
@@ -28203,7 +28308,7 @@ paths:
                                 username:
                                   description: Username for authentication
                                   type: string
-                              required: *id202
+                              required: *id204
                               type: object
                             auth_id:
                               description: Unique identifier for the join auth resource
@@ -28220,7 +28325,7 @@ paths:
                             resource_type:
                               description: ceph.smb.join.auth
                               type: string
-                          required: *id203
+                          required: *id205
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -28229,13 +28334,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id204
+                      required: *id206
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id205
+                required: *id207
                 type: object
           description: Resource created.
         '202':
@@ -28331,7 +28436,7 @@ paths:
                       username:
                         description: Username for authentication
                         type: string
-                    required: &id206
+                    required: &id208
                     - username
                     - password
                     type: object
@@ -28350,7 +28455,7 @@ paths:
                   resource_type:
                     description: ceph.smb.join.auth
                     type: string
-                required: &id207
+                required: &id209
                 - resource_type
                 - auth_id
                 - intent
@@ -28369,7 +28474,7 @@ paths:
                       username:
                         description: Username for authentication
                         type: string
-                    required: *id206
+                    required: *id208
                     type: object
                   auth_id:
                     description: Unique identifier for the join auth resource
@@ -28386,7 +28491,7 @@ paths:
                   resource_type:
                     description: ceph.smb.join.auth
                     type: string
-                required: *id207
+                required: *id209
                 type: object
           description: OK
         '400':
@@ -28442,7 +28547,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: &id208
+                    required: &id210
                     - volume
                     - path
                     - provider
@@ -28486,7 +28591,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: &id209
+                required: &id211
                 - resource_type
                 - cluster_id
                 - share_id
@@ -28526,7 +28631,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: *id208
+                    required: *id210
                     type: object
                   cluster_id:
                     description: Unique identifier for the cluster
@@ -28565,7 +28670,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: *id209
+                required: *id211
                 type: object
           description: OK
         '400':
@@ -28633,7 +28738,7 @@ paths:
                                 volume:
                                   description: Name of the CephFS file system
                                   type: string
-                              required: &id210
+                              required: &id212
                               - volume
                               - path
                               - provider
@@ -28677,7 +28782,7 @@ paths:
                             write_iops_limit:
                               description: 'QoS: max write IOPS (0=disabled)'
                               type: integer
-                          required: &id211
+                          required: &id213
                           - resource_type
                           - cluster_id
                           - share_id
@@ -28700,7 +28805,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id212
+                      required: &id214
                       - resource
                       - state
                       - success
@@ -28709,7 +28814,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id213
+                required: &id215
                 - results
                 - success
                 type: object
@@ -28745,7 +28850,7 @@ paths:
                                 volume:
                                   description: Name of the CephFS file system
                                   type: string
-                              required: *id210
+                              required: *id212
                               type: object
                             cluster_id:
                               description: Unique identifier for the cluster
@@ -28784,7 +28889,7 @@ paths:
                             write_iops_limit:
                               description: 'QoS: max write IOPS (0=disabled)'
                               type: integer
-                          required: *id211
+                          required: *id213
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -28793,13 +28898,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id212
+                      required: *id214
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id213
+                required: *id215
                 type: object
           description: Resource created.
         '202':
@@ -28992,7 +29097,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: &id214
+                    required: &id216
                     - volume
                     - path
                     - provider
@@ -29036,7 +29141,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: &id215
+                required: &id217
                 - resource_type
                 - cluster_id
                 - share_id
@@ -29076,7 +29181,7 @@ paths:
                       volume:
                         description: Name of the CephFS file system
                         type: string
-                    required: *id214
+                    required: *id216
                     type: object
                   cluster_id:
                     description: Unique identifier for the cluster
@@ -29115,7 +29220,7 @@ paths:
                   write_iops_limit:
                     description: 'QoS: max write IOPS (0=disabled)'
                     type: integer
-                required: *id215
+                required: *id217
                 type: object
           description: OK
         '400':
@@ -29169,7 +29274,7 @@ paths:
                               name:
                                 description: The name of the group
                                 type: string
-                            required: &id216
+                            required: &id218
                             - name
                             type: object
                           type: array
@@ -29184,17 +29289,17 @@ paths:
                               password:
                                 description: The password for the user
                                 type: string
-                            required: &id217
+                            required: &id219
                             - name
                             - password
                             type: object
                           type: array
-                      required: &id218
+                      required: &id220
                       - users
                       - groups
                       type: object
                   type: object
-                required: &id219
+                required: &id221
                 - resource_type
                 - users_groups_id
                 - intent
@@ -29230,7 +29335,7 @@ paths:
                               name:
                                 description: The name of the group
                                 type: string
-                            required: *id216
+                            required: *id218
                             type: object
                           type: array
                         users:
@@ -29244,13 +29349,13 @@ paths:
                               password:
                                 description: The password for the user
                                 type: string
-                            required: *id217
+                            required: *id219
                             type: object
                           type: array
-                      required: *id218
+                      required: *id220
                       type: object
                   type: object
-                required: *id219
+                required: *id221
                 type: array
           description: OK
         '400':
@@ -29310,7 +29415,7 @@ paths:
                                           username:
                                             description: Username for authentication
                                             type: string
-                                        required: &id220
+                                        required: &id222
                                         - username
                                         - password
                                         type: object
@@ -29331,7 +29436,7 @@ paths:
                                       resource_type:
                                         description: ceph.smb.join.auth
                                         type: string
-                                    required: &id221
+                                    required: &id223
                                     - resource_type
                                     - auth_id
                                     - intent
@@ -29345,7 +29450,7 @@ paths:
                                   success:
                                     description: Indicates if the operation was successful
                                     type: boolean
-                                required: &id222
+                                required: &id224
                                 - resource
                                 - state
                                 - success
@@ -29355,7 +29460,7 @@ paths:
                               description: Indicates if the overall operation was
                                 successful
                               type: boolean
-                          required: &id223
+                          required: &id225
                           - results
                           - success
                           type: object
@@ -29366,7 +29471,7 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: &id224
+                      required: &id226
                       - resource
                       - state
                       - success
@@ -29375,7 +29480,7 @@ paths:
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: &id225
+                required: &id227
                 - results
                 - success
                 type: object
@@ -29405,7 +29510,7 @@ paths:
                                           username:
                                             description: Username for authentication
                                             type: string
-                                        required: *id220
+                                        required: *id222
                                         type: object
                                       auth_id:
                                         description: Unique identifier for the join
@@ -29424,7 +29529,7 @@ paths:
                                       resource_type:
                                         description: ceph.smb.join.auth
                                         type: string
-                                    required: *id221
+                                    required: *id223
                                     type: object
                                   state:
                                     description: The current state of the resource,                        e.g.,
@@ -29433,14 +29538,14 @@ paths:
                                   success:
                                     description: Indicates if the operation was successful
                                     type: boolean
-                                required: *id222
+                                required: *id224
                                 type: object
                               type: array
                             success:
                               description: Indicates if the overall operation was
                                 successful
                               type: boolean
-                          required: *id223
+                          required: *id225
                           type: object
                         state:
                           description: The current state of the resource,                        e.g.,
@@ -29449,13 +29554,13 @@ paths:
                         success:
                           description: Indicates if the operation was successful
                           type: boolean
-                      required: *id224
+                      required: *id226
                       type: object
                     type: array
                   success:
                     description: Indicates if the overall operation was successful
                     type: boolean
-                required: *id225
+                required: *id227
                 type: object
           description: Resource created.
         '202':
@@ -29567,7 +29672,7 @@ paths:
                             name:
                               description: The name of the group
                               type: string
-                          required: &id226
+                          required: &id228
                           - name
                           type: object
                         type: array
@@ -29582,16 +29687,16 @@ paths:
                             password:
                               description: The password for the user
                               type: string
-                          required: &id227
+                          required: &id229
                           - name
                           - password
                           type: object
                         type: array
-                    required: &id228
+                    required: &id230
                     - users
                     - groups
                     type: object
-                required: &id229
+                required: &id231
                 - resource_type
                 - users_groups_id
                 - intent
@@ -29626,7 +29731,7 @@ paths:
                             name:
                               description: The name of the group
                               type: string
-                          required: *id226
+                          required: *id228
                           type: object
                         type: array
                       users:
@@ -29640,12 +29745,12 @@ paths:
                             password:
                               description: The password for the user
                               type: string
-                          required: *id227
+                          required: *id229
                           type: object
                         type: array
-                    required: *id228
+                    required: *id230
                     type: object
-                required: *id229
+                required: *id231
                 type: object
           description: OK
         '400':
@@ -29698,7 +29803,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: &id230
+                          required: &id232
                           - pool
                           type: object
                         name:
@@ -29713,7 +29818,7 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: &id231
+                      required: &id233
                       - name
                       - metadata
                       - begin_time
@@ -29746,14 +29851,14 @@ paths:
                       warnings:
                         description: ''
                         type: integer
-                    required: &id232
+                    required: &id234
                     - warnings
                     - errors
                     type: object
                   version:
                     description: ''
                     type: string
-                required: &id233
+                required: &id235
                 - health_status
                 - mgr_id
                 - mgr_host
@@ -29793,7 +29898,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: *id230
+                          required: *id232
                           type: object
                         name:
                           description: ''
@@ -29807,7 +29912,7 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: *id231
+                      required: *id233
                       type: object
                     type: array
                   have_mon_connection:
@@ -29831,12 +29936,12 @@ paths:
                       warnings:
                         description: ''
                         type: integer
-                    required: *id232
+                    required: *id234
                     type: object
                   version:
                     description: ''
                     type: string
-                required: *id233
+                required: *id235
                 type: object
           description: OK
         '400':
@@ -29893,7 +29998,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: &id234
+                          required: &id236
                           - pool
                           type: object
                         name:
@@ -29908,7 +30013,7 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: &id235
+                      required: &id237
                       - name
                       - metadata
                       - begin_time
@@ -29920,7 +30025,7 @@ paths:
                       - exception
                       type: object
                     type: array
-                required: &id236
+                required: &id238
                 - executing_tasks
                 - finished_tasks
                 type: object
@@ -29952,7 +30057,7 @@ paths:
                             pool:
                               description: ''
                               type: integer
-                          required: *id234
+                          required: *id236
                           type: object
                         name:
                           description: finished tasks name
@@ -29966,10 +30071,10 @@ paths:
                         success:
                           description: ''
                           type: boolean
-                      required: *id235
+                      required: *id237
                       type: object
                     type: array
-                required: *id236
+                required: *id238
                 type: object
           description: OK
         '400':
@@ -30064,7 +30169,7 @@ paths:
                           mode:
                             description: ''
                             type: string
-                        required: &id237
+                        required: &id239
                         - active
                         - mode
                         type: object
@@ -30091,7 +30196,7 @@ paths:
                             items:
                               type: string
                             type: array
-                        required: &id238
+                        required: &id240
                         - cluster_changed
                         - active_changed
                         type: object
@@ -30112,7 +30217,7 @@ paths:
                               straw2:
                                 description: ''
                                 type: integer
-                            required: &id239
+                            required: &id241
                             - straw2
                             type: object
                           bucket_sizes:
@@ -30124,7 +30229,7 @@ paths:
                               '3':
                                 description: ''
                                 type: integer
-                            required: &id240
+                            required: &id242
                             - '1'
                             - '3'
                             type: object
@@ -30137,7 +30242,7 @@ paths:
                               '11':
                                 description: ''
                                 type: integer
-                            required: &id241
+                            required: &id243
                             - '1'
                             - '11'
                             type: object
@@ -30227,7 +30332,7 @@ paths:
                               straw_calc_version:
                                 description: ''
                                 type: integer
-                            required: &id242
+                            required: &id244
                             - choose_local_tries
                             - choose_local_fallback_tries
                             - choose_total_tries
@@ -30249,7 +30354,7 @@ paths:
                             - require_feature_tunables5
                             - has_v5_rules
                             type: object
-                        required: &id243
+                        required: &id245
                         - num_devices
                         - num_types
                         - num_buckets
@@ -30277,7 +30382,7 @@ paths:
                               ever_enabled_multiple:
                                 description: ''
                                 type: boolean
-                            required: &id244
+                            required: &id246
                             - enable_multiple
                             - ever_enabled_multiple
                             type: object
@@ -30292,7 +30397,7 @@ paths:
                           total_num_mds:
                             description: ''
                             type: integer
-                        required: &id245
+                        required: &id247
                         - count
                         - feature_flags
                         - num_standby_mds
@@ -30317,7 +30422,7 @@ paths:
                           num_with_osd:
                             description: ''
                             type: integer
-                        required: &id246
+                        required: &id248
                         - num
                         - num_with_mon
                         - num_with_mds
@@ -30342,7 +30447,7 @@ paths:
                                   x86_64:
                                     description: ''
                                     type: integer
-                                required: &id247
+                                required: &id249
                                 - x86_64
                                 type: object
                               ceph_version:
@@ -30351,7 +30456,7 @@ paths:
                                   ceph version 16.0.0-3151-gf202994fcf:
                                     description: ''
                                     type: integer
-                                required: &id248
+                                required: &id250
                                 - ceph version 16.0.0-3151-gf202994fcf
                                 type: object
                               cpu:
@@ -30360,7 +30465,7 @@ paths:
                                   Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
                                     description: ''
                                     type: integer
-                                required: &id249
+                                required: &id251
                                 - Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
                                 type: object
                               distro:
@@ -30369,7 +30474,7 @@ paths:
                                   centos:
                                     description: ''
                                     type: integer
-                                required: &id250
+                                required: &id252
                                 - centos
                                 type: object
                               distro_description:
@@ -30378,7 +30483,7 @@ paths:
                                   CentOS Linux 8 (Core):
                                     description: ''
                                     type: integer
-                                required: &id251
+                                required: &id253
                                 - CentOS Linux 8 (Core)
                                 type: object
                               kernel_description:
@@ -30387,7 +30492,7 @@ paths:
                                   '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
                                     description: ''
                                     type: integer
-                                required: &id252
+                                required: &id254
                                 - '#1 SMP Wed Jul 1 19:53:01 UTC 2020'
                                 type: object
                               kernel_version:
@@ -30396,7 +30501,7 @@ paths:
                                   5.7.7-200.fc32.x86_64:
                                     description: ''
                                     type: integer
-                                required: &id253
+                                required: &id255
                                 - 5.7.7-200.fc32.x86_64
                                 type: object
                               os:
@@ -30405,10 +30510,10 @@ paths:
                                   Linux:
                                     description: ''
                                     type: integer
-                                required: &id254
+                                required: &id256
                                 - Linux
                                 type: object
-                            required: &id255
+                            required: &id257
                             - arch
                             - ceph_version
                             - os
@@ -30427,7 +30532,7 @@ paths:
                                   x86_64:
                                     description: ''
                                     type: integer
-                                required: &id256
+                                required: &id258
                                 - x86_64
                                 type: object
                               ceph_version:
@@ -30436,7 +30541,7 @@ paths:
                                   ceph version 16.0.0-3151-gf202994fcf:
                                     description: ''
                                     type: integer
-                                required: &id257
+                                required: &id259
                                 - ceph version 16.0.0-3151-gf202994fcf
                                 type: object
                               cpu:
@@ -30445,7 +30550,7 @@ paths:
                                   Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
                                     description: ''
                                     type: integer
-                                required: &id258
+                                required: &id260
                                 - Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
                                 type: object
                               distro:
@@ -30454,7 +30559,7 @@ paths:
                                   centos:
                                     description: ''
                                     type: integer
-                                required: &id259
+                                required: &id261
                                 - centos
                                 type: object
                               distro_description:
@@ -30463,7 +30568,7 @@ paths:
                                   CentOS Linux 8 (Core):
                                     description: ''
                                     type: integer
-                                required: &id260
+                                required: &id262
                                 - CentOS Linux 8 (Core)
                                 type: object
                               kernel_description:
@@ -30472,7 +30577,7 @@ paths:
                                   '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
                                     description: ''
                                     type: integer
-                                required: &id261
+                                required: &id263
                                 - '#1 SMP Wed Jul 1 19:53:01 UTC 2020'
                                 type: object
                               kernel_version:
@@ -30481,7 +30586,7 @@ paths:
                                   5.7.7-200.fc32.x86_64:
                                     description: ''
                                     type: integer
-                                required: &id262
+                                required: &id264
                                 - 5.7.7-200.fc32.x86_64
                                 type: object
                               os:
@@ -30490,7 +30595,7 @@ paths:
                                   Linux:
                                     description: ''
                                     type: integer
-                                required: &id263
+                                required: &id265
                                 - Linux
                                 type: object
                               osd_objectstore:
@@ -30499,7 +30604,7 @@ paths:
                                   bluestore:
                                     description: ''
                                     type: integer
-                                required: &id264
+                                required: &id266
                                 - bluestore
                                 type: object
                               rotational:
@@ -30508,10 +30613,10 @@ paths:
                                   '1':
                                     description: ''
                                     type: integer
-                                required: &id265
+                                required: &id267
                                 - '1'
                                 type: object
-                            required: &id266
+                            required: &id268
                             - osd_objectstore
                             - rotational
                             - arch
@@ -30523,7 +30628,7 @@ paths:
                             - distro_description
                             - distro
                             type: object
-                        required: &id267
+                        required: &id269
                         - osd
                         - mon
                         type: object
@@ -30546,7 +30651,7 @@ paths:
                                 items:
                                   type: string
                                 type: array
-                            required: &id268
+                            required: &id270
                             - persistent
                             - optional
                             type: object
@@ -30565,7 +30670,7 @@ paths:
                           v2_addr_mons:
                             description: ''
                             type: integer
-                        required: &id269
+                        required: &id271
                         - count
                         - features
                         - min_mon_release
@@ -30589,7 +30694,7 @@ paths:
                           require_osd_release:
                             description: ''
                             type: string
-                        required: &id270
+                        required: &id272
                         - count
                         - require_osd_release
                         - require_min_compat_client
@@ -30632,7 +30737,7 @@ paths:
                             type:
                               description: ''
                               type: string
-                          required: &id271
+                          required: &id273
                           - pool
                           - type
                           - pg_num
@@ -30662,7 +30767,7 @@ paths:
                           num_pools:
                             description: ''
                             type: integer
-                        required: &id272
+                        required: &id274
                         - num_pools
                         - num_images_by_pool
                         - mirroring_by_pool
@@ -30693,7 +30798,7 @@ paths:
                           zones:
                             description: ''
                             type: integer
-                        required: &id273
+                        required: &id275
                         - count
                         - zones
                         - zonegroups
@@ -30705,7 +30810,7 @@ paths:
                           rgw:
                             description: ''
                             type: integer
-                        required: &id274
+                        required: &id276
                         - rgw
                         type: object
                       usage:
@@ -30726,14 +30831,14 @@ paths:
                           total_used_bytes:
                             description: ''
                             type: integer
-                        required: &id275
+                        required: &id277
                         - pools
                         - pg_num
                         - total_used_bytes
                         - total_bytes
                         - total_avail_bytes
                         type: object
-                    required: &id276
+                    required: &id278
                     - leaderboard
                     - report_version
                     - report_timestamp
@@ -30757,7 +30862,7 @@ paths:
                     - balancer
                     - crashes
                     type: object
-                required: &id277
+                required: &id279
                 - report
                 - device_report
                 type: object
@@ -30779,7 +30884,7 @@ paths:
                           mode:
                             description: ''
                             type: string
-                        required: *id237
+                        required: *id239
                         type: object
                       channels:
                         description: ''
@@ -30804,7 +30909,7 @@ paths:
                             items:
                               type: string
                             type: array
-                        required: *id238
+                        required: *id240
                         type: object
                       crashes:
                         description: ''
@@ -30823,7 +30928,7 @@ paths:
                               straw2:
                                 description: ''
                                 type: integer
-                            required: *id239
+                            required: *id241
                             type: object
                           bucket_sizes:
                             description: ''
@@ -30834,7 +30939,7 @@ paths:
                               '3':
                                 description: ''
                                 type: integer
-                            required: *id240
+                            required: *id242
                             type: object
                           bucket_types:
                             description: ''
@@ -30845,7 +30950,7 @@ paths:
                               '11':
                                 description: ''
                                 type: integer
-                            required: *id241
+                            required: *id243
                             type: object
                           compat_weight_set:
                             description: ''
@@ -30933,9 +31038,9 @@ paths:
                               straw_calc_version:
                                 description: ''
                                 type: integer
-                            required: *id242
+                            required: *id244
                             type: object
-                        required: *id243
+                        required: *id245
                         type: object
                       fs:
                         description: ''
@@ -30952,7 +31057,7 @@ paths:
                               ever_enabled_multiple:
                                 description: ''
                                 type: boolean
-                            required: *id244
+                            required: *id246
                             type: object
                           filesystems:
                             description: ''
@@ -30965,7 +31070,7 @@ paths:
                           total_num_mds:
                             description: ''
                             type: integer
-                        required: *id245
+                        required: *id247
                         type: object
                       hosts:
                         description: ''
@@ -30985,7 +31090,7 @@ paths:
                           num_with_osd:
                             description: ''
                             type: integer
-                        required: *id246
+                        required: *id248
                         type: object
                       leaderboard:
                         description: ''
@@ -31005,7 +31110,7 @@ paths:
                                   x86_64:
                                     description: ''
                                     type: integer
-                                required: *id247
+                                required: *id249
                                 type: object
                               ceph_version:
                                 description: ''
@@ -31013,7 +31118,7 @@ paths:
                                   ceph version 16.0.0-3151-gf202994fcf:
                                     description: ''
                                     type: integer
-                                required: *id248
+                                required: *id250
                                 type: object
                               cpu:
                                 description: ''
@@ -31021,7 +31126,7 @@ paths:
                                   Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
                                     description: ''
                                     type: integer
-                                required: *id249
+                                required: *id251
                                 type: object
                               distro:
                                 description: ''
@@ -31029,7 +31134,7 @@ paths:
                                   centos:
                                     description: ''
                                     type: integer
-                                required: *id250
+                                required: *id252
                                 type: object
                               distro_description:
                                 description: ''
@@ -31037,7 +31142,7 @@ paths:
                                   CentOS Linux 8 (Core):
                                     description: ''
                                     type: integer
-                                required: *id251
+                                required: *id253
                                 type: object
                               kernel_description:
                                 description: ''
@@ -31045,7 +31150,7 @@ paths:
                                   '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
                                     description: ''
                                     type: integer
-                                required: *id252
+                                required: *id254
                                 type: object
                               kernel_version:
                                 description: ''
@@ -31053,7 +31158,7 @@ paths:
                                   5.7.7-200.fc32.x86_64:
                                     description: ''
                                     type: integer
-                                required: *id253
+                                required: *id255
                                 type: object
                               os:
                                 description: ''
@@ -31061,9 +31166,9 @@ paths:
                                   Linux:
                                     description: ''
                                     type: integer
-                                required: *id254
+                                required: *id256
                                 type: object
-                            required: *id255
+                            required: *id257
                             type: object
                           osd:
                             description: ''
@@ -31074,7 +31179,7 @@ paths:
                                   x86_64:
                                     description: ''
                                     type: integer
-                                required: *id256
+                                required: *id258
                                 type: object
                               ceph_version:
                                 description: ''
@@ -31082,7 +31187,7 @@ paths:
                                   ceph version 16.0.0-3151-gf202994fcf:
                                     description: ''
                                     type: integer
-                                required: *id257
+                                required: *id259
                                 type: object
                               cpu:
                                 description: ''
@@ -31090,7 +31195,7 @@ paths:
                                   Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz:
                                     description: ''
                                     type: integer
-                                required: *id258
+                                required: *id260
                                 type: object
                               distro:
                                 description: ''
@@ -31098,7 +31203,7 @@ paths:
                                   centos:
                                     description: ''
                                     type: integer
-                                required: *id259
+                                required: *id261
                                 type: object
                               distro_description:
                                 description: ''
@@ -31106,7 +31211,7 @@ paths:
                                   CentOS Linux 8 (Core):
                                     description: ''
                                     type: integer
-                                required: *id260
+                                required: *id262
                                 type: object
                               kernel_description:
                                 description: ''
@@ -31114,7 +31219,7 @@ paths:
                                   '#1 SMP Wed Jul 1 19:53:01 UTC 2020':
                                     description: ''
                                     type: integer
-                                required: *id261
+                                required: *id263
                                 type: object
                               kernel_version:
                                 description: ''
@@ -31122,7 +31227,7 @@ paths:
                                   5.7.7-200.fc32.x86_64:
                                     description: ''
                                     type: integer
-                                required: *id262
+                                required: *id264
                                 type: object
                               os:
                                 description: ''
@@ -31130,7 +31235,7 @@ paths:
                                   Linux:
                                     description: ''
                                     type: integer
-                                required: *id263
+                                required: *id265
                                 type: object
                               osd_objectstore:
                                 description: ''
@@ -31138,7 +31243,7 @@ paths:
                                   bluestore:
                                     description: ''
                                     type: integer
-                                required: *id264
+                                required: *id266
                                 type: object
                               rotational:
                                 description: ''
@@ -31146,11 +31251,11 @@ paths:
                                   '1':
                                     description: ''
                                     type: integer
-                                required: *id265
+                                required: *id267
                                 type: object
-                            required: *id266
+                            required: *id268
                             type: object
-                        required: *id267
+                        required: *id269
                         type: object
                       mon:
                         description: ''
@@ -31171,7 +31276,7 @@ paths:
                                 items:
                                   type: string
                                 type: array
-                            required: *id268
+                            required: *id270
                             type: object
                           ipv4_addr_mons:
                             description: ''
@@ -31188,7 +31293,7 @@ paths:
                           v2_addr_mons:
                             description: ''
                             type: integer
-                        required: *id269
+                        required: *id271
                         type: object
                       osd:
                         description: ''
@@ -31205,7 +31310,7 @@ paths:
                           require_osd_release:
                             description: ''
                             type: string
-                        required: *id270
+                        required: *id272
                         type: object
                       pools:
                         description: ''
@@ -31244,7 +31349,7 @@ paths:
                             type:
                               description: ''
                               type: string
-                          required: *id271
+                          required: *id273
                           type: object
                         type: array
                       rbd:
@@ -31263,7 +31368,7 @@ paths:
                           num_pools:
                             description: ''
                             type: integer
-                        required: *id272
+                        required: *id274
                         type: object
                       report_id:
                         description: ''
@@ -31291,7 +31396,7 @@ paths:
                           zones:
                             description: ''
                             type: integer
-                        required: *id273
+                        required: *id275
                         type: object
                       services:
                         description: ''
@@ -31299,7 +31404,7 @@ paths:
                           rgw:
                             description: ''
                             type: integer
-                        required: *id274
+                        required: *id276
                         type: object
                       usage:
                         description: ''
@@ -31319,11 +31424,11 @@ paths:
                           total_used_bytes:
                             description: ''
                             type: integer
-                        required: *id275
+                        required: *id277
                         type: object
-                    required: *id276
+                    required: *id278
                     type: object
-                required: *id277
+                required: *id279
                 type: object
           description: OK
         '400':
@@ -31375,7 +31480,7 @@ paths:
                   username:
                     description: Username of the user
                     type: string
-                required: &id278
+                required: &id280
                 - username
                 - roles
                 - name
@@ -31414,7 +31519,7 @@ paths:
                   username:
                     description: Username of the user
                     type: string
-                required: *id278
+                required: *id280
                 type: object
           description: OK
         '400':

@@ -2,6 +2,10 @@ export class CephfsSnapshot {
   name: string;
   path: string;
   created: string;
+  /** Present when listing with details=true (from snap_info). */
+  id?: number;
+  /** Present when listing with details=true (from snap_info). */
+  metadata?: Record<string, string>;
 }
 
 export class CephfsQuotas {

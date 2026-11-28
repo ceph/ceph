@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import datetime
 import errno
 import json
 import unittest
@@ -18,6 +19,7 @@ from ..controllers.cephfs import CephFS, CephFSClients, CephFSMirror, \
     CephFSSubvolumeSnapshots
 from ..exceptions import DashboardException
 from ..services.ceph_service import SendCommandError
+from ..services.cephfs import CephFS as CephFSService
 from ..services.cephfs import ensure_mirroring_client_caps, \
     has_mirroring_mds_caps, unmanaged_volume_info
 from ..tests import ControllerTestCase
@@ -158,6 +160,94 @@ class EnsureMirroringClientCapsTest(unittest.TestCase):
             ensure_mirroring_client_caps('client.admin', 'myfs')
         self.assertEqual(str(ctx.exception), 'Invalid capabilities on the MDS')
         self.assertEqual(ctx.exception.code, 'invalid_mds_caps')
+
+
+class CephFSListSnapshotsServiceTest(unittest.TestCase):
+    def test_details_snap_info_error_keeps_entry(self):
+        service = CephFSService.__new__(CephFSService)
+        cfs = Mock()
+        service.cfs = cfs
+        cfs.conf_get.return_value = '.snap'
+
+        ok_dent = Mock()
+        ok_dent.is_dir.return_value = True
+        ok_dent.d_name = b'snap-ok'
+        bad_dent = Mock()
+        bad_dent.is_dir.return_value = True
+        bad_dent.d_name = b'snap-bad'
+        cfs.readdir.side_effect = [ok_dent, bad_dent, None]
+
+        stat = Mock()
+        stat.st_ctime = datetime.datetime(2024, 1, 1)
+        cfs.stat.return_value = stat
+        cfs.snap_info.side_effect = [
+            {'id': 1, 'metadata': {}},
+            cephfs.Error(-errno.EIO, 'snap_info error')
+        ]
+
+        result = service.ls_snapshots('/vol', details=True)
+
+        self.assertEqual([entry['name'] for entry in result], ['snap-ok', 'snap-bad'])
+        self.assertEqual(result[0]['id'], 1)
+        self.assertNotIn('id', result[1])
+        self.assertIn('created', result[1])
+
+
+class CephFSSnapshotTest(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([CephFS])
+
+    @patch.object(CephFS, '_cephfs_instance')
+    def test_ls_snapshots_success(self, mock_instance):
+        path = '/volumes/g1/sv1'
+        expected = [{
+            'name': 'snap1',
+            'path': '/volumes/g1/sv1/.snap/snap1',
+            'created': '2024-01-01T00:00:00Z'
+        }]
+        mock_instance.return_value.ls_snapshots.return_value = expected
+
+        self._get(f'/api/cephfs/1/snapshot?path={urllib.parse.quote(path)}')
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        mock_instance.assert_called_once_with('1')
+        mock_instance.return_value.ls_snapshots.assert_called_once_with(
+            path, details=False)
+
+    @patch.object(CephFS, '_cephfs_instance')
+    def test_ls_snapshots_with_details(self, mock_instance):
+        path = '/volumes/g1/sv1'
+        expected = [{
+            'name': 'snap1',
+            'path': '/volumes/g1/sv1/.snap/snap1',
+            'created': '2024-01-01T00:00:00Z',
+            'id': 42,
+            'metadata': {'foo': 'bar'}
+        }]
+        mock_instance.return_value.ls_snapshots.return_value = expected
+
+        self._get(
+            f'/api/cephfs/1/snapshot?path={urllib.parse.quote(path)}&details=true')
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        mock_instance.assert_called_once_with('1')
+        mock_instance.return_value.ls_snapshots.assert_called_once_with(
+            path, details=True)
+
+    @patch('dashboard.controllers.cephfs.cephfs')
+    @patch.object(CephFS, '_cephfs_instance')
+    def test_ls_snapshots_missing_snapdir(self, mock_instance, mock_cephfs):
+        path = '/volumes/g1/sv1'
+        mock_cephfs.ObjectNotFound = Exception
+        mock_cephfs.PermissionError = Exception
+        mock_instance.return_value.ls_snapshots.side_effect = mock_cephfs.ObjectNotFound(
+            errno.ENOENT, 'No such file or directory'
+        )
+
+        self._get(f'/api/cephfs/1/snapshot?path={urllib.parse.quote(path)}')
+        self.assertStatus(200)
+        self.assertJsonBody([])
 
 
 class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-methods
