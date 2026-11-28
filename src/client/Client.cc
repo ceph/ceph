@@ -1620,12 +1620,36 @@ std::string Client::_unwrap_name(Inode& diri, const std::string& dname, const st
     /* no reverse of normalization / encoding */
 
     if (is_insensitive) {
-      ldout(cct, 25) << __func__ << ":  = " << binstrprint(alternate_name) << dendl;
-      newdname = newaltn;
+      /* Prefer the original (pre-fold) name when present. If alternate_name
+       * is missing, keep the MDS primary name so readdir/path consumers do
+       * not see an empty dentry name. */
+      if (!newaltn.empty()) {
+        ldout(cct, 25) << __func__ << ":  = " << binstrprint(newaltn) << dendl;
+        newdname = std::move(newaltn);
+      } else {
+        ldout(cct, 25) << __func__ << ":  alternate_name empty, keeping "
+                       << binstrprint(newdname) << dendl;
+      }
     }
   }
 
   return newdname;
+}
+
+void Client::_maybe_set_request_alternate_name(MetaRequest *req, Inode& diri,
+                                               const std::string& alternate_name)
+{
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name);
+    return;
+  }
+  /* visible=true is for fscrypt/cptree: do not mint fscrypt alternate_name
+   * (cptree copies it via vxattr). Charmap still needs the wrapped original
+   * name persisted when the parent is not fscrypt-enabled. */
+  if (diri.has_charmap() && !diri.is_fscrypt_enabled() &&
+      !alternate_name.empty()) {
+    req->set_alternate_name(alternate_name);
+  }
 }
 
 
@@ -16530,8 +16554,8 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
+  _maybe_set_request_alternate_name(req, *wdr.diri, wdr.alternate_name);
   if (!alternate_name_visible) {
-    req->set_alternate_name(wdr.alternate_name);
 #if defined(__linux__)
     wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
@@ -16669,16 +16693,18 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
 
   req->set_filepath(wdr.getpath());
   req->set_inode(wdr.diri);
+  _maybe_set_request_alternate_name(
+      req, *wdr.diri,
+      alternate_name.empty() ? wdr.alternate_name : alternate_name);
   if (!alternate_name_visible) {
-    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
-  if (fscrypt_options.fscrypt_auth.size())
-    req->fscrypt_auth = fscrypt_options.fscrypt_auth;
+    if (fscrypt_options.fscrypt_auth.size())
+      req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
-  else
-    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    else
+      wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
-  if (fscrypt_options.fscrypt_file.size())
-    req->fscrypt_file = fscrypt_options.fscrypt_file;
+    if (fscrypt_options.fscrypt_file.size())
+      req->fscrypt_file = fscrypt_options.fscrypt_file;
   }
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
 
@@ -16773,8 +16799,10 @@ int Client::_mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& p
   req->set_inode(wdr.diri);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  _maybe_set_request_alternate_name(
+      req, *wdr.diri,
+      alternate_name.empty() ? wdr.alternate_name : alternate_name);
   if (!alternate_name_visible) {
-    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
     if (fscrypt_options.fscrypt_auth.size())
       req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
@@ -16920,8 +16948,10 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
+  _maybe_set_request_alternate_name(
+      req, *wdr.diri,
+      alternate_name.empty() ? wdr.alternate_name : alternate_name);
   if (!alternate_name_visible) {
-    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
     if (fscrypt_options.fscrypt_auth.size())
       req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
@@ -17259,8 +17289,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   req->set_filepath(wdr_to.getpath());
   req->set_filepath2(wdr_from.getpath());
+  _maybe_set_request_alternate_name(
+      req, *wdr_to.diri,
+      alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
   if (!alternate_name_visible) {
-    req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
 #if defined(__linux__)
     wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
@@ -17373,8 +17405,10 @@ int Client::_link(Inode *diri_from, const char* path_from, Inode* diri_to, const
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   req->set_filepath(wdr_to.getpath());
+  _maybe_set_request_alternate_name(
+      req, *wdr_to.diri,
+      alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
   if (!alternate_name_visible) {
-    req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
 #if defined(__linux__)
     wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif

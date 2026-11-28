@@ -2795,6 +2795,68 @@ class TestSubvolumes(TestVolumesHelper):
         v = json.loads(v)
         self.assertEqual(v, attrs)
 
+    def test_subvolume_snapshot_info_clone_with_group_charmap(self):
+        """
+        Snapshot info and clone must work when the subvolume root inherits
+        casesensitive=false from the group (charmap on base, not only on the
+        UUID data dir). Regression for empty alternate_name / readdir unwrap
+        under case-insensitive snap contents (mgr volumes visible=true).
+        """
+        group = self._gen_subvol_grp_name()
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_name()
+        attrs = {
+            "normalization": "nfkd",
+            "encoding": "utf8",
+            "casesensitive": False,
+        }
+
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        self._fs_cmd("subvolumegroup", "charmap", "set", self.volname,
+                     "--group_name", group, "casesensitive", "0")
+        self._fs_cmd("subvolume", "create", self.volname, subvolume,
+                     "--group_name", group, "--mode=777")
+        for setting, value in attrs.items():
+            self._fs_cmd("subvolume", "charmap", "set", self.volname, subvolume,
+                         setting, str(value), "--group_name", group)
+
+        inherited = json.loads(self._fs_cmd(
+            "subvolume", "charmap", "get", self.volname, subvolume,
+            "--group_name", group))
+        self.assertEqual(inherited["casesensitive"], False)
+
+        self._do_subvolume_io(subvolume, subvolume_group=group, number_of_files=1)
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume,
+                     snapshot, "--group_name", group)
+
+        snaps = json.loads(self._fs_cmd(
+            "subvolume", "snapshot", "ls", self.volname, subvolume,
+            "--group_name", group))
+        self.assertIn(snapshot, [s["name"] for s in snaps])
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(
+            self.volname, subvolume, snapshot, group_name=group))
+        self.assertIn("created_at", snap_info)
+        self.assertEqual(snap_info["has_pending_clones"], "no")
+
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume,
+                     snapshot, clone, "--group_name", group,
+                     "--target_group_name", group)
+        self._wait_for_clone_to_complete(clone, clone_group=group)
+
+        clone_charmap = json.loads(self._fs_cmd(
+            "subvolume", "charmap", "get", self.volname, clone,
+            "--group_name", group))
+        self.assertEqual(clone_charmap["casesensitive"], False)
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume,
+                     snapshot, "--group_name", group)
+        self._fs_cmd("subvolume", "rm", self.volname, clone, "--group_name", group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        self._wait_for_trash_empty()
+
     def test_subvolume_charmap_rm(self):
         subvolume = self._gen_subvol_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolume)

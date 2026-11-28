@@ -1198,6 +1198,8 @@ protected:
 
   bool _wrap_name(Inode& diri, std::string& dname, std::string& alternate_name);
   std::string _unwrap_name(Inode& diri, const std::string& dname, const std::string& alternate_name);
+  void _maybe_set_request_alternate_name(MetaRequest *req, Inode& diri,
+                                         const std::string& alternate_name);
 
   void set_cap_epoch_barrier(epoch_t e);
 
