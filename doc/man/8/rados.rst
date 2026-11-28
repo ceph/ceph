@@ -62,12 +62,6 @@ Global Options
 
    Create the pool or directory that was specified.
 
-.. option:: -i infile
-
-   will specify an input file to be passed along as a payload with the
-   command to the Monitor cluster. This is only used for specific
-   Monitor commands.
-
 .. option:: -m monaddress[:port]
 
    Connect to specified Monitor (instead of looking through ceph.conf).
@@ -90,11 +84,45 @@ Global Options
 
    Set the max number of objects for write benchmarking.
 
+.. option:: --obj-name-file file
+
+   Use the content of *file* as the object name, and leave out the object
+   name argument. The whole content of the file is used, including any
+   trailing newline. This allows object names that are hard to type, such
+   as names that contain binary data. The ``cp``, ``listwatchers``,
+   ``lock``, ``notify``, ``rollback``, ``set-chunk``, ``set-redirect``,
+   ``setomapval``, and ``watch`` commands ignore this option.
+
+.. option:: --input-file file
+
+   Use the content of *file* as the value for ``setomapval`` and
+   ``setomapheader``, in place of the value argument.
+
 .. option:: --lock-cookie locker-cookie
 
    Will set the lock cookie for acquiring advisory lock (lock get command).
    If the cookie is not empty, this option must be passed to lock break command
    to find the correct lock when releasing lock.
+
+.. option:: --lock-tag tag
+
+   Set the tag of the lock to take (``lock get``). All the lockers of a
+   lock must use the same tag.
+
+.. option:: --lock-description description
+
+   Set a description of the lock to take (``lock get``), which
+   ``lock info`` shows.
+
+.. option:: --lock-duration seconds
+
+   Set how long the lock to take (``lock get``) lasts, in seconds. By
+   default, the lock does not expire.
+
+.. option:: --lock-type type
+
+   Take a *shared* or an *exclusive* lock (``lock get``). The default is
+   *exclusive*.
 
 .. option:: --target-locator
 
@@ -128,17 +156,49 @@ Bench options
 
    Do not verify contents of read objects.
 
-.. option:: --write-object
+.. option:: --no-hints
 
-   Write contents to the objects.
+   Do not send allocation hints with the object writes of a write
+   benchmark. By default, each write carries a hint with the object size
+   and the write size.
 
-.. option:: --write-omap
+.. option:: --reuse-bench
 
-   Write contents to the omap.
+   Make a write benchmark overwrite the objects of an earlier write
+   benchmark, with that benchmark's object size and write size, instead of
+   writing new objects. The earlier benchmark must have been run with
+   ``--no-cleanup``, and ``--run-name`` selects it.
 
-.. option:: --write-xattr
+.. option:: --object, --write-object
 
-   Write contents to the extended attributes.
+   Read or write contents to the objects. This is the default.
+   ``--write-object`` is a deprecated name for this option.
+
+.. option:: --omap, --write-omap
+
+   Read or write contents to the omap. ``--write-omap`` is a deprecated
+   name for this option.
+
+.. option:: --xattr, --write-xattr
+
+   Write contents to the extended attributes. Read benchmarks do not
+   support this option. ``--write-xattr`` is a deprecated name for this
+   option.
+
+.. option:: --omap-read-start-after key
+
+   With ``--omap``, make each read of a read benchmark list the omap entries
+   that come after *key*.
+
+.. option:: --omap-read-filter-prefix prefix
+
+   With ``--omap``, make each read of a read benchmark list only the omap
+   entries whose keys begin with *prefix*.
+
+.. option:: --omap-read-max-return count
+
+   With ``--omap``, make each read of a read benchmark list at most *count*
+   omap entries. The default is 1024.
 
 
 Load gen options
@@ -243,6 +303,20 @@ Global commands
 :command:`lspools`
   List object pools
 
+:command:`cppool` *source-pool* *dest-pool* [ --yes-i-really-mean-it ]
+  Copy every object in every namespace of *source-pool* to *dest-pool*,
+  which must already exist. Each copy gets the data, extended attributes,
+  object map, name, and namespace of its source object, but not its locator
+  key. Snapshots are not copied, and object versions are not preserved. If
+  *source-pool* has self-managed snapshots, such as RBD and CephFS
+  snapshots, the command refuses to run unless ``--yes-i-really-mean-it``
+  is given.
+
+:command:`purge` *pool* --yes-i-really-really-mean-it
+  Remove every object, in every namespace, from *pool* without removing
+  the pool itself. This cannot be undone. The command works even when the
+  pool is full.
+
 :command:`df`
   Show utilization statistics, including disk usage (bytes) and object
   counts, over the entire system and broken down by pool.
@@ -260,8 +334,9 @@ Global commands
 Pool specific commands
 ======================
 
-:command:`get` *name* *outfile*
-  Read object name from the cluster and write it to outfile.
+:command:`get` *name* *outfile* [--offset offset]
+  Read object name from the cluster, starting at offset (default: 0), and
+  write it to outfile.
 
 :command:`put` *name* *infile* [--offset offset]
   Write object name with start offset (default:0) to the cluster with contents from infile.
@@ -272,14 +347,45 @@ Pool specific commands
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.
 
+:command:`truncate` *name* *length*
+  Set the size of object *name* to *length* bytes. Data past *length* is
+  discarded. If *length* is larger than the object, the object is extended,
+  and the added range reads as zeros.
+
+:command:`create` *name*
+  Create an empty object named *name*. The command fails if the object
+  already exists.
+
 :command:`rm` [--force-full] *name* ...
   Remove object(s) with name(s). With ``--force-full`` will remove when cluster is marked full.
+
+:command:`cp` *name* [ *target-name* ]
+  Copy object *name*, with its data, extended attributes, and object map, to
+  *target-name*. The copy is made in the same pool unless ``--target-pool``
+  names another pool. ``--target-locator`` and ``--target-nspace`` set the
+  locator key and the namespace of the copy. If *target-name* is omitted,
+  the copy gets the same name, which requires ``--target-pool`` to name a
+  different pool.
+
+:command:`watch` *name*
+  Register a watch on object *name*, which must exist, and print each
+  notification that arrives, with a hexadecimal dump of its payload, until
+  Enter is pressed. Each notification is acknowledged with its own payload
+  as the reply.
+
+:command:`notify` *name* *message*
+  Send a notification that carries *message* to the watchers of object
+  *name*, and wait up to 10 seconds for them to acknowledge it. Print each
+  reply, with a hexadecimal dump of its payload, and list the watchers that
+  did not reply in time.
 
 :command:`listwatchers` *name*
   List the watchers of object name.
 
-:command:`ls` *outfile*
-  List objects in the given pool and write to outfile. Instead of ``--pool`` if ``--pgid`` will be specified, ``ls`` will only list the objects in the given PG.
+:command:`ls`
+  List the objects in the given pool and write them to standard output, or
+  to the file given by ``--output``. If ``--pgid`` is given instead of
+  ``--pool``, ``ls`` lists only the objects in the given PG.
 
 :command:`lssnap`
   List snapshots for given pool.
@@ -309,6 +415,22 @@ Pool specific commands
   Clean up a previous benchmark operation.
   Note: the default run-name is "benchmark_last_metadata"
 
+:command:`load-gen` [ *options* ]
+  Generate a random load of reads and writes on the pool for
+  ``--run-length`` seconds (default: 60), and then remove the objects that
+  it created. It first creates ``--num-objects`` objects (default: 200) of
+  random sizes between ``--min-object-size`` (default: 1 KiB) and
+  ``--max-object-size`` (default: 5 GiB). It then reads and writes random
+  ranges of between ``--min-op-len`` (default: 1 KiB) and ``--max-op-len``
+  (default: 2 MiB) bytes, of which ``--read-percent`` (default: 80) percent
+  are reads, at up to ``--target-throughput`` bytes per second (default:
+  5 MiB), with no more than ``--max-ops`` operations (default: 16) and
+  ``--max-backlog`` bytes (default: 10 MiB) in flight. ``--offset-align``
+  aligns the offsets of the operations.
+  Note: the default ``--max-object-size`` is larger than the default
+  ``osd_max_object_size`` of 128 MiB, and the OSDs refuse to create larger
+  objects, so pass a ``--max-object-size`` that the cluster allows.
+
 :command:`listxattr` *name*
   List all extended attributes of an object.
 
@@ -327,6 +449,26 @@ Pool specific commands
 :command:`stat2` *name*
   Get stat (similar to stat, but with high precision time) of given object
 
+:command:`touch` *name* [ *timestamp* ]
+  Set the modification time of object *name* to *timestamp*, given in
+  seconds since the Unix epoch, or to the current time if *timestamp* is
+  omitted. The object is created if it does not exist.
+
+:command:`mapext` *name*
+  List the allocated extents of object *name*, one per line, as a
+  hexadecimal offset and length. Erasure-coded pools do not support this
+  command.
+
+:command:`rollback` *name* *snap*
+  Roll back object *name* to its state in pool snapshot *snap*.
+
+:command:`listsnaps` *name*
+  List the clones of object *name*, the IDs of the snapshots that each clone
+  belongs to, the size of each clone, and the ranges that each clone shares
+  with the next newer clone. The current version of the object is listed as
+  ``head``. With ``--format``, the output also gives the names of pool
+  snapshots.
+
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
 
@@ -342,22 +484,80 @@ Pool specific commands
 :command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
   Set the value of key in the object map of object name. If the optional
   *value* argument is not provided, the value will be read from standard
-  input.
+  input. With ``--input-file``, the value is read from *file* instead.
 
 :command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*
   Remove key from the object map of object name.
 
-:command:`getomapheader` *name*
-  Dump the hexadecimal value of the object map header of object name.
+:command:`clearomap` *name* [ *name* ... ]
+  Remove all the keys from the object maps of the given objects.
 
-:command:`setomapheader` *name* *value*
-  Set the value of the object map header of object name.
+:command:`getomapheader` *name* [ *out-file* ]
+  Dump the hexadecimal value of the object map header of object name.
+  If *out-file* is given, write the raw header to *out-file* instead.
+
+:command:`setomapheader` *name* < *value* | --input-file *file* >
+  Set the value of the object map header of object name, from *value* or
+  from the content of *file*.
+
+:command:`set-alloc-hint` *name* *expected-object-size* *expected-write-size*
+  Set an allocation hint on object *name*: the size, in bytes, that the
+  object is expected to reach and the expected size of writes to it. The
+  object is created if it does not exist.
+
+:command:`set-redirect` *name* [ *target-name* ] [ --with-reference ]
+  Make object *name*, which must exist, a redirect to object *target-name*
+  in the pool given by ``--target-pool`` (default: the same pool). This
+  discards the data, object map, and extended attributes of object *name*.
+  If *target-name* is omitted, the target has the same name, which requires
+  ``--target-pool`` to name a different pool. With ``--with-reference``,
+  the redirect takes a reference on the target object. ``set-redirect``,
+  ``set-chunk``, and ``unset-manifest`` act on manifest objects, which
+  deduplication uses.
+
+:command:`set-chunk` *name* *offset* *length* *target-name* *target-offset*
+  Map the range of object *name* that starts at *offset* and is *length*
+  bytes long to the range of object *target-name* that starts at
+  *target-offset*, in the pool given by ``--target-pool`` (default: the
+  same pool). The range must lie within the object and must not overlap a
+  range that is already mapped. The mapping always takes a reference on
+  the target object, so ``--with-reference`` has no effect. Object *name*
+  cannot be in an erasure-coded pool.
+
+:command:`unset-manifest` *name*
+  Remove the redirect or the chunk mappings from object *name*, and drop
+  the references that they hold on target objects. Data that is held only
+  in target objects is not copied back.
 
 :command:`export` *filename*
   Serialize pool contents to a file or standard output.
 
 :command:`import` [--dry-run] [--no-overwrite] < filename | - >
   Load pool contents from a file or standard input
+
+:command:`lock list` *name*
+  List the names of the advisory locks on object *name*.
+
+:command:`lock get` *name* *lock-name* [ *lock options* ]
+  Try to take the advisory lock *lock-name* on object *name*. The command
+  does not wait: it fails if the lock is held in a way that conflicts. The
+  lock is exclusive unless ``--lock-type shared`` is given, and
+  ``--lock-cookie``, ``--lock-tag``, ``--lock-description``, and
+  ``--lock-duration`` set its other properties. The locker is the client
+  entity of this run of **rados**, and the lock stays in place after
+  **rados** exits, until it expires or is broken with ``lock break``.
+
+:command:`lock break` *name* *lock-name* *locker* [ --lock-cookie *cookie* ]
+  Break the lock *lock-name* on object *name* that is held by *locker*, an
+  entity name such as ``client.4123`` as ``lock info`` shows it. If the
+  locker took the lock with a cookie, pass the same cookie with
+  ``--lock-cookie``.
+
+:command:`lock info` *name* *lock-name*
+  Show the type and tag of the lock *lock-name* on object *name*, and the
+  name, cookie, description, expiration, and address of each locker.
+  ``lock list`` and ``lock info`` print JSON unless ``--format`` selects
+  another format.
 
 
 Examples
