@@ -1,0 +1,9 @@
+overrides:
+  ganesha-client:
+    version: 4.0
+  # NFSv4.0 has no RECLAIM_COMPLETE, so a restarted ganesha stays in its 90
+  # second grace period: restart it less often than that (fs:thrash), or new
+  # opens never succeed
+  ganesha_thrash:
+    min_thrash_delay: 120
+    max_thrash_delay: 180
