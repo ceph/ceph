@@ -48,6 +48,7 @@ support older versions of Ceph.
     certmgr
     upgrade
     Cephadm operations <operations>
+    config-options
     Client Setup <client-setup>
     troubleshooting
     Cephadm Feature Planning <../dev/cephadm/index>
