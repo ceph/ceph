@@ -92,15 +92,45 @@ do that using its unique ID, or various other attributes to identify it:
 Advanced: Un-blocklisting a client
 ==================================
 
-Ordinarily, a blocklisted client may not reconnect to the servers: it
-must be unmounted and then mounted anew.
+By default, a blocklisted client cannot reconnect to the cluster: it must be
+unmounted and then mounted anew, which remains the safest way to get a fully
+healthy client back. In some situations, however, it can be useful to let an
+evicted client reconnect while it stays mounted.
 
-However, in some situations it may be useful to permit a client that
-was evicted to attempt to reconnect.
+A ``ceph-fuse`` or ``libcephfs`` client that has
+:confval:`client_reconnect_stale` set to ``true`` reconnects by itself after it
+has been blocklisted. For example, to turn this on for all clients:
 
-Because CephFS uses the RADOS OSD blocklist to control client eviction,
-CephFS clients can be permitted to reconnect by removing them from
-the blocklist:
+.. prompt:: bash #
+
+   ceph config set client client_reconnect_stale true
+
+When such a client finds that it has been blocklisted, it reconnects with a new
+client address, which the blocklist entry made by the eviction does not match.
+It does this at most once every 30 minutes: a client that is evicted again
+within 30 minutes of an automatic reconnection waits until those 30 minutes
+have passed before it reconnects again. The reconnected client does not get
+back what it lost in the eviction:
+
+- Data that the client had buffered but not yet written to the OSDs is lost.
+- File descriptors that were open for writing before the eviction no longer
+  work: I/O through them fails with ``EBADF``. The application must close the
+  file and open it again. File descriptors that were open only for reading
+  continue to work.
+- File locks (``flock()`` and ``fcntl()`` locks) that the client held are lost.
+  I/O through a file descriptor that held such a lock fails with ``EIO``, and
+  so do new lock requests on that file.
+
+The kernel client reconnects by itself after it has been blocklisted if it was
+mounted with the ``recover_session=clean`` option, available in Linux 5.4 and
+later. When it reconnects, it drops dirty data and metadata, and it invalidates
+its page cache and its writable file handles. Until the application releases
+any stale file locks on a file, the client refuses reads and writes on that
+file. See :doc:`/man/8/mount.ceph`.
+
+Because CephFS uses the RADOS OSD blocklist to control client eviction, a client
+that does not reconnect by itself can be permitted to reconnect by removing it
+from the blocklist:
 
 ::
 
@@ -116,10 +146,6 @@ files that the blocklisted client was doing buffered I/O to.  It is also not
 guaranteed to result in a fully functional client -- the best way to get
 a fully healthy client back after an eviction is to unmount the client
 and do a fresh mount.
-
-If you are trying to reconnect clients in this way, you may also
-find it useful to set ``client_reconnect_stale`` to true in the
-FUSE client, to prompt the client to try to reconnect.
 
 Advanced: Configuring blocklisting
 ==================================
