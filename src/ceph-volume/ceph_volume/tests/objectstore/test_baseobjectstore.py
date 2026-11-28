@@ -13,6 +13,19 @@ class TestBaseObjectStore:
         assert bo.cephx_lockbox_secret == ['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']
         assert bo.secrets['cephx_lockbox_secret'] == ['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']
 
+    def test_init_hw_opal_only(self, factory):
+        args = factory(hw_opal_only=True)
+        bo = BaseObjectStore(args)
+        assert bo.hw_opal_only is True
+        assert bo.encrypted == 1
+        assert bo.cephx_lockbox_secret == ['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']
+
+    def test_init_hw_opal_and_dmcrypt_raises(self, factory):
+        args = factory(hw_opal_only=True, dmcrypt=True)
+        with pytest.raises(RuntimeError) as err:
+            BaseObjectStore(args)
+        assert 'mutually exclusive' in str(err.value)
+
     @patch('ceph_volume.process.call', Mock(return_value=(['c6798f59-01'], '', 0)))
     def test_get_ptuuid_ok(self):
         """

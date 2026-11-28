@@ -46,7 +46,11 @@ class BaseObjectStore:
         self.wal_device_path: str = ''
         self.db_device_path: str = ''
         self.block_lv: Optional[Volume] = None
-        if getattr(self.args, 'dmcrypt', False):
+        self.hw_opal_only: bool = bool(getattr(self.args, 'hw_opal_only', False))
+        self.luks_device: str = ''
+        self.luks_uuid: str = ''
+        encryption_utils.validate_hw_opal_cli_args(self.args)
+        if getattr(self.args, 'dmcrypt', False) or self.hw_opal_only:
             self.encrypted = 1
             if not self.with_tpm:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
@@ -211,17 +215,33 @@ class BaseObjectStore:
 
         mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
                                    'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}
-        if self.args.dmcrypt:
-            for dev_type in mapping[self.method]:
-                if self.method == 'raw':
-                    path = self.args.__dict__.get(dev_type, None)
-                else:
-                    if self.block_lv is not None:
-                        path = self.block_lv.tags.get(dev_type, None)
+        if self.encrypted:
+            if self.hw_opal_only and self.method == 'lvm':
+                luks_paths = []
+                if self.luks_device:
+                    luks_paths.append(self.luks_device)
+                if self.block_lv is not None:
+                    for tag in ('ceph.luks_device', 'ceph.db_luks_device', 'ceph.wal_luks_device'):
+                        path = self.block_lv.tags.get(tag) or self.tags.get(tag)
+                        if path and path not in luks_paths:
+                            luks_paths.append(path)
+                for path in luks_paths:
+                    encryption_utils.CephLuks2(path).config_luks2(
+                        {'subsystem': f'ceph_fsid={self.osd_fsid}'}
+                    )
+            else:
+                for dev_type in mapping[self.method]:
+                    if self.method == 'raw':
+                        path = self.args.__dict__.get(dev_type, None)
                     else:
-                        raise RuntimeError('Unexpected error while running bluestore mkfs.')
-                if path is not None:
-                    encryption_utils.CephLuks2(path).config_luks2({'subsystem': f'ceph_fsid={self.osd_fsid}'})
+                        if self.block_lv is not None:
+                            path = self.block_lv.tags.get(dev_type, None)
+                        else:
+                            raise RuntimeError('Unexpected error while running bluestore mkfs.')
+                    if path is not None:
+                        encryption_utils.CephLuks2(path).config_luks2(
+                            {'subsystem': f'ceph_fsid={self.osd_fsid}'}
+                        )
 
     def activate(self) -> None:
         raise NotImplementedError()
