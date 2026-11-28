@@ -16,9 +16,9 @@ Description
 ===========
 
 :program:`radosgw` is an HTTP REST gateway for the RADOS object store, a part
-of the Ceph distributed storage system. It is implemented as a FastCGI
-module using libfcgi, and can be used in conjunction with any FastCGI
-capable web server.
+of the Ceph distributed storage system. It serves S3-compatible and
+Swift-compatible APIs through its built-in HTTP frontend, Beast, and does not
+need a separate web server.
 
 
 Options
@@ -53,112 +53,65 @@ Options
 
    Run in foreground, log to usual location
 
-.. option:: --rgw-region=region
+.. option:: -k keyring, --keyring=keyring
 
-   The region where radosgw runs
+   Read the gateway's key from ``keyring`` instead of the default,
+   ``$rgw_data/keyring``, which is
+   ``/var/lib/ceph/radosgw/$cluster-$id/keyring`` unless ``rgw_data`` is set.
+
+.. option:: --setuser USER
+
+   Run as ``USER``, a user name or a UID. :program:`radosgw` switches to this
+   user only after Beast has bound its ports, so it can listen on a port
+   below 1024. If a user name is given, its primary group is used as well,
+   unless :option:`--setgroup` is also given.
+
+.. option:: --setgroup GROUP
+
+   Run as ``GROUP``, a group name or a GID.
+
+.. option:: --rgw-realm=realm
+
+   The realm where radosgw runs
+
+.. option:: --rgw-zonegroup=zonegroup
+
+   The zonegroup where radosgw runs
 
 .. option:: --rgw-zone=zone
 
    The zone where radosgw runs
 
+.. option:: --rgw-region=region
+
+   Obsolete name for :option:`--rgw-zonegroup`. It is used only when
+   ``--rgw-zonegroup`` is not set.
+
+Any other configuration option can also be given on the command line, as
+``--option-name=value``. For example, ``--debug-rgw=20`` raises the gateway's
+log level.
+
 
 Configuration
 =============
 
-Earlier RADOS Gateway had to be configured with ``Apache`` and ``mod_fastcgi``.
-Now, ``mod_proxy_fcgi`` module is used instead of ``mod_fastcgi``.
-``mod_proxy_fcgi`` works differently than a traditional FastCGI module. This
-module requires the service of ``mod_proxy`` which provides support for the
-FastCGI protocol. So, to be able to handle FastCGI protocol, both ``mod_proxy``
-and ``mod_proxy_fcgi`` have to be present in the server. Unlike ``mod_fastcgi``,
-``mod_proxy_fcgi`` cannot start the application process. Some platforms have
-``fcgistarter`` for that purpose. However, external launching of application
-or process management may be available in the FastCGI application framework
-in use.
+The ``rgw_frontends`` option configures the frontend. Its default value,
+``beast port=7480``, makes :program:`radosgw` listen on port 7480. To listen on
+port 8080 instead, put the following in the gateway's section of
+``ceph.conf``::
 
-``Apache`` must be configured in a way that enables ``mod_proxy_fcgi`` to be
-used with localhost TCP.
+        [client.radosgw.gateway]
+            rgw_frontends = beast port=8080
 
-The following steps show the configuration in Ceph's configuration file i.e.,
-``/etc/ceph/ceph.conf`` and the gateway configuration file i.e,
-``/etc/httpd/conf.d/rgw.conf`` (RPM-based distros) or
-``/etc/apache2/conf-available/rgw.conf`` (Debian-based distros) with localhost
-TCP:
+For the other Beast options, including SSL, see
+https://docs.ceph.com/en/latest/radosgw/frontends/. For the other gateway
+options, see https://docs.ceph.com/en/latest/radosgw/config-ref/.
 
-#. For distros with Apache 2.2 and early versions of Apache 2.4 that use
-   localhost TCP, append the following contents to ``/etc/ceph/ceph.conf``::
-
-	[client.radosgw.gateway]
-	host = {hostname}
-	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	log_file = /var/log/ceph/client.radosgw.gateway.log
-	rgw_frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
-	rgw_print_continue = false
-
-#. Add the following content in the gateway configuration file:
-
-   For Debian/Ubuntu add in ``/etc/apache2/conf-available/rgw.conf``::
-
-		<VirtualHost *:80>
-		ServerName localhost
-		DocumentRoot /var/www/html
-
-		ErrorLog /var/log/apache2/rgw_error.log
-		CustomLog /var/log/apache2/rgw_access.log combined
-
-		# LogLevel debug
-
-		RewriteEngine On
-
-		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-
-		SetEnv proxy-nokeepalive 1
-
-		ProxyPass / fcgi://localhost:9000/
-
-		</VirtualHost>
-
-   For CentOS/RHEL add in ``/etc/httpd/conf.d/rgw.conf``::
-
-		<VirtualHost *:80>
-		ServerName localhost
-		DocumentRoot /var/www/html
-
-		ErrorLog /var/log/httpd/rgw_error.log
-		CustomLog /var/log/httpd/rgw_access.log combined
-
-		# LogLevel debug
-
-		RewriteEngine On
-
-		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-
-		SetEnv proxy-nokeepalive 1
-
-		ProxyPass / fcgi://localhost:9000/
-
-		</VirtualHost>
-
-#. Generate a key for radosgw to use for authentication with the cluster. ::
-
-	ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
-	ceph-authtool -n client.radosgw.gateway --cap mon 'profile rgw' --cap osd 'profile rgw' /etc/ceph/keyring.radosgw.gateway
-
-#. Add the key to the auth entries. ::
-
-	ceph auth add client.radosgw.gateway --in-file=keyring.radosgw.gateway
-
-#. Start Apache and radosgw.
-
-   Debian/Ubuntu::
-
-		sudo /etc/init.d/apache2 start
-		sudo /etc/init.d/radosgw start
-
-   CentOS/RHEL::
-
-		sudo apachectl start
-		sudo /etc/init.d/ceph-radosgw start
+In a cluster that cephadm manages, run ``ceph orch apply rgw`` to deploy
+gateways instead of starting :program:`radosgw` by hand. See
+https://docs.ceph.com/en/latest/cephadm/services/rgw/. To deploy a gateway by
+hand, including its key and its systemd service, see the RGW section of
+https://docs.ceph.com/en/latest/install/manual-deployment/.
 
 Usage Logging
 =============
