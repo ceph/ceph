@@ -24,6 +24,8 @@
 #include <atomic>
 #include <tuple>
 
+class RGWFormatterFlusher;
+
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
 static constexpr std::string_view restore_oid_prefix = "restore";

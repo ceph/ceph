@@ -20,6 +20,7 @@
 #include "rgw_common.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_sal.h"
+#include "rgw_tools.h"
 
 namespace rgwrados::oidcs {
 

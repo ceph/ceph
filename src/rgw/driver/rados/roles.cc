@@ -21,6 +21,7 @@
 #include "cls/user/cls_user_client.h"
 #include "rgw_role.h"
 #include "rgw_sal.h"
+#include "rgw_tools.h"
 
 namespace rgwrados::roles {
 

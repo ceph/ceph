@@ -48,7 +48,7 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
       return r;
     }
 
-    r = ioctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+    r = ioctx.application_enable("rgw", false);
     if (r < 0 && r != -EOPNOTSUPP) {
       return r;
     }
