@@ -7,6 +7,11 @@ CLUSTER_SPEC=${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci/cluster-specs/cluster-on-
 DEFAULT_NS="rook-ceph"
 KUBECTL="minikube kubectl --"
 export ROOK_CLUSTER_NS="${ROOK_CLUSTER_NS:=$DEFAULT_NS}" ## CephCluster namespace
+# Rook manifests come from a release, not master. Master's CRDs can need a newer
+# Kubernetes than the builders' minikube runs (v1.27): from v1.21.1 on, Rook's CRDs
+# use the CEL format library in x-kubernetes-validations, which v1.27 rejects.
+ROOK_VERSION="${ROOK_VERSION:-v1.21.0}"
+ROOK_EXAMPLES="https://raw.githubusercontent.com/rook/rook/${ROOK_VERSION}/deploy/examples"
 
 # We build a local ceph image that contains the latest code
 # plus changes from the PR. This image will be used by the docker
@@ -84,7 +89,7 @@ build_ceph_image() {
 }
 
 create_rook_cluster() {
-    local base="https://raw.githubusercontent.com/rook/rook/master/deploy/examples"
+    local base="${ROOK_EXAMPLES}"
     $KUBECTL create -f ${base}/crds.yaml
     $KUBECTL create -f ${base}/common.yaml
     $KUBECTL create -f ${base}/csi-operator.yaml
@@ -216,11 +221,11 @@ enable_monitoring() {
     echo "Enabling monitoring"
     $KUBECTL apply --server-side -f https://raw.githubusercontent.com/coreos/prometheus-operator/v0.90.1/bundle.yaml
     $KUBECTL wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-operator --timeout=90s
-    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/rbac.yaml
-    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/service-monitor.yaml
-    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/exporter-service-monitor.yaml
-    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/prometheus.yaml
-    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/prometheus-service.yaml
+    $KUBECTL apply -f ${ROOK_EXAMPLES}/monitoring/rbac.yaml
+    $KUBECTL apply -f ${ROOK_EXAMPLES}/monitoring/service-monitor.yaml
+    $KUBECTL apply -f ${ROOK_EXAMPLES}/monitoring/exporter-service-monitor.yaml
+    $KUBECTL apply -f ${ROOK_EXAMPLES}/monitoring/prometheus.yaml
+    $KUBECTL apply -f ${ROOK_EXAMPLES}/monitoring/prometheus-service.yaml
 
     # Wait for the prometheus pod itself to be ready before checking metrics
     $KUBECTL wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus \
