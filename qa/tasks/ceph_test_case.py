@@ -166,8 +166,11 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
 
         self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "dump")
 
+    def _config_reset_epoch(self):
+        return self.ctx.conf_epoch
+
     def tearDown(self):
-        self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "reset", str(self.ctx.conf_epoch))
+        self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "reset", str(self._config_reset_epoch()))
 
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Ended test {0}".format(self.id()))
