@@ -317,6 +317,7 @@ void usage()
   cout << "  bilog autotrim                   auto trim bucket index log\n";
   cout << "  datalog list                     list data log\n";
   cout << "  datalog trim                     trim data log\n";
+  cout << "  datalog prune                    prune incomplete datalog entries\n";
   cout << "  datalog status                   read data log status\n";
   cout << "  datalog type                     change datalog type to --log_type=fifo\n";
   cout << "  datalog semaphore list           List recovery semaphores\n";
