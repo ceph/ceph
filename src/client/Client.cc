@@ -1448,6 +1448,8 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   
   if (!dn || !dn->inode) {
     InodeRef tmp_ref(in);
+    Inode *diri = dir->parent_inode;
+    clear_dir_complete_and_ordered(diri, false);
     if (old_dentry) {
       if (old_dentry->dir != dir) {
 	Inode *old_diri = old_dentry->dir->parent_inode;
@@ -1455,8 +1457,6 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       }
       unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
     }
-    Inode *diri = dir->parent_inode;
-    clear_dir_complete_and_ordered(diri, false);
     dn = link(dir, dname, in, dn);
 
     if (old_dentry) {
@@ -1698,9 +1698,10 @@ void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
 	diri->flags &= ~I_DIR_ORDERED;
       }
     }
-    if (diri->dir)
-      diri->dir->readdir_cache.clear();
   }
+  // readdir_cache holds no references, also while it is being filled
+  if (diri->dir)
+    diri->dir->readdir_cache.clear();
 }
 
 /*
@@ -1926,22 +1927,32 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     Dentry *d = request->dentry();
     if (d) {
-      Inode *diri = d->dir->parent_inode;
-      clear_dir_complete_and_ordered(diri, true);
+      Inode *diri = d->dir ? d->dir->parent_inode : request->inode();
+      if (diri && diri->is_dir())
+	clear_dir_complete_and_ordered(diri, true);
     }
 
     if (d && reply->get_result() == 0) {
       if (op == CEPH_MDS_OP_RENAME) {
-	// rename
-	Dentry *od = request->old_dentry();
-	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
-	ceph_assert(od);
-	unlink(od, true, true);  // keep dir, dentry
+	// rename: MDS returns a traceless 0 reply as a POSIX no-op when
+	// src and dst refer to the same inode (e.g. hard links or same path);
+	// do not unlink src dentry in that case.
+	if (!request->old_inode() || request->old_inode() != request->other_inode()) {
+	  Dentry *od = request->old_dentry();
+	  ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
+	  ceph_assert(od);
+	  if (od->dir) {
+	    if (od->dir != d->dir)
+	      clear_dir_complete_and_ordered(od->dir->parent_inode, true);
+	    unlink(od, true, true);  // keep dir, dentry
+	  }
+	}
       } else if (op == CEPH_MDS_OP_RMDIR ||
 		 op == CEPH_MDS_OP_UNLINK) {
 	// unlink, rmdir
 	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
-	unlink(d, true, true);  // keep dir, dentry
+	if (d->dir)
+	  unlink(d, true, true);  // keep dir, dentry
       }
     }
     return NULL;
@@ -2568,12 +2579,13 @@ void Client::put_request(MetaRequest *request)
     if (request->success)
       op = request->get_op();
     InodeRef other_in;
+    bool same_inode = (request->old_inode() == request->other_inode());
     request->take_other_inode(&other_in);
     delete request;
 
     if (other_in &&
 	(op == CEPH_MDS_OP_RMDIR ||
-	 op == CEPH_MDS_OP_RENAME ||
+	 (op == CEPH_MDS_OP_RENAME && other_in->is_dir() && !same_inode) ||
 	 op == CEPH_MDS_OP_RMSNAP)) {
       _try_to_trim_inode(other_in.get(), false);
     }
@@ -4081,6 +4093,21 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   return dn;
 }
 
+struct dentry_off_lt {
+  bool operator()(const Dentry* dn, int64_t off) const {
+    return dir_result_t::fpos_cmp(dn->offset, off) < 0;
+  }
+};
+
+// readdir_cache is sorted by dentry offset
+static bool readdir_cache_holds(const Dir *dir, const Dentry *dn)
+{
+  const auto& cache = dir->readdir_cache;
+  auto it = std::lower_bound(cache.begin(), cache.end(), dn->offset,
+			     dentry_off_lt());
+  return it != cache.end() && *it == dn;
+}
+
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   InodeRef in(dn->inode);
@@ -4113,11 +4140,16 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   if (keepdentry) {
     dn->lease_mds = -1;
+    dn->cap_shared_gen = -1;
   } else {
     ldout(cct, 15) << "unlink  removing '" << dn->name << "' dn " << dn << dendl;
 
     // unlink from dir
     Dir *dir = dn->dir;
+    // readdir_cache holds no reference: drop it before dn can be freed,
+    // and with it the claim that no other names exist
+    if (readdir_cache_holds(dir, dn))
+      clear_dir_complete_and_ordered(dir->parent_inode, true);
     dn->detach();
     ceph_assert(dn->dir == nullptr);   // detach() must clear it
 
@@ -6391,6 +6423,8 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
         //        so in->dentries doesn't always reflect the state of kernel's dcache.
         _schedule_invalidate_dentry_callback(dn, true);
       }
+      if (dn->dir)
+        clear_dir_complete_and_ordered(dn->dir->parent_inode, true);
       unlink(dn, true, true);
     }
   }
@@ -10305,12 +10339,6 @@ int Client::_readdir_get_frag(int op, dir_result_t* dirp,
   return res;
 }
 
-struct dentry_off_lt {
-  bool operator()(const Dentry* dn, int64_t off) const {
-    return dir_result_t::fpos_cmp(dn->offset, off) < 0;
-  }
-};
-
 int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 			      int caps, bool getref)
 {
@@ -10349,13 +10377,14 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       continue;
     }
 
-    if (dn->inode->is_dir() && cct->_conf->client_dirsize_rbytes) {
+    InodeRef target_in = dn->inode;
+    if (target_in->is_dir() && cct->_conf->client_dirsize_rbytes) {
       mask |= CEPH_STAT_RSTAT;
     }
-    int r = _getattr(dn->inode, mask, dirp->perms);
-    if (r == -EACCES && dn->inode->is_under_quarantine()) {
-      ldout(cct, 10) << __func__ << " quarantined entry '"
-		     << dn->name << "', using cached stat" << dendl;
+    int r = _getattr(target_in, mask, dirp->perms);
+    if (r == -EACCES && target_in->is_under_quarantine()) {
+      ldout(cct, 10) << __func__ << " quarantined entry "
+		     << target_in->ino << ", using cached stat" << dendl;
     } else if (r < 0) {
       return r;
     }
@@ -10367,14 +10396,15 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     }
     
     // the content of readdir_cache may change after _getattr()
-    if (idx >= dir->readdir_cache.size() || dir->readdir_cache[idx] != dn)
+    if (idx >= dir->readdir_cache.size() || dir->readdir_cache[idx] != dn || !dn->inode)
       return -EAGAIN;
 
     struct ceph_statx stx;
     struct dirent de;
     fill_statx(dn->inode, caps, &stx);
 
-    uint64_t next_off = dn->offset + 1;
+    int64_t dn_off = dn->offset;
+    uint64_t next_off = dn_off + 1;
     auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
     fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
     if (idx + 1 == dir->readdir_cache.size())
@@ -10392,7 +10422,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
-    ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
+    ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn_off << dec
 		   << " = " << r << dendl;
     if (r < 0) {
       return r;
