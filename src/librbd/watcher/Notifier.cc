@@ -83,15 +83,16 @@ void Notifier::handle_notify(int r, Context *on_finish) {
   --m_pending_aio_notifies;
 
   ldout(m_cct, 20) << "pending=" << m_pending_aio_notifies << dendl;
+  if (on_finish != nullptr) {
+    m_work_queue->queue(on_finish, r);
+  }
+
+  // Flush waiters share the work queue with the notification callbacks.
   if (m_pending_aio_notifies == 0) {
     for (auto ctx : m_aio_notify_flush_ctxs) {
       m_work_queue->queue(ctx, 0);
     }
     m_aio_notify_flush_ctxs.clear();
-  }
-
-  if (on_finish != nullptr) {
-    m_work_queue->queue(on_finish, r);
   }
 }
 

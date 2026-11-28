@@ -811,6 +811,11 @@ int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_i
         int r = it->second;
         // reset complete request expiration time
         mark_async_request_complete(async_request_id, r);
+        if (r >= 0) {
+          // A successful ACK tells the requester to wait for completion.
+          l.unlock();
+          schedule_async_complete(async_request_id, r);
+        }
         return r;
       }
     }
