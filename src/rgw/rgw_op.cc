@@ -5955,6 +5955,19 @@ void RGWPutMetadataObject::execute(optional_yield y)
     return;
   }
 
+  // this rewrites the metadata of an existing version in place, so refuse it
+  // while object lock protects the version. swift has no way to bypass
+  // governance mode
+  if (s->bucket->get_info().obj_lock_enabled()) {
+    op_ret = verify_object_lock(this, s->object->get_attrs(), false, false);
+    if (op_ret < 0) {
+      if (op_ret == -EACCES) {
+        s->err.message = "forbidden by object lock";
+      }
+      return;
+    }
+  }
+
   /* Filter currently existing attributes. */
   prepare_add_del_attrs(s->object->get_attrs(), attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
