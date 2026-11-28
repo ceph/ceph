@@ -1004,6 +1004,28 @@ std::string image_id(librbd::Image& image) {
   return id;
 }
 
+void warn_if_image_being_removed(librbd::RBD &rbd, librados::IoCtx &io_ctx,
+                                 const std::string &name,
+                                 const std::string &id,
+                                 bool name_reused) {
+  if (id.empty()) {
+    return;
+  }
+  librbd::trash_image_info_t info;
+  if (rbd.trash_get(io_ctx, id.c_str(), &info) < 0 ||
+      info.source != RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+    return;
+  }
+  std::string prefix = io_ctx.get_pool_name() + "/";
+  if (!io_ctx.get_namespace().empty()) {
+    prefix += io_ctx.get_namespace() + "/";
+  }
+  std::cerr << "rbd: image " << prefix << name << " is being removed, run \""
+            << (name_reused ? "rbd trash rm " + prefix + id :
+                              "rbd rm " + prefix + name)
+            << "\" if its removal was interrupted" << std::endl;
+}
+
 std::string mirror_image_mode(librbd::mirror_image_mode_t mode) {
   switch (mode) {
     case RBD_MIRROR_IMAGE_MODE_JOURNAL:
