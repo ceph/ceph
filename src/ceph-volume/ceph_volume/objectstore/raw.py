@@ -211,6 +211,8 @@ class Raw(BaseObjectStore):
 
         for d in disk.lsblk_all(abspath=True):
             device: str = d.get('NAME', '')
+            if disk.is_network_block_device(device):
+                continue
             if lvm_api.is_ceph_volume_lvm_prepared(device, lvm_prepare_lv_paths):
                 continue
             luks2 = encryption_utils.CephLuks2(device)

@@ -240,6 +240,24 @@ class TestRaw:
                                                    'type': 'bluestore'},
                                                    tmpfs=True)]
 
+    @patch('ceph_volume.objectstore.raw.encryption_utils.CephLuks2')
+    def test_activate_skips_network_devices(self,
+                                            m_ceph_luks2,
+                                            is_root,
+                                            fake_lsblk_all,
+                                            mock_raw_direct_report):
+        m_ceph_luks2.return_value.is_ceph_encrypted = False
+        fake_lsblk_all([{'NAME': '/dev/rbd0', 'FSTYPE': 'crypto_LUKS'},
+                        {'NAME': '/dev/nbd0', 'FSTYPE': 'crypto_LUKS'},
+                        {'NAME': '/dev/sdb', 'FSTYPE': 'crypto_LUKS'}])
+        self.raw_bs._activate = MagicMock()
+        self.raw_bs.osd_id = '8'
+        self.raw_bs.osd_fsid = '824f7edf-371f-4b75-9231-4ab62a32d5c0'
+
+        self.raw_bs.activate()
+
+        assert m_ceph_luks2.call_args_list == [call('/dev/sdb')]
+
     @patch('ceph_volume.objectstore.raw.encryption_utils.rename_mapper', Mock(return_value=MagicMock()))
     @patch('ceph_volume.util.disk.get_bluestore_header')
     @patch('ceph_volume.objectstore.raw.encryption_utils.luks_close', Mock(return_value=MagicMock()))
