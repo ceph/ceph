@@ -132,6 +132,7 @@ public:
     case LOCK_MIX_SYNC: return "mix->sync";
     case LOCK_MIX_SYNC2: return "mix->sync(2)";
     case LOCK_EXCL_MIX: return "excl->mix";
+    case LOCK_LOCK_MIX: return "lock->mix";
     case LOCK_MIX_EXCL: return "mix->excl";
 
     case LOCK_PRE_SCAN: return "*->scan";
