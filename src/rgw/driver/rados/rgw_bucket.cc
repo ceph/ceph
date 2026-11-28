@@ -2526,7 +2526,8 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
   }
 
   int get(std::string& entry, RGWMetadataObject** obj, optional_yield y,
-          const DoutPrefixProvider *dpp) override;
+          const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none) override;
   int put(std::string& entry, RGWMetadataObject* obj,
           RGWObjVersionTracker& objv_tracker,
           optional_yield y, const DoutPrefixProvider* dpp,
@@ -2548,7 +2549,8 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
 };
 
 int RGWBucketMetadataHandler::get(std::string& entry, RGWMetadataObject** obj,
-                                  optional_yield y, const DoutPrefixProvider *dpp)
+                                  optional_yield y, const DoutPrefixProvider *dpp,
+                                  boost::optional<obj_version> expected_version)
 {
   RGWObjVersionTracker ot;
   RGWBucketEntryPoint be;
@@ -2556,7 +2558,9 @@ int RGWBucketMetadataHandler::get(std::string& entry, RGWMetadataObject** obj,
   map<string, bufferlist> attrs;
 
   int ret = svc_bucket->read_bucket_entrypoint_info(entry, &be, &ot, &mtime,
-                                                    &attrs, y, dpp);
+                                                    &attrs, y, dpp,
+                                                    nullptr, boost::none,
+                                                    expected_version);
   if (ret < 0) {
     return ret;
   }
@@ -3053,7 +3057,8 @@ protected:
   }
 
   int get(std::string& entry, RGWMetadataObject** obj, optional_yield y,
-          const DoutPrefixProvider *dpp) override;
+          const DoutPrefixProvider *dpp,
+          boost::optional<obj_version> expected_version = boost::none) override;
   int put(std::string& entry, RGWMetadataObject* obj,
           RGWObjVersionTracker& objv_tracker,
           optional_yield y, const DoutPrefixProvider* dpp,
@@ -3075,12 +3080,15 @@ protected:
 };
 
 int RGWBucketInstanceMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
-                                          optional_yield y, const DoutPrefixProvider *dpp)
+                                          optional_yield y, const DoutPrefixProvider *dpp,
+                                          boost::optional<obj_version> expected_version)
 {
   RGWBucketCompleteInfo bci;
   real_time mtime;
 
-  int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, &mtime, &bci.attrs, y, dpp);
+  int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, &mtime, &bci.attrs, y, dpp,
+                                                  nullptr, boost::none,
+                                                  expected_version);
   if (ret < 0) {
     return ret;
   }
@@ -3750,10 +3758,9 @@ int RGWBucketCtl::link_bucket(librados::Rados& rados,
 
   if (update_entrypoint) {
     meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-    if (pinfo) {
-      ep = pinfo->ep;
-      pattrs = &pinfo->attrs;
-    } else {
+    /* store_bucket_entrypoint_info() below needs the current version, or
+     * the correspoding mdlog entry has an empty tag and zero version */
+    if (!pinfo || rot.read_version.tag.empty()) {
       ret = svc.bucket->read_bucket_entrypoint_info(meta_key,
                                                     &ep, &rot,
                                                     nullptr, &attrs,
@@ -3763,6 +3770,10 @@ int RGWBucketCtl::link_bucket(librados::Rados& rados,
                       << cpp_strerror(-ret) << dendl;
       }
       pattrs = &attrs;
+    }
+    if (pinfo) {
+      ep = pinfo->ep;
+      pattrs = &pinfo->attrs;
     }
   }
 
