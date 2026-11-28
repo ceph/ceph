@@ -478,6 +478,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino, int mode) 
       in->inode_auth = mds_authority_t(mds->get_nodeid(), CDIR_AUTH_UNKNOWN);
     else
       in->inode_auth = mds_authority_t(mds_rank_t(in->ino() - MDS_INO_MDSDIR_OFFSET), CDIR_AUTH_UNKNOWN);
+    CInode::ancestry_changed();
     in->open_snaprealm();  // empty snaprealm
     ceph_assert(!in->snaprealm->parent); // created its own
     in->snaprealm->srnode.seq = 1;
@@ -3925,6 +3926,7 @@ void MDCache::recalc_auth_bits(bool replay)
 
   if (root) {
     root->inode_auth.first = mds->mdsmap->get_root();
+    CInode::ancestry_changed();
     bool auth = mds->get_nodeid() == root->inode_auth.first;
     if (auth) {
       root->state_set(CInode::STATE_AUTH);
@@ -5253,9 +5255,11 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 	add_inode(diri);
 	if (MDS_INO_MDSDIR(from) == p.first.ino) {
 	  diri->inode_auth = mds_authority_t(from, CDIR_AUTH_UNKNOWN);
+	  CInode::ancestry_changed();
 	  dout(10) << " add inode " << *diri << dendl;
 	} else {
 	  diri->inode_auth = CDIR_AUTH_DEFAULT;
+	  CInode::ancestry_changed();
 	  isolated_inodes.insert(diri);
 	  dout(10) << " unconnected dirfrag " << p.first << dendl;
 	}
@@ -11535,6 +11539,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
       in->inode_auth.first = 0;
     else if (in->is_mdsdir())
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
+    CInode::ancestry_changed();
     dout(10) << __func__ << " added " << *in << dendl;
     if (dn) {
       ceph_assert(dn->get_linkage()->is_null());

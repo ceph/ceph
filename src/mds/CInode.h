@@ -888,6 +888,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void open_snaprealm(bool no_split=false);
   void close_snaprealm(bool no_join=false);
   SnapRealm *find_snaprealm() const;
+  // the same, always walking up, for mds_cache_ancestry_verify
+  SnapRealm *find_snaprealm_walk() const;
+  void verify_realm_cache(SnapRealm *r) const;
   void encode_snap(ceph::buffer::list& bl);
   void decode_snap(ceph::buffer::list::const_iterator& p);
 
@@ -917,6 +920,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   int get_caps_quiesce_mask() const;
   int get_caps_quarantine_mask(bool has_qtine_auth_caps) const;
+  bool has_quarantine_access(Session *session) const;
+  // mds_lazy_quarantine_path
+  static std::atomic<bool> lazy_quarantine_path;
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
@@ -976,6 +982,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   // -- authority --
   mds_authority_t authority() const override;
+  // the same, always walking up, for mds_cache_ancestry_verify
+  mds_authority_t authority_walk() const;
 
   // -- auth pins --
   bool can_auth_pin(int *err_ret=nullptr) const override;
@@ -1011,10 +1019,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     ceph_assert(parent == 0 ||
 	   g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
     parent = p;
+    parent_changed();
   }
   void remove_primary_parent(CDentry *dn) {
     ceph_assert(dn == parent);
     parent = 0;
+    parent_changed();
   }
   void add_remote_parent(CDentry *p);
   void remove_remote_parent(CDentry *p);
@@ -1024,11 +1034,38 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   void push_projected_parent(CDentry *dn) {
     projected_parent.push_back(dn);
+    parent_changed();
   }
   void pop_projected_parent() {
     ceph_assert(projected_parent.size());
     parent = projected_parent.front();
     projected_parent.pop_front();
+    parent_changed();
+  }
+
+  /*
+   * authority() and find_snaprealm() walk up the parent chain, to the
+   * subtree root and to the nearest snaprealm, which costs as many cache
+   * misses as the inode is deep, and they are called several times for
+   * every request.  Their results are cached on each inode and dirfrag,
+   * tagged with ancestry_gen, which goes up whenever anything happens that
+   * may change them for a whole subtree: a dirfrag's dir_auth or an
+   * inode's inode_auth changes, a directory with dirfrags in cache is
+   * linked somewhere else, a snaprealm is opened or closed, dentries move
+   * to another dirfrag.  A file has nothing below it, so linking it
+   * somewhere else only drops its own cache.
+   */
+  static std::atomic<uint64_t> ancestry_gen;
+  static std::atomic<bool> cache_ancestry;   // mds_cache_ancestry
+  static std::atomic<bool> verify_ancestry;  // mds_cache_ancestry_verify
+  static void ancestry_changed() {
+    ancestry_gen.fetch_add(1, std::memory_order_relaxed);
+  }
+  void parent_changed() {
+    if (is_dir() && !dirfrags.empty())
+      ancestry_changed();
+    auth_cache_gen = 0;
+    realm_cache_gen = 0;
   }
   bool is_parent_projected() const {
     return !projected_parent.empty();
@@ -1231,6 +1268,11 @@ protected:
   mempool::mds_co::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
   mds_authority_t inode_auth = CDIR_AUTH_DEFAULT;
+  // see ancestry_gen
+  mutable uint64_t auth_cache_gen = 0;
+  mutable mds_authority_t auth_cache;
+  mutable uint64_t realm_cache_gen = 0;
+  mutable SnapRealm *realm_cache = nullptr;
 
   // -- distributed state --
   // file capabilities

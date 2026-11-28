@@ -831,6 +831,36 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_cache_ancestry
+  type: bool
+  level: dev
+  desc: cache what an inode's authority and snaprealm are, instead of walking up its parents every time
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_ancestry_verify
+  type: bool
+  level: dev
+  desc: check every cached authority and snaprealm against a walk up the parents
+  long_desc: With mds_cache_ancestry on, every time a cached authority or
+    snaprealm is used, also walk up the parents and abort if the two differ.
+    For testing only; it costs the walk the cache saves.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_lazy_quarantine_path
+  type: bool
+  level: dev
+  desc: build an inode's path for the quarantine cap check only when the inode is under quarantine
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_allow_batched_ops
   type: bool
   level: advanced

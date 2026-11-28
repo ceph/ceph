@@ -532,6 +532,10 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  CInode::lazy_quarantine_path = g_conf().get_val<bool>("mds_lazy_quarantine_path");
+  CInode::cache_ancestry = g_conf().get_val<bool>("mds_cache_ancestry");
+  CInode::verify_ancestry = g_conf().get_val<bool>("mds_cache_ancestry_verify");
+
   quiesce_db_manager.reset(new QuiesceDbManager());
 
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
@@ -4194,6 +4198,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_bal_split_size",
     "mds_bal_split_wr",
     "mds_bal_unreplicate_threshold",
+    "mds_cache_ancestry",
+    "mds_cache_ancestry_verify",
     "mds_cache_memory_limit",
     "mds_cache_mid",
     "mds_cache_quiesce_decay_rate",
@@ -4230,6 +4236,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_inject_rename_corrupt_dentry_first",
     "mds_kill_dirfrag_at",
     "mds_kill_shutdown_at",
+    "mds_lazy_quarantine_path",
     "mds_log_event_large_threshold",
     "mds_log_events_per_segment",
     "mds_log_major_segment_event_ratio",
@@ -4261,7 +4268,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_session_max_caps_throttle_ratio",
     "mds_session_metadata_threshold",
     "mds_symlink_recovery",
-    "mds_use_global_snaprealm_seq_for_subvol"
+    "mds_use_global_snaprealm_seq_for_subvol",
   });
   static_assert(std::is_sorted(as_sv.begin(), as_sv.end()),
                 "keys are not sorted!");
@@ -4273,6 +4280,17 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   // XXX with or without mds_lock!
   dout(2) << __func__ << ": " << changed << dendl;
 
+  if (changed.count("mds_cache_ancestry")) {
+    // mds_lock is held here or not; either way drop every cached value
+    CInode::cache_ancestry = conf.get_val<bool>("mds_cache_ancestry");
+    CInode::ancestry_changed();
+  }
+  if (changed.count("mds_cache_ancestry_verify")) {
+    CInode::verify_ancestry = conf.get_val<bool>("mds_cache_ancestry_verify");
+  }
+  if (changed.count("mds_lazy_quarantine_path")) {
+    CInode::lazy_quarantine_path = conf.get_val<bool>("mds_lazy_quarantine_path");
+  }
   if (changed.count("mds_heartbeat_reset_grace")) {
     _heartbeat_reset_grace = conf.get_val<uint64_t>("mds_heartbeat_reset_grace");
   }

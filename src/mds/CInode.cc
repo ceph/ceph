@@ -3157,19 +3157,52 @@ void CInode::auth_unpin(void *by)
 
 // authority
 
+std::atomic<uint64_t> CInode::ancestry_gen{1};
+std::atomic<bool> CInode::cache_ancestry{true};
+std::atomic<bool> CInode::verify_ancestry{false};
+
 mds_authority_t CInode::authority() const
 {
   if (inode_auth.first >= 0) 
     return inode_auth;
 
-  if (parent)
-    return parent->dir->authority();
+  const uint64_t gen = ancestry_gen.load(std::memory_order_relaxed);
+  const bool cache = cache_ancestry.load(std::memory_order_relaxed);
+  if (cache && auth_cache_gen == gen) {
+    if (verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]] {
+      if (mds_authority_t w = authority_walk(); w != auth_cache) {
+        // not *this: printing an inode calls authority() again
+        derr << __func__ << " cached " << auth_cache << " != " << w
+             << " found walking up, on " << ino() << dendl;
+        ceph_abort_msg("stale CInode::authority() cache");
+      }
+    }
+    return auth_cache;
+  }
 
+  mds_authority_t a = CDIR_AUTH_UNDEF;
+  if (parent)
+    a = parent->dir->authority();
   // new items that are not yet linked in (in the committed plane) belong
   // to their first parent.
-  if (!projected_parent.empty())
-    return projected_parent.front()->dir->authority();
+  else if (!projected_parent.empty())
+    a = projected_parent.front()->dir->authority();
 
+  if (cache) {
+    auth_cache = a;
+    auth_cache_gen = gen;
+  }
+  return a;
+}
+
+mds_authority_t CInode::authority_walk() const
+{
+  if (inode_auth.first >= 0)
+    return inode_auth;
+  if (parent)
+    return parent->dir->authority_walk();
+  if (!projected_parent.empty())
+    return projected_parent.front()->dir->authority_walk();
   return CDIR_AUTH_UNDEF;
 }
 
@@ -3323,6 +3356,7 @@ snapid_t CInode::pick_old_inode(snapid_t snap) const
 
 void CInode::open_snaprealm(bool nosplit)
 {
+  CInode::ancestry_changed();
   if (!snaprealm) {
     SnapRealm *parent = find_snaprealm();
     snaprealm = new SnapRealm(mdcache, this);
@@ -3340,6 +3374,7 @@ void CInode::open_snaprealm(bool nosplit)
 }
 void CInode::close_snaprealm(bool nojoin)
 {
+  CInode::ancestry_changed();
   if (snaprealm) {
     dout(15) << __func__ << " " << *snaprealm << dendl;
     if (snaprealm->parent) {
@@ -3353,6 +3388,55 @@ void CInode::close_snaprealm(bool nojoin)
 }
 
 SnapRealm *CInode::find_snaprealm() const
+{
+  if (snaprealm)
+    return snaprealm;
+
+  const uint64_t gen = ancestry_gen.load(std::memory_order_relaxed);
+  const bool cache = cache_ancestry.load(std::memory_order_relaxed);
+  if (cache && realm_cache_gen == gen) {
+    if (verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]]
+      verify_realm_cache(realm_cache);
+    return realm_cache;
+  }
+
+  // walk up to the nearest realm, or to an ancestor that knows it
+  SnapRealm *r = nullptr;
+  const CInode *cur = this;
+  while (true) {
+    const CDentry *pdn = cur->get_oldest_parent_dn();
+    if (!pdn)
+      break;
+    cur = pdn->get_dir()->get_inode();
+    if (cur->snaprealm) {
+      r = cur->snaprealm;
+      break;
+    }
+    if (cache && cur->realm_cache_gen == gen) {
+      r = cur->realm_cache;
+      break;
+    }
+  }
+
+  if (cache) {
+    if (verify_ancestry.load(std::memory_order_relaxed)) [[unlikely]]
+      verify_realm_cache(r);
+    realm_cache = r;
+    realm_cache_gen = gen;
+  }
+  return r;
+}
+
+void CInode::verify_realm_cache(SnapRealm *r) const
+{
+  if (SnapRealm *w = find_snaprealm_walk(); w != r) {
+    derr << __func__ << " cached " << r << " != " << w
+         << " found walking up, on " << ino() << dendl;
+    ceph_abort_msg("stale CInode::find_snaprealm() cache");
+  }
+}
+
+SnapRealm *CInode::find_snaprealm_walk() const
 {
   const CInode *cur = this;
   while (!cur->snaprealm) {
@@ -3486,11 +3570,8 @@ bool CInode::try_drop_loner()
     set_loner_cap(-1);
     return true;
   }
-  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-  std::string path;
-  make_path_string(path, true);
   auto session = mdcache->mds->sessionmap.get_session(entity_name_t::CLIENT(cap->get_client().v));
-  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+  bool has_qtine_auth_caps = has_quarantine_access(session);
 
   int other_allowed = get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY);
   if (!cap ||
@@ -3712,6 +3793,25 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
   }
 }
 
+std::atomic<bool> CInode::lazy_quarantine_path{true};
+
+/*
+ * Whether this session's auth caps grant quarantine access to this inode.
+ * That only matters for an inode under quarantine (see
+ * get_caps_quarantine_mask()), and building the inode's path for the cap
+ * match is not cheap, so don't do it otherwise.
+ */
+bool CInode::has_quarantine_access(Session *session) const
+{
+  if (lazy_quarantine_path.load(std::memory_order_relaxed) &&
+      !is_under_quarantine())
+    return false;
+  std::string path;
+  make_path_string(path, true);
+  return session->auth_caps.quarantine_access_in_caps(
+    mdcache->mds->get_mds_map()->get_fs_name(), path);
+}
+
 int CInode::get_caps_quarantine_mask(bool has_qtine_auth_caps) const
 {
   if (is_under_quarantine()) {
@@ -3789,10 +3889,7 @@ int CInode::get_caps_careful(bool has_qtine_auth_caps) const
 int CInode::get_xlocker_mask(client_t client) const
 {
   Session *session = mdcache->mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
-  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-  std::string path;
-  make_path_string(path, true);
-  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+  bool has_qtine_auth_caps = has_quarantine_access(session);
 
   return get_caps_quarantine_mask(has_qtine_auth_caps) & get_caps_quiesce_mask() & (
     (filelock.gcaps_xlocker_mask(client) << CEPH_CAP_SFILE) |
@@ -3807,11 +3904,7 @@ int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
 {
   client_t client = session->get_client();
   int allowed;
-  std::string path;
-
-  make_path_string(path, true);
-  auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-  bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+  bool has_qtine_auth_caps = has_quarantine_access(session);
 
   if (client == get_loner()) {
     // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
@@ -4198,10 +4291,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      * tracks caps per-snap and the mds does either per-interval or
      * multiversion.
      */
-    auto fs_name = mdcache->mds->get_mds_map()->get_fs_name();
-    std::string path;
-    make_path_string(path, true);
-    bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
+    bool has_qtine_auth_caps = has_quarantine_access(session);
 
     ecap.caps = valid ? get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY) : CEPH_STAT_CAP_INODE;
     if (last == CEPH_NOSNAP || is_any_caps())
