@@ -75,6 +75,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/Clock.h"
+#include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
@@ -253,6 +254,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   admin_hook(NULL),
   routed_request_tid(0),
+  dispatch_watchdog(*cct->get_heartbeat_map(), "mon." + name + " dispatch"),
   op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1)
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
@@ -331,6 +333,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
 Monitor::~Monitor()
 {
+  dispatch_watchdog_shutdown();
   op_tracker.on_shutdown();
   delete logger;
   ceph_assert(session_map.sessions.empty());
@@ -1230,6 +1233,7 @@ void Monitor::shutdown()
   }
 
   state = STATE_SHUTDOWN;
+  dispatch_watchdog_shutdown();
 
   lock.unlock();
   g_conf().remove_observer(this);
@@ -1418,9 +1422,12 @@ void Monitor::bootstrap()
 
   // sync store
   if (g_conf()->mon_compact_on_bootstrap) {
-    dout(10) << "bootstrap -- triggering compaction" << dendl;
-    store->compact();
-    dout(10) << "bootstrap -- finished compaction" << dendl;
+    // bootstrap() can run on a dispatch thread while holding Monitor::lock.
+    // Full compaction can legitimately outlast the dispatch watchdog deadline;
+    // queue it on the store's compaction thread instead of blocking dispatch
+    // (and other threads waiting for Monitor::lock).
+    dout(10) << "bootstrap -- queuing compaction" << dendl;
+    store->compact_async();
   }
 
   // stretch mode bits
@@ -4703,6 +4710,33 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
     }
     op->mark_zap();
   }
+}
+
+DispatchWatchdog::Token Monitor::dispatch_watchdog_start()
+{
+  return dispatch_watchdog.start(cct->_conf->mon_dispatch_watchdog_timeout);
+}
+
+void Monitor::dispatch_watchdog_finish(const DispatchWatchdog::Token& token)
+{
+  dispatch_watchdog.finish(token);
+}
+
+void Monitor::dispatch_watchdog_shutdown()
+{
+  dispatch_watchdog.shutdown();
+}
+
+void Monitor::dispatch_watchdog_inject_delay()
+{
+  const auto delay = cct->_conf->mon_inject_dispatch_delay;
+  if (delay <= 0) {
+    return;
+  }
+
+  dout(1) << __func__ << " injecting monitor dispatch delay of "
+         << delay << " seconds" << dendl;
+  usleep((long long)(delay * 1000000.0));
 }
 
 void Monitor::_ms_dispatch(Message *m)

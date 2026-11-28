@@ -19,6 +19,15 @@ add_executable(ceph_test_mon_msg
 target_link_libraries(ceph_test_mon_msg os osdc global ${UNITTEST_LIBS})
 install(TARGETS ceph_test_mon_msg DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# unittest_mon_dispatch_watchdog
+add_executable(unittest_mon_dispatch_watchdog
+  test_dispatch_watchdog.cc
+  ${CMAKE_SOURCE_DIR}/src/mon/DispatchWatchdog.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mon_dispatch_watchdog)
+target_link_libraries(unittest_mon_dispatch_watchdog global ceph-common)
+
 # unittest_config_map
 add_executable(unittest_config_map
   test_config_map.cc

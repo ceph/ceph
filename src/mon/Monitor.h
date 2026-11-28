@@ -34,6 +34,7 @@
 
 #include "common/Timer.h"
 
+#include "DispatchWatchdog.h"
 #include "Elector.h"
 #include "Session.h"
 #include "MonCommand.h"
@@ -953,10 +954,32 @@ public:
     }
   };
 
+  DispatchWatchdog dispatch_watchdog;
+
+  DispatchWatchdog::Token dispatch_watchdog_start();
+  void dispatch_watchdog_finish(const DispatchWatchdog::Token& token);
+  void dispatch_watchdog_shutdown();
+  void dispatch_watchdog_inject_delay();
+
+  class DispatchWatchdogGuard {
+    Monitor *mon;
+    DispatchWatchdog::Token token;
+  public:
+    explicit DispatchWatchdogGuard(Monitor *m)
+      : mon(m), token(mon->dispatch_watchdog_start()) {}
+    ~DispatchWatchdogGuard() {
+      mon->dispatch_watchdog_finish(token);
+    }
+    DispatchWatchdogGuard(const DispatchWatchdogGuard&) = delete;
+    DispatchWatchdogGuard& operator=(const DispatchWatchdogGuard&) = delete;
+  };
+
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
   void _ms_dispatch(Message *m);
   bool ms_dispatch(Message *m) override {
+    DispatchWatchdogGuard dispatch_watchdog_guard(this);
+    dispatch_watchdog_inject_delay();
     std::lock_guard l{lock};
     _ms_dispatch(m);
     return true;

@@ -70,7 +70,7 @@ class HeartbeatMap {
   // return false if any of the timeouts are currently expired.
   bool is_healthy();
 
-  // touch cct->_conf->heartbeat_file if is_healthy()
+  // check registered workers and touch cct->_conf->heartbeat_file if healthy
   void check_touch_file();
 
   // get the number of unhealthy workers

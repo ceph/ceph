@@ -470,6 +470,41 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_dispatch_watchdog_timeout
+  type: float
+  level: advanced
+  desc: Maximum time for monitor dispatch to make progress before aborting
+  long_desc: If positive, a monitor arms an internal heartbeat watchdog while
+    processing dispatch work. If the dispatch path stops making progress for
+    longer than this timeout, the monitor aborts through the existing heartbeat
+    suicide path so service management can restart it.
+  fmt_desc: The maximum time in seconds that a monitor dispatch operation may run
+    without making heartbeat progress before the monitor aborts. Set to ``0`` to
+    disable the dispatch watchdog. Each dispatch thread has an independent
+    watchdog, including time spent waiting for the monitor lock. Runtime changes
+    take effect when the next outermost dispatch call starts on each thread;
+    active calls retain their existing deadlines.
+  default: 30
+  services:
+  - mon
+  see_also:
+  - mon_lease
+  - mon_session_timeout
+  min: 0
+  with_legacy: true
+- name: mon_inject_dispatch_delay
+  type: float
+  level: dev
+  desc: Inject a delay after arming the monitor dispatch watchdog
+  long_desc: If positive, the monitor sleeps for this many seconds after arming
+    the dispatch watchdog and before acquiring Monitor::lock in ms_dispatch().
+    This is intended for testing that the dispatch watchdog can abort a monitor
+    whose dispatch thread stops making progress.
+  default: 0
+  services:
+  - mon
+  min: 0
+  with_legacy: true
 - name: mon_lease_renew_interval_factor
   type: float
   level: advanced
@@ -1329,10 +1364,12 @@ options:
   default: false
   services:
   - mon
-  fmt_desc: Compact the database used as Ceph Monitor store
-    on bootstrap. Monitors probe each other to establish
-    a quorum after bootstrap. If a Monitor times out before joining the
-    quorum, it will start over and bootstrap again.
+  fmt_desc: Queue background compaction of the database used as Ceph Monitor
+    store on bootstrap. Bootstrap continues without waiting for compaction to
+    finish, so compaction does not block dispatch or consume its watchdog
+    timeout. Monitors probe each other to establish a quorum after bootstrap.
+    If a monitor times out before joining the quorum, it will start over and
+    bootstrap again.
   with_legacy: true
 # compact (a prefix) when we trim old states
 - name: mon_compact_on_trim
