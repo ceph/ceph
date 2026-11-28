@@ -5,8 +5,8 @@ Elasticsearch Sync Module
 =========================
 
 .. deprecated:: Vampire
-     The Elasticsearch module will be removed in the X release. (The
-     W and X releases after Vampire are unnamed as of this note.)
+     The Elasticsearch sync module will be removed in the X release (24.x),
+     which follows Whiplash and has not been named yet.
 
 .. note::
      As of 31 May 2020, only Elasticsearch 6 and lower are supported. Elasticsearch 7 is not supported.
