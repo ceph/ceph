@@ -6,11 +6,11 @@ Configuring the iSCSI Initiators
 
 .. include:: iscsi-deprecation.inc.rst
 
-- `iSCSI Initiator for Linux <../iscsi-initiator-linux>`_
+- :doc:`iscsi-initiator-linux`
 
-- `iSCSI Initiator for Microsoft Windows <../iscsi-initiator-win>`_
+- :doc:`iscsi-initiator-win`
 
-- `iSCSI Initiator for VMware ESX <../iscsi-initiator-esx>`_
+- :doc:`iscsi-initiator-esx`
 
     .. warning::
 

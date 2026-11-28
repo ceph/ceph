@@ -4,9 +4,9 @@
  Configuring the NVMe-oF Initiators 
 ====================================
 
-- `NVMe/TCP Initiator for Linux <../nvmeof-initiator-linux>`_
+- :doc:`nvmeof-initiator-linux`
 
-- `NVMe/TCP Initiator for VMware ESX <../nvmeof-initiator-esx>`_
+- :doc:`nvmeof-initiator-esx`
 
 .. toctree::
   :maxdepth: 1
