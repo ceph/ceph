@@ -31,6 +31,7 @@ import pdb
 from collections import namedtuple
 from collections import defaultdict
 from io import BytesIO
+from urllib.parse import unquote_plus
 
 from .utils import assert_raises
 from .utils import generate_random
@@ -262,6 +263,113 @@ def test_bucket_list_encoding_basic():
     prefixes = _get_prefixes(response)
     assert len(prefixes) == 3
     assert prefixes == ['foo%2B1/', 'foo/', 'quux%20ab/']
+
+
+# Prefixes, keys and markers containing characters that must survive a
+# round trip through EncodingType=url. Passing EncodingType explicitly stops
+# botocore from decoding the response, so these tests see the raw values.
+_ENCODING_TEST_NAMES = ['100%/', 'a+b c/', 'test file(3)+~*/', '\x0a/']
+
+
+def _list_encoded(client, operation, **kwargs):
+    """
+    call a listing operation with EncodingType=url and return
+    (response, keys, common_prefixes) with keys and prefixes still encoded
+    """
+    response = getattr(client, operation)(EncodingType='url', **kwargs)
+    assert response['EncodingType'] == 'url'
+    if operation == 'list_object_versions':
+        keys = [v['Key'] for v in response.get('Versions', [])]
+    else:
+        keys = _get_keys(response)
+    return response, keys, _get_prefixes(response)
+
+
+@pytest.mark.parametrize('operation', [
+    'list_objects',
+    pytest.param('list_objects_v2', marks=pytest.mark.list_objects_v2),
+    'list_object_versions',
+])
+@pytest.mark.parametrize('prefix', _ENCODING_TEST_NAMES)
+def test_bucket_list_encoding_prefix(operation, prefix):
+    key = prefix + 'report.csv'
+    bucket_name = _create_objects(
+        keys=[key, prefix + 'sub/report.csv', '100/report.csv'])
+    client = get_client()
+
+    response, keys, prefixes = _list_encoded(
+        client, operation, Bucket=bucket_name, Prefix=prefix, Delimiter='/')
+    assert unquote_plus(response['Prefix']) == prefix
+    assert unquote_plus(response['Delimiter']) == '/'
+    assert [unquote_plus(k) for k in keys] == [key]
+    assert [unquote_plus(p) for p in prefixes] == [prefix + 'sub/']
+    # Prefix and CommonPrefixes must use the same encoding
+    assert prefixes[0].startswith(response['Prefix'])
+
+
+@pytest.mark.parametrize('operation, request_param, response_field', [
+    ('list_objects', 'Marker', 'Marker'),
+    pytest.param('list_objects_v2', 'StartAfter', 'StartAfter',
+                 marks=pytest.mark.list_objects_v2),
+    ('list_object_versions', 'KeyMarker', 'KeyMarker'),
+])
+@pytest.mark.parametrize('marker', _ENCODING_TEST_NAMES)
+def test_bucket_list_encoding_marker(operation, request_param, response_field,
+                                     marker):
+    bucket_name = _create_objects(keys=[marker, 'zzz'])
+    client = get_client()
+
+    response, keys, _ = _list_encoded(
+        client, operation, Bucket=bucket_name, **{request_param: marker})
+    assert unquote_plus(response[response_field]) == marker
+    assert [unquote_plus(k) for k in keys] == ['zzz']
+
+
+@pytest.mark.parametrize('prefix', _ENCODING_TEST_NAMES)
+def test_list_multipart_upload_encoding(prefix):
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key = prefix + 'obj'
+    upload_id = client.create_multipart_upload(
+        Bucket=bucket_name, Key=key)['UploadId']
+
+    try:
+        response = client.list_multipart_uploads(
+            Bucket=bucket_name, Prefix=prefix, Delimiter='/',
+            EncodingType='url')
+        assert response['EncodingType'] == 'url'
+        assert unquote_plus(response['Prefix']) == prefix
+        assert unquote_plus(response['Delimiter']) == '/'
+        assert [unquote_plus(u['Key']) for u in response['Uploads']] == [key]
+    finally:
+        client.abort_multipart_upload(
+            Bucket=bucket_name, Key=key, UploadId=upload_id)
+
+
+@pytest.mark.fails_on_aws
+@pytest.mark.parametrize('prefix', _ENCODING_TEST_NAMES)
+def test_bucket_listv2_versions_encoding_prefix(prefix):
+    # ListObjectVersions with list-type=2 is an RGW extension that is served
+    # by a separate code path from the regular versions listing
+    key = prefix + 'report.csv'
+    bucket_name = _create_objects(
+        keys=[key, prefix + 'sub/report.csv', '100/report.csv'])
+    client = get_client()
+
+    def add_list_type_2(**kwargs):
+        kwargs['params']['url'] += "&list-type=2"
+    client.meta.events.register('before-call.s3.ListObjectVersions',
+                                add_list_type_2)
+
+    response, keys, prefixes = _list_encoded(
+        client, 'list_object_versions',
+        Bucket=bucket_name, Prefix=prefix, Delimiter='/')
+    assert unquote_plus(response['Prefix']) == prefix
+    assert unquote_plus(response['Delimiter']) == '/'
+    assert [unquote_plus(k) for k in keys] == [key]
+    # The versioned V2 response can repeat common prefixes.
+    assert {unquote_plus(p) for p in prefixes} == {prefix + 'sub/'}
+    assert all(p.startswith(response['Prefix']) for p in prefixes)
 
 
 def validate_bucket_list(bucket_name, prefix, delimiter, marker, max_keys,
@@ -839,7 +947,9 @@ def test_bucket_list_prefix_unreadable():
     client = get_client()
 
     response = client.list_objects(Bucket=bucket_name, Prefix='\x0a')
-    assert response['Prefix'] == '\x0a'
+    # botocore requests EncodingType=url for ListObjects but, unlike
+    # ListObjectsV2, does not decode the top-level Prefix of the response
+    assert unquote_plus(response['Prefix']) == '\x0a'
 
     keys = _get_keys(response)
     prefixes = _get_prefixes(response)
