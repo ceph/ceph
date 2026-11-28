@@ -292,14 +292,17 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
     if (this.lifecycleFormat === 'json' && !this.selection.lifecycle) {
       this.selection.lifecycle = {};
     }
-    if (this.selection.lifecycle_progress?.length > 0) {
-      this.selection.lifecycle_progress.forEach(
-        (progress: { bucket: string; status: string; started: string }) => {
-          if (progress.bucket.includes(this.selection.bucket)) {
-            this.lifecycleProgress = progress;
-          }
-        }
+    // Always reset, so progress of a previously selected bucket is never shown.
+    this.lifecycleProgress = { bucket: '', status: 'UNINITIAL', started: '' };
+    const progressList = this.selection.lifecycle_progress;
+    if (Array.isArray(progressList)) {
+      // Entries are formatted as "[tenant:]bucket:bucket_id".
+      const match = progressList.find((progress) =>
+        progress?.bucket?.split(':').includes(this.selection.bucket)
       );
+      if (match) {
+        this.lifecycleProgress = match;
+      }
     }
   }
 

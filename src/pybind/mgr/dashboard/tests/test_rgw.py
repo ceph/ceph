@@ -4,6 +4,7 @@ from unittest.mock import Mock, call, patch
 
 from .. import mgr
 from ..controllers.rgw import Rgw, RgwBucket, RgwBucketUi, RgwDaemon, RgwTopic, RgwUser
+from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
@@ -913,6 +914,32 @@ class RgwBucketControllerTestCase(ControllerTestCase):
 
         self.assertStatus(200)
         mock_get_locking.assert_called_once_with('testuser', None, 'kenny:test-bucket')
+
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_lifecycle_progress_uses_selected_daemon(self, mock_admin_instance):
+        progress = [{'bucket': ':b1:id1', 'status': 'COMPLETE', 'started': 'x'}]
+        mock_admin_instance.return_value.get_lifecycle_progress.return_value = progress
+
+        # pylint: disable=protected-access
+        result = RgwBucket()._get_lifecycle_progress('realm2.zone2.host.abc')
+
+        mock_admin_instance.assert_called_once_with(daemon_name='realm2.zone2.host.abc')
+        self.assertEqual(result, progress)
+
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_lifecycle_progress_failure_returns_empty_list(self, mock_admin_instance):
+        mock_admin_instance.return_value.get_lifecycle_progress.side_effect = \
+            DashboardException(msg='boom', component='rgw')
+
+        # pylint: disable=protected-access
+        self.assertEqual(RgwBucket()._get_lifecycle_progress('d'), [])
+
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_lifecycle_progress_non_list_returns_empty_list(self, mock_admin_instance):
+        mock_admin_instance.return_value.get_lifecycle_progress.return_value = None
+
+        # pylint: disable=protected-access
+        self.assertEqual(RgwBucket()._get_lifecycle_progress('d'), [])
 
 
 class RgwBucketUiControllerTestCase(ControllerTestCase):
