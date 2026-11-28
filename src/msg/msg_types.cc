@@ -367,29 +367,7 @@ void entity_addrvec_t::decode(ceph::buffer::list::const_iterator& bl)
   }
   if (marker == 1) {
     entity_addr_t addr;
-    DECODE_START(1, bl);
-    decode(addr.type, bl);
-    decode(addr.nonce, bl);
-    __u32 elen;
-    decode(elen, bl);
-    if (elen) {
-      struct sockaddr *sa = (struct sockaddr *)addr.get_sockaddr();
-#if defined(__FreeBSD__) || defined(__APPLE__)
-      sa->sa_len = 0;
-#endif
-      uint16_t ss_family;
-      if (elen < sizeof(ss_family)) {
-        throw ceph::buffer::malformed_input("elen smaller than family len");
-      }
-      decode(ss_family, bl);
-      sa->sa_family = ss_family;
-      elen -= sizeof(ss_family);
-      if (elen > addr.get_sockaddr_len() - offsetof(struct sockaddr, sa_data)) {
-        throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
-      }
-      bl.copy(elen, sa->sa_data);
-    }
-    DECODE_FINISH(bl);
+    addr.decode_after_marker(bl);
     v.clear();
     v.push_back(addr);
     return;

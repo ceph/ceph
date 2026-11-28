@@ -33,10 +33,9 @@
 
 #define MAX_PORT_NUMBER 65535
 
-#ifdef _WIN32
-// ceph_sockaddr_storage matches the Linux format.
+// The wire format uses Linux's AF_INET6. Windows, FreeBSD and macOS
+// define it differently (23, 28 and 30).
 #define AF_INET6_LINUX 10
-#endif
 
 namespace ceph {
   class Formatter;
@@ -173,7 +172,7 @@ static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
   auto src = (unsigned char const *)&a;
   auto dst = (unsigned char *)&ss;
   src += sizeof(a.ss_len);
-  ss.ss_family = a.ss_family;
+  ss.ss_family = a.ss_family == AF_INET6 ? AF_INET6_LINUX : a.ss_family;
   src += sizeof(a.ss_family);
   dst += sizeof(ss.ss_family);
   const auto copy_size = std::min((unsigned char*)(&a + 1) - src,
@@ -207,7 +206,7 @@ static inline void decode(sockaddr_storage& a,
   auto dst = (unsigned char *)&a;
   a.ss_len = 0;
   dst += sizeof(a.ss_len);
-  a.ss_family = ss.ss_family;
+  a.ss_family = ss.ss_family == AF_INET6_LINUX ? AF_INET6 : ss.ss_family;
   src += sizeof(ss.ss_family);
   dst += sizeof(a.ss_family);
   auto const copy_size = std::min((unsigned char*)(&ss + 1) - src,
@@ -273,9 +272,11 @@ struct entity_addr_t {
     type = o.type;
     nonce = o.nonce;
     memcpy(&u, &o.in_addr, sizeof(u));
-#if !defined(__FreeBSD__)
-    u.sa.sa_family = ntohs(u.sa.sa_family);
-#endif
+    // sa_family is a single byte on the BSDs and macOS, where a 16-bit
+    // swap would zero it
+    if constexpr (sizeof(u.sa.sa_family) == 2) {
+      u.sa.sa_family = ntohs(u.sa.sa_family);
+    }
   }
 
   uint32_t get_type() const { return type; }
@@ -388,9 +389,11 @@ struct entity_addr_t {
     a.type = 0;
     a.nonce = nonce;
     a.in_addr = get_sockaddr_storage();
-#if !defined(__FreeBSD__)
-    a.in_addr.ss_family = htons(a.in_addr.ss_family);
-#endif
+    // ss_family is a single byte on the BSDs and macOS, where a 16-bit
+    // swap would zero it
+    if constexpr (sizeof(a.in_addr.ss_family) == 2) {
+      a.in_addr.ss_family = htons(a.in_addr.ss_family);
+    }
     return a;
   }
 
@@ -455,6 +458,8 @@ struct entity_addr_t {
     decode(marker, bl);
     decode(rest, bl);
     decode(nonce, bl);
+    // set_sockaddr() only writes the bytes of this address's family
+    memset(&u, 0, sizeof(u));
     sockaddr_storage ss;
     decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
@@ -497,11 +502,9 @@ struct entity_addr_t {
     encode(elen, bl);
     if (elen) {
       uint16_t ss_family = u.sa.sa_family;
-#if defined(_WIN32)
       if (ss_family == AF_INET6) {
         ss_family = AF_INET6_LINUX;
       }
-#endif
       encode(ss_family, bl);
       bl.append(u.sa.sa_data, elen - offsetof(struct sockaddr, sa_data));
     }
@@ -517,9 +520,19 @@ struct entity_addr_t {
     }
     if (marker != 1)
       throw ceph::buffer::malformed_input("entity_addr_t marker != 1");
+    decode_after_marker(bl);
+  }
+  /// the msgr2 encoding, once decode() or entity_addrvec_t::decode() has
+  /// read marker 1
+  void decode_after_marker(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
     DECODE_START(1, bl);
     decode(type, bl);
     decode(nonce, bl);
+    // the encoding only carries the bytes of this address, so clear the
+    // union: an entity_addr_t that is decoded into a second time would
+    // otherwise keep bytes of the address it held before
+    memset(&u, 0, sizeof(u));
     __u32 elen;
     decode(elen, bl);
     if (elen) {
@@ -531,11 +544,9 @@ struct entity_addr_t {
 	throw ceph::buffer::malformed_input("elen smaller than family len");
       }
       decode(ss_family, bl);
-#if defined(_WIN32)
       if (ss_family == AF_INET6_LINUX) {
         ss_family = AF_INET6;
       }
-#endif
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
       if (elen > get_sockaddr_len() - offsetof(struct sockaddr, sa_data)) {

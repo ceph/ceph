@@ -334,3 +334,185 @@ TEST(entity_addrvec_t, legacy_equals)
   ASSERT_FALSE(av21.legacy_equals(bv1));
   ASSERT_FALSE(av1.legacy_equals(bv21));
 }
+
+// The msgr2 encoding of an address is the same on every platform, whatever
+// the local sockaddr layout (the BSDs and macOS have sa_len).
+TEST(Msgr, TestAddrEncodingIsPortable)
+{
+  entity_addr_t addr;
+  ASSERT_TRUE(addr.parse("v2:1.2.3.4:6789/12345"));
+  bufferlist bl;
+  encode(addr, bl, CEPH_FEATURES_ALL);
+  const unsigned char expected[] = {
+    0x01,                    // marker
+    0x01, 0x01,              // struct_v, compat
+    0x1c, 0x00, 0x00, 0x00,  // struct_len: 28
+    0x02, 0x00, 0x00, 0x00,  // type: TYPE_MSGR2
+    0x39, 0x30, 0x00, 0x00,  // nonce: 12345
+    0x10, 0x00, 0x00, 0x00,  // elen: sizeof(sockaddr_in)
+    0x02, 0x00,              // family: AF_INET
+    0x1a, 0x85,              // port 6789, network order
+    0x01, 0x02, 0x03, 0x04,  // address
+    0, 0, 0, 0, 0, 0, 0, 0,  // sin_zero
+  };
+  ASSERT_EQ(sizeof(expected), bl.length());
+  ASSERT_EQ(0, memcmp(expected, bl.c_str(), sizeof(expected)));
+
+  entity_addr_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  ASSERT_EQ(addr, decoded);
+}
+
+// The same for IPv6, whose family number differs between platforms.
+TEST(Msgr, TestAddr6EncodingIsPortable)
+{
+  // AF_INET6 is 10 on Linux, 23 on Windows, 28 on FreeBSD and 30 on macOS;
+  // the wire carries Linux's value.
+  entity_addr_t addr;
+  ASSERT_TRUE(addr.parse("v2:[::1]:6789/12345"));
+  bufferlist bl;
+  encode(addr, bl, CEPH_FEATURES_ALL);
+  const unsigned char expected[] = {
+    0x01,                    // marker
+    0x01, 0x01,              // struct_v, compat
+    0x28, 0x00, 0x00, 0x00,  // struct_len: 40
+    0x02, 0x00, 0x00, 0x00,  // type: TYPE_MSGR2
+    0x39, 0x30, 0x00, 0x00,  // nonce: 12345
+    0x1c, 0x00, 0x00, 0x00,  // elen: sizeof(sockaddr_in6)
+    0x0a, 0x00,              // family: AF_INET6 as on Linux
+    0x1a, 0x85,              // port 6789, network order
+    0, 0, 0, 0,              // flowinfo
+    0, 0, 0, 0, 0, 0, 0, 0,  // address ::1
+    0, 0, 0, 0, 0, 0, 0, 1,
+    0, 0, 0, 0,              // scope_id
+  };
+  ASSERT_EQ(sizeof(expected), bl.length());
+  ASSERT_EQ(0, memcmp(expected, bl.c_str(), sizeof(expected)));
+
+  entity_addr_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  ASSERT_EQ(addr, decoded);
+  ASSERT_TRUE(decoded.is_ipv6());
+}
+
+// entity_addrvec_t::decode() reads a single msgr2 address itself; it must
+// map the family the same way entity_addr_t::decode() does.
+TEST(Msgr, TestAddr6DecodedAsAddrvecIsPortable)
+{
+  entity_addr_t addr;
+  ASSERT_TRUE(addr.parse("v2:[::1]:6789/12345"));
+  bufferlist bl;
+  encode(addr, bl, CEPH_FEATURES_ALL);
+
+  entity_addrvec_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  ASSERT_EQ(1u, decoded.v.size());
+  ASSERT_TRUE(decoded.v[0].is_ipv6());
+  ASSERT_EQ(addr, decoded.v[0]);
+}
+
+TEST(Msgr, TestAddr6LegacyEncodingIsPortable)
+{
+  entity_addr_t addr;
+  ASSERT_TRUE(addr.parse("v1:[::1]:6789/12345"));
+  bufferlist bl;
+  encode(addr, bl, 0);  // no MSG_ADDR2: the legacy sockaddr_storage format
+  // __u32 type, __u32 nonce, then the family in network byte order
+  ASSERT_LE(10u, bl.length());
+  ASSERT_EQ(0x00, (unsigned char)bl.c_str()[8]);
+  ASSERT_EQ(0x0a, (unsigned char)bl.c_str()[9]);
+
+  entity_addr_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  ASSERT_TRUE(decoded.is_ipv6());
+  ASSERT_EQ(addr.get_port(), decoded.get_port());
+}
+
+// decode() rejects an address longer than the sockaddr it is decoded into,
+// with the same bound on every platform.
+TEST(Msgr, TestAddrDecodeRejectsOversizedAddr)
+{
+  // as in TestAddrEncodingIsPortable, but with elen and the data one byte
+  // too long
+  const unsigned char bad[] = {
+    0x01,
+    0x01, 0x01,
+    0x1d, 0x00, 0x00, 0x00,  // struct_len: 29
+    0x02, 0x00, 0x00, 0x00,
+    0x39, 0x30, 0x00, 0x00,
+    0x11, 0x00, 0x00, 0x00,  // elen: sizeof(sockaddr_in) + 1
+    0x02, 0x00,
+    0x1a, 0x85,
+    0x01, 0x02, 0x03, 0x04,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
+  bufferlist bl;
+  bl.append(reinterpret_cast<const char*>(bad), sizeof(bad));
+  {
+    entity_addr_t a;
+    auto p = bl.cbegin();
+    ASSERT_THROW(decode(a, p), ceph::buffer::malformed_input);
+  }
+  {
+    entity_addrvec_t av;
+    auto p = bl.cbegin();
+    ASSERT_THROW(decode(av, p), ceph::buffer::malformed_input);
+  }
+}
+
+// decode() into an entity_addr_t that already holds an address gives the
+// same value as decoding into a new one.
+TEST(Msgr, TestAddrDecodeIntoUsedAddr)
+{
+  entity_addr_t v6, v4, blank;
+  ASSERT_TRUE(v6.parse("v2:[2001:db8::1:2:3:4]:6789/12345"));
+  ASSERT_TRUE(v4.parse("v2:1.2.3.4:6789/12345"));
+
+  for (uint64_t features : {uint64_t(CEPH_FEATURE_MSG_ADDR2), uint64_t(0)}) {
+    bufferlist bl6, bl4, blb;
+    encode(v6, bl6, features);
+    encode(v4, bl4, features);
+    encode(blank, blb, features);
+
+    entity_addr_t fresh4;
+    auto p = bl4.cbegin();
+    decode(fresh4, p);
+
+    // IPv6 first, then the shorter IPv4 address over it
+    entity_addr_t used;
+    p = bl6.cbegin();
+    decode(used, p);
+    ASSERT_TRUE(used.is_ipv6());
+    p = bl4.cbegin();
+    decode(used, p);
+    ASSERT_EQ(fresh4, used);
+
+    // and a blank address over that
+    entity_addr_t freshb;
+    p = blb.cbegin();
+    decode(freshb, p);
+    p = blb.cbegin();
+    decode(used, p);
+    ASSERT_EQ(freshb, used);
+  }
+}
+
+// entity_addr_t survives the conversion to ceph_entity_addr and back on
+// every platform, whatever the width of sa_family.
+TEST(Msgr, TestAddrCephEntityAddrRoundTrip)
+{
+  for (const char *s : {"v1:1.2.3.4:6789/12345",
+                        "v1:[2001:db8::1:2:3:4]:6789/12345"}) {
+    entity_addr_t a;
+    ASSERT_TRUE(a.parse(s));
+    ceph_entity_addr c = a;
+    entity_addr_t b(c);
+    b.set_type(a.get_type());  // ceph_entity_addr does not carry the type
+    ASSERT_EQ(a.get_family(), b.get_family()) << s;
+    ASSERT_EQ(a, b) << s;
+  }
+}
