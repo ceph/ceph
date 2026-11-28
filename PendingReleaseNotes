@@ -6,6 +6,12 @@
   ``next_scheduled_time``. Scripts or tools that parse this output
   must be updated accordingly.
 
+* MGR: The balancer has a new option, ``crush_exact_weight_sets`` (off by
+  default). In the ``upmap``, ``read`` and ``upmap-read`` modes it gives each
+  pool a CRUSH weight-set, computed from the CRUSH weights, that corrects the
+  "multi-pick anomaly": the surplus of data on low-weight hosts or OSDs of
+  clusters with unequal weights. See the balancer documentation.
+
 * libcephsqlite: concurrent readers is now supported. The VFS implements the
   full sqlite3 locking protocol.
 

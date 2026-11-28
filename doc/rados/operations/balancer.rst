@@ -249,6 +249,47 @@ The mode can be changed to ``upmap-read`` by running the following command:
 
       ceph balancer mode upmap-read
 
+Weight-sets for the multi-pick anomaly
+--------------------------------------
+
+When a CRUSH rule picks several items of unequal weight from one bucket, the
+items with a low weight get more data than their share: with three replicas
+over hosts of weights 3, 3, 3 and 1, the small host gets 40% more than a tenth
+of the data. This is known as the multi-pick anomaly. The upmap balancer
+corrects it one PG at a time, like any other imbalance.
+
+The balancer can instead remove this error at its source. If
+``crush_exact_weight_sets`` is set, then in the ``upmap``, ``read`` and
+``upmap-read`` modes the balancer first gives each pool a
+:ref:`weight-set <weight-sets>` computed from the CRUSH weights, and then
+balances what is left in the usual way:
+
+.. prompt:: bash $
+
+   ceph config set mgr mgr/balancer/crush_exact_weight_sets true
+
+* A replicated pool gets a *positional* weight-set: every replica position,
+  the primary included, is then distributed in proportion to the CRUSH
+  weights.
+* An erasure coded pool, and any pool whose rule takes a device class, gets a
+  *flat* weight-set: the total per OSD is in proportion to the CRUSH weights,
+  but the first position is not. Setting
+  ``crush_exact_weight_sets_positional`` to ``false`` makes replicated pools
+  use flat weight-sets too.
+
+A pool gets no weight-set if its rule is not of the form *take*, *choose*
+(or *chooseleaf*), *emit*, if its failure domains have equal weights, or if
+one failure domain has more than ``1/size`` of the weight, in which case no
+weights can give every failure domain its share.
+
+The weight-sets depend only on the CRUSH weights and the size of the pool, and
+are updated when those change. Setting them moves data once: the amount by
+which the low-weight items were overfull. A weight-set stays in place when
+the option is turned off again; remove it with ``ceph osd crush weight-set rm
+<pool>``. The option cannot be combined with a compat weight-set, i.e. with
+``crush-compat`` mode.
+
+
 Supervised optimization
 -----------------------
 
