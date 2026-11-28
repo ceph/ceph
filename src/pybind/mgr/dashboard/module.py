@@ -40,6 +40,7 @@ from .services import nvmeof_cli, nvmeof_top_cli  # noqa # pylint: disable=unuse
 from .services.auth import AuthManager, AuthManagerTool, AuthType, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.nvmeof_top_cli import NvmeofTopCollector
+from .services.orchestrator import OrchClient
 from .services.service import RgwServiceManager
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
@@ -453,7 +454,20 @@ class Module(MgrModule, CherryPyConfig):
 
     @DBCLICommand.Write("dashboard create-self-signed-cert")
     def set_mgr_created_self_signed_cert(self):
-        cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        orch_client = OrchClient.instance() if orch_backend == 'cephadm' else None
+        # if cephadm orchestrator is enabled, then use its interface to
+        # generate the self-signed certificate using cephadm's interface
+        # otherwise, generate using the local self-signed certificate creation function
+        if orch_client and orch_client.available():
+            logger.info("Generating certificate using cephadm...")
+            result = orch_client.cert_store.generate_cert()
+            if not result or not result.get('cert') or not result.get('key'):
+                return -errno.EINVAL, '', 'Failed to generate certificates'
+            cert = result['cert']
+            pkey = result['key']
+        else:
+            cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
         result = HandleCommandResult(*self.set_ssl_certificate(inbuf=cert))
         if result.retval != 0:
             return result
