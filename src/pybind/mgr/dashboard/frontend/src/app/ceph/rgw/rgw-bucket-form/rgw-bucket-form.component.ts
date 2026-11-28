@@ -10,7 +10,7 @@ import { AbstractControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { Observable, forkJoin } from 'rxjs';
+import { Observable, forkJoin, of } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -35,7 +35,7 @@ import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.co
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
-import { map, switchMap } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
@@ -86,6 +86,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   aclPermissions: AclPermissionsType[] = [aclPermission.FullControl];
   multisiteStatus$: Observable<any>;
   isDefaultZoneGroup$: Observable<boolean>;
+  accountBucketLimitReached = false;
+  accountBucketLimit: number | null = null;
 
   get isVersioningEnabled(): boolean {
     return this.bucketForm.getValue('versioning');
@@ -212,6 +214,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         )
       )
     );
+
+    this.bucketForm
+      .get('accountUser')
+      .valueChanges.pipe(switchMap((uid: string) => this.getAccountBucketLimitStatus(uid)))
+      .subscribe(({ reached, limit }) => {
+        this.accountBucketLimitReached = reached;
+        this.accountBucketLimit = limit;
+      });
 
     this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
@@ -345,6 +355,32 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         this.loadingReady();
       });
     });
+  }
+
+  /**
+   * Checks whether the account of the given account user has reached its bucket limit.
+   * max_buckets: -1 => bucket creation disabled, 0 => unlimited, >0 => limit.
+   */
+  private getAccountBucketLimitStatus(
+    uid: string
+  ): Observable<{ reached: boolean; limit: number | null }> {
+    const noLimit: { reached: boolean; limit: number | null } = { reached: false, limit: null };
+    const accountId = this.accountUsers.find((user) => user.uid === uid)?.account_id;
+    if (!accountId || this.bucketForm.get('isAccountOwner').disabled) {
+      return of(noLimit);
+    }
+    return this.rgwAccountsService.get(accountId).pipe(
+      switchMap((account) => {
+        const limit = Number(account?.max_buckets);
+        if (!(limit > 0)) {
+          return of({ reached: limit < 0, limit });
+        }
+        return this.rgwBucketService
+          .list(false, uid)
+          .pipe(map((buckets) => ({ reached: buckets.length >= limit, limit })));
+      }),
+      catchError(() => of(noLimit))
+    );
   }
 
   goToListView() {
