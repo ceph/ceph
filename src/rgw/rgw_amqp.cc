@@ -917,6 +917,8 @@ public:
     }
     auto wrapper = std::make_unique<message_wrapper_t>(conn_id, topic, message, nullptr);
     if (messages.push(wrapper.get())) {
+      // the queue now owns the message; the manager thread deletes it
+      // coverity[leaked_storage:SUPPRESS]
       std::ignore = wrapper.release();
       ++queued;
       return AMQP_STATUS_OK;
@@ -935,6 +937,8 @@ public:
     }
     auto wrapper = std::make_unique<message_wrapper_t>(conn_id, topic, message, cb);
     if (messages.push(wrapper.get())) {
+      // the queue now owns the message; the manager thread deletes it
+      // coverity[leaked_storage:SUPPRESS]
       std::ignore = wrapper.release();
       ++queued;
       return AMQP_STATUS_OK;
