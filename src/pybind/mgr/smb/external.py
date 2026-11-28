@@ -7,7 +7,11 @@ granted access to only one cluster at a time.
 """
 from typing import Collection, Tuple
 
+import logging
+
 from .proto import ConfigStore, EntryKey
+
+log = logging.getLogger(__name__)
 
 # Convert identifiers into config entry keys
 
@@ -17,8 +21,8 @@ def config_key(cluster_id: str, override: bool = False) -> EntryKey:
     return (cluster_id, 'config.smb.override' if override else 'config.smb')
 
 
-def cluster_placeholder_key(cluster_id: str) -> EntryKey:
-    """Return key identifying a cluster info in an external store."""
+def cluster_info_key(cluster_id: str) -> EntryKey:
+    """Return key identifying a cluster info object in an external store."""
     return (cluster_id, 'cluster-info')
 
 
@@ -27,7 +31,7 @@ def cluster_orchestration_submitted(
 ) -> bool:
     """Treat unknown orchestration history as submitted."""
     try:
-        info = store[cluster_placeholder_key(cluster_id)].get()
+        info = store[cluster_info_key(cluster_id)].get()
     except KeyError:
         return True
     return info.get('orch_submitted') is not False
@@ -89,15 +93,6 @@ def stored_join_source_keys(
     return [k for k in store.contents(cluster_id) if k.startswith('join.')]
 
 
-def stored_cluster_placeholder_keys(
-    store: ConfigStore, cluster_id: str
-) -> Collection[str]:
-    """Return a collection of names for join source objects in an external
-    store.
-    """
-    return [k for k in store.contents(cluster_id) if k == 'cluster-info']
-
-
 def stored_usergroup_source_keys(
     store: ConfigStore, cluster_id: str
 ) -> Collection[str]:
@@ -143,8 +138,13 @@ def rm_cluster(store: ConfigStore, cluster_id: str) -> None:
     rm_namespace = getattr(store, 'remove_namespace', None)
     if rm_namespace:
         rm_namespace(cluster_id)
-    # TODO: this can probably be removed once the code has matured
-    assert cluster_id not in store.namespaces()
+    remaining = store.contents(cluster_id)
+    if remaining:
+        log.warning(
+            'objects remain in namespace %r after removing cluster: %r',
+            cluster_id,
+            sorted(remaining),
+        )
 
 
 def rm_other_in_ns(
