@@ -326,6 +326,45 @@ describe('TelemetryComponent', () => {
       });
     });
 
+    it('should request the report of the channels selected in the form', () => {
+      component.newConfig = { channel_basic: true, channel_crash: false, channel_perf: true };
+      component['getReport']();
+      httpTesting.expectOne('api/telemetry/report?channels=basic&channels=perf');
+    });
+
+    it('should request the report without channels if none is selected', () => {
+      component.newConfig = { channel_basic: false, channel_perf: false };
+      component['getReport']();
+      httpTesting.expectOne('api/telemetry/report?channels=');
+    });
+
+    it('should show the channels of the report and only add the contact info with ident', () => {
+      const flush = (newConfig: object, channels: string[]) => {
+        component.newConfig = {
+          contact: 'a@b.c',
+          description: 'd',
+          organization: 'o',
+          ...newConfig
+        };
+        component['getReport']();
+        const channelQuery = channels.map((channel) => `channels=${channel}`).join('&');
+        httpTesting
+          .expectOne(`api/telemetry/report?${channelQuery}`)
+          .flush({ report: { report_id: 'id', channels } });
+        return component.report['report'];
+      };
+      const withoutIdent = flush({ channel_basic: true }, ['basic']);
+      expect(withoutIdent['channels']).toEqual(['basic']);
+      expect(withoutIdent).not.toHaveProperty('contact');
+      const withIdent = flush({ channel_basic: true, channel_ident: true }, ['basic', 'ident']);
+      expect(withIdent['channels']).toEqual(['basic', 'ident']);
+      expect(withIdent).toMatchObject({
+        contact: 'a@b.c',
+        description: 'd',
+        organization: 'o'
+      });
+    });
+
     it('should submit when telemetry is not yet enabled', () => {
       component.moduleEnabled = false;
       component.onSubmit();

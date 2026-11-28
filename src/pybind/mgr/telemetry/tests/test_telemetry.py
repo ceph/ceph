@@ -140,3 +140,51 @@ class TestTelemetry:
             restored = pickle.loads(pickle.dumps(d))
             assert restored is not None, \
                 f"defaultdict({factory.__name__}) failed pickle round-trip"
+
+    def test_report_of_unsaved_channels(self) -> None:
+        # The Dashboard previews the channels selected in its form, which are
+        # not saved yet, and the report must match `ceph telemetry show`.
+        m = telemetry.Module('telemetry', '', '')
+        m.set_module_option('enabled', True)
+        for channel in ALL_CHANNELS:
+            m.set_module_option(f'channel_{channel}', channel == 'device')
+        m.config_update_module_option()
+        m.load()
+        m.db_collection = [c['name'].name for c in MODULE_COLLECTION]
+        m.gather_crashinfo = mock.Mock(return_value=[{'crash_id': 'id'}])  # type: ignore
+        m.gather_perf_counters = mock.Mock(return_value={'osd.1': {}})  # type: ignore
+        m.gather_device_report = mock.Mock(return_value={})  # type: ignore
+        for getter in ['get_stats_per_pool', 'get_stats_per_pg', 'get_io_rate',
+                       'get_osd_histograms', 'get_mempool', 'get_heap_stats',
+                       'get_rocksdb_stats']:
+            setattr(m, getter, mock.Mock(return_value={}))
+        collection = list(m.db_collection)
+
+        saved = m.get_report_locked(channels=None)
+        assert saved['channels'] == ['device']
+        assert 'crashes' not in saved
+        assert 'perf_counters' not in saved
+
+        channels = ['crash', 'perf']
+        report = m.get_report_locked('all', channels)['report']
+        assert report['channels'] == channels
+        assert report['crashes'] == [{'crash_id': 'id'}]
+        for section in ['perf_counters', 'stats_per_pool', 'stats_per_pg', 'io_rate',
+                        'osd_perf_histograms', 'mempool', 'heap_stats', 'rocksdb_stats']:
+            assert section in report
+
+        _, out, _ = m.show(channels)
+        shown, _ = json.JSONDecoder().raw_decode(out)  # ignores the trailing device hint
+        for r in (report, shown):
+            r.pop('report_timestamp')
+        assert report == shown
+
+        # no channel selected must not fall back to the saved channels
+        empty = m.get_report_locked('all', [])['report']
+        assert empty['channels'] == []
+        assert 'crashes' not in empty
+        assert 'perf_counters' not in empty
+
+        # nothing was changed
+        assert m.db_collection == collection
+        assert m.get_active_channels() == ['device']

@@ -1032,7 +1032,7 @@ class Module(MgrModule):
             return 0
 
     def compile_report(self, channels: Optional[List[str]] = None) -> Dict[str, Any]:
-        if not channels:
+        if channels is None:
             channels = self.get_active_channels()
         report = {
             'leaderboard': self.leaderboard,

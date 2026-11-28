@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from typing import List, Optional
+
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -199,6 +201,8 @@ REPORT_SCHEMA = {
     "device_report": (str, "")
 }
 
+TELEMETRY_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
+
 
 @APIRouter('/telemetry', Scope.CONFIG_OPT)
 @APIDoc("Display Telemetry Report", "Telemetry")
@@ -206,14 +210,29 @@ class Telemetry(RESTController):
 
     @RESTController.Collection('GET')
     @EndpointDoc("Get Detailed Telemetry report",
+                 parameters={
+                     'channels': ([str], 'Channels to report, an empty value selects none. '
+                                         'Defaults to the enabled ones.', True)
+                 },
                  responses={200: REPORT_SCHEMA})
-    def report(self):
+    def report(self, channels: Optional[List[str]] = None):
         """
         Get Ceph and device report data
         :return: Ceph and device report data
         :rtype: dict
         """
-        return mgr.remote('telemetry', 'get_report_locked', 'all')
+        if isinstance(channels, str):
+            channels = [channels]
+        if channels is not None:
+            # an empty value means that no channel is selected
+            channels = [c for c in channels if c]
+            invalid = [c for c in channels if c not in TELEMETRY_CHANNELS]
+            if invalid:
+                raise DashboardException(
+                    code='telemetry_invalid_channel',
+                    component='telemetry',
+                    msg=f'Invalid channels {invalid}, available: {TELEMETRY_CHANNELS}')
+        return mgr.remote('telemetry', 'get_report_locked', 'all', channels)
 
     def singleton_set(self, enable=True, license_name=None):
         """
