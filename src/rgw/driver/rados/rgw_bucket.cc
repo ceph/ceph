@@ -873,7 +873,7 @@ static int is_versioned_instance_listable(const DoutPrefixProvider *dpp,
         listable = true;
         return 0;
       }
-      marker = entry.second.key;
+      marker = rgw_list_resume_marker(entry.second, true);
     }
   } while (result.is_truncated);
   return 0;

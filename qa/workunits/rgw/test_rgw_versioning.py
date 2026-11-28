@@ -324,6 +324,76 @@ def main():
         exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver {olh_ver}')
     assert bucket.Object(key).delete().get('DeleteMarker'), 'expected a delete marker'
 
+    # TESTCASE 'verify an UNORDERED listing resumes correctly after a null version'
+    log.debug('TEST: unordered listing resumes correctly after a null version\n')
+    null_bucket_name = BUCKET_NAME + '-null-resume'
+    null_bucket = connection.create_bucket(Bucket=null_bucket_name)
+    keys = [f'k{i:02d}' for i in range(6)]
+    try:
+        connection.BucketVersioning(null_bucket_name).enable()
+        for k in keys:
+            null_bucket.Object(k).put(Body=b'v1')      # a noncurrent version
+        connection.BucketVersioning(null_bucket_name).suspend()
+        for k in keys:
+            null_bucket.Object(k).put(Body=b'null')    # a current null version
+        exec_cmd(f'radosgw-admin bucket reshard --bucket {null_bucket_name} --num-shards 1 --yes-i-really-mean-it')
+        # 'tell' applies the limit on every OSD before returning, so the
+        # listing below always pages within the index shard
+        exec_cmd('ceph tell osd.* config set osd_max_omap_entries_per_request 1')
+        try:
+            listing = json.loads(exec_cmd(f'radosgw-admin bucket list --bucket {null_bucket_name} --allow-unordered'))
+        finally:
+            exec_cmd('ceph tell osd.* config unset osd_max_omap_entries_per_request')
+        entries = [(e['name'], e.get('instance', '')) for e in listing]
+        dups = sorted(e for e in set(entries) if entries.count(e) > 1)
+        assert not dups, f'entries listed more than once: {dups}'
+    finally:
+        null_bucket.object_versions.all().delete()
+        null_bucket.delete()
+
+    # TESTCASE 'ordered and unordered outer pages resume after a null version'
+    outer_name = BUCKET_NAME + '-outer-null-resume'
+    outer_bucket = connection.create_bucket(Bucket=outer_name)
+    try:
+        connection.BucketVersioning(outer_name).enable()
+        for key in [f'k{i:02d}' for i in range(99)] + ['z']:
+            outer_bucket.Object(key).put(Body=b'old')
+        connection.BucketVersioning(outer_name).suspend()
+        outer_bucket.Object('z').put(Body=b'null')
+        exec_cmd(f'radosgw-admin bucket reshard --bucket {outer_name} '
+                 '--num-shards 1 --yes-i-really-mean-it')
+
+        # Both commands use outer pages of 100 entries. The current null
+        # version is entry 100, with z's older version still to be listed.
+        command = (f'radosgw-admin bucket radoslist --bucket {outer_name} '
+                   '--rgw-obj-fs ,')
+        def radoslist(skip=None):
+            # oid,bucket,key; match on the key so tail oids are skipped too
+            lines = [l.split(b',', 2) for l in exec_cmd(command).splitlines()]
+            return [oid for oid, _, key in lines
+                    if skip is None or key.split(b'[')[0] != skip]
+        actual = radoslist()
+        resync = (f'radosgw-admin bucket resync encrypted multipart '
+                  f'--bucket {outer_name} --yes-i-really-mean-it')
+        progress = json.loads(exec_cmd(resync))['progress']
+        processed = progress[-1]['total processed']
+
+        # A numbered version immediately before z moves the page boundary
+        # off the null version without changing any existing object.
+        connection.BucketVersioning(outer_name).enable()
+        outer_bucket.Object('padding').put(Body=b'padding')
+        expected = radoslist(skip=b'padding')
+        control = json.loads(exec_cmd(resync))['progress']
+        assert control[-1]['total processed'] == 102
+        log.info(f'outer pages: radoslist={len(actual)}, '
+                 f'control={len(expected)}, resync={processed}')
+        assert sorted(actual) == sorted(expected), \
+            'radoslist differs at the null-version page boundary'
+        assert processed == 101, f'resync processed {processed} entries, not 101'
+    finally:
+        outer_bucket.object_versions.all().delete()
+        outer_bucket.delete()
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()

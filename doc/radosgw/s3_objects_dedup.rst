@@ -122,6 +122,9 @@ The dedup estimate process collects all needed information directly from
 the bucket indexes, reading one full bucket index object a thousand entries at
 a time.
 
+For versioned buckets, the scan includes current and noncurrent object versions,
+including the null version. Delete markers are not counted.
+
 Bucket index objects are sharded between the participating members so each
 is read exactly one time. The sharding allows processing to
 scale almost linearly, splitting the load evenly among participating

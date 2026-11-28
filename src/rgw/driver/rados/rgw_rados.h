@@ -342,6 +342,9 @@ struct BILogNopHandler {
   int flush() { return 0; }
 };
 
+rgw_obj_index_key rgw_list_resume_marker(const rgw_bucket_dir_entry& dirent,
+                                         bool list_versions);
+
 class RGWRados
 {
   friend class RGWGC;
