@@ -174,6 +174,63 @@ growth, not to find which module is responsible. The ``notify_avg_usec`` and
 the CPU and memory counters monitor resource consumption. The default monitoring
 interval is 5 seconds.
 
+The same ``perf dump`` reports how long Manager threads wait for the Python GIL:
+
+- ``mgr.gil_acquire_lat``: waits when C++ code calls into a module
+- ``mgr.gil_reacquire_lat``: waits when a module returns from a call into the
+  Manager
+- ``mgr.gil_slow_waits``: number of waits longer than 5 ms
+
+``max_inc`` in the two latency counters is the longest single wait. Waits that
+happen inside Python itself (I/O, ``time.sleep()``, the rados bindings) are not
+counted. For example:
+
+.. prompt:: bash #
+
+   ceph daemon mgr.${MGRNAME} perf dump mgr
+
+::
+
+    "mgr": {
+        "gil_acquire_lat": {
+            "avgcount": 79,
+            "sum": 0.012754997,
+            "max_inc": 0.004310491,
+            "avgtime": 0.000161455
+        },
+        "gil_reacquire_lat": {
+            "avgcount": 309,
+            "sum": 0.054896731,
+            "max_inc": 0.007915636,
+            "avgtime": 0.000177659
+        },
+        "gil_slow_waits": 5
+    }
+
+The counters add up from Manager start. A few slow waits right after startup
+are normal, since all modules start at the same time. Watch how fast
+``gil_slow_waits`` grows rather than its value. To start again from zero, run
+``ceph daemon mgr.${MGRNAME} perf reset all``.
+
+To find which module waited, raise the Manager debug level:
+
+.. prompt:: bash #
+
+   ceph config set mgr debug_mgr 5
+
+Slow waits are then logged in the Manager log, at most one line per second.
+Each line names the waiting module and, when Python code was running, the
+function and line where it waited::
+
+    mgr log_slow_wait without_gil_t::acquire_gil: module 'progress' waited 0.007915636s for the GIL, python frame: config_notify (/usr/share/ceph/mgr/progress/module.py:502)
+
+``Gil::Gil`` means the Manager was calling into the module, and
+``without_gil_t::acquire_gil`` means the module was returning from a call
+into the Manager. When waits were skipped, the line ends with how many and
+the longest of them, for example ``(5 slow waits not logged since the last
+report, worst 0.009014971s in 'prometheus')``. To log every slow wait, use
+``debug_mgr 20``.
+
 
 Automatic Stats Period Tuning
 ------------------------------

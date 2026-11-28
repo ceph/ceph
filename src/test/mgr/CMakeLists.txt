@@ -73,6 +73,15 @@ target_link_libraries(unittest_mgr_servicemap
   ceph-common
 )
 
+# unittest_mgr_gil
+add_executable(unittest_mgr_gil
+  test_gil.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/Gil.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/mgr_perf_counters.cc)
+add_ceph_unittest(unittest_mgr_gil)
+target_link_libraries(unittest_mgr_gil ceph-common global
+  Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+
 # unittest_mgr_map_cache
 add_executable(unittest_mgr_map_cache
   test_mgrmapcache.cc
