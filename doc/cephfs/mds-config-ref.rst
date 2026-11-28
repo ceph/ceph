@@ -4,6 +4,32 @@
  MDS Config Reference
 ======================
 
+These options configure the Ceph Metadata Server (MDS). The options under
+`Developer Options`_ are for testing and debugging. Some of them crash the MDS
+or delete metadata on purpose.
+
+To set an option for every MDS, or for one MDS, run a command of one of the
+following forms:
+
+.. prompt:: bash #
+
+   ceph config set mds <option> <value>
+   ceph config set mds.<name> <option> <value>
+
+To see the MDS options that are set in the Monitor configuration database, run
+``ceph config get mds``. To see the options that a running MDS uses with
+values other than their defaults, run either of the following commands:
+
+.. prompt:: bash #
+
+   ceph config show mds.<name>
+   ceph tell mds.<name> config diff
+
+Here ``<name>`` is the name of the MDS daemon, as shown by ``ceph fs status``
+or ``ceph orch ps --daemon-type mds``. For more on these commands, see
+:ref:`configuring-ceph-api` and :ref:`configuring_ceph_runtime_view`. For
+everything else about setting options, see :ref:`configuring-ceph`.
+
 .. confval:: mds_cache_mid
 .. confval:: mds_allow_batched_ops
 .. confval:: mds_dir_max_commit_size
@@ -16,12 +42,10 @@
 .. confval:: mon_mds_blocklist_interval
 .. confval:: mds_reconnect_timeout
 .. confval:: mds_tick_interval
-.. confval:: mds_dirstat_min_interval
 .. confval:: mds_scatter_nudge_interval
 .. confval:: mds_client_prealloc_inos
 .. confval:: mds_early_reply
 .. confval:: mds_default_dir_hash
-.. confval:: mds_log_skip_corrupt_events
 .. confval:: mds_bal_sample_interval
 .. confval:: mds_bal_replicate_threshold
 .. confval:: mds_bal_unreplicate_threshold
@@ -35,6 +59,33 @@
 .. confval:: mds_bal_fragment_fast_factor
 .. confval:: mds_bal_fragment_size_max
 .. confval:: mds_bal_idle_threshold
+.. confval:: mds_replay_interval
+.. confval:: mds_min_caps_per_client
+.. confval:: mds_symlink_recovery
+.. confval:: mds_extraordinary_events_dump_interval
+.. confval:: mds_session_blocklist_on_evict
+.. confval:: mds_enable_op_tracker
+.. confval:: mds_op_complaint_time
+.. confval:: mds_op_history_size
+.. confval:: mds_op_history_duration
+
+The following options control the dmClock QoS scheduler for client
+metadata requests. See :ref:`mds-qos` for an explanation of the
+feature and a worked example.
+
+.. confval:: mds_dmclock_enable
+.. confval:: mds_dmclock_reservation
+.. confval:: mds_dmclock_weight
+.. confval:: mds_dmclock_limit
+
+Developer Options
+=================
+
+.. important:: These options are internal. They are listed here only to
+   complete the list of options.
+
+.. confval:: mds_dirstat_min_interval
+.. confval:: mds_log_skip_corrupt_events
 .. confval:: mds_bal_max
 .. confval:: mds_bal_max_until
 .. confval:: mds_bal_mode
@@ -45,7 +96,6 @@
 .. confval:: mds_bal_need_max
 .. confval:: mds_bal_midchunk
 .. confval:: mds_bal_minchunk
-.. confval:: mds_replay_interval
 .. confval:: mds_shutdown_check
 .. confval:: mds_thrash_exports
 .. confval:: mds_thrash_fragments
@@ -66,21 +116,4 @@
 .. confval:: mds_wipe_sessions
 .. confval:: mds_wipe_ino_prealloc
 .. confval:: mds_skip_ino
-.. confval:: mds_min_caps_per_client
-.. confval:: mds_symlink_recovery
-.. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
-.. confval:: mds_session_blocklist_on_evict
-.. confval:: mds_enable_op_tracker
-.. confval:: mds_op_complaint_time
-.. confval:: mds_op_history_size
-.. confval:: mds_op_history_duration
-
-The following options control the dmClock QoS scheduler for client
-metadata requests. See :ref:`mds-qos` for an explanation of the
-feature and a worked example.
-
-.. confval:: mds_dmclock_enable
-.. confval:: mds_dmclock_reservation
-.. confval:: mds_dmclock_weight
-.. confval:: mds_dmclock_limit
