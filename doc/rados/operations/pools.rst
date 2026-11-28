@@ -813,7 +813,11 @@ You may set values for the following keys:
 .. describe:: compression_min_blob_size
 
    
-   :Description: Sets the minimum size for the compression of chunks: that is, chunks smaller than this are not compressed.  This key's setting overrides the following global settings:
+   :Description: Sets the maximum size of each compressed chunk for objects
+                 without sequential-access allocation hints, which includes RBD,
+                 RGW, and CephFS data. Despite the name, this is not a minimum,
+                 and smaller chunks are compressed too. This key's setting
+                 overrides the following global settings:
    
    * :confval:`bluestore_compression_min_blob_size` 
    * :confval:`bluestore_compression_min_blob_size_hdd`
@@ -824,7 +828,15 @@ You may set values for the following keys:
 
 .. describe:: compression_max_blob_size
    
-   :Description: Sets the maximum size for chunks: that is, chunks larger than this are broken into smaller blobs no larger than this size before compression is performed.
+   :Description: Sets the maximum size of each compressed chunk for objects with
+                 sequential-access allocation hints. RBD, RGW, and CephFS do not
+                 set those hints, so this does not apply to their data. This
+                 key's setting overrides the following global settings:
+
+   * :confval:`bluestore_compression_max_blob_size`
+   * :confval:`bluestore_compression_max_blob_size_hdd`
+   * :confval:`bluestore_compression_max_blob_size_ssd`
+
    :Type: Unsigned Integer
 
 .. note:: Compressed pool statistics are visible using ``ceph df detail``.
