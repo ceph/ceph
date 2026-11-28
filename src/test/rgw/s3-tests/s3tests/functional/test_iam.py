@@ -1105,6 +1105,30 @@ def test_account_current_user_access_key_create(iam_root):
 
 @pytest.mark.iam_account
 @pytest.mark.iam_user
+def test_account_current_user_access_key_create_with_policy(iam_root):
+    """ test that mutating operations on current user preserve user attrs """
+    path = get_iam_path_prefix()
+    name = make_iam_name('name')
+    iam_root.create_user(UserName=name, Path=path)
+
+    # add policy for access to iam:CreateAccessKey
+    policy = 'arn:aws:iam::aws:policy/IAMFullAccess'
+    iam_root.attach_user_policy(UserName=name, PolicyArn=policy)
+
+    key = iam_root.create_access_key(UserName=name)['AccessKey']
+    iam = get_iam_client(aws_access_key_id=key['AccessKeyId'],
+                         aws_secret_access_key=key['SecretAccessKey'])
+
+    iam.create_access_key()
+
+    # verify that user policy remains
+    response = iam_root.list_attached_user_policies(UserName=name)
+    assert len(response['AttachedPolicies']) == 1
+    assert 'IAMFullAccess' == response['AttachedPolicies'][0]['PolicyName']
+    assert policy == response['AttachedPolicies'][0]['PolicyArn']
+
+@pytest.mark.iam_account
+@pytest.mark.iam_user
 def test_account_user_access_key_update(iam_root):
     with pytest.raises(iam_root.exceptions.NoSuchEntityException):
         iam_root.update_access_key(UserName='nosuchuser', AccessKeyId='abcdefghijklmnopqrstu', Status='Active')
