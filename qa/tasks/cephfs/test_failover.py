@@ -340,6 +340,68 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.wait_for_daemons(timeout=90)
 
+class TestRecoveryWhileStopping(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 4
+
+    def _rank_state(self, rank):
+        for info in self.fs.status().get_ranks(self.fs.id):
+            if info['rank'] == rank:
+                return info['state']
+        return None
+
+    def test_rank_stops_during_rejoin(self):
+        """
+        That a rank in rejoin does not wait forever for a rejoin from a
+        rank that finished stopping while it was recovering.
+
+        Tests: https://tracker.ceph.com/issues/47843
+        """
+        self.fs.grow(3)
+        # ranks 0 and 2 hold their OP_STRONG, so rank 1 stays in rejoin
+        names = [self.fs.get_rank(rank=r)['name'] for r in (0, 2)]
+        for name in names:
+            self.config_set(f'mds.{name}',
+                            'mds_defer_rejoin_send_for_testing', True)
+        self.fs.set_max_mds(2)
+        self.fs.rank_fail(rank=1)
+        self.wait_until_true(lambda: self._rank_state(1) == 'up:rejoin',
+                             timeout=60, period=0.1)
+        self.fs.set_joinable(False)
+        self.fs.rank_fail(rank=0)
+        self.wait_until_true(lambda: 2 in self.fs.get_var('stopped'),
+                             timeout=120, period=1)
+        # the old daemons come back as standbys; let them send again
+        for name in names:
+            self.config_rm(f'mds.{name}',
+                           'mds_defer_rejoin_send_for_testing')
+        self.fs.set_joinable(True)
+        self.fs.wait_for_daemons(timeout=120)
+
+    def test_rank_stops_during_resolve(self):
+        """
+        That a rank in resolve does not wait forever for a resolve from a
+        rank that finished stopping while it was recovering.
+
+        Tests: https://tracker.ceph.com/issues/47843
+        """
+        self.fs.grow(3)
+        # slow rank 1's replay so that rank 0 fails before rank 1
+        # asks for resolve
+        self.config_set('mds', 'mds_delay_journal_replay_for_testing',
+                        '2000')
+        self.fs.set_max_mds(2)
+        self.fs.rank_fail(rank=1)
+        self.wait_until_true(lambda: self._rank_state(1) == 'up:replay',
+                             timeout=30, period=0.1)
+        self.fs.set_joinable(False)
+        self.fs.rank_fail(rank=0)
+        self.config_rm('mds', 'mds_delay_journal_replay_for_testing')
+        self.wait_until_true(lambda: 2 in self.fs.get_var('stopped'),
+                             timeout=120, period=1)
+        self.fs.set_joinable(True)
+        self.fs.wait_for_daemons(timeout=120)
+
 class TestFailoverBeaconHealth(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
