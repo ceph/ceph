@@ -37,21 +37,30 @@
  * outputs, translates errors, and leaves a clean extension point for future
  * caller-owned memory or a different serializer. */
 
-namespace ceph::libfdb::to {
+namespace ceph::libfdb::detail {
 
-inline auto convert(const auto& from,
-                    std::vector<std::uint8_t>& out_data)
- -> std::span<const std::uint8_t>
+inline auto convert_to_buffer(const auto& from, auto& out_data,
+                              auto ...options) -> std::span<const std::uint8_t>
 {
  out_data.clear();
 
- zpp::bits::out out(out_data);
+ zpp::bits::out out(out_data, options...);
+
  if (const auto status = out(from); zpp::bits::failure(status)) {
   throw libfdb_exception(std::make_error_code(static_cast<std::errc>(status)),
                          "unable to encode value");
  }
 
  return out_data;
+}
+
+} // namespace ceph::libfdb::detail
+
+namespace ceph::libfdb::to {
+
+inline auto convert(const auto& from, std::vector<std::uint8_t>& out_data) -> std::span<const std::uint8_t>
+{
+ return detail::convert_to_buffer(from, out_data);
 }
 
 inline auto convert(const auto& from) -> std::vector<std::uint8_t>
@@ -64,9 +73,8 @@ inline auto convert(const auto& from) -> std::vector<std::uint8_t>
 
 } // namespace ceph::libfdb::to
 
-/* Map from FDB inputs from FDB TYPE to CONCRETE (i.e. copyable) userland types. Do NOT add
-non-FDB input sources here (or any non-matching user output sources). Do NOT add
-non-owning targets, lest Antevorda be angered!: */
+/* Decoded values must own their data or write into caller-owned storage.
+ * Custom serializers must enforce that rule for nested members too: */
 namespace ceph::libfdb::from {
 
 namespace detail {
@@ -84,7 +92,7 @@ inline void convert(const std::span<const std::uint8_t>& from, versionstamp& to)
  to.store_result(from);
 }
 
-template <typename ToT>
+template <concepts::decoded_value ToT>
 requires (!std::invocable<ToT&, const char *, std::size_t>)
 inline void convert(const std::span<const std::uint8_t>& from, ToT& to)
 {
@@ -102,7 +110,7 @@ inline void convert(const std::span<const std::uint8_t>& in,
 {
  const auto input = ::ceph::libfdb::detail::as_string_view(in);
 
- std::invoke(write_output_fn, input.data(), input.size());
+ std::invoke(write_output_fn, std::data(input), std::size(input));
 }
 
 } // namespace ceph::libfdb::from
@@ -131,7 +139,7 @@ inline std::string decode_zpp_string_value(const std::span<const std::uint8_t> f
  return std::string(data, static_cast<std::string::size_type>(size));
 }
 
-template <typename ValueT>
+template <concepts::decoded_value ValueT>
 inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
 {
  std::pair<std::string, ValueT> r;

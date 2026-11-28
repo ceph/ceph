@@ -24,6 +24,7 @@ between FDB's types! If you have a user type to add, this is the place!
 
 #include "fdb/fdb.h"
 
+#include <iterator>
 #include <span>
 #include <vector>
 #include <cstdint>
@@ -35,23 +36,16 @@ namespace ceph::buffer {
 
 auto serialize(auto& archive, ceph::buffer::list& target)
 {
- // This should be revisited after the library is separated from the larger
- // surrounding project-- essentially, we can't write directly /into/ the buffer::list
- // that I know of; yet, it would obviously be great to eliminate the copy
- // here. I believe that somewhere in zpp::bits there's probably a way to get the
- // archive to call a custom function-- but it is not clear to me at this time and
- // I need to move on for now, unfortunately:
- std::vector<std::uint8_t> out;
+ // Decode a transient view, then copy the bytes once into their durable Ceph
+ // owner:
+ std::span<const std::uint8_t> bytes;
 
- auto r = archive(out);
+ auto result = archive(bytes);
 
- // JFW: this is really annoying, but again buffer::list is not something I find
- // easy to wrangle-- I'm not sure there's a straightforward way to just assign
- // a new value... so if you know what that is, please improve this:
  target.clear();
- target.append(out);
+ target.append(reinterpret_cast<const char *>(std::data(bytes)), std::size(bytes));
 
- return r;
+ return result;
 }
 
 auto serialize(auto& archive, const ceph::buffer::list& src)
@@ -66,10 +60,8 @@ auto serialize(auto& archive, const ceph::buffer::list& src)
  return archive(std::span<const std::uint8_t> { bytes.data(), bytes.size() });
 }
 
-// This transliteration is one-way: we read from a buffer::ptr to an archive; writing 
-// to a ceph::buffer::ptr as output seems pointless to me, as we already support spans 
-// and buffer::list-- I feel in fact like we would be courting danger we don't need as it
-// is a non-owning structure. 
+// buffer::ptr shares ownership of its allocation. This adapter supports it as
+// input; decode into buffer::list or caller-owned byte storage:
 auto serialize(auto& archive, const ceph::buffer::ptr& src)
 {
  const auto bytes = ceph::libfdb::detail::as_byte_view(

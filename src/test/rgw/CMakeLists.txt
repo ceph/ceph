@@ -574,10 +574,11 @@ target_link_libraries(unittest_yield_completion
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_FDB)
- list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ list(APPEND rgw_incs "${zpp_bits_SOURCE_DIR}")
  add_catch2_test_rgw(rgw_hex)
  add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_query)
+ add_catch2_test_rgw(fdb_query_algebra)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_content)
 endif()

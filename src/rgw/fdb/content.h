@@ -18,51 +18,52 @@
 
 #include "base.h"
 
+#include <algorithm>
+#include <array>
+#include <compare>
+#include <cstddef>
+#include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-
-#include <algorithm>
-
-#include <cstddef>
-#include <utility>
-#include <compare>
+#include <tuple>
 
 namespace ceph::libfdb::layer::content {
 
 namespace detail {
 
-// Includes the Tuple byte-string type code, segment terminator, and embedded-NUL
-// escape bytes.
-constexpr std::size_t encoded_string_segment_size(const std::string_view segment)
+constexpr char *copy_string_bytes(char *out, const std::string_view bytes) noexcept
 {
- const auto embedded_nuls =
-  static_cast<std::size_t>(std::ranges::count(segment, '\0'));
-
- return 2 + std::size(segment) + embedded_nuls;
-}
-
-constexpr void append_encoded_string_segment(std::string& out, const std::string_view segment)
-{
- // FoundationDB's Tuple-layer byte-string type code makes the NUL-FF escape
- // distinguishable from a segment terminator followed by an FF byte:
- out.push_back('\x01');
-
- // User-readable key segments take the common bulk-append path.
- if (!segment.contains('\0')) {
-  out.append(segment);
-  out.push_back('\0');
-  return;
+ if (not std::empty(bytes)) {
+  std::char_traits<char>::copy(out, std::data(bytes), std::size(bytes));
  }
 
- for (const char c : segment) {
-  out.push_back(c);
+ return out + std::size(bytes);
+}
 
-  if ('\0' == c) {
-   out.push_back('\xFF');
+constexpr char *write_string_segment(char *out, std::string_view bytes,
+                                     const std::size_t first_nul) noexcept
+{
+ // FoundationDB's Tuple-layer byte-string type code makes the NUL-FF escape distinguishable from a
+ // segment terminator followed by an FF byte:
+ *out++ = '\x01';
+ out = copy_string_bytes(out, bytes.substr(0, first_nul));
+
+ if (std::string_view::npos != first_nul) {
+  bytes.remove_prefix(first_nul);
+
+  for (const char c : bytes) {
+   *out++ = c;
+
+   if ('\0' == c) {
+    *out++ = '\xFF';
+   }
   }
  }
 
- out.push_back('\0');
+ *out++ = '\0';
+
+ return out;
 }
 
 // JFW: we should see how often this gets called in practice-- it may not "earn its keep", but we'll
@@ -92,33 +93,88 @@ constexpr std::string_view segment_view(const concepts::stringview_convertible a
  return std::string_view(segment);
 }
 
-constexpr std::string_view first_segment_view(const auto& first, const auto&...)
+constexpr auto segment_views(const auto& ...segments)
 {
- return segment_view(first);
+ return std::array {segment_view(segments)...};
 }
 
-constexpr void reserve_encoded_string_segments(std::string& out, const auto& ...segments)
+template <bool Escaped>
+constexpr void write_string_segments(std::string& out, const std::string_view compiled_prefix,
+                                      const auto& ...segments)
 {
- out.reserve(out.size() +
-             (encoded_string_segment_size(segment_view(segments)) +
-              ... + std::size_t{0}));
+ const auto previous_size = std::size(out);
+ const auto limit = out.max_size();
+
+ auto encoded_size = previous_size;
+
+ const auto add_size = [&limit, &encoded_size](const std::size_t amount) {
+  if (limit - encoded_size < amount) {
+   throw std::length_error("content key exceeds maximum string size");
+  }
+
+  encoded_size += amount;
+ };
+
+ add_size(std::size(compiled_prefix));
+ ((add_size(2), add_size(std::size(segments))), ...);
+
+ if constexpr (Escaped) {
+  (add_size(static_cast<std::size_t>(std::ranges::count(segments, '\0'))), ...);
+ }
+
+ // Preserve amortized growth when repeatedly extending an owned key:
+ auto capacity = encoded_size;
+
+ if (0 != previous_size and out.capacity() < encoded_size) {
+  capacity = std::max(encoded_size, out.capacity() <= limit / 2 ? 2 * out.capacity() : limit);
+ }
+
+ out.resize_and_overwrite(capacity, [&](char *buffer, std::size_t) noexcept {
+  auto *cursor = copy_string_bytes(buffer + previous_size, compiled_prefix);
+
+  const auto emit = [&cursor](const std::string_view segment) {
+   auto first_nul = std::string_view::npos;
+
+   if constexpr (Escaped) {
+    first_nul = segment.find('\0');
+   }
+
+   cursor = write_string_segment(cursor, segment, first_nul);
+  };
+
+  (emit(segments), ...);
+
+  return encoded_size;
+ });
 }
 
-constexpr void append_encoded_string_segments(std::string& out, const auto& ...segments)
+// Keep binary sizing and emission separate from the zero-free path:
+[[gnu::noinline]]
+constexpr void write_escaped_string_segments(std::string& out, const std::string_view compiled_prefix,
+                                              const auto& ...segments)
 {
- (append_encoded_string_segment(out, segment_view(segments)), ...);
+ write_string_segments<true>(out, compiled_prefix, segments...);
+}
+
+template <std::size_t N>
+constexpr void append_encoded_string_segments(std::string& out, const std::string_view compiled_prefix,
+                                               const std::array<std::string_view, N>& segments)
+{
+ std::apply([&out, &compiled_prefix](const auto& ...views) {
+  if (((std::string_view::npos == views.find('\0')) and ...)) [[likely]] {
+   write_string_segments<false>(out, compiled_prefix, views...);
+
+   return;
+  }
+
+  write_escaped_string_segments(out, compiled_prefix, views...);
+ }, segments);
 }
 
 } // namespace detail
 
 template <typename ...Segments>
 concept key_segments = 0 < sizeof...(Segments) && (concepts::stringview_convertible<Segments> && ...);
-
-class compiled_key;
-
-template <typename ...Segments>
-requires key_segments<Segments...>
-constexpr compiled_key assemble(const Segments& ...segments);
 
 class compiled_key final
 {
@@ -128,14 +184,17 @@ class compiled_key final
  compiled_key() = delete;
 
  private:
- explicit constexpr compiled_key(std::string bytes)
-  : encoded_bytes(std::move(bytes))
- {}
+ template <std::size_t N>
+ explicit constexpr compiled_key(const std::string_view compiled_prefix,
+                                  const std::array<std::string_view, N>& segments)
+ {
+  detail::append_encoded_string_segments(encoded_bytes, compiled_prefix, segments);
+ }
 
  public:
  constexpr std::size_t size() const noexcept
  {
-  return encoded_bytes.size();
+  return std::size(encoded_bytes);
  }
 
  constexpr auto operator<=>(const compiled_key& rhs) const noexcept
@@ -145,14 +204,37 @@ class compiled_key final
 
  constexpr bool operator==(const compiled_key& rhs) const noexcept = default;
 
+ // Append child segments to an exclusively owned compiled key. This may invalidate views into its
+ // bytes, so segment arguments must not alias them:
+ template <typename ...Segments>
+ requires key_segments<Segments...>
+ constexpr compiled_key& append(const Segments& ...segments) &
+ {
+  detail::append_encoded_string_segments(encoded_bytes, {}, detail::segment_views(segments...));
+
+  return *this;
+ }
+
  template <typename Segment>
  requires concepts::stringview_convertible<Segment>
- friend constexpr compiled_key operator/(compiled_key lhs, const Segment& segment)
+ constexpr compiled_key& operator/=(const Segment& segment) &
  {
-  const auto segment_bytes = detail::segment_view(segment);
+  return append(segment);
+ }
 
-  detail::reserve_encoded_string_segments(lhs.encoded_bytes, segment_bytes);
-  detail::append_encoded_string_segment(lhs.encoded_bytes, segment_bytes);
+ template <typename Segment>
+ requires concepts::stringview_convertible<Segment>
+ friend constexpr compiled_key operator/(const compiled_key& lhs, const Segment& segment)
+ {
+  // Preserve an lvalue prefix while copying it directly into the final buffer:
+  return compiled_key(lhs.encoded_bytes, detail::segment_views(segment));
+ }
+
+ template <typename Segment>
+ requires concepts::stringview_convertible<Segment>
+ friend constexpr compiled_key operator/(compiled_key&& lhs, const Segment& segment)
+ {
+  lhs /= segment;
 
   return lhs;
  }
@@ -165,26 +247,56 @@ class compiled_key final
  private:
  template <typename ...Segments>
  requires key_segments<Segments...>
- friend constexpr compiled_key assemble(const Segments& ...segments);
+ friend constexpr compiled_key key(const Segments& ...segments);
+
+ template <typename ...Segments>
+ requires key_segments<Segments...>
+ friend constexpr compiled_key key(const compiled_key& prefix, const Segments& ...segments);
+
+ template <typename ...Segments>
+ requires key_segments<Segments...>
+ friend constexpr compiled_key key(compiled_key&& prefix, const Segments& ...segments);
+
 };
+
+template <typename ...Segments>
+requires key_segments<Segments...>
+constexpr compiled_key key(const Segments& ...segments)
+{
+ // Only the root is constrained; later segments are user/domain data:
+ const auto views = detail::segment_views(segments...);
+
+ detail::require_valid_keyspace_root(views.front());
+
+ return compiled_key(std::string_view {}, views);
+}
 
 template <typename ...Segments>
 requires key_segments<Segments...>
 constexpr compiled_key assemble(const Segments& ...segments)
 {
- // Only the root is constrained; later segments are user/domain data.
- detail::require_valid_keyspace_root(detail::first_segment_view(segments...));
+ return key(segments...);
+}
 
- std::string out;
- detail::reserve_encoded_string_segments(out, segments...);
- detail::append_encoded_string_segments(out, segments...);
+template <typename ...Segments>
+requires key_segments<Segments...>
+constexpr compiled_key key(const compiled_key& prefix, const Segments& ...segments)
+{
+ return compiled_key(prefix.encoded_bytes, detail::segment_views(segments...));
+}
 
- return compiled_key(std::move(out));
+template <typename ...Segments>
+requires key_segments<Segments...>
+constexpr compiled_key key(compiled_key&& prefix, const Segments& ...segments)
+{
+ prefix.append(segments...);
+
+ return prefix;
 }
 
 constexpr compiled_key keyspace(const std::string_view segment)
 {
- return assemble(segment);
+ return key(segment);
 }
 
 template <std::size_t N>
@@ -192,14 +304,7 @@ constexpr compiled_key keyspace(const char (&segment)[N])
 {
  static_assert(1 < N, "content keyspace literal must not be empty");
 
- return assemble(segment);
-}
-
-template <typename ...Segments>
-requires key_segments<Segments...>
-constexpr compiled_key key(const Segments& ...segments)
-{
- return assemble(segments...);
+ return key(segment);
 }
 
 inline select prefix(const compiled_key& key_prefix)

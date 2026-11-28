@@ -15,7 +15,8 @@
 #ifndef CEPH_FDB_BASE_H
  #define CEPH_FDB_BASE_H
 
-#include "fdb_errors.h"
+#include "key.h"
+#include "transaction_result.h"
 
 // Ceph uses libfmt rather than <format>:
 #include <fmt/format.h>
@@ -41,23 +42,16 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
+#include <initializer_list>
+#include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <stop_token>
 #include <type_traits>
 #include <utility>
 
 #include <mutex>
 #include <thread>
-
-#ifdef __cpp_lib_flat_map
- #include <flat_map>
- template <typename ...Args>
- using flat_map = std::flat_map<Args...>;
-#else
- #include <boost/container/flat_map.hpp>
- template <typename ...Args>
- using flat_map = boost::container::flat_map<Args...>;
-#endif
 
 // Wrangle some forward declarations:
 namespace ceph::libfdb {
@@ -74,7 +68,7 @@ struct with_result_t final {};
 inline constexpr with_result_t with_result;
 
 struct versionstamp;
-struct watch_handle;
+class watch_handle;
 
 class key_selector;
 
@@ -153,42 +147,6 @@ inline future_value block_until_ready(future_value&& fv);
 
 namespace ceph::libfdb::concepts {
 
-// Note that "stringlikes" are not all "stringview-likes"-- such as when they can be written to:
-template <typename StringViewLikeT>
-concept stringview_convertible =
- std::convertible_to<std::remove_reference_t<StringViewLikeT> const&, std::string_view>;
-
-template <typename KeyViewT>
-concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
-
-} // namespace ceph::libfdb::concepts
-
-namespace ceph::libfdb::detail {
-
-constexpr std::string_view libfdb_key_view(const concepts::stringview_convertible auto& key)
-{
- return std::string_view(key);
-}
-
-template <typename KeyT>
-concept libfdb_key_like =
- requires(const KeyT& key) {
-  { libfdb_key_view(key) } -> std::same_as<std::string_view>;
- };
-
-template <libfdb_key_like KeyT>
-constexpr std::string_view as_libfdb_key_view(const KeyT& key)
-{
- return libfdb_key_view(key);
-}
-
-} // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb::concepts {
-
-template <typename KeyT>
-concept libfdb_key = ::ceph::libfdb::detail::libfdb_key_like<KeyT>;
-
 template <typename FnT>
 concept value_invocable =
  std::invocable<FnT&, std::span<const std::uint8_t>>;
@@ -198,12 +156,30 @@ concept value_callback =
  value_invocable<FnT> &&
  std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
 
+template <typename FnT>
+concept raw_key_value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>, std::span<const std::uint8_t>> and
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>,
+                                           std::span<const std::uint8_t>>>;
+
+template <typename T>
+concept read_only_borrowed_range =
+ std::ranges::borrowed_range<std::remove_cvref_t<T>> and
+ std::is_const_v<std::remove_reference_t<
+                  std::ranges::range_reference_t<std::remove_cvref_t<T>>>>;
+
+// Read-only borrowed ranges would retain bytes owned by a released FDB result.
+// Writable spans remain valid sinks into caller-owned storage.
+template <typename T>
+concept decoded_value =
+ std::is_object_v<T> and not read_only_borrowed_range<T>;
+
 template <typename T>
 concept decoded_value_sink =
  not value_invocable<std::remove_reference_t<T>> and
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
- std::is_object_v<std::remove_reference_t<T>>;
+ decoded_value<std::remove_reference_t<T>>;
 
 } // namespace ceph::libfdb::concepts
 
@@ -623,11 +599,18 @@ inline std::string key_after(std::string_view key)
  return std::string(key) + '\0';
 }
 
-inline select as_half_open_select(const select& selection)
+inline select as_half_open_select(select selection)
 {
+ if (not selection.begin_inclusive) {
+  selection.begin_key.push_back('\0');
+ }
+
+ if (selection.end_inclusive) {
+  selection.end_key.push_back('\0');
+ }
+
  auto half_open = select {
-  selection.begin_inclusive ? selection.begin_key : key_after(selection.begin_key),
-  selection.end_inclusive ? key_after(selection.end_key) : selection.end_key
+  std::move(selection.begin_key), std::move(selection.end_key), true, false
  };
 
  half_open.options = selection.options;
@@ -639,18 +622,109 @@ inline select as_half_open_select(const select& selection)
 
 // Flag-only options are indicated with an explicit option_flag, as they have
 // no actual value:
-struct option_flag_t final {};
+struct option_flag_t final
+{
+ constexpr auto operator<=>(const option_flag_t&) const = default;
+
+};
 inline constexpr option_flag_t option_flag;
 
 using option_value = std::variant<option_flag_t, std::int64_t, std::string, std::vector<std::uint8_t>>;
 
-// i.e. option /code/ to the value of the option itself (e.g. FDB_FOO, 42):
+// Own option applications in order, including repeated codes:
 template <typename OptionCodeT>
-using option_map = flat_map<OptionCodeT, option_value>; 
+struct option_list final
+{
+ using value_type = std::pair<OptionCodeT, option_value>;
+ using size_type = typename std::vector<value_type>::size_type;
+ using iterator = typename std::vector<value_type>::iterator;
+ using const_iterator = typename std::vector<value_type>::const_iterator;
 
-using network_options = option_map<FDBNetworkOption>;
-using database_options = option_map<FDBDatabaseOption>;
-using transaction_options = option_map<FDBTransactionOption>;
+ private:
+ std::vector<value_type> entries;
+
+ public:
+ option_list() = default;
+
+ option_list(std::initializer_list<value_type> values)
+  : entries(values)
+ {}
+
+ public:
+ iterator begin() noexcept { return std::begin(entries); }
+ const_iterator begin() const noexcept { return std::begin(entries); }
+ const_iterator cbegin() const noexcept { return std::cbegin(entries); }
+
+ iterator end() noexcept { return std::end(entries); }
+ const_iterator end() const noexcept { return std::end(entries); }
+ const_iterator cend() const noexcept { return std::cend(entries); }
+
+ bool empty() const noexcept { return std::empty(entries); }
+ size_type size() const noexcept { return std::size(entries); }
+
+ void clear() noexcept { entries.clear(); }
+ void reserve(const size_type count) { entries.reserve(count); }
+
+ void push_back(const value_type& value) { entries.push_back(value); }
+ void push_back(value_type&& value) { entries.push_back(std::move(value)); }
+
+ template <typename ...ArgTs>
+ requires std::constructible_from<value_type, ArgTs...>
+ value_type& emplace_back(ArgTs&& ...args)
+ {
+  return entries.emplace_back(std::forward<ArgTs>(args)...);
+ }
+
+ // As with vector::append_range, the range must not overlap this container.
+ template <std::ranges::input_range RangeT>
+ requires std::convertible_to<std::ranges::range_reference_t<RangeT>, value_type>
+ void append_range(RangeT&& values)
+ {
+  if constexpr (std::ranges::sized_range<RangeT>) {
+   const auto count = std::ranges::size(values);
+
+   if (entries.max_size() - std::size(entries) < count) {
+    throw libfdb_exception(std::errc::value_too_large, "too many option entries");
+   }
+
+   entries.reserve(std::size(entries) + count);
+  }
+
+  std::ranges::copy(values, std::back_inserter(entries));
+ }
+
+ void append(std::initializer_list<value_type> values)
+ {
+  append_range(values);
+ }
+
+ // Replace every matching value in place; an absent code inserts nothing:
+ size_type replace_all(const OptionCodeT code, const option_value& value)
+ {
+  size_type count = 0;
+
+  for (auto& entry : entries) {
+   if (code == entry.first) {
+    entry.second = value;
+    ++count;
+   }
+  }
+
+  return count;
+ }
+
+ size_type erase(const OptionCodeT code)
+ {
+  return std::erase_if(entries, [code](const auto& entry) {
+   return code == entry.first;
+  });
+ }
+
+};
+
+using network_options = option_list<FDBNetworkOption>;
+using database_options = option_list<FDBDatabaseOption>;
+using transaction_options = option_list<FDBTransactionOption>;
 
 // Caller-supplied database sources are tagged so paths and connection strings
 // cannot be confused:
@@ -857,9 +931,9 @@ inline auto apply_option_value(auto& set_option,
  return std::invoke(set_option, code, input.data, input.length);
 }
 
-inline void apply_options(auto&& option_map, auto&& set_option)
+inline void apply_options(auto&& options, auto&& set_option)
 {
- std::ranges::for_each(option_map, [&set_option](const auto& option) {
+ std::ranges::for_each(options, [&set_option](const auto& option) {
     const auto apply = [&set_option, code = option.first](const auto& value) {
       return apply_option_value(set_option, code, value);
     };
@@ -1130,7 +1204,7 @@ class transaction final
 
  static database_handle require_database(database_handle dbh)
  {
-  if (not dbh) {
+  if (not dbh or not *dbh) {
    throw libfdb_exception(std::errc::invalid_argument, "transaction requires a database handle");
   }
 
@@ -1443,7 +1517,7 @@ class transaction final
   fdb_transaction_set_read_version(raw_handle(), version);
  }
 
- std::expected<void, std::error_code> commit(with_result_t);
+ transaction_result<void> commit() noexcept;
 
  // Friends implement the public free-function interface while keeping the transaction handle opaque:
  // (In C++26, it will be a lot easier to express this!)
@@ -1479,9 +1553,9 @@ class transaction final
                                read_mode mode,
                                const commit_after_op commit_after);
 
- friend inline std::expected<void, std::error_code> commit(with_result_t, const transaction_handle& txn);
- friend inline std::expected<void, std::error_code> commit(with_result_t, const transaction_handle& txn,
-                                                         const versionstamp& stamp);
+ friend inline transaction_result<void> commit(const transaction_handle& txn) noexcept;
+ friend inline transaction_result<void> commit(const transaction_handle& txn,
+                                               const versionstamp& stamp) noexcept;
  friend inline std::int64_t committed_version(const transaction_handle& txn);
  friend inline std::int64_t read_version(const transaction_handle& txn);
  friend inline std::int64_t approximate_commit_bytes(const transaction_handle& txn);
@@ -1516,6 +1590,52 @@ class transaction final
 
 namespace detail {
 
+inline bool risky_causal_writes(const transaction_options& options) noexcept
+{
+ return std::ranges::any_of(options, [](const auto& option) {
+  return FDB_TR_OPTION_CAUSAL_WRITE_RISKY == option.first or
+         FDB_TR_OPTION_INITIALIZE_NEW_DATABASE == option.first;
+ });
+}
+
+inline commit_status commit_failure_status(const std::error_code error,
+                                           const transaction_options& options) noexcept
+{
+ if (retryable_not_committed(error)) {
+  return commit_status::not_committed;
+ }
+
+ if (fdb_error_code::commit_unknown_result == error and not risky_causal_writes(options)) {
+  return commit_status::unknown_result;
+ }
+
+ return commit_status::unconfirmed;
+}
+
+inline transaction_result<void> commit_exception(transaction& txn, transaction_status& status,
+                                                 const std::exception_ptr& error) noexcept
+{
+ const auto phase = 0 == status.attempts ? transaction_phase::setup
+                                       : transaction_phase::commit_observation;
+
+ auto failure = exception_failure(error, phase, status);
+
+ const auto *native = std::get_if<fdb_error>(&failure.cause);
+
+ if (commit_status::committed == status.commit) {
+  finish_version_stamps(txn, native ? native->code : std::make_error_code(std::errc::operation_canceled));
+
+  return transaction_result<void> {std::in_place, status};
+ }
+
+ if (native and commit_status::unconfirmed == status.commit) {
+  uncertain_commit(status, status.commit, native->code);
+  failure.status = status;
+ }
+
+ return fail_transaction(std::move(failure));
+}
+
 // Owns the futures for one native commit submission and optional stamp result.
 // Recovery is an explicit operation performed by the caller or transactor.
 class commit_attempt final
@@ -1524,10 +1644,22 @@ class commit_attempt final
 
  transaction& txn;
 
+ transaction_status& status;
+
  std::optional<future_value> versionstamp_future;
  future_value commit_future;
 
  phase current_phase = phase::commit;
+
+ static future_value submit(transaction& txn, transaction_status& status)
+ {
+  // No C++ operation can throw between recording submission and the native call.
+  status.attempts = 1;
+  status.commit = commit_status::unconfirmed;
+  status.duplicate_commit_possible = risky_causal_writes(txn.options);
+
+  return future_value(fdb_transaction_commit(txn.raw_handle()));
+ }
 
  static std::optional<future_value> make_versionstamp_future(transaction& txn)
  {
@@ -1569,10 +1701,11 @@ class commit_attempt final
  }
 
  public:
- explicit commit_attempt(transaction& transaction)
+ explicit commit_attempt(transaction& transaction, transaction_status& completion)
   : txn(transaction),
+    status(completion),
     versionstamp_future(make_versionstamp_future(txn)),
-    commit_future(fdb_transaction_commit(txn.raw_handle()))
+    commit_future(submit(txn, status))
  {}
 
  ~commit_attempt()
@@ -1607,45 +1740,70 @@ class commit_attempt final
  }
 
  // Failure to observe a commit is distinct from the commit future's result.
- [[nodiscard]] auto advance(const fdb_error_t wait_error = 0)
-  -> std::optional<std::expected<void, std::error_code>>
- {
-  if (phase::complete == current_phase) {
-   std::unreachable();
+ [[nodiscard]] auto advance(const fdb_error_t wait_error = 0) noexcept
+  -> std::optional<transaction_result<void>>
+ try
+  {
+   if (phase::complete == current_phase) {
+    std::unreachable();
+   }
+
+   if (phase::versionstamp == current_phase) {
+    // The commit succeeded; error here applies only to versionstamp results:
+    publish_versionstamp(wait_error);
+    current_phase = phase::complete;
+
+    return transaction_result<void> {std::in_place, status};
+   }
+
+   if (0 != wait_error) {
+    const auto error = std::error_code(wait_error, ::ceph::libfdb::fdb_error_category());
+
+    uncertain_commit(status, commit_status::unconfirmed, error);
+    txn.finish_version_stamps(error);
+    current_phase = phase::complete;
+    throw libfdb_exception(error);
+   }
+
+   if (const auto future_error = fdb_future_get_error(commit_future.raw_ptr_or_throw());
+       0 != future_error) {
+    const auto error = std::error_code(future_error, ::ceph::libfdb::fdb_error_category());
+
+    status.commit = commit_failure_status(error, txn.options);
+
+    if (commit_status::not_committed == status.commit) {
+     status.duplicate_commit_possible = false;
+    }
+
+    if (status.has_unknown_commit()) {
+     uncertain_commit(status, status.commit, error);
+    }
+
+    txn.finish_version_stamps(error);
+    current_phase = phase::complete;
+
+    return transaction_result<void> {
+                fail_transaction(fdb_error {error, {}}, transaction_phase::commit, status)
+            };
+   }
+
+   txn.state = transaction::state_t::committed;
+   status.commit = commit_status::committed;
+
+   if (not versionstamp_future) {
+    current_phase = phase::complete;
+
+    return transaction_result<void> {std::in_place, status};
+   }
+
+   current_phase = phase::versionstamp;
+
+   return std::nullopt;
   }
-
-  if (phase::versionstamp == current_phase) {
-   // The commit succeeded; error here applies only to versionstamp results:
-   publish_versionstamp(wait_error);
-   current_phase = phase::complete;
-   return std::expected<void, std::error_code> {};
+ catch (...)
+  {
+   return commit_exception(txn, status, std::current_exception());
   }
-
-  if (0 != wait_error) {
-   const auto error = std::error_code(wait_error, ::ceph::libfdb::fdb_error_category());
-   txn.finish_version_stamps(error);
-   current_phase = phase::complete;
-   throw libfdb_exception(error);
-  }
-
-  if (const auto future_error = fdb_future_get_error(commit_future.raw_ptr_or_throw());
-      0 != future_error) {
-   const auto error = std::error_code(future_error, ::ceph::libfdb::fdb_error_category());
-   txn.finish_version_stamps(error);
-   current_phase = phase::complete;
-   return std::expected<void, std::error_code>(std::unexpected(error));
-  }
-
-  txn.state = transaction::state_t::committed;
-
-  if (not versionstamp_future) {
-   current_phase = phase::complete;
-   return std::expected<void, std::error_code> {};
-  }
-
-  current_phase = phase::versionstamp;
-  return std::nullopt;
- }
 
 };
 
@@ -1763,17 +1921,36 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(
  return true;
 }
 
-inline std::expected<void, std::error_code> ceph::libfdb::transaction::commit(with_result_t)
+namespace detail {
+
+// Keep the waiting mechanism separate from submission/observation evidence.
+// The synchronous API and tests of wait failures use this same implementation:
+template <typename WaitFnT>
+transaction_result<void> complete_commit(transaction& txn, WaitFnT&& wait) noexcept
 {
- detail::commit_attempt attempt {*this};
+ transaction_status status;
 
- for (;;) {
-  const auto ec = fdb_future_block_until_ready(attempt.pending_future());
+ try
+  {
+   commit_attempt attempt {txn, status};
 
-  if (auto result = attempt.advance(ec)) {
-   return *result;
+   for (;;) {
+    if (auto result = attempt.advance(std::invoke(wait, attempt.pending_future()))) {
+     return std::move(*result);
+    }
+   }
   }
- }
+ catch (...)
+  {
+   return commit_exception(txn, status, std::current_exception());
+  }
+}
+
+} // namespace detail
+
+inline transaction_result<void> transaction::commit() noexcept
+{
+ return detail::complete_commit(*this, fdb_future_block_until_ready);
 }
 
 } // namespace ceph::libfdb
