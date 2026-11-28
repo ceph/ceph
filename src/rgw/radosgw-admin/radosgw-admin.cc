@@ -284,9 +284,6 @@ void usage()
   cout << "  data sync status                 get data sync status of the specified source zone\n";
   cout << "  data sync init                   init data sync for the specified source zone\n";
   cout << "  data sync run                    run data sync for the specified source zone\n";
-  cout << "  pool add                         add an existing pool for data placement\n";
-  cout << "  pool rm                          remove an existing pool from data placement set\n";
-  cout << "  pools list                       list placement active set\n";
   cout << "  policy                           read bucket/object policy\n";
   cout << "  log list                         list log objects\n";
   cout << "  log show                         dump a log from specific object or (bucket + date + bucket-id)\n";
