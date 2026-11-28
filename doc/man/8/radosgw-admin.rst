@@ -361,15 +361,6 @@ as follows:
 :command:`zone placement rm`
   Remove a zone placement target.
 
-:command:`pool add`
-  Add an existing pool for data placement.
-
-:command:`pool rm`
-  Remove an existing pool from data placement set.
-
-:command:`pools list`
-  List placement active set.
-
 :command:`policy`
   Display bucket/object policies (e.g. permissions/ACLs etc.).
 
