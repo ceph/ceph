@@ -760,6 +760,10 @@ OMapLeafNode::insert(
     }
     co_return mutation_result_t(mutation_status_t::SUCCESS, std::nullopt, std::nullopt);
   } else {
+    // A smaller root leaf grows before insert, see
+    // BtreeOMapManager::grow_root_leaf(). Split, merge and balance
+    // need all non-root leaves to have the same size.
+    ceph_assert(get_len() == get_leaf_size(oc.type));
     auto tuple = co_await make_split_children(oc);
     auto [left, right, pivot] = tuple;
     left->init_range(get_begin(), pivot);
@@ -1093,6 +1097,15 @@ uint64_t get_max_key_length() {
   // Same rule as OMapInnerNode::exceeds_max_kv_limit()
   return (OMAP_INNER_BLOCK_SIZE - StringKVInnerNodeLayout::header_size()) / 4
     - sizeof(laddr_le_t);
+}
+
+extent_len_t get_initial_leaf_size(omap_type_t type) {
+  if (type == omap_type_t::XATTR) {
+    // Most objects keep a few small xattrs, so start small and let the
+    // root leaf grow, see BtreeOMapManager::grow_root_leaf().
+    return XATTR_LEAF_INIT_BLOCK_SIZE;
+  }
+  return get_leaf_size(type);
 }
 
 }
