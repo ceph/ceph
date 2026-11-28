@@ -42,7 +42,6 @@
 #include "osdc/ObjectCacher.h"
 
 #include "RWRef.h"
-#include "Dentry.h"
 #include "DentryRef.h"
 #include "InodeRef.h"
 #include "MetaSession.h"
@@ -58,7 +57,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -216,6 +214,7 @@ struct DirEntry {
 
 struct Cap;
 class Dir;
+class Dentry;
 struct SnapRealm;
 struct Fh;
 struct CapSnap;
@@ -381,6 +380,7 @@ public:
   friend class C_Client_RequestInterrupt;
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend class C_Client_CacheRelease; // Asserts on client_lock
+  friend class Dentry; // for client_lock assert check
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
   template <typename T> friend struct RWRefState;
@@ -1227,7 +1227,8 @@ protected:
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
-  // path traversal for testing, looking at walk_dentry_result
+  // path traversal for testing, looking at walk_dentry_result (dn is not
+  // returned)
   int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true);
 
   int make_request(MetaRequest *req, const UserPerm& perms,
@@ -1371,21 +1372,6 @@ protected:
   void trim_cache(bool trim_kernel_dcache=false);
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
-  void assert_lru_num_pinned_sane(const char *where, const Dentry *dn = nullptr) {
-    if (lru.lru_get_num_pinned() <= lru.lru_get_size())
-      return;
-    std::ostringstream oss;
-    oss << where << " LRU num_pinned drift: pinned="
-	<< lru.lru_get_num_pinned() << " size=" << lru.lru_get_size()
-	<< " (top=" << lru.lru_get_top() << " bot=" << lru.lru_get_bot()
-	<< " pintail=" << lru.lru_get_pintail() << ")";
-    if (dn)
-      oss << " dentry '" << dn->name << "' dn " << dn
-	  << " ref=" << dn->ref
-	  << " expireable=" << dn->lru_is_expireable();
-    lderr(cct) << oss.str() << dendl;
-    ceph_assert(lru.lru_get_num_pinned() <= lru.lru_get_size());
-  }
   void trim_caps(MetaSession *s, uint64_t max);
   void _invalidate_kernel_dcache();
   void _trim_negative_child_dentries(const InodeRef& in);
