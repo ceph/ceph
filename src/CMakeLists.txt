@@ -46,7 +46,7 @@ if(ENABLE_GIT_VERSION)
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
   git_describe(CEPH_GIT_NICE_VER_WITH_V --always)
   # remove leading 'v'
-  string(SUBSTRING ${CEPH_GIT_NICE_VER_WITH_V} 1 -1 CEPH_GIT_NICE_VER)
+  string(REGEX REPLACE "^v(.*)" "\\1" CEPH_GIT_NICE_VER "${CEPH_GIT_NICE_VER_WITH_V}")
   #if building from a source tarball via make-dist
   if(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
     message(STATUS "Ceph/.git directory not found, parsing ${CMAKE_CURRENT_SOURCE_DIR}/.git_version for CEPH_GIT_VER and CEPH_GIT_NICE_VER")
