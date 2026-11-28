@@ -16,6 +16,7 @@
 
 
 #include "CDentry.h"
+#include "MDSReadPhaseCtx.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "SnapClient.h"
@@ -603,12 +604,23 @@ ClientLease *CDentry::add_client_lease(Session *session)
   if (it == client_leases.end() || it->get_client() != client) {
     l = new ClientLease(this, session);
     dout(20) << __func__ << " client." << client << " on " << lock << dendl;
+    // in a parallel read phase the pin, which goes up the parent chain, and
+    // the session's lease seq are shared with other threads
+    MDSReadPhaseCtx *phase = MDSReadPhaseCtx::current();
     if (client_leases.empty()) {
-      get(PIN_CLIENTLEASE);
+      if (phase)
+        phase->lease_pins.push_back(this);
+      else
+        get(PIN_CLIENTLEASE);
       lock.get_client_lease();
     }
     client_leases.insert_before(it, *l);
-    l->seq = ++session->lease_seq;
+    if (phase) {
+      std::lock_guard g(*phase->lease_seq_lock);
+      l->seq = ++session->lease_seq;
+    } else {
+      l->seq = ++session->lease_seq;
+    }
   } else {
     l = &(*it);
   }

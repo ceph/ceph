@@ -14,6 +14,7 @@
  */
 
 #include "CInode.h"
+#include "MDSReadPhaseCtx.h"
 
 #include <string>
 
@@ -3599,30 +3600,44 @@ Capability *CInode::add_client_cap(client_t client, Session *session,
 				   SnapRealm *conrealm, bool new_inode)
 {
   ceph_assert(last == CEPH_NOSNAP);
+  // In a parallel read phase only this inode's own state may change here;
+  // what is shared with other inodes is done when the phase ends.
+  MDSReadPhaseCtx *phase = MDSReadPhaseCtx::current();
   if (client_caps.empty()) {
-    get(PIN_CAPS);
     if (conrealm)
       containing_realm = conrealm;
     else
       containing_realm = find_snaprealm();
-    containing_realm->inodes_with_caps.push_back(&item_caps);
     dout(10) << __func__ << " first cap, joining realm " << *containing_realm << dendl;
-
-    mdcache->num_inodes_with_caps++;
-    if (parent)
-      parent->dir->adjust_num_inodes_with_caps(1);
+    if (phase)
+      phase->first_caps.push_back(this);
+    else
+      add_first_cap_shared();
   }
 
-  uint64_t cap_id = new_inode ? 1 : ++mdcache->last_cap_id;
+  uint64_t cap_id = new_inode ? 1 :
+    (phase ? phase->alloc_cap_id() : ++mdcache->last_cap_id);
   auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
                                  std::forward_as_tuple(this, session, cap_id));
   ceph_assert(ret.second == true);
   Capability *cap = &ret.first->second;
 
   cap->client_follows = first-1;
-  containing_realm->add_cap(client, cap);
+  if (phase)
+    phase->new_caps.push_back(cap);
+  else
+    containing_realm->add_cap(client, cap);
 
   return cap;
+}
+
+void CInode::add_first_cap_shared()
+{
+  get(PIN_CAPS);
+  containing_realm->inodes_with_caps.push_back(&item_caps);
+  mdcache->num_inodes_with_caps++;
+  if (parent)
+    parent->dir->adjust_num_inodes_with_caps(1);
 }
 
 void CInode::remove_client_cap(client_t client)
@@ -3967,7 +3982,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
 			     unsigned max_bytes,
-			     int getattr_caps)
+			     int getattr_caps,
+			     bool force_no_caps)
 {
   client_t client = session->get_client();
   ceph_assert(snapid);
@@ -4031,7 +4047,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
 
 
-  bool no_caps = !valid ||
+  bool no_caps = force_no_caps || !valid ||
 		 session->is_stale() ||
 		 (dir_realm && realm != dir_realm) ||
 		 is_frozen() ||
@@ -4049,7 +4065,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // "fake" a version that is odd (stable) version, +1 if projected.
   version_t version = (oi->version * 2) + is_projected();
 
-  Capability *cap = get_client_cap(client);
+  // force_no_caps: another thread may be adding a cap to this inode
+  Capability *cap = force_no_caps ? nullptr : get_client_cap(client);
   bool pfile = filelock.is_xlocked_by_client(client) || get_loner() == client;
   //(cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
   bool pauth = authlock.is_xlocked_by_client(client) || get_loner() == client;

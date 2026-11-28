@@ -14,6 +14,7 @@
  */
 
 #include "Capability.h"
+#include "MDSReadPhaseCtx.h"
 #include "BatchOp.h"
 #include "CInode.h"
 #include "Mutation.h" // for struct MDLockCache
@@ -165,7 +166,10 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
   inode(i), session(s), cap_id(id)
 {
   if (session) {
-    session->touch_cap_bottom(this);
+    // in a parallel read phase the session's cap list is shared with other
+    // threads; the phase puts the cap on it when it ends
+    if (!MDSReadPhaseCtx::current())
+      session->touch_cap_bottom(this);
     cap_gen = session->get_cap_gen();
     if (session->is_stale())
       --cap_gen; // not valid

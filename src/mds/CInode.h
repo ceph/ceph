@@ -844,7 +844,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // for giving to clients
   int encode_inodestat(ceph::buffer::list& bl, Session *session, SnapRealm *realm,
 		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
-		       int getattr_wants=0);
+		       int getattr_wants=0, bool force_no_caps=false);
   void encode_cap_message(const ceph::ref_t<MClientCaps> &m, Capability *cap);
 
   SimpleLock* get_lock(int type) override;
@@ -946,6 +946,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   Capability *add_client_cap(client_t client, Session *session,
 			     SnapRealm *conrealm=nullptr, bool new_inode=false);
+  // the part of adding the first client cap that touches state shared
+  // with other inodes (pins, realm list, counters)
+  void add_first_cap_shared();
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 

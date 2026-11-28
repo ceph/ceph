@@ -168,6 +168,8 @@ class QuarantineTracker;
  * the various subsystems (server, mdcache, etc), such as pointers
  * to the other subsystems, and message-sending calls.
  */
+class MDSReadPhase;
+
 class MDSRank {
   public:
     friend class C_Flush_Journal;
@@ -178,6 +180,7 @@ class MDSRank {
     friend class MDCache;
     friend class Locker;
     friend class CInode;
+    friend class MDSReadPhase;
 
     CephContext *cct;
 
@@ -429,6 +432,8 @@ class MDSRank {
 
     // sub systems
     Server *server = nullptr;
+    // parallel read phase, if mds_read_phase_threads > 0
+    std::unique_ptr<MDSReadPhase> read_phase;
     MDCache *mdcache = nullptr;
     Locker *locker = nullptr;
     MDLog *mdlog = nullptr;

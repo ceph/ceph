@@ -3,6 +3,7 @@ set(mds_srcs
   Capability.cc
   MDSDaemon.cc
   MDSRank.cc
+  MDSReadPhase.cc
   Beacon.cc
   flock.cc
   locks.c

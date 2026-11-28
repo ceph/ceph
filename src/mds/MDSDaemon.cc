@@ -14,6 +14,7 @@
  */
 
 #include "MDSDaemon.h"
+#include "MDSReadPhase.h"
 
 #include <unistd.h>
 
@@ -1100,6 +1101,14 @@ Dispatcher::dispatch_result_t MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(10) << " stopping, discarding " << *m << dendl;
     return true;
+  }
+
+  // Reads the parallel read phase can serve are queued; anything else first
+  // runs the reads queued before it, so that message order is kept.
+  if (mds_rank && mds_rank->read_phase) {
+    if (mds_rank->read_phase->maybe_queue(m))
+      return true;
+    mds_rank->read_phase->flush();
   }
 
   // First see if it's a daemon message
