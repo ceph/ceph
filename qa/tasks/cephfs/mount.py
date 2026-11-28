@@ -556,17 +556,7 @@ class CephFSMountBase(object):
         """
         raise NotImplementedError()
 
-    def _verify_attrs(self, **kwargs):
-        """
-        Verify that client_id, client_keyring_path, client_remote, hostfs_mntpt,
-        cephfs_name, cephfs_mntpt are either type str or None.
-        """
-        for k, v in kwargs.items():
-            if v is not None and not isinstance(v, str):
-                raise RuntimeError('value of attributes should be either str '
-                                   f'or None. {k} - {v}')
-
-    def update_attrs(self, **kwargs):
+   def _verify_attrs(self, **kwargs):
         verify_keys = [
           'client_id',
           'client_keyring_path',
@@ -575,12 +565,16 @@ class CephFSMountBase(object):
           'cephfs_mntpt',
         ]
 
-        self._verify_attrs(**{key: kwargs[key] for key in verify_keys if key in kwargs})
+        for k, v in kwargs.items():
+            if k in verify_keys:
+                if v is not None and not isinstance(v, str):
+                    raise RuntimeError('value of attributes should be either str '
+                                       f'or None. {k} - {v}')
+   def update_attrs(self, **kwargs):
+       self._verify_attrs(**kwargs)
 
-        for k in verify_keys:
-            v = kwargs.get(k)
-            if v is not None:
-                setattr(self, k, v)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     def remount(self, **kwargs):
         """
@@ -751,7 +745,7 @@ class CephFSMountBase(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        write_file(self.client_remote, path, data, **kwargs)
+        self.client_remote.write_file(path, data, **kwargs)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
