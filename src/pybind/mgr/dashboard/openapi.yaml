@@ -23063,7 +23063,8 @@ paths:
       - RgwBucket
     put:
       parameters:
-      - in: path
+      - description: Bucket name
+        in: path
         name: uid
         required: true
         schema:
@@ -23074,23 +23075,40 @@ paths:
             schema:
               properties:
                 daemon_name:
+                  description: RGW daemon name.
                   type: string
                 enabled:
-                  type: string
+                  default: false
+                  description: Enable or disable the rate limit.
+                  type: boolean
+                max_delete_ops:
+                  description: Max delete ops per interval per RGW. 0 disables this
+                    limit. Omit to leave the current value unchanged.
+                  type: integer
+                max_list_ops:
+                  description: Max list ops per interval per RGW. 0 disables this
+                    limit. Omit to leave the current value unchanged.
+                  type: integer
                 max_read_bytes:
-                  type: string
+                  default: 0
+                  description: Max read bytes per interval per RGW. 0 disables this
+                    limit.
+                  type: integer
                 max_read_ops:
-                  type: string
+                  default: 0
+                  description: Max read ops per interval per RGW. 0 disables this
+                    limit.
+                  type: integer
                 max_write_bytes:
-                  type: string
+                  default: 0
+                  description: Max write bytes per interval per RGW. 0 disables this
+                    limit.
+                  type: integer
                 max_write_ops:
-                  type: string
-              required:
-              - enabled
-              - max_read_ops
-              - max_write_ops
-              - max_read_bytes
-              - max_write_bytes
+                  default: 0
+                  description: Max write ops per interval per RGW. 0 disables this
+                    limit.
+                  type: integer
               type: object
       responses:
         '200':
@@ -25094,7 +25112,8 @@ paths:
       - RgwUser
     put:
       parameters:
-      - in: path
+      - description: User ID
+        in: path
         name: uid
         required: true
         schema:
@@ -25105,21 +25124,39 @@ paths:
             schema:
               properties:
                 daemon_name:
+                  description: RGW daemon name.
                   type: string
                 enabled:
                   default: false
+                  description: Enable or disable the rate limit.
                   type: boolean
+                max_delete_ops:
+                  description: Max delete ops per interval per RGW. 0 disables this
+                    limit. Omit to leave the current value unchanged.
+                  type: integer
+                max_list_ops:
+                  description: Max list ops per interval per RGW. 0 disables this
+                    limit. Omit to leave the current value unchanged.
+                  type: integer
                 max_read_bytes:
                   default: 0
+                  description: Max read bytes per interval per RGW. 0 disables this
+                    limit.
                   type: integer
                 max_read_ops:
                   default: 0
+                  description: Max read ops per interval per RGW. 0 disables this
+                    limit.
                   type: integer
                 max_write_bytes:
                   default: 0
+                  description: Max write bytes per interval per RGW. 0 disables this
+                    limit.
                   type: integer
                 max_write_ops:
                   default: 0
+                  description: Max write ops per interval per RGW. 0 disables this
+                    limit.
                   type: integer
               type: object
       responses:

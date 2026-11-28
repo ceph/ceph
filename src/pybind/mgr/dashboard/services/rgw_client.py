@@ -54,6 +54,8 @@ DEFAULT_USER_RATELIMIT = {
     "user_ratelimit": {
         "max_read_ops": 0,
         "max_write_ops": 0,
+        "max_list_ops": 0,
+        "max_delete_ops": 0,
         "max_read_bytes": 0,
         "max_write_bytes": 0,
         "enabled": False
@@ -1922,15 +1924,22 @@ class RgwRateLimit:
     def set_rateLimit(self, scope: str, enabled: bool, name: str,
                       max_read_ops: int, max_write_ops: int,
                       max_read_bytes: int, max_write_bytes: int,
+                      max_list_ops: Optional[int] = None, max_delete_ops: Optional[int] = None,
                       daemon_name: Optional[str] = None,
                       realm_name: Optional[str] = None):
         if daemon_name and realm_name is None:
             realm_name = self._realm_name_for_daemon(daemon_name)
         enabled = str(enabled)
+        # Omit list/delete ops when the caller did not send them. radosgw-admin
+        # updates a limit only when its flag is present, and 0 means unlimited.
         rgw_rate_limit_cmd = ['ratelimit', 'set', '--ratelimit-scope', scope,
                               '--max-read-ops', str(max_read_ops), '--max-write-ops',
                               str(max_write_ops), '--max-write-bytes', str(max_write_bytes),
                               '--max-read-bytes', str(max_read_bytes)]
+        if max_list_ops is not None:
+            rgw_rate_limit_cmd.extend(['--max-list-ops', str(max_list_ops)])
+        if max_delete_ops is not None:
+            rgw_rate_limit_cmd.extend(['--max-delete-ops', str(max_delete_ops)])
 
         rgw_rate_limit_enable_cmd = ['ratelimit', 'enable' if enabled == 'True' else 'disable',
                                      '--ratelimit-scope', scope]

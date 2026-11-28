@@ -32,6 +32,43 @@ from ._version import APIVersion
 
 logger = logging.getLogger("controllers.rgw")
 
+
+def _rate_limit_set_doc(summary: str, uid_description: str) -> EndpointDoc:
+    """Document a user or bucket rate-limit update.
+
+    ``max_list_ops`` and ``max_delete_ops`` are omitted from the radosgw-admin
+    command when the request leaves them out, so an existing limit is kept.
+    ``0`` disables that limit.
+    """
+    return EndpointDoc(summary, parameters={
+        'uid': (str, uid_description),
+        'enabled': (bool, 'Enable or disable the rate limit.', True, False),
+        'max_read_ops': (
+            int, 'Max read ops per interval per RGW. 0 disables this limit.',
+            True, 0),
+        'max_write_ops': (
+            int, 'Max write ops per interval per RGW. 0 disables this limit.',
+            True, 0),
+        'max_read_bytes': (
+            int, 'Max read bytes per interval per RGW. 0 disables this limit.',
+            True, 0),
+        'max_write_bytes': (
+            int, 'Max write bytes per interval per RGW. 0 disables this limit.',
+            True, 0),
+        'max_list_ops': (
+            int,
+            'Max list ops per interval per RGW. 0 disables this limit. '
+            'Omit to leave the current value unchanged.',
+            True),
+        'max_delete_ops': (
+            int,
+            'Max delete ops per interval per RGW. 0 disables this limit. '
+            'Omit to leave the current value unchanged.',
+            True),
+        'daemon_name': (str, 'RGW daemon name.', True),
+    })
+
+
 RGW_SCHEMA = {
     "available": (bool, "Is RGW available?"),
     "message": (str, "Descriptions")
@@ -914,14 +951,17 @@ class RgwBucket(RgwRESTController):
     @Endpoint(method='PUT', path='{uid}/ratelimit')
     @UpdatePermission
     @allow_empty_body
-    @EndpointDoc("Update the bucket rate limit")
-    def set_rate_limit(self, enabled: bool, uid: str, max_read_ops: int,
-                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int,
+    @_rate_limit_set_doc("Update the bucket rate limit", "Bucket name")
+    def set_rate_limit(self, uid: str, enabled: bool = False, max_read_ops: int = 0,
+                       max_write_ops: int = 0, max_read_bytes: int = 0,
+                       max_write_bytes: int = 0, max_list_ops: Optional[int] = None,
+                       max_delete_ops: Optional[int] = None,
                        daemon_name: Optional[str] = None):
         rgwBucketRateLimit_instance = RgwRateLimit()
         return rgwBucketRateLimit_instance.set_rateLimit('bucket', enabled, uid,
                                                          max_read_ops, max_write_ops,
                                                          max_read_bytes, max_write_bytes,
+                                                         max_list_ops, max_delete_ops,
                                                          daemon_name=daemon_name)
 
 
@@ -1291,14 +1331,16 @@ class RgwUser(RgwRESTController):
     @Endpoint(method='PUT', path='{uid}/ratelimit')
     @UpdatePermission
     @allow_empty_body
-    @EndpointDoc("Update the user rate limit")
+    @_rate_limit_set_doc("Update the user rate limit", "User ID")
     def set_rate_limit(self, uid: str, enabled: bool = False, max_read_ops: int = 0,
                        max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0,
+                       max_list_ops: Optional[int] = None, max_delete_ops: Optional[int] = None,
                        daemon_name: Optional[str] = None):
         rgwUserRateLimit_instance = RgwRateLimit()
         return rgwUserRateLimit_instance.set_rateLimit('user', enabled,
                                                        uid, max_read_ops, max_write_ops,
                                                        max_read_bytes, max_write_bytes,
+                                                       max_list_ops, max_delete_ops,
                                                        daemon_name=daemon_name)
 
 
