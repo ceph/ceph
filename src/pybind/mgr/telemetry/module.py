@@ -55,7 +55,6 @@ def _defaultdict_histogram() -> defaultdict:
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL = 'https://cdla.io/sharing-1-0/'
-NO_SALT_CNT = 0
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
@@ -516,10 +515,10 @@ class Module(MgrModule):
             salt = self.salt
         # avoid asserting that salt exists
         if not self.salt:
-            # do not set self.salt to a temp value
-            salt = f"no_salt_found_{NO_SALT_CNT}"
-            NO_SALT_CNT += 1
-            self.log.debug(f"No salt found, created a temp one: {salt}")
+            # do not set self.salt to a temp value; use a random one-off
+            # salt so the hash cannot be reversed by guessing the salt
+            salt = str(uuid.uuid4())
+            self.log.debug("No salt found, using a temporary random salt")
         m.update(salt.encode('utf-8'))
         m.update(eid.encode('utf-8'))
         m.update(salt.encode('utf-8'))
