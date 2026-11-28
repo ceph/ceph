@@ -170,10 +170,13 @@ private:
   int apply_sharding(const rocksdb::Options& opt,
 		     const std::string& sharding_text);
   int verify_sharding(const rocksdb::Options& opt,
+                      std::vector<ColumnFamily>& stored_sharding_def,
+                      std::vector<std::string>& rocksdb_cfs,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
-		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard,
+		      std::vector<std::string>& extra_cfs);
   std::shared_ptr<rocksdb::Cache> create_block_cache(
     const std::string& name,
     const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
@@ -590,6 +593,11 @@ public:
   };
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
   bool get_sharding(std::string& sharding);
+  /// Read the stored sharding definition.
+  /// Returns 1 and fills @sharding if a definition is stored, 0 if no
+  /// definition is stored (non-sharded db), -EIO if a definition exists
+  /// but cannot be read.
+  int read_sharding_def(std::string& sharding);
   void util_divide_key_range(
     const std::string& prefix,        // Table to operate on.
     const std::string& starting_key,  // Included if exists.
