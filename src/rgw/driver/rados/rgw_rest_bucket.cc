@@ -48,9 +48,15 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
   RESTArgs::get_bool(s, "restore-stats", false, &fetch_restore_stats);
 
-  uint32_t max_entries;
+  uint32_t max_entries = 0;
   std::string marker;
-  RESTArgs::get_uint32(s, "max-entries", 0, &max_entries);
+  // get_uint32() leaves the output unset when the value doesn't parse, so
+  // refuse the request instead of listing with an uninitialized page size
+  op_ret = RESTArgs::get_uint32(s, "max-entries", 0, &max_entries);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "failed to parse max-entries" << dendl;
+    return;
+  }
   RESTArgs::get_string(s, "marker", marker, &marker);
 
   op_state.max_entries = max_entries;
