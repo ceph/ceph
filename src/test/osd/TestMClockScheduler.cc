@@ -11,6 +11,10 @@
 
 #include "osd/scheduler/mClockScheduler.h"
 #include "osd/scheduler/OpSchedulerItem.h"
+#include "osd/OpRequest.h"
+#include "messages/MOSDPGBackfillRemove.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDRepOp.h"
 
 using namespace ceph::osd::scheduler;
 
@@ -571,4 +575,51 @@ TEST_F(mClockSchedulerTest, TestNonClientRequeueDoesNotBlockForcedYield) {
   ASSERT_EQ(50u, r.get_map_epoch());
 
   ASSERT_TRUE(q.empty());
+}
+
+// A backfill remove has no reply: the primary sends a repop of the same
+// object straight after it. The replica must apply the remove first, or the
+// remove deletes the object that the repop wrote.
+TEST_F(mClockSchedulerTest, TestBackfillRemoveBeforeLaterRepop) {
+  OpTracker tracker(g_ceph_context, false, 1);
+  spg_t pgid(pg_t(0, 1), shard_id_t::NO_SHARD);
+  const uint64_t primary = 4;
+  auto item = [&](Message *m, bool recovery_msg) {
+    OpRequestRef op = tracker.create_request<OpRequest, Message*>(m);
+    unsigned priority = op->get_req()->get_priority();
+    OpSchedulerItem::OpQueueable::Ref qitem;
+    if (recovery_msg) {
+      qitem = std::make_unique<PGRecoveryMsg>(pgid, op);
+    } else {
+      qitem = std::make_unique<PGOpItem>(pgid, op);
+    }
+    return OpSchedulerItem(std::move(qitem), 1, priority, utime_t(), primary, 1);
+  };
+
+  // Set up last_mclock_service_time, so the mclock queue is not starved.
+  q.enqueue(create_item(0, client1, SchedulerClass::client));
+  get_item(q.dequeue());
+  ASSERT_TRUE(q.empty());
+
+  auto remove = new MOSDPGBackfillRemove(pgid, 1);
+  remove->set_priority(PeeringState::recovery_msg_priority_t::DEGRADED);
+  auto repop = new MOSDRepOp();
+  repop->set_priority(CEPH_MSG_PRIO_DEFAULT);
+  q.enqueue(item(remove, true));
+  q.enqueue(item(repop, false));
+
+  auto first = get_item(q.dequeue());
+  ASSERT_EQ(MSG_OSD_PG_BACKFILL_REMOVE,
+            (*first.maybe_get_op())->get_req()->get_type());
+  auto second = get_item(q.dequeue());
+  ASSERT_EQ(MSG_OSD_REPOP, (*second.maybe_get_op())->get_req()->get_type());
+  ASSERT_TRUE(q.empty());
+
+  // pushes wait for their replies, so they stay background recovery
+  auto push = new MOSDPGPush();
+  push->set_priority(PeeringState::recovery_msg_priority_t::DEGRADED);
+  OpRequestRef push_op = tracker.create_request<OpRequest, Message*>(push);
+  ASSERT_EQ(SchedulerClass::background_recovery,
+            PGRecoveryMsg(pgid, push_op).get_scheduler_class());
+  tracker.on_shutdown();
 }
