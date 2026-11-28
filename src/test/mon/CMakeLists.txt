@@ -48,6 +48,14 @@ add_executable(unittest_mon_client_shutdown
 add_ceph_unittest(unittest_mon_client_shutdown)
 target_link_libraries(unittest_mon_client_shutdown global)
 
+# unittest_cephx_pending_key
+add_executable(unittest_cephx_pending_key
+  test_cephx_pending_key.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_cephx_pending_key)
+target_link_libraries(unittest_cephx_pending_key mon global)
+
 # unittest_mon_pgmap
 add_executable(unittest_mon_pgmap
   PGMap.cc
