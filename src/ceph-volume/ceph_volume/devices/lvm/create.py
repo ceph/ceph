@@ -38,7 +38,8 @@ class Create(object):
                 except Exception:
                     logger.exception('lvm activate was unable to complete, while creating the OSD')
                     logger.info('will rollback OSD ID creation')
-                    rollback_osd(osd_id)
+                    rollback_osd(osd_id,
+                                 self.objectstore.reused_destroyed_id)
                     raise
                 terminal.success("ceph-volume lvm create successful for: %s" % self.args.data)
 

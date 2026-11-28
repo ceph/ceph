@@ -78,7 +78,7 @@ class Raw(BaseObjectStore):
         except Exception:
             logger.exception('raw prepare was unable to complete')
             logger.info('will rollback OSD ID creation')
-            rollback_osd(self.osd_id)
+            rollback_osd(self.osd_id, self.reused_destroyed_id)
             raise
         dmcrypt_log = 'dmcrypt' if hasattr(args, 'dmcrypt') else 'clear'
         terminal.success("ceph-volume raw {} prepare "
@@ -97,6 +97,7 @@ class Raw(BaseObjectStore):
 
         tmpfs = not self.args.no_tmpfs
 
+        self.reused_destroyed_id = prepare_utils.osd_id_destroyed(self.osd_id)
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
             self.osd_fsid, json.dumps(self.secrets), self.osd_id)

@@ -30,6 +30,9 @@ class BaseObjectStore:
         self.encrypted: int = 0
         self.tags: Dict[str, Any] = {}
         self.osd_id: str = ''
+        # set when osd_id was taken over from a destroyed OSD, so that a
+        # failed prepare does not purge it (see rollback_osd())
+        self.reused_destroyed_id: bool = False
         self.osd_fsid: str = ''
         self.cephx_lockbox_secret: str = ''
         self.objectstore: str = getattr(args, "objectstore", '')

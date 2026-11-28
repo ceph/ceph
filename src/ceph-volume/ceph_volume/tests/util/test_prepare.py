@@ -47,6 +47,30 @@ class TestOSDIDAvailable(object):
         assert result
 
 
+class TestOSDIDDestroyed(object):
+
+    def test_false_if_id_is_none(self):
+        assert not prepare.osd_id_destroyed(None)
+
+    def test_false_if_id_is_empty(self):
+        assert not prepare.osd_id_destroyed('')
+
+    def test_true_when_id_is_destroyed(self, monkeypatch):
+        stdout = ['', json.dumps(dict(nodes=[dict(id=0, status="destroyed")]))]
+        monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
+        assert prepare.osd_id_destroyed('0')
+
+    def test_false_when_id_does_not_exist(self, monkeypatch):
+        stdout = ['', json.dumps(dict(nodes=[dict(id=0, status="destroyed")]))]
+        monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
+        assert not prepare.osd_id_destroyed('1')
+
+    def test_false_when_id_is_in_use(self, monkeypatch):
+        stdout = ['', json.dumps(dict(nodes=[dict(id=0, status="down")]))]
+        monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
+        assert not prepare.osd_id_destroyed('0')
+
+
 class TestFormatDevice(object):
 
     def test_include_force(self, fake_run, monkeypatch):

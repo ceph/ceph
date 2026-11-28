@@ -154,16 +154,13 @@ def create_id(fsid: str, json_secrets: str, osd_id: Optional[str]=None) -> str:
     return ' '.join(stdout).strip()
 
 
-def osd_id_available(osd_id):
+def _get_osd_tree_node(osd_id):
     """
-    Checks to see if an osd ID exists and if it's available for
-    reuse. Returns True if it is, False if it isn't.
+    Returns the ``osd tree`` node for ``osd_id``, or None if the ID does not
+    exist in the cluster.
 
-    :param osd_id: The osd ID to check
+    :param osd_id: The osd ID to look up
     """
-    if osd_id is None:
-        return False
-
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
         [
@@ -183,9 +180,35 @@ def osd_id_available(osd_id):
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
     osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
-    if not osd or (osd and osd[0].get('status') == "destroyed"):
-        return True
-    return False
+    return osd[0] if osd else None
+
+
+def osd_id_available(osd_id):
+    """
+    Checks to see if an osd ID exists and if it's available for
+    reuse. Returns True if it is, False if it isn't.
+
+    :param osd_id: The osd ID to check
+    """
+    if osd_id is None:
+        return False
+
+    osd = _get_osd_tree_node(osd_id)
+    return osd is None or osd.get('status') == "destroyed"
+
+
+def osd_id_destroyed(osd_id):
+    """
+    Checks to see if an osd ID belongs to a destroyed OSD, as opposed to one
+    that does not exist at all. Returns True if it does, False otherwise.
+
+    :param osd_id: The osd ID to check
+    """
+    if osd_id is None or osd_id == '':
+        return False
+
+    osd = _get_osd_tree_node(osd_id)
+    return osd is not None and osd.get('status') == "destroyed"
 
 
 def mount_tmpfs(path):
