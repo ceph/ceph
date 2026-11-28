@@ -57,6 +57,16 @@ as follows:
 :command:`user list`
   List all users.
 
+:command:`user policy attach`
+  Attach the managed policy given with --policy-arn to a user that belongs to
+  an account.
+
+:command:`user policy detach`
+  Detach a managed policy from a user.
+
+:command:`user policy list attached`
+  List the managed policies that are attached to a user.
+
 :command:`caps add`
   Add user capabilities.
 
@@ -77,6 +87,26 @@ as follows:
 
 :command:`key rm`
   Remove access key.
+
+:command:`account create`
+  Create an account. See https://docs.ceph.com/en/latest/radosgw/account/.
+
+:command:`account modify`
+  Modify an account.
+
+:command:`account get`
+  Show an account's information.
+
+:command:`account stats`
+  Show an account's storage stats. With --sync-stats, first update them from
+  the account's buckets.
+
+:command:`account rm`
+  Remove an account. With --purge-data, also remove the users, buckets, and
+  other resources that the account owns, which otherwise must be removed first.
+
+:command:`account list`
+  List the IDs of all accounts.
 
 :command:`bucket list`
   List buckets, or, if a bucket is specified with --bucket=<bucket>,
@@ -481,6 +511,19 @@ as follows:
 :command:`role-policy delete`
   Remove the policy attached to a role
 
+:command:`role policy attach`
+  Attach the managed policy given with --policy-arn to a role that belongs to
+  an account.
+
+:command:`role policy detach`
+  Detach a managed policy from a role.
+
+:command:`role policy list attached`
+  List the managed policies that are attached to a role.
+
+:command:`role update`
+  Update the maximum session duration of a role.
+
 :command:`oidc-provider create`
   Create an OIDC provider. If ``account-id`` is not specified,
   the provider is created in the global scope.
@@ -553,6 +596,11 @@ Options
 
    Name of the tenant.
 
+.. option:: --user_ns=<namespace>
+
+   The namespace of the user. Users who authenticate through an OIDC provider
+   are in the ``oidc`` namespace.
+
 .. option:: --uid=uid
 
    The user on which to operate.
@@ -564,6 +612,31 @@ Options
 .. option:: --subuser=<name>
 
     Name of the subuser.
+
+.. option:: --account-name=<name>
+
+   The name of the account.
+
+.. option:: --account-id=<id>
+
+   The ID of the account.
+
+.. option:: --max-users
+
+   The maximum number of users in an account. The default is 1000.
+
+.. option:: --max-roles
+
+   The maximum number of roles in an account. The default is 1000.
+
+.. option:: --max-groups
+
+   The maximum number of groups in an account. The default is 1000.
+
+.. option:: --max-access-keys
+
+   The maximum number of access keys for each user in an account. The default
+   is 4.
 
 .. option:: --access-key=<key>
 
@@ -622,6 +695,11 @@ Options
 .. option:: --system
 
    Set the system flag on the user.
+
+.. option:: --account-root
+
+   Set the account root flag on a user that belongs to an account. The account
+   root user has default permissions on all of the account's resources.
 
 .. option:: --bucket=[tenant-id/]bucket
 
@@ -1006,6 +1084,21 @@ Role Options
 .. option:: --path-prefix
 
    The path prefix for filtering the roles.
+
+.. option:: --description
+
+   The description of the role, for role create.
+
+.. option:: --max-session-duration
+
+   The maximum session duration of the role, in seconds, from 3600 to 43200,
+   for role create and role update.
+
+.. option:: --policy-arn
+
+   The ARN of a managed policy, for user policy attach and detach and for role
+   policy attach and detach. See
+   https://docs.ceph.com/en/latest/radosgw/iam/#managed-policies.
 
 
 OIDC Provider Options
