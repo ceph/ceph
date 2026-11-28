@@ -2378,19 +2378,13 @@ Then run the following:
         :param host: host name
         """
         HostSpec.validate(spec)
-        # Drop the cached SSH connection when re-adding a host with a new
-        # address. Otherwise check-host may reuse the old connection and
-        # validate the wrong machine.
-        addr_changed = spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr
-        if addr_changed:
-            self.ssh.reset_con(spec.hostname)
+        old_addr = self.inventory.get_addr(spec.hostname) if spec.hostname in self.inventory else None
+        check_addr = spec.addr
         try:
-            ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+            ip_addr = self._check_valid_addr(spec.hostname, check_addr)
         except Exception:
-            # Validation failed. Clear the connection we just created to the
-            # wrong address so future operations use a fresh connection.
-            if addr_changed:
-                self.ssh.reset_con(spec.hostname)
+            if check_addr != old_addr:
+                self.ssh.reset_con(spec.hostname, check_addr)
             # The SSH failure in _check_valid_addr may have added the hostname
             # to offline_hosts. Only undo that for hosts we never registered.
             # An existing inventory host that just failed SSH should stay offline.
@@ -2428,6 +2422,9 @@ Then run the following:
             self.cache.prime_empty_host(spec.hostname)
         self.inventory.add_host(spec)
         self.cache.registry_login_queue.add(spec.hostname)
+        for addr in {old_addr, check_addr}:
+            if addr and addr != spec.addr:
+                self.ssh.reset_con(spec.hostname, addr)
         self.offline_hosts_remove(spec.hostname)
         if spec.status == 'maintenance':
             self.update_maintenance_healthcheck()
@@ -2633,12 +2630,13 @@ Then run the following:
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:
         host = normalize_hostname(host)
-        # Drop the cached connection before validating so check-host
-        # runs on the new address, not the old one.
-        self.ssh.reset_con(host)
-        self._check_valid_addr(host, addr)
-        self.inventory.set_addr(host, addr)
-        self.ssh.reset_con(host)
+        try:
+            self._check_valid_addr(host, addr)
+        except Exception:
+            if host not in self.inventory or addr != self.inventory.get_addr(host):
+                self.ssh.reset_con(host, addr)
+            raise
+        self.wait_async(self.ssh.commit_host_addr(host, addr))
         self.event.set()  # refresh stray health check
         self.log.info('Set host %s addr to %s' % (host, addr))
         return "Updated host '{}' addr to '{}'".format(host, addr)

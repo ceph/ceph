@@ -2108,7 +2108,6 @@ class CephadmServe:
                                 self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
 
             except Exception as e:
-                await self.mgr.ssh._reset_con(host)
                 if error_ok:
                     return [], [str(e)], 1
                 raise
@@ -2126,7 +2125,6 @@ class CephadmServe:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
             except Exception as e:
-                await self.mgr.ssh._reset_con(host)
                 if error_ok:
                     return [], [str(e)], 1
                 raise
