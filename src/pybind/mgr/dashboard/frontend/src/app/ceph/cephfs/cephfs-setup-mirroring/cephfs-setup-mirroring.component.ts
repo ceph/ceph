@@ -1,7 +1,7 @@
 import { Component, OnInit, Output, EventEmitter, inject } from '@angular/core';
 import { Validators } from '@angular/forms';
-import { concat, forkJoin, of, throwError } from 'rxjs';
-import { catchError, finalize, last, switchMap } from 'rxjs/operators';
+import { forkJoin, of, throwError } from 'rxjs';
+import { catchError, finalize, switchMap } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -64,21 +64,27 @@ export class CephfsSetupMirroringComponent extends CdForm implements OnInit {
     this.isSubmitting = true;
     const { filesystem, token } = this.setupForm.value;
 
-    const apiActionsObs = concat(
-      this.cephServiceService.create({
-        service_type: 'cephfs-mirror'
-      }),
-      this.cephfsService.enableMirror(filesystem),
-      this.cephfsService.createBootstrapPeer(filesystem, token.replace(/\s/g, '')).pipe(
-        catchError((err) =>
-          // otherwise empty peer list is created
-          this.cephfsService.disableMirror(filesystem).pipe(
-            catchError(() => of(null)),
-            switchMap(() => throwError(() => err))
+    // Lazily chain steps so enableMirror is not called if deploy fails.
+    const apiActionsObs = this.cephfsService.listDaemonStatus().pipe(
+      catchError(() => of([] as Daemon[])),
+      switchMap((daemons) =>
+        (daemons || []).length > 0
+          ? of(null)
+          : this.cephServiceService.create({ service_type: 'cephfs-mirror' })
+      ),
+      switchMap(() => this.cephfsService.enableMirror(filesystem)),
+      switchMap(() =>
+        this.cephfsService.createBootstrapPeer(filesystem, token.replace(/\s/g, '')).pipe(
+          catchError((err) =>
+            // otherwise empty peer list is created
+            this.cephfsService.disableMirror(filesystem).pipe(
+              catchError(() => of(null)),
+              switchMap(() => throwError(() => err))
+            )
           )
         )
       )
-    ).pipe(last());
+    );
 
     this.taskWrapper
       .wrapTaskAroundCall({
