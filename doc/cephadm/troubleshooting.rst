@@ -626,6 +626,118 @@ called ``mgr.hostname.smfvfd``.
       cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
 
+.. _cephadm-manually-deploy-osd:
+
+Manually deploying an OSD daemon
+================================
+
+Create OSDs with ``ceph orch daemon add osd`` or with an OSD service
+specification whenever the orchestrator is available. See
+:ref:`cephadm-deploy-osds` and :ref:`drivegroups`. Use the procedure in this
+section only when the orchestrator cannot create the OSDs: for example, when no
+Manager is running, when the cephadm module is disabled, when a bug keeps the
+orchestrator from deploying OSDs, or when you are recovering the OSDs of a host
+by hand.
+
+If the orchestrator is running but no OSD service specification can express
+the device layout that you need, run only steps 1 and 2 below. Then run
+``ceph cephadm osd activate <host>``, which deploys a container for each new
+OSD on that host. See :ref:`cephadm-osd-activate`. Before step 2, set any OSD
+service specification that could claim the same devices to unmanaged, so that
+the orchestrator does not create OSDs on them first. See
+:ref:`cephadm-osd-declarative`.
+
+Run the ``ceph`` commands on a host that has the admin keyring. Run the
+``cephadm`` commands on the OSD host, which must have ``cephadm`` and a
+container engine installed. The examples create OSDs on ``/dev/sdb`` and
+``/dev/sdc`` with their DB volumes on ``/dev/nvme0n1``.
+
+#. Retrieve the cluster's FSID, a minimal configuration file, the
+   ``client.bootstrap-osd`` keyring, and the container image for OSDs. Copy
+   ``ceph.conf`` and ``bootstrap-osd.keyring`` to the OSD host:
+
+   .. prompt:: bash #
+
+      ceph fsid
+      ceph config generate-minimal-conf > ceph.conf
+      ceph auth get client.bootstrap-osd > bootstrap-osd.keyring
+      ceph config get osd container_image
+
+#. Create the OSDs with ``ceph-volume``. Skip this step if the OSDs already
+   exist on the devices, for example after the host's operating system was
+   reinstalled.
+
+   Use ``cephadm ceph-volume`` rather than ``cephadm shell``. It runs
+   ``ceph-volume`` in a privileged container that has the host's ``/dev``,
+   ``/run/udev``, ``/run/lvm``, and ``/sys`` mounted, and it mounts the file
+   passed with ``--keyring`` where ``ceph-volume`` looks for the
+   ``client.bootstrap-osd`` key. Pass ``--no-systemd`` to ``ceph-volume``,
+   because ``cephadm`` creates the systemd units in a later step:
+
+   .. prompt:: bash #
+
+      cephadm --image <container-image> ceph-volume --fsid <fsid> \
+        --config ceph.conf --keyring bootstrap-osd.keyring -- \
+        lvm batch --no-auto /dev/sdb /dev/sdc --db-devices /dev/nvme0n1 \
+        --yes --no-systemd
+
+   Adjust the ``lvm batch`` arguments to the layout that you need. See
+   :ref:`ceph-volume-lvm-batch`.
+
+#. List the OSDs on the host, and note the ``osd id`` and the ``osd fsid`` of
+   each OSD that you are deploying:
+
+   .. prompt:: bash #
+
+      cephadm ceph-volume --fsid <fsid> -- lvm list
+
+   Repeat the next two steps for each of these OSDs.
+
+#. Retrieve the OSD's keyring and copy it to the OSD host. ``ceph-volume``
+   created this keyring when it registered the OSD with the cluster:
+
+   .. prompt:: bash #
+
+      ceph auth get osd.<id> > osd.<id>.keyring
+
+#. Deploy the OSD daemon:
+
+   .. prompt:: bash #
+
+      cephadm --image <container-image> deploy --fsid <fsid> --name osd.<id> \
+        --osd-fsid <osd-fsid> --config ceph.conf --keyring osd.<id>.keyring
+
+   ``cephadm`` writes the configuration file and the keyring to
+   ``/var/lib/ceph/<fsid>/osd.<id>/``, creates a systemd unit that activates
+   the OSD with ``ceph-volume`` before each start, and starts the OSD. It also
+   logs a warning that the ``deploy`` command is deprecated. The warning does
+   not affect the deployment.
+
+   To pass the configuration and the keyring in one JSON file instead, use
+   ``--config-json`` with the keys ``config`` and ``keyring``, as in
+   :ref:`cephadm-manually-deploy-mgr`.
+
+#. Confirm that the new OSDs are ``up``:
+
+   .. prompt:: bash #
+
+      ceph osd tree
+
+   On the OSD host, confirm that ``cephadm`` lists the new OSD daemons:
+
+   .. prompt:: bash #
+
+      cephadm ls
+
+#. Delete ``bootstrap-osd.keyring`` and each ``osd.<id>.keyring`` from the
+   hosts where you created or copied them.
+
+When the orchestrator is available again, it finds the new OSDs on its next
+refresh of the host. No OSD service specification created these OSDs, so they
+do not belong to a managed OSD service. To attach them to one, see
+``ceph orch osd set-spec-affinity`` in :ref:`cephadm-deploy-osds`.
+
+
 Capturing Core Dumps
 ====================
 
