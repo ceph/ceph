@@ -340,6 +340,9 @@ public:
       if (header.version >= 8) {
         decode_trace(p);
       }
+      if (header.version >= 9) {
+        decode(core_hint, p);
+      }
     }
   }
 
