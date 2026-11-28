@@ -574,6 +574,12 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
     new_key.create_date = ceph::real_clock::now();
   }
 
+  // honor an explicit active=false so a key can be created disabled and
+  // enabled later, instead of authenticating as soon as it exists
+  if (op_state.access_key_active) {
+    new_key.active = *op_state.access_key_active;
+  }
+
   if (key_type == KEY_TYPE_S3) {
     access_keys->emplace(id, new_key);
   } else if (key_type == KEY_TYPE_SWIFT) {
