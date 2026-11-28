@@ -145,6 +145,11 @@ void RGWObjectRetention::dump_xml(Formatter *f) const {
   encode_xml("RetainUntilDate", date, f);
 }
 
+void RGWObjectRetention::dump(Formatter *f) const {
+  encode_json("mode", mode, f);
+  encode_json("retain_until_date", ceph::to_iso_8601(retain_until_date), f);
+}
+
 void RGWObjectLegalHold::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Status", status, obj, true);
   if (status.compare("ON") != 0 && status.compare("OFF") != 0) {
@@ -154,6 +159,10 @@ void RGWObjectLegalHold::decode_xml(XMLObj *obj) {
 
 void RGWObjectLegalHold::dump_xml(Formatter *f) const {
   encode_xml("Status", status, f);
+}
+
+void RGWObjectLegalHold::dump(Formatter *f) const {
+  encode_json("status", status, f);
 }
 
 bool RGWObjectLegalHold::is_enabled() const {

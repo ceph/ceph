@@ -9313,6 +9313,10 @@ next:
         handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_DELETE_AT) {
         handled = decode_dump<utime_t>("delete_at", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_OBJECT_RETENTION) {
+        handled = decode_dump<RGWObjectRetention>("retention", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_OBJECT_LEGAL_HOLD) {
+        handled = decode_dump<RGWObjectLegalHold>("legal_hold", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_TORRENT) {
         // contains bencoded binary data which shouldn't be output directly
         // TODO: decode torrent info for display as json?
