@@ -64,14 +64,37 @@ A banner payload has the form::
 
   __le64 peer_supported_features
   __le64 peer_required_features
+  ... (only if peer_supported_features has CEPH_MSGR2_FEATURE_EXTENDED_FEATURES)
+  __le64 features (the CEPH_FEATURE_* bitmask the peer sends in TAG_CLIENT_IDENT
+                   or TAG_SERVER_IDENT)
+  __le32 length of the extended features, in bytes (a multiple of 8, at most 512)
+  __le64*(length/8) extended features: feature n is bit n%64 of word n/64
+  ... (later fields)
+
+A receiver MUST ignore payload bytes it does not know, and the extended
+features it does not know, including words past the 64th.  Older peers
+decode the first two words only, so they ignore the extended part.
 
 This is a new, distinct feature bit namespace (CEPH_MSGR2_*).
-Currently, only CEPH_MSGR2_FEATURE_REVISION_1 is defined. It is
-supported but not required, so that msgr2.0 and msgr2.1 peers
-can talk to each other.
+CEPH_MSGR2_FEATURE_REVISION_1, CEPH_MSGR2_FEATURE_COMPRESSION and
+CEPH_MSGR2_FEATURE_EXTENDED_FEATURES are defined. They are supported
+but not required, so that peers with and without them can talk to
+each other.
 
 If the remote party advertises required features we don't support, we
 can disconnect.
+
+CEPH_MSGR2_FEATURE_EXTENDED_FEATURES is never required: that would lock
+out every older peer.  Extended features (src/include/ceph_features_ext.h)
+are numbered without a limit and never reused.  The banner carries no
+required extended features, because it is sent before the peer's type is
+known: each side checks the peer's supported set against its own policy.
+Because the banner comes before authentication, the server knows what a
+client supports when it authenticates it, and can turn the client away
+there (see TAG_AUTH_BAD_METHOD).  With cephx, AUTH_SIGNATURE covers the
+banner, so a peer cannot strip the extended part unnoticed.  The
+features word in TAG_CLIENT_IDENT/TAG_SERVER_IDENT must equal the one in
+the banner; a peer that sees otherwise faults the connection.
 
 
 .. ditaa::
@@ -280,10 +303,27 @@ Authentication
     list<__le32> allowed_methods // CEPH_AUTH_{NONE, CEPHX, ...}
     __le32 num_modes
     list<__le32> allowed_modes   // CEPH_CON_MODE_*
+    ... (optional, only to a peer that offered
+         CEPH_MSGR2_FEATURE_EXTENDED_FEATURES: the reason trailer)
+    __le32 reason length
+    char*length reason (human readable)
+    __le64 CEPH_FEATURE_* we require that the peer's banner lacks
+    __le32 length, in bytes
+    __le64*(length/8) extended features we require that the peer lacks
+    ... (later fields)
 
   - Returns the attempted auth method, and error code (-EOPNOTSUPP if
     the method is unsupported), and the list of allowed authentication
     methods.
+  - The error code is a Linux errno value; peers on other platforms
+    convert it.
+  - A monitor in quorum turns away a client that lacks features it
+    requires with -EPROTONOSUPPORT, never -EOPNOTSUPP: kernel clients
+    warn about that, and librbd and rgw take it as "fall back".  A
+    connecting client fails at once, and one that offered
+    EXTENDED_FEATURES reports the reason.  A running client refused when
+    it reconnects is left without a monitor session; from Vampire on it
+    retries with backoff.
 
 * TAG_AUTH_REPLY_MORE: server->client::
 
@@ -646,6 +686,12 @@ an established session.
   with too few features::
 
     __le64 features we require that the peer didn't advertise
+    ... (only to a peer that offered CEPH_MSGR2_FEATURE_EXTENDED_FEATURES:
+         the reason trailer of TAG_AUTH_BAD_METHOD)
+
+  - the client reconnects, as before.  The mask is never 0: if only
+    extended features are missing, it is that of SERVER_VAMPIRE, the
+    first release that sends them.
 
 * TAG_SERVER_IDENT (server->client): accept client ident and identify server::
 

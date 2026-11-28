@@ -33,6 +33,13 @@ add_executable(unittest_mon_moncap
 add_ceph_unittest(unittest_mon_moncap)
 target_link_libraries(unittest_mon_moncap mon global)
 
+# unittest_mon_peer_feature_gate
+add_executable(unittest_mon_peer_feature_gate
+  test_peer_feature_gate.cc
+  )
+add_ceph_unittest(unittest_mon_peer_feature_gate)
+target_link_libraries(unittest_mon_peer_feature_gate mon global)
+
 # unittest_mon_map
 add_executable(unittest_mon_monmap
   MonMap.cc
@@ -47,6 +54,14 @@ add_executable(unittest_mon_client_shutdown
   )
 add_ceph_unittest(unittest_mon_client_shutdown)
 target_link_libraries(unittest_mon_client_shutdown global)
+
+# unittest_mon_client_authenticate
+add_executable(unittest_mon_client_authenticate
+  test_mon_client_authenticate.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mon_client_authenticate)
+target_link_libraries(unittest_mon_client_authenticate global)
 
 # unittest_mon_pgmap
 add_executable(unittest_mon_pgmap

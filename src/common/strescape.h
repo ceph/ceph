@@ -35,6 +35,20 @@ inline std::string binstrprint(std::string_view sv, size_t maxlen=0)
   return s;
 }
 
+/// @p sv cut to @p maxlen with control and non-ASCII characters replaced,
+/// for logging text a peer sent
+inline std::string printable_str(std::string_view sv, size_t maxlen)
+{
+  std::string s(sv.substr(0, maxlen));
+  std::replace_if(s.begin(), s.end(), [](unsigned char c) {
+    return c < 0x20 || c > 0x7e;
+  }, '?');
+  if (sv.size() > maxlen) {
+    s += "...";
+  }
+  return s;
+}
+
 inline std::string get_trimmed_path_str(const std::string& path)
 {
   // index of '/' before 10th component (count from end of the path).

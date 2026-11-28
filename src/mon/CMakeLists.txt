@@ -12,6 +12,7 @@ set(lib_mon_srcs
   MgrStatMonitor.cc
   Monitor.cc
   MonitorBackup.cc
+  PeerFeatureGate.cc
   MonmapMonitor.cc
   LogMonitor.cc
   AuthMonitor.cc
