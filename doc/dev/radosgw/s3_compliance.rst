@@ -129,13 +129,13 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 | DELETE | Bucket cors            | ?          | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1731    |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1916         |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket lifecycle       | No         |                                                                                                            |             |
+| DELETE | Bucket lifecycle       | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5702    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | DELETE | Bucket policy          | ?          |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | DELETE | Bucket tagging         | ?          |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket website         | No         |                                                                                                            |             |
+| DELETE | Bucket website         | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5721    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | GET    | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1676    |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L185     |             |
@@ -148,9 +148,9 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 |        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1845         |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/76040d90f7eb9f9921a3b8dcd0f821ac2cd9c492/src/rgw/rgw_main.cc#L345        |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket lifecycle       | No         |                                                                                                            |             |
+| GET    | Bucket lifecycle       | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5609    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket location        | No         |                                                                                                            |             |
+| GET    | Bucket location        | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5581    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | GET    | Bucket policy          | ?          | https://github.com/ceph/ceph/blob/e91042171939b6bf82a56a1015c5cae792d228ad/src/rgw/rgw_rest_bucket.cc#L232 |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/e91042171939b6bf82a56a1015c5cae792d228ad/src/rgw/rgw_rest_bucket.cc#L58  |             |
@@ -158,17 +158,17 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 | GET    | Bucket logging         | ?          | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1695    |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L287     |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket notification    | No         |                                                                                                            |             |
+| GET    | Bucket notification    | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5617    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket tagging         | No         |                                                                                                            |             |
+| GET    | Bucket tagging         | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5613    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket Object versions | No         |                                                                                                            |             |
+| GET    | Bucket Object versions | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L2003    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket requestPayment  | No         |                                                                                                            |             |
+| GET    | Bucket requestPayment  | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5605    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket versioning      | No         |                                                                                                            |             |
+| GET    | Bucket versioning      | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5584    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket website         | No         |                                                                                                            |             |
+| GET    | Bucket website         | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5590    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | GET    | List Multipart uploads | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1701    |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest.cc#L877        |             |
@@ -197,21 +197,21 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 |        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1858         |             |
 |        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1866         |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket lifecycle       | No         |                                                                                                            |             |
+| PUT    | Bucket lifecycle       | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5665    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | PUT    | Bucket policy          | ?          |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | PUT    | Bucket logging         | ?          |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket notification    | No         |                                                                                                            |             |
+| PUT    | Bucket notification    | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5671    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | PUT    | Bucket tagging         | ?          |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket requestPayment  | No         |                                                                                                            |             |
+| PUT    | Bucket requestPayment  | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5663    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket versioning      | No         |                                                                                                            |             |
+| PUT    | Bucket versioning      | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5649    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket website         | No         |                                                                                                            |             |
+| PUT    | Bucket website         | Yes        | https://github.com/ceph/ceph/blob/613fa36c431ca19259b1a6045a4fe0360176cc99/src/rgw/rgw_rest_s3.cc#L5654    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 
 ---------------------
