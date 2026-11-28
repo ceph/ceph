@@ -47,16 +47,22 @@ class Activate(object):
         # Avoid that raw activates a LVM osd that is already activated
         # Only do this when both filters are available, because the mapper
         # lookup builds LVM tag strings and will fail if osd_fsid is None.
+        # That lookup already lists the LVs for this id and fsid.
+        mappers = None
         if self.args.osd_id is not None and self.args.osd_fsid is not None:
-            OsdLvmMappers(self.args.osd_id, self.args.osd_fsid).close()
+            mappers = OsdLvmMappers(self.args.osd_id, self.args.osd_fsid)
+            mappers.close()
 
-        # first try raw
-        try:
-            raw_activate = RAWActivate(self.args)
-            raw_activate.activate()
-            return
-        except Exception as e:
-            terminal.info(f'Failed to activate via raw: {e}')
+        # LVM activation needs the block LV. A db or wal LV alone must
+        # still go through the raw scan.
+        lvm_osd = mappers is not None and mappers.block_volume is not None
+        if not lvm_osd:
+            try:
+                raw_activate = RAWActivate(self.args)
+                raw_activate.activate()
+                return
+            except Exception as e:
+                terminal.info(f'Failed to activate via raw: {e}')
 
         # then try lvm
         try:
@@ -69,6 +75,8 @@ class Activate(object):
                                   self.args.osd_fsid)
             return
         except Exception as e:
+            if lvm_osd:
+                raise
             terminal.info(f'Failed to activate via LVM: {e}')
 
         # then try simple
