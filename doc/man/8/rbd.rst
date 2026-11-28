@@ -343,6 +343,9 @@ Commands
 :command:`group create` *group-spec*
   Create a group.
 
+:command:`group info` [--format *format*] *group-spec*
+  Show information about a group.
+
 :command:`group image add` *group-spec* *image-spec*
   Add an image to a group.
 
