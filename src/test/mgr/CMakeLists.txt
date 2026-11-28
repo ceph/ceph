@@ -41,6 +41,17 @@ add_executable(unittest_mgr_mgrcap
 add_ceph_unittest(unittest_mgr_mgrcap)
 target_link_libraries(unittest_mgr_mgrcap global)
 
+# unittest_mgr_metrictypes
+add_executable(unittest_mgr_metrictypes
+  test_metrictypes.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc
+)
+add_ceph_unittest(unittest_mgr_metrictypes)
+target_link_libraries(unittest_mgr_metrictypes
+  ceph-common
+)
+
 # unittest_mgr_pyformatter
 add_executable(unittest_mgr_pyformatter
   test_pyformatter.cc
