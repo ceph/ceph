@@ -190,7 +190,7 @@ void DaemonState::set_metadata(const std::map<std::string,std::string>& m)
   metadata = m;
   if (auto found = m.find("device_ids"); found != m.end()) {
     auto& device_ids = found->second;
-    std::map<std::string,std::string> paths; // devname -> id or path
+    std::map<std::string,std::string> paths; // devname -> by-path path
     if (auto found = m.find("device_paths"); found != m.end()) {
       get_str_map(found->second, &paths, ",; ");
     }
@@ -203,7 +203,9 @@ void DaemonState::set_metadata(const std::map<std::string,std::string>& m)
 	}
 	// id -> devname
 	devices.emplace(id, devname);
-	if (auto path = paths.find(std::string(id)); path != paths.end()) {
+	// device_paths is keyed by devname, like device_ids (see
+	// get_device_metadata()), not by the device id
+	if (auto path = paths.find(std::string(devname)); path != paths.end()) {
 	  // id -> path
 	  devices_bypath.emplace(id, path->second);
 	}
