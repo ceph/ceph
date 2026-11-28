@@ -215,14 +215,16 @@ class OSDMap(ceph_module.BasePyOSDMap):
         return self._dump()
 
     def get_pools(self) -> Dict[int, Dict[str, Any]]:
-        # FIXME: efficient implementation
-        d = self._dump()
-        return dict([(p['pool'], p) for p in d['pools']])
+        return {p['pool']: p for p in self._get_pools()['pools']}
 
     def get_pools_by_name(self) -> Dict[str, Dict[str, Any]]:
-        # FIXME: efficient implementation
-        d = self._dump()
-        return dict([(p['pool_name'], p) for p in d['pools']])
+        return {p['pool_name']: p for p in self._get_pools()['pools']}
+
+    def exists(self, osd: int) -> bool:
+        return self._exists(osd)
+
+    def get_osd_uuid(self, osd: int) -> Optional[str]:
+        return self._get_osd_uuid(osd)
 
     def new_incremental(self) -> 'OSDMapIncremental':
         return self._new_incremental()
@@ -269,8 +271,7 @@ class OSDMap(ceph_module.BasePyOSDMap):
         return d['erasure_code_profiles'].get(name, None)
 
     def get_require_osd_release(self) -> str:
-        d = self._dump()
-        return d['require_osd_release']
+        return self._get_require_osd_release()
 
 
 class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
